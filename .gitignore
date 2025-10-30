@@ -1,0 +1,106 @@
+# Node & package managers
+node_modules/
+.pnp
+.pnp.js
+pnpm-lock.yaml
+yarn.lock
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnpm-store/
+
+# Next.js build output
+.next/
+out/
+dist/
+build/
+.turbo/
+
+# TypeScript build artifacts
+*.tsbuildinfo
+*.d.ts.map
+*.js.map
+next-env.d.ts
+
+# Editor / system
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+
+# Testing / coverage
+coverage/
+.nyc_output
+*.lcov
+.jest/
+
+# Env / secrets
+.env
+.env.*
+*.pem
+*.key
+*.crt
+*.cert
+*.pfx
+secrets/
+.secrets/
+
+# Logs
+*.log
+logs/
+tmp/
+.temp/
+*.tmp
+*.temp
+
+# Cursor / dev artefacts
+.cursor/
+*.cursor-temp.*
+*.cursor-backup.*
+
+# Cache & build tools
+.cache/
+.parcel-cache/
+
+# Docker
+docker-compose.override.yml
+.docker/
+
+# Keycloak runtime data
+keycloak/data/
+keycloak/logs/
+
+# Database files (test/local DBs)
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+*.orig
+*.rej
+
+# Vercel (if deploying)
+.vercel
+
+# Local development
+.local/
+local/
+
+# Misc
+*.local
