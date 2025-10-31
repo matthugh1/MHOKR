@@ -1,0 +1,340 @@
+[
+  {
+    "file": "services/core-api/src/modules/okr/key-result.service.ts",
+    "line": 116,
+    "comment": "TODO [tenant-isolation-P1-KR]: This is a placeholder until formal KR RBAC is implemented.",
+    "category": "SECURITY / DATA ISOLATION",
+    "urgency": "BLOCKER NOW"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/key-result.service.ts",
+    "line": 190,
+    "comment": "TODO [tenant-isolation-P1-KR]: This is a placeholder until formal KR RBAC is implemented.",
+    "category": "SECURITY / DATA ISOLATION",
+    "urgency": "BLOCKER NOW"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/key-result.service.ts",
+    "line": 351,
+    "comment": "TODO [tenant-isolation-P1-KR]: replace with formal canEditKeyResult/canDeleteKeyResult.",
+    "category": "SECURITY / DATA ISOLATION",
+    "urgency": "BLOCKER NOW"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/key-result.service.ts",
+    "line": 465,
+    "comment": "TODO [tenant-isolation-P1-KR]: replace with formal canEditKeyResult/canDeleteKeyResult.",
+    "category": "SECURITY / DATA ISOLATION",
+    "urgency": "BLOCKER NOW"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/key-result.service.ts",
+    "line": 525,
+    "comment": "TODO: Future version will allow \"propose change\" workflow instead of hard blocking",
+    "category": "GOVERNANCE / AUDITABILITY",
+    "urgency": "LATER"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/key-result.service.ts",
+    "line": 589,
+    "comment": "TODO [tenant-isolation-P1-KR]: replace with formal canEditKeyResult/canDeleteKeyResult.",
+    "category": "SECURITY / DATA ISOLATION",
+    "urgency": "BLOCKER NOW"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/key-result.service.ts",
+    "line": 649,
+    "comment": "TODO: Future version will allow \"propose change\" workflow instead of hard blocking",
+    "category": "GOVERNANCE / AUDITABILITY",
+    "urgency": "LATER"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/key-result.service.ts",
+    "line": 710,
+    "comment": "TODO [tenant-isolation-P1-KR]: replace with formal canEditKeyResult/canDeleteKeyResult.",
+    "category": "SECURITY / DATA ISOLATION",
+    "urgency": "BLOCKER NOW"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/key-result.service.ts",
+    "line": 772,
+    "comment": "TODO: Future version will allow \"propose change\" workflow instead of hard blocking",
+    "category": "GOVERNANCE / AUDITABILITY",
+    "urgency": "LATER"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/key-result.service.ts",
+    "line": 953,
+    "comment": "TODO: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.",
+    "category": "PERF / SCALING / CLEANUP",
+    "urgency": "LATER"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/objective.service.ts",
+    "line": 245,
+    "comment": "TODO: Apply the same tenant isolation logic to Key Results write paths (PATCH/DELETE)",
+    "category": "SECURITY / DATA ISOLATION",
+    "urgency": "BLOCKER NOW"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/objective.service.ts",
+    "line": 483,
+    "comment": "TODO: Future version will allow \"propose change\" workflow instead of hard blocking",
+    "category": "GOVERNANCE / AUDITABILITY",
+    "urgency": "LATER"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/objective.service.ts",
+    "line": 613,
+    "comment": "TODO: Future version will allow \"propose change\" workflow instead of hard blocking",
+    "category": "GOVERNANCE / AUDITABILITY",
+    "urgency": "LATER"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/objective.service.ts",
+    "line": 1028,
+    "comment": "TODO: Later we should handle multiple active cycles, but for now assume at most one active cycle per org.",
+    "category": "PERF / SCALING / CLEANUP",
+    "urgency": "LATER"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/objective.controller.ts",
+    "line": 47,
+    "comment": "TODO: Frontend - use this to populate a 'filter by strategic bet' dropdown in analytics and OKR list",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/objective.controller.ts",
+    "line": 55,
+    "comment": "TODO: Frontend - show active cycle name at the top of the OKR dashboard and mark locked cycles",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/objective.controller.ts",
+    "line": 63,
+    "comment": "TODO: Frontend: highlight rows where objectiveCountInActiveCycle === 0 as strategic gaps.",
+    "category": "REPORTING / EXEC INSIGHT",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/objective.controller.ts",
+    "line": 111,
+    "comment": "TODO: Frontend - add Export CSV button in analytics dashboard for TENANT_OWNER / TENANT_ADMIN",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/objective.controller.ts",
+    "line": 163,
+    "comment": "TODO: Frontend - show warning modal when attempting to edit published OKR",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/objective.controller.ts",
+    "line": 179,
+    "comment": "TODO: Frontend - show warning modal when attempting to delete published OKR",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/objective.controller.ts",
+    "line": 192,
+    "comment": "TODO: Frontend - expose this on the Objective detail view timeline",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/key-result.controller.ts",
+    "line": 30,
+    "comment": "TODO: Frontend: show 'Check-ins overdue' widget in analytics.",
+    "category": "REPORTING / EXEC INSIGHT",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/key-result.controller.ts",
+    "line": 125,
+    "comment": "TODO: Frontend - expose this on the Key Result detail view timeline",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/okr-progress.service.ts",
+    "line": 10,
+    "comment": "TODO: Future enhancements:\n * - Add weighting support on ObjectiveKeyResult junction table (e.g., KR1 = 40%, KR2 = 60%)\n * - Add performance optimization with batch recalculation\n * - Add transaction support for atomic updates",
+    "category": "PERF / SCALING / CLEANUP",
+    "urgency": "LATER"
+  },
+  {
+    "file": "services/core-api/src/modules/auth/strategies/jwt.strategy.ts",
+    "line": 37,
+    "comment": "TODO: Support multi-org users (currently using first org membership only)",
+    "category": "SECURITY / DATA ISOLATION",
+    "urgency": "BLOCKER NOW"
+  },
+  {
+    "file": "services/core-api/src/modules/okr/me.controller.ts",
+    "line": 24,
+    "comment": "TODO: Frontend: this powers a 'My dashboard' view; later we can add widgets for only-my-team.",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/core-api/prisma/schema.prisma",
+    "line": 202,
+    "comment": "TODO: Admin endpoint to update cycle.status (DRAFT -> ACTIVE -> LOCKED -> ARCHIVED)",
+    "category": "GOVERNANCE / AUDITABILITY",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/core-api/src/modules/rbac/rbac.service.ts",
+    "line": 295,
+    "comment": "TODO: Record audit log",
+    "category": "GOVERNANCE / AUDITABILITY",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/core-api/src/modules/rbac/rbac.service.ts",
+    "line": 323,
+    "comment": "TODO: Record audit log",
+    "category": "GOVERNANCE / AUDITABILITY",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/core-api/src/modules/rbac/audit.ts",
+    "line": 59,
+    "comment": "TODO: Implement actual audit logging",
+    "category": "GOVERNANCE / AUDITABILITY",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/core-api/src/modules/auth/auth.service.ts",
+    "line": 150,
+    "comment": "TODO: Implement actual Keycloak token verification",
+    "category": "SECURITY / DATA ISOLATION",
+    "urgency": "BLOCKER NOW"
+  },
+  {
+    "file": "services/core-api/src/modules/permissions/tenant-isolation.guard.ts",
+    "line": 15,
+    "comment": "TODO: Cleanup/removal of legacy membership tables and TenantIsolationGuard after all controllers migrated",
+    "category": "PERF / SCALING / CLEANUP",
+    "urgency": "LATER"
+  },
+  {
+    "file": "apps/web/src/app/dashboard/okrs/page.tsx",
+    "line": 231,
+    "comment": "TODO: Future: call backend activity endpoint to show audit drawer.",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "SOON"
+  },
+  {
+    "file": "apps/web/src/app/dashboard/okrs/page.tsx",
+    "line": 277,
+    "comment": "TODO: Later we'll surface a CTA for admins to open next cycle / lock current cycle.",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "SOON"
+  },
+  {
+    "file": "apps/web/src/app/dashboard/okrs/page.tsx",
+    "line": 574,
+    "comment": "TODO: Make this pretty later - replace with proper drawer/modal component",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "LATER"
+  },
+  {
+    "file": "apps/web/src/app/dashboard/okrs/page.tsx",
+    "line": 732,
+    "comment": "TODO: Make this pretty later - replace with proper drawer/modal component",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "LATER"
+  },
+  {
+    "file": "apps/web/src/app/dashboard/analytics/page.tsx",
+    "line": 125,
+    "comment": "TODO: Add loading state and better error handling",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "SOON"
+  },
+  {
+    "file": "apps/web/src/app/dashboard/analytics/page.tsx",
+    "line": 126,
+    "comment": "TODO: RBAC nuance - ensure canAdministerTenant() matches backend checks exactly",
+    "category": "SECURITY / DATA ISOLATION",
+    "urgency": "BLOCKER NOW"
+  },
+  {
+    "file": "apps/web/src/app/dashboard/page.tsx",
+    "line": 3,
+    "comment": "TODO: Backend endpoint `/me/summary` is now available and should be integrated here.",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "SOON"
+  },
+  {
+    "file": "services/ai-service/src/personas/persona.controller.ts",
+    "line": 37,
+    "comment": "TODO: Implement SSE streaming",
+    "category": "PRODUCT EXPERIENCE",
+    "urgency": "LATER"
+  },
+  {
+    "file": "services/integration-service/src/connectors/slack/slack.service.ts",
+    "line": 15,
+    "comment": "TODO: Implement Slack API call",
+    "category": "PERF / SCALING / CLEANUP",
+    "urgency": "LATER"
+  },
+  {
+    "file": "services/integration-service/src/webhooks/webhook.service.ts",
+    "line": 7,
+    "comment": "TODO: Implement webhook processing",
+    "category": "PERF / SCALING / CLEANUP",
+    "urgency": "LATER"
+  },
+  {
+    "file": "services/integration-service/src/webhooks/webhook.service.ts",
+    "line": 13,
+    "comment": "TODO: Implement webhook processing",
+    "category": "PERF / SCALING / CLEANUP",
+    "urgency": "LATER"
+  },
+  {
+    "file": "services/integration-service/src/connectors/jira/jira.service.ts",
+    "line": 13,
+    "comment": "TODO: Implement Jira issue sync",
+    "category": "PERF / SCALING / CLEANUP",
+    "urgency": "LATER"
+  },
+  {
+    "file": "services/integration-service/src/connectors/jira/jira.service.ts",
+    "line": 19,
+    "comment": "TODO: Implement Jira API call",
+    "category": "PERF / SCALING / CLEANUP",
+    "urgency": "LATER"
+  },
+  {
+    "file": "services/integration-service/src/connectors/github/github.service.ts",
+    "line": 13,
+    "comment": "TODO: Implement GitHub API call",
+    "category": "PERF / SCALING / CLEANUP",
+    "urgency": "LATER"
+  },
+  {
+    "summary": {
+      "SECURITY / DATA ISOLATION": 9,
+      "GOVERNANCE / AUDITABILITY": 6,
+      "REPORTING / EXEC INSIGHT": 2,
+      "PRODUCT EXPERIENCE": 13,
+      "PERF / SCALING / CLEANUP": 9,
+      "UNCATEGORISED": 0,
+      "BLOCKER NOW": 9,
+      "SOON": 19,
+      "LATER": 11,
+      "total": 39
+    }
+  }
+]
+
+

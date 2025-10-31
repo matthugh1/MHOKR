@@ -3,3 +3,4 @@
 
 ALTER TYPE "VisibilityLevel" ADD VALUE 'PRIVATE';
 
+

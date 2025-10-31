@@ -159,6 +159,24 @@ app.use('/api/key-results', createProxyMiddleware({
   },
 }));
 
+app.use('/api/rbac', createProxyMiddleware({
+  target: services.core,
+  changeOrigin: true,
+  pathRewrite: { '^/api/rbac': '/rbac' },
+  onProxyReq: (_proxyReq, req) => {
+    logger.info(`Proxying to Core API: ${req.method} ${req.path}`);
+  },
+}));
+
+app.use('/api/me', createProxyMiddleware({
+  target: services.core,
+  changeOrigin: true,
+  pathRewrite: { '^/api/me': '/me' },
+  onProxyReq: (_proxyReq, req) => {
+    logger.info(`Proxying to Core API: ${req.method} ${req.path}`);
+  },
+}));
+
 app.use('/api/initiatives', createProxyMiddleware({
   target: services.core,
   changeOrigin: true,

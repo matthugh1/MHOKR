@@ -97,7 +97,8 @@ describe('RBAC Integration', () => {
           okr: {
             id: 'okr-1',
             ownerId: 'other-user',
-            tenantId,
+            organizationId: tenantId,  // Canonical field
+            tenantId,  // Legacy field for backward compatibility
             visibilityLevel: 'PUBLIC_TENANT',
             createdAt: new Date(),
             updatedAt: new Date(),

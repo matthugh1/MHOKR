@@ -32,7 +32,7 @@ export default function OrganizationSettingsPage() {
 }
 
 function OrganizationSettings() {
-  const { organization, refreshContext } = useWorkspace()
+  const { currentOrganization: organization, refreshContext } = useWorkspace()
   const { user } = useAuth()
   const [members, setMembers] = useState<any[]>([])
   const [workspaces, setWorkspaces] = useState<any[]>([])
@@ -157,20 +157,42 @@ function OrganizationSettings() {
         if (!organization && organizations.length > 0) {
           // Load data for first organization
           const firstOrg = organizations[0]
-          const [membersRes, workspacesRes] = await Promise.all([
-            api.get(`/organizations/${firstOrg.id}/members`),
-            api.get(`/workspaces?organizationId=${firstOrg.id}`),
-          ])
-          setMembers(membersRes.data)
-          setWorkspaces(workspacesRes.data)
+          try {
+            const [membersRes, workspacesRes] = await Promise.all([
+              api.get(`/organizations/${firstOrg.id}/members`),
+              api.get(`/workspaces?organizationId=${firstOrg.id}`),
+            ])
+            console.log('Loaded workspaces for first organization:', firstOrg.id, workspacesRes.data)
+            setMembers(membersRes.data || [])
+            // Ensure workspaces is always an array
+            const workspacesData = Array.isArray(workspacesRes.data) ? workspacesRes.data : []
+            console.log('Setting workspaces:', workspacesData)
+            setWorkspaces(workspacesData)
+          } catch (error: any) {
+            console.error('Failed to load data for first organization:', firstOrg.id, error)
+            console.error('Error response:', error.response?.data)
+            setMembers([])
+            setWorkspaces([])
+          }
         } else if (organization) {
           // Load data for selected organization
-          const [membersRes, workspacesRes] = await Promise.all([
-            api.get(`/organizations/${organization.id}/members`),
-            api.get(`/workspaces?organizationId=${organization.id}`),
-          ])
-          setMembers(membersRes.data)
-          setWorkspaces(workspacesRes.data)
+          try {
+            const [membersRes, workspacesRes] = await Promise.all([
+              api.get(`/organizations/${organization.id}/members`),
+              api.get(`/workspaces?organizationId=${organization.id}`),
+            ])
+            console.log('Loaded workspaces for organization:', organization.id, workspacesRes.data)
+            setMembers(membersRes.data || [])
+            // Ensure workspaces is always an array
+            const workspacesData = Array.isArray(workspacesRes.data) ? workspacesRes.data : []
+            console.log('Setting workspaces:', workspacesData)
+            setWorkspaces(workspacesData)
+          } catch (error: any) {
+            console.error('Failed to load data for organization:', organization.id, error)
+            console.error('Error response:', error.response?.data)
+            setMembers([])
+            setWorkspaces([])
+          }
         }
       } catch (error: any) {
         console.error('Failed to load superuser organization data:', error)

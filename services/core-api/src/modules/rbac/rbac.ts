@@ -285,6 +285,9 @@ function canViewOKRAction(
 
 /**
  * Check if user can edit an OKR
+ * 
+ * Governs post-publish edit control: once an OKR is published (isPublished === true),
+ * only TENANT_OWNER and TENANT_ADMIN can edit it. All other roles are blocked.
  */
 function canEditOKRAction(
   userContext: UserContext,
@@ -295,8 +298,28 @@ function canEditOKRAction(
   }
 
   const okr = resourceContext.okr;
-  const tenantId = okr.organizationId || okr.tenantId || '';  // Use organizationId, fallback to tenantId
+  // NOTE: organizationId is the canonical tenant identifier.
+  // tenantId is legacy and kept only for backward compatibility with pre-P0 data.
+  // Do not reintroduce tenantId in new code.
+  const tenantId = okr.organizationId || (okr as any).tenantId || '';
 
+  // PUBLISH LOCK: If OKR is published, only TENANT_OWNER and TENANT_ADMIN can edit
+  if (okr.isPublished === true) {
+    if (hasTenantOwnerRole(userContext, tenantId)) {
+      return true;
+    }
+    if (hasTenantAdminRole(userContext, tenantId)) {
+      // TENANT_ADMIN can edit published OKRs (but not EXEC_ONLY unless allowed)
+      if (okr.visibilityLevel === 'EXEC_ONLY' && !resourceContext.tenant?.allowTenantAdminExecVisibility) {
+        return false;
+      }
+      return true;
+    }
+    // All other roles (including owner) cannot edit published OKRs
+    return false;
+  }
+
+  // For draft (unpublished) OKRs, apply normal RBAC rules
   // Owner can always edit their own OKRs
   if (okr.ownerId === userContext.userId) {
     return true;
@@ -330,6 +353,9 @@ function canEditOKRAction(
 
 /**
  * Check if user can delete an OKR
+ * 
+ * Governs post-publish edit control: once an OKR is published (isPublished === true),
+ * only TENANT_OWNER and TENANT_ADMIN can delete it. All other roles are blocked.
  */
 function canDeleteOKRAction(
   userContext: UserContext,
@@ -340,8 +366,28 @@ function canDeleteOKRAction(
   }
 
   const okr = resourceContext.okr;
-  const tenantId = okr.organizationId || okr.tenantId || '';  // Use organizationId, fallback to tenantId
+  // NOTE: organizationId is the canonical tenant identifier.
+  // tenantId is legacy and kept only for backward compatibility with pre-P0 data.
+  // Do not reintroduce tenantId in new code.
+  const tenantId = okr.organizationId || (okr as any).tenantId || '';
 
+  // PUBLISH LOCK: If OKR is published, only TENANT_OWNER and TENANT_ADMIN can delete
+  if (okr.isPublished === true) {
+    if (hasTenantOwnerRole(userContext, tenantId)) {
+      return true;
+    }
+    if (hasTenantAdminRole(userContext, tenantId)) {
+      // TENANT_ADMIN can delete published OKRs (but not EXEC_ONLY unless allowed)
+      if (okr.visibilityLevel === 'EXEC_ONLY' && !resourceContext.tenant?.allowTenantAdminExecVisibility) {
+        return false;
+      }
+      return true;
+    }
+    // All other roles (including owner) cannot delete published OKRs
+    return false;
+  }
+
+  // For draft (unpublished) OKRs, apply normal RBAC rules
   // Owner can delete their own OKRs
   if (okr.ownerId === userContext.userId) {
     return true;
@@ -426,7 +472,10 @@ function canPublishOKRAction(
   }
 
   const okr = resourceContext.okr;
-  const tenantId = okr.tenantId;
+  // NOTE: organizationId is the canonical tenant identifier.
+  // tenantId is legacy and kept only for backward compatibility with pre-P0 data.
+  // Do not reintroduce tenantId in new code.
+  const tenantId = okr.organizationId || (okr as any).tenantId || '';
 
   // TENANT_OWNER can publish any OKR
   if (hasTenantOwnerRole(userContext, tenantId)) {

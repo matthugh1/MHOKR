@@ -15,35 +15,37 @@ datasource db {
 // ==========================================
 
 model Organization {
-  id                              String               @id @default(cuid())
-  name                            String
-  slug                            String               @unique
-  allowTenantAdminExecVisibility  Boolean              @default(false) // Config flag for TENANT_ADMIN access to EXEC_ONLY
-  execOnlyWhitelist               Json?                // Array of user IDs allowed to view EXEC_ONLY OKRs: ["userId1", "userId2"]
-  metadata                        Json?                // Additional tenant configuration
-  workspaces                      Workspace[]
-  members                         OrganizationMember[]
-  objectives                      Objective[] // Organization-level OKRs
-  createdAt                       DateTime             @default(now())
-  updatedAt                       DateTime             @updatedAt
+  id                             String               @id @default(cuid())
+  name                           String
+  slug                           String               @unique
+  allowTenantAdminExecVisibility Boolean              @default(false) // Config flag for TENANT_ADMIN access to EXEC_ONLY
+  execOnlyWhitelist              Json? // Array of user IDs allowed to view EXEC_ONLY OKRs: ["userId1", "userId2"]
+  metadata                       Json? // Additional tenant configuration
+  workspaces                     Workspace[]
+  members                        OrganizationMember[]
+  objectives                     Objective[] // Organization-level OKRs
+  strategicPillars               StrategicPillar[] // Strategic pillars/themes for this organization
+  cycles                         Cycle[] // OKR cycles/quarters for this organization
+  createdAt                      DateTime             @default(now())
+  updatedAt                      DateTime             @updatedAt
 
   @@map("organizations")
 }
 
 model Workspace {
-  id               String            @id @default(cuid())
-  name             String
-  organizationId   String
-  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                String            @id @default(cuid())
+  name              String
+  organizationId    String
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parentWorkspaceId String?
-  parentWorkspace  Workspace?        @relation("WorkspaceHierarchy", fields: [parentWorkspaceId], references: [id], onDelete: SetNull)
-  childWorkspaces  Workspace[]       @relation("WorkspaceHierarchy")
-  teams            Team[]
-  members          WorkspaceMember[]
-  objectives       Objective[]
-  aiConversations  AIConversation[]
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  parentWorkspace   Workspace?        @relation("WorkspaceHierarchy", fields: [parentWorkspaceId], references: [id], onDelete: SetNull)
+  childWorkspaces   Workspace[]       @relation("WorkspaceHierarchy")
+  teams             Team[]
+  members           WorkspaceMember[]
+  objectives        Objective[]
+  aiConversations   AIConversation[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@index([organizationId])
   @@index([parentWorkspaceId])
@@ -72,7 +74,7 @@ model User {
   passwordHash              String?
   avatar                    String?
   isSuperuser               Boolean              @default(false) // System-wide superuser
-  managerId                 String?              // Direct manager for MANAGER_CHAIN visibility
+  managerId                 String? // Direct manager for MANAGER_CHAIN visibility
   manager                   User?                @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
   directReports             User[]               @relation("UserManager")
   teamMembers               TeamMember[]
@@ -81,7 +83,7 @@ model User {
   roleAssignments           RoleAssignment[]     @relation("RoleAssignmentUser")
   objectives                Objective[]          @relation("ObjectiveOwner")
   permissionAudits          PermissionAudit[]    @relation("PermissionAuditUser")
-  permissionAuditsPerformed  PermissionAudit[]    @relation("PermissionAuditPerformedBy")
+  permissionAuditsPerformed PermissionAudit[]    @relation("PermissionAuditPerformedBy")
   auditLogsActor            AuditLog[]           @relation("AuditLogActor")
   auditLogsImpersonated     AuditLog[]           @relation("AuditLogImpersonated")
   createdAt                 DateTime             @default(now())
@@ -175,69 +177,123 @@ model PermissionAudit {
 // OKR Models
 // ==========================================
 
-model Objective {
-  id             String               @id @default(cuid())
-  title          String
-  description    String?              @db.Text
-  organizationId String? // For organization-level OKRs
-  organization   Organization?        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  workspaceId    String? // For workspace-level OKRs (optional now)
-  workspace      Workspace?           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  teamId         String? // For team-level OKRs
-  team           Team?                @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  ownerId        String // Always has an owner
-  owner          User                 @relation("ObjectiveOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  parentId       String?
-  parent         Objective?           @relation("ObjectiveHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children       Objective[]          @relation("ObjectiveHierarchy")
-  keyResults     ObjectiveKeyResult[]
-  initiatives    Initiative[]
-  period         Period
+// Strategic Pillars represent high-level strategic bets/themes that OKRs align to.
+// This enables exec reporting: "Which OKRs support our top strategic bets?"
+// Pillars are tenant-scoped (organizationId) for tenant isolation.
+model StrategicPillar {
+  id             String       @id @default(cuid())
+  organizationId String // Tenant scoping: pillar belongs to one organization
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?      @db.Text
+  color          String? // Hex color for badge/visual representation (optional)
+  objectives     Objective[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@map("strategic_pillars")
+}
+
+// Cycles represent OKR periods (e.g., "Q1 2025", "Q2 2025") with governance status.
+// Cycle-level LOCKED status provides quarter-level governance, separate from per-OKR publish lock (isPublished).
+// When a cycle is LOCKED, only TENANT_OWNER and TENANT_ADMIN can modify Objectives/Key Results in that cycle.
+// This adds a higher-level governance layer above individual OKR publish locks.
+// TODO: Admin endpoint to update cycle.status (DRAFT -> ACTIVE -> LOCKED -> ARCHIVED)
+model Cycle {
+  id             String      @id @default(cuid())
+  organizationId String      // Tenant scoping: cycle belongs to one organization
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String      // e.g. "Q1 2025"
+  status         CycleStatus @default(DRAFT)
   startDate      DateTime
   endDate        DateTime
-  status         OKRStatus            @default(ON_TRACK)
-  progress       Float                @default(0)
-  visibilityLevel VisibilityLevel     @default(PUBLIC_TENANT) // Visibility level for access control
-  isPublished    Boolean              @default(false) // Whether OKR is published (draft vs published)
-  positionX      Float?
-  positionY      Float?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  objectives     Objective[]
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("cycles")
+}
+
+enum CycleStatus {
+  DRAFT    // Cycle is being planned, OKRs can be freely edited
+  ACTIVE   // Cycle is active, normal edit rules apply
+  LOCKED   // Cycle is locked, only TENANT_OWNER/TENANT_ADMIN can edit OKRs
+  ARCHIVED // Cycle is archived, read-only for all users
+}
+
+model Objective {
+  id              String               @id @default(cuid())
+  title           String
+  description     String?              @db.Text
+  organizationId  String? // For organization-level OKRs
+  organization    Organization?        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspaceId     String? // For workspace-level OKRs (optional now)
+  workspace       Workspace?           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  teamId          String? // For team-level OKRs
+  team            Team?                @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  pillarId        String? // Optional link to strategic pillar/theme
+  pillar          StrategicPillar?     @relation(fields: [pillarId], references: [id], onDelete: SetNull)
+  cycleId         String? // Optional link to OKR cycle/quarter
+  cycle           Cycle?                @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  ownerId         String // Always has an owner
+  owner           User                 @relation("ObjectiveOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  parentId        String?
+  parent          Objective?           @relation("ObjectiveHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children        Objective[]          @relation("ObjectiveHierarchy")
+  keyResults      ObjectiveKeyResult[]
+  initiatives     Initiative[]
+  period          Period
+  startDate       DateTime
+  endDate         DateTime
+  status          OKRStatus            @default(ON_TRACK)
+  progress        Float                @default(0)
+  visibilityLevel VisibilityLevel      @default(PUBLIC_TENANT) // Visibility level for access control
+  isPublished     Boolean              @default(false) // Whether OKR is published (draft vs published)
+  positionX       Float?
+  positionY       Float?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
   @@index([organizationId])
   @@index([workspaceId])
   @@index([teamId])
   @@index([ownerId])
   @@index([parentId])
+  @@index([pillarId])
+  @@index([cycleId])
   @@index([visibilityLevel])
   @@index([isPublished])
   @@map("objectives")
 }
 
 model KeyResult {
-  id             String               @id @default(cuid())
-  title          String
-  description    String?              @db.Text
-  ownerId        String
-  metricType     MetricType
-  startValue     Float
-  targetValue    Float
-  currentValue   Float
-  unit           String?
-  status         OKRStatus            @default(ON_TRACK)
-  progress       Float                @default(0)
-  visibilityLevel VisibilityLevel     @default(PUBLIC_TENANT) // Visibility level for access control
-  isPublished    Boolean              @default(false) // Whether KR is published (draft vs published)
-  period         Period?
-  startDate      DateTime?
-  endDate        DateTime?
-  positionX      Float?
-  positionY      Float?
-  objectives     ObjectiveKeyResult[]
-  checkIns       CheckIn[]
-  integrations   KRIntegration[]
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  id              String               @id @default(cuid())
+  title           String
+  description     String?              @db.Text
+  ownerId         String
+  metricType      MetricType
+  startValue      Float
+  targetValue     Float
+  currentValue    Float
+  unit            String?
+  status          OKRStatus            @default(ON_TRACK)
+  progress        Float                @default(0)
+  visibilityLevel VisibilityLevel      @default(PUBLIC_TENANT) // Visibility level for access control
+  isPublished     Boolean              @default(false) // Whether KR is published (draft vs published)
+  checkInCadence  CheckInCadence?      // Optional check-in cadence for overdue tracking
+  period          Period?
+  startDate       DateTime?
+  endDate         DateTime?
+  positionX       Float?
+  positionY       Float?
+  objectives      ObjectiveKeyResult[]
+  checkIns        CheckIn[]
+  integrations    KRIntegration[]
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
   @@index([ownerId])
   @@index([visibilityLevel])
@@ -313,17 +369,24 @@ enum InitiativeStatus {
   BLOCKED
 }
 
+enum CheckInCadence {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  NONE
+}
+
 // ==========================================
 // RBAC & Visibility Enums
 // ==========================================
 
 enum VisibilityLevel {
-  PUBLIC_TENANT    // Default: Visible to everyone (filtered in UI, not blocked by backend)
-  PRIVATE          // Only owner + explicit whitelist (HR, legal, M&A confidential OKRs)
-  WORKSPACE_ONLY   // DEPRECATED: Kept for backward compatibility, treated as PUBLIC_TENANT
-  TEAM_ONLY        // DEPRECATED: Kept for backward compatibility, treated as PUBLIC_TENANT
-  MANAGER_CHAIN    // DEPRECATED: Kept for backward compatibility, treated as PUBLIC_TENANT
-  EXEC_ONLY        // DEPRECATED: Kept for backward compatibility, treated as PUBLIC_TENANT
+  PUBLIC_TENANT // Default: Visible to everyone (filtered in UI, not blocked by backend)
+  PRIVATE // Only owner + explicit whitelist (HR, legal, M&A confidential OKRs)
+  WORKSPACE_ONLY // DEPRECATED: Kept for backward compatibility, treated as PUBLIC_TENANT
+  TEAM_ONLY // DEPRECATED: Kept for backward compatibility, treated as PUBLIC_TENANT
+  MANAGER_CHAIN // DEPRECATED: Kept for backward compatibility, treated as PUBLIC_TENANT
+  EXEC_ONLY // DEPRECATED: Kept for backward compatibility, treated as PUBLIC_TENANT
 }
 
 // ==========================================
@@ -331,14 +394,14 @@ enum VisibilityLevel {
 // ==========================================
 
 model RoleAssignment {
-  id        String     @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User       @relation("RoleAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
-  role      RBACRole   // Role at the specified scope
-  scopeType ScopeType  // PLATFORM | TENANT | WORKSPACE | TEAM
-  scopeId   String?    // null for PLATFORM scope, required for others
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  user      User      @relation("RoleAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  role      RBACRole // Role at the specified scope
+  scopeType ScopeType // PLATFORM | TENANT | WORKSPACE | TEAM
+  scopeId   String? // null for PLATFORM scope, required for others
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@unique([userId, role, scopeType, scopeId], name: "userId_role_scopeType_scopeId")
   @@index([userId])
@@ -350,17 +413,17 @@ model RoleAssignment {
 enum RBACRole {
   // Platform level (internal only)
   SUPERUSER
-  
+
   // Tenant level
   TENANT_OWNER
   TENANT_ADMIN
   TENANT_VIEWER
-  
+
   // Workspace level
   WORKSPACE_LEAD
   WORKSPACE_ADMIN
   WORKSPACE_MEMBER
-  
+
   // Team level
   TEAM_LEAD
   TEAM_CONTRIBUTOR
@@ -379,22 +442,22 @@ enum ScopeType {
 // ==========================================
 
 model AuditLog {
-  id               String   @id @default(cuid())
-  actorUserId      String
-  actorUser        User     @relation("AuditLogActor", fields: [actorUserId], references: [id])
-  action            String   // Action performed (e.g., 'GRANT_ROLE', 'PUBLISH_OKR', 'IMPERSONATE_USER')
-  targetType        AuditTargetType
-  targetId          String   // ID of the target entity
-  timestamp         DateTime @default(now())
-  metadata          Json?    // Additional context (JSON)
-  
+  id          String          @id @default(cuid())
+  actorUserId String
+  actorUser   User            @relation("AuditLogActor", fields: [actorUserId], references: [id])
+  action      String // Action performed (e.g., 'GRANT_ROLE', 'PUBLISH_OKR', 'IMPERSONATE_USER')
+  targetType  AuditTargetType
+  targetId    String // ID of the target entity
+  timestamp   DateTime        @default(now())
+  metadata    Json? // Additional context (JSON)
+
   // For role changes
-  previousRole      RBACRole?
-  newRole           RBACRole?
-  
+  previousRole RBACRole?
+  newRole      RBACRole?
+
   // For impersonation
   impersonatedUserId String?
-  impersonatedUser   User?    @relation("AuditLogImpersonated", fields: [impersonatedUserId], references: [id])
+  impersonatedUser   User?   @relation("AuditLogImpersonated", fields: [impersonatedUserId], references: [id])
 
   @@index([actorUserId])
   @@index([targetType, targetId])

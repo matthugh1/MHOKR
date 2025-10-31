@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { PrismaModule } from '../../common/prisma/prisma.module';
+import { JwksVerifier } from './utils/jwks-verifier';
 
 @Module({
   imports: [
@@ -23,8 +24,8 @@ import { PrismaModule } from '../../common/prisma/prisma.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  providers: [AuthService, JwtStrategy, JwksVerifier],
+  exports: [AuthService, JwksVerifier],
 })
 export class AuthModule {}
 

@@ -19,11 +19,13 @@ import {
   Network,
   Building2,
   UserCog,
-  Shield
+  Shield,
+  User
 } from 'lucide-react'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'My Dashboard', href: '/dashboard/me', icon: User },
   { name: 'OKRs', href: '/dashboard/okrs', icon: Target },
   { name: 'Visual Builder', href: '/dashboard/builder', icon: Network },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },

@@ -1,226 +1,381 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { StatCard } from '@/components/ui/StatCard'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { TrendingUp, AlertTriangle, CheckCircle2, Download } from 'lucide-react'
+import api from '@/lib/api'
+import { useWorkspace } from '@/contexts/workspace.context'
+import { useTenantAdmin } from '@/hooks/useTenantAdmin'
+
+interface AnalyticsSummary {
+  totalObjectives: number
+  byStatus: { [status: string]: number }
+  atRiskRatio: number
+}
+
+interface CheckInFeedItem {
+  id: string
+  krId: string
+  krTitle: string
+  userId: string
+  userName: string | null
+  value: number
+  confidence: number
+  createdAt: string
+}
+
+interface OverdueCheckInItem {
+  krId: string
+  krTitle: string
+  objectiveId: string
+  objectiveTitle: string
+  ownerId: string
+  ownerName: string | null
+  ownerEmail: string
+  lastCheckInAt: string | null
+  daysLate: number
+  cadence: string | null
+}
+
+interface PillarCoverageItem {
+  pillarId: string
+  pillarName: string
+  objectiveCountInActiveCycle: number
+}
 
 export default function AnalyticsPage() {
+  const { currentOrganization } = useWorkspace()
+  const { isTenantAdmin } = useTenantAdmin()
+  const [summary, setSummary] = useState<AnalyticsSummary | null>(null)
+  const [feed, setFeed] = useState<CheckInFeedItem[]>([])
+  const [overdue, setOverdue] = useState<OverdueCheckInItem[]>([])
+  const [pillarCoverage, setPillarCoverage] = useState<PillarCoverageItem[]>([])
+  const [activeCycles, setActiveCycles] = useState<Array<{
+    id: string
+    name: string
+    status: string
+    startDate: string
+    endDate: string
+    organizationId: string
+  }>>([])
+  const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      if (!currentOrganization?.id) {
+        setLoading(false)
+        return
+      }
+
+      try {
+        setLoading(true)
+        const [summaryRes, feedRes, overdueRes, coverageRes, cyclesRes] = await Promise.all([
+          api.get('/objectives/analytics/summary'),
+          api.get('/objectives/analytics/feed'),
+          api.get('/key-results/overdue'),
+          api.get('/objectives/pillars/coverage'),
+          api.get('/objectives/cycles/active'),
+        ])
+
+        setSummary(summaryRes.data)
+        setFeed(feedRes.data || [])
+        setOverdue(overdueRes.data || [])
+        setPillarCoverage(coverageRes.data || [])
+        setActiveCycles(cyclesRes.data || [])
+      } catch (error) {
+        console.error('Failed to fetch analytics:', error)
+        // Set empty state on error
+        setSummary({
+          totalObjectives: 0,
+          byStatus: {},
+          atRiskRatio: 0,
+        })
+        setFeed([])
+        setOverdue([])
+        setPillarCoverage([])
+        setActiveCycles([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchAnalytics()
+  }, [currentOrganization?.id])
+
+  const onTrackCount = summary?.byStatus['ON_TRACK'] || 0
+  const atRiskCount = summary?.byStatus['AT_RISK'] || 0
+  const offTrackCount = summary?.byStatus['OFF_TRACK'] || 0
+  const completedCount = summary?.byStatus['COMPLETED'] || 0
+  const totalObjectives = summary?.totalObjectives || 0
+  const atRiskPercentage = summary ? Math.round(summary.atRiskRatio * 100) : 0
+
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 60) {
+      return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`
+    } else if (diffHours < 24) {
+      return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`
+    } else {
+      return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`
+    }
+  }
+
+  const handleExportCSV = async () => {
+    // This endpoint is tenant-scoped and already RBAC-protected server-side
+    // must match backend RBAC canExportData() for CSV export
+    try {
+      setExporting(true)
+      const response = await api.get('/objectives/export/csv', {
+        responseType: 'blob',
+      })
+      
+      // Create blob and trigger download
+      const blob = new Blob([response.data], { type: 'text/csv' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `okr-export-${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (error: any) {
+      console.error('Failed to export CSV:', error)
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to export CSV'
+      alert(`Failed to export: ${errorMessage}`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <ProtectedRoute>
       <DashboardLayout>
         <div className="p-8">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-slate-900">Analytics</h1>
-            <p className="text-slate-600 mt-1">Track performance and identify trends</p>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <PageHeader
+                  title={
+                    activeCycles.length > 0
+                      ? `${activeCycles[0].name} Execution Health`
+                      : 'Execution Health'
+                  }
+                  subtitle="Live performance for your organisation"
+                  badges={[
+                    ...(activeCycles.length > 0
+                      ? [
+                          {
+                            label: `Active Cycle: ${activeCycles[0].name}`,
+                            tone: 'neutral' as const,
+                          },
+                        ]
+                      : []),
+                    ...(activeCycles.some((c) => c.status === 'LOCKED')
+                      ? [{ label: 'Locked', tone: 'warning' as const }]
+                      : []),
+                    ...(atRiskCount > 0
+                      ? [{ label: `${atRiskCount} At Risk`, tone: 'warning' as const }]
+                      : []),
+                    { label: `${totalObjectives} Objectives`, tone: 'neutral' as const },
+                    ...(completedCount > 0
+                      ? [{ label: `${completedCount} Completed`, tone: 'success' as const }]
+                      : []),
+                  ]}
+                />
+              </div>
+              {/* must match backend canExportData() logic - only show for tenant admins */}
+              {isTenantAdmin && (
+                <Button
+                  onClick={handleExportCSV}
+                  disabled={exporting || loading}
+                  variant="outline"
+                  className="shrink-0"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {exporting ? 'Exporting...' : 'Export CSV'}
+                </Button>
+              )}
+            </div>
           </div>
 
-          {/* Key Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-slate-600">
-                  Overall Progress
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div className="text-3xl font-bold">68%</div>
-                  <TrendingUp className="h-6 w-6 text-green-500" />
-                </div>
-                <div className="mt-2 flex items-center text-sm">
-                  <span className="text-green-600 font-medium">+12%</span>
-                  <span className="text-slate-500 ml-1">from last month</span>
-                </div>
-              </CardContent>
-            </Card>
+          {loading ? (
+            <div className="text-center py-12">
+              <p className="text-slate-500">Loading analytics...</p>
+            </div>
+          ) : (
+            <>
+              {/* Key Metrics */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <StatCard
+                  label="Total Objectives"
+                  value={totalObjectives.toString()}
+                  hint={`${onTrackCount} on track`}
+                />
+                <StatCard
+                  label="Completion Rate"
+                  value={`${totalObjectives > 0 ? Math.round((completedCount / totalObjectives) * 100) : 0}%`}
+                  hint={`${completedCount} of ${totalObjectives} completed`}
+                  tone={completedCount > 0 ? 'success' : 'default'}
+                />
+                <StatCard
+                  label="At Risk OKRs"
+                  value={atRiskCount.toString()}
+                  hint={`${atRiskPercentage}% of active OKRs`}
+                  tone={atRiskCount > 0 ? 'warning' : 'default'}
+                />
+                <StatCard
+                  label="Status Breakdown"
+                  value={`${onTrackCount} / ${atRiskCount} / ${offTrackCount}`}
+                  hint="On Track / At Risk / Off Track"
+                />
+              </div>
 
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-slate-600">
-                  Completion Rate
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div className="text-3xl font-bold">42%</div>
-                  <CheckCircle2 className="h-6 w-6 text-blue-500" />
-                </div>
-                <div className="mt-2 flex items-center text-sm">
-                  <span className="text-slate-500">5 of 12 completed</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-slate-600">
-                  At Risk OKRs
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div className="text-3xl font-bold">3</div>
-                  <AlertTriangle className="h-6 w-6 text-yellow-500" />
-                </div>
-                <div className="mt-2 flex items-center text-sm">
-                  <span className="text-yellow-600 font-medium">25%</span>
-                  <span className="text-slate-500 ml-1">of active OKRs</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-slate-600">
-                  Team Velocity
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div className="text-3xl font-bold">8.5</div>
-                  <TrendingDown className="h-6 w-6 text-red-500" />
-                </div>
-                <div className="mt-2 flex items-center text-sm">
-                  <span className="text-red-600 font-medium">-0.5</span>
-                  <span className="text-slate-500 ml-1">from last sprint</span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Charts and Details */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>OKR Health by Team</CardTitle>
-                <CardDescription>Current status across all teams</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {[
-                    { team: 'Product', onTrack: 8, atRisk: 1, total: 10 },
-                    { team: 'Engineering', onTrack: 6, atRisk: 2, total: 8 },
-                    { team: 'Sales', onTrack: 5, atRisk: 0, total: 5 },
-                    { team: 'Customer Success', onTrack: 4, atRisk: 1, total: 6 },
-                  ].map((team) => (
-                    <div key={team.team} className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium">{team.team}</span>
-                        <span className="text-slate-500">
-                          {team.onTrack + team.atRisk} / {team.total}
-                        </span>
+              {/* Strategic Coverage */}
+              <div className="grid grid-cols-1 gap-6 mb-8">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Strategic Coverage</CardTitle>
+                    <CardDescription>Pillar coverage in active cycle</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {pillarCoverage.length === 0 ? (
+                      <div className="text-center py-8 text-slate-500">
+                        No strategic pillars defined or no active cycle
                       </div>
-                      <div className="flex gap-1 h-2">
-                        <div
-                          className="bg-green-500 rounded-full"
-                          style={{ width: `${(team.onTrack / team.total) * 100}%` }}
-                        />
-                        <div
-                          className="bg-yellow-500 rounded-full"
-                          style={{ width: `${(team.atRisk / team.total) * 100}%` }}
-                        />
-                        <div
-                          className="bg-slate-200 rounded-full"
-                          style={{ 
-                            width: `${((team.total - team.onTrack - team.atRisk) / team.total) * 100}%` 
-                          }}
-                        />
+                    ) : (
+                      <div className="space-y-3">
+                        {pillarCoverage.map((pillar) => (
+                          <div
+                            key={pillar.pillarId}
+                            className="flex items-center justify-between pb-3 border-b last:border-0"
+                          >
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-slate-900">
+                                {pillar.pillarName}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {pillar.objectiveCountInActiveCycle === 0 ? (
+                                <span className="text-xs font-medium text-red-600">
+                                  No active OKRs this cycle
+                                </span>
+                              ) : (
+                                <span className="text-sm text-slate-600">
+                                  {pillar.objectiveCountInActiveCycle} OKR{pillar.objectiveCountInActiveCycle !== 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Top Contributors</CardTitle>
-                <CardDescription>Most active OKR owners this quarter</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {[
-                    { name: 'Sarah Johnson', completed: 8, progress: 92 },
-                    { name: 'Mike Chen', completed: 6, progress: 85 },
-                    { name: 'Alex Kumar', completed: 7, progress: 88 },
-                    { name: 'Emma Davis', completed: 5, progress: 78 },
-                  ].map((person, index) => (
-                    <div key={person.name} className="flex items-center gap-4">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-200 text-sm font-medium">
-                        #{index + 1}
+              {/* Overdue Check-ins */}
+              <div className="grid grid-cols-1 gap-6 mb-8">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Overdue Check-ins</CardTitle>
+                    <CardDescription>Key Results overdue for check-in</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {overdue.length === 0 ? (
+                      <div className="text-center py-8 text-slate-500">
+                        All KRs are up to date ✅
                       </div>
-                      <div className="flex-1">
-                        <div className="font-medium text-sm">{person.name}</div>
-                        <div className="text-xs text-slate-500">
-                          {person.completed} completed • {person.progress}% avg progress
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="text-sm font-medium text-slate-700 mb-2">
+                          {overdue.length} Key Result{overdue.length !== 1 ? 's' : ''} overdue
                         </div>
+                        {overdue.slice(0, 5).map((item) => (
+                          <div key={item.krId} className="flex items-start gap-4 pb-4 border-b last:border-0">
+                            <div className="w-2 h-2 rounded-full mt-2 bg-red-500" />
+                            <div className="flex-1">
+                              <p className="text-sm">
+                                <span className="font-medium">{item.krTitle}</span>
+                              </p>
+                              <div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
+                                <span>Owner: {item.ownerName || item.ownerEmail}</span>
+                                <span>•</span>
+                                <span className="text-red-600 font-medium">{item.daysLate}d late</span>
+                                {item.lastCheckInAt && (
+                                  <>
+                                    <span>•</span>
+                                    <span>Last check-in: {formatTimeAgo(item.lastCheckInAt)}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {overdue.length > 5 && (
+                          <div className="text-xs text-slate-500 text-center pt-2">
+                            And {overdue.length - 5} more...
+                          </div>
+                        )}
                       </div>
-                      <Badge variant="success">{person.progress}%</Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
 
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle>Recent Activity</CardTitle>
-                <CardDescription>Latest updates across all OKRs</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {[
-                    {
-                      action: 'completed',
-                      user: 'Sarah Johnson',
-                      okr: 'Launch new feature',
-                      time: '2 hours ago',
-                    },
-                    {
-                      action: 'updated',
-                      user: 'Mike Chen',
-                      okr: 'Improve NPS score',
-                      time: '5 hours ago',
-                    },
-                    {
-                      action: 'at-risk',
-                      user: 'Alex Kumar',
-                      okr: 'Reduce infrastructure costs',
-                      time: '1 day ago',
-                    },
-                    {
-                      action: 'created',
-                      user: 'Emma Davis',
-                      okr: 'Expand market presence',
-                      time: '2 days ago',
-                    },
-                  ].map((activity, index) => (
-                    <div key={index} className="flex items-start gap-4 pb-4 border-b last:border-0">
-                      <div
-                        className={`w-2 h-2 rounded-full mt-2 ${
-                          activity.action === 'completed'
-                            ? 'bg-green-500'
-                            : activity.action === 'at-risk'
-                            ? 'bg-yellow-500'
-                            : 'bg-blue-500'
-                        }`}
-                      />
-                      <div className="flex-1">
-                        <p className="text-sm">
-                          <span className="font-medium">{activity.user}</span>{' '}
-                          <span className="text-slate-600">{activity.action}</span>{' '}
-                          <span className="font-medium">{activity.okr}</span>
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1">{activity.time}</p>
+              {/* Recent Activity Feed */}
+              <div className="grid grid-cols-1 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Recent Activity</CardTitle>
+                    <CardDescription>Latest check-ins across all Key Results</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {feed.length === 0 ? (
+                      <div className="text-center py-8 text-slate-500">
+                        No recent check-ins
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {feed.map((item) => (
+                          <div key={item.id} className="flex items-start gap-4 pb-4 border-b last:border-0">
+                            <div className="w-2 h-2 rounded-full mt-2 bg-blue-500" />
+                            <div className="flex-1">
+                              <p className="text-sm">
+                                <span className="font-medium">{item.userName || 'Unknown User'}</span>{' '}
+                                <span className="text-slate-600">checked in</span>{' '}
+                                <span className="font-medium">{item.krTitle}</span>
+                              </p>
+                              <div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
+                                <span>Value: {item.value}</span>
+                                <span>•</span>
+                                <span>Confidence: {item.confidence}%</span>
+                                <span>•</span>
+                                <span>{formatTimeAgo(item.createdAt)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>

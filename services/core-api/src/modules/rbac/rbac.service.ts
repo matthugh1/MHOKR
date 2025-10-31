@@ -5,7 +5,7 @@
  * Provides methods to build user context, check permissions, and manage role assignments.
  */
 
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable, Optional, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   UserContext,
@@ -22,6 +22,7 @@ import { RBACCacheService } from './rbac-cache.service';
 
 @Injectable()
 export class RBACService {
+  private readonly logger = new Logger(RBACService.name);
   private memoryCache = new Map<string, { context: UserContext; timestamp: number }>();
 
   constructor(
@@ -201,8 +202,35 @@ export class RBACService {
     action: Action,
     resourceContext: ResourceContext,
   ): Promise<boolean> {
-    const userContext = await this.buildUserContext(userId);
-    return can(userContext, action, resourceContext);
+    // Don't use cache for authorization checks to ensure we have fresh role data
+    // Cache might be stale if roles were recently assigned
+    const userContext = await this.buildUserContext(userId, false);
+    
+    // Debug logging
+    this.logger.log(`canPerformAction check`, {
+      userId,
+      action,
+      resourceContext,
+      userContext: {
+        userId: userContext.userId,
+        isSuperuser: userContext.isSuperuser,
+        tenantRoles: Array.from(userContext.tenantRoles.entries()),
+        hasTenantRoleForContext: resourceContext.tenantId 
+          ? userContext.tenantRoles.has(resourceContext.tenantId)
+          : false,
+      },
+    });
+    
+    const result = can(userContext, action, resourceContext);
+    
+    this.logger.log(`canPerformAction result`, {
+      userId,
+      action,
+      tenantId: resourceContext.tenantId,
+      authorized: result,
+    });
+    
+    return result;
   }
 
   /**

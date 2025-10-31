@@ -198,3 +198,4 @@ const tenantId = okr.organizationId || okr.tenantId || '';  // Use organizationI
 
 The implementation correctly enforces tenant isolation, superuser read-only policy, and consistent use of organizationId. The remaining issues are minor inconsistencies and follow-up tasks that do not affect correctness.
 
+

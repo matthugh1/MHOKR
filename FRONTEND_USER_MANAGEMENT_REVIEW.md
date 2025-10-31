@@ -311,3 +311,4 @@ people/
 The backend already supports rich user-organization-workspace relationships, but the frontend only exposes team-level management. This creates a poor user experience where administrators must use database queries or API calls to perform basic user management tasks.
 
 **Recommendation**: Prioritize Phase 1 improvements to unlock the backend's capabilities and provide a complete user management experience.
+

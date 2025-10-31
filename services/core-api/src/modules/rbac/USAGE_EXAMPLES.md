@@ -291,3 +291,4 @@ Call `invalidateUserContextCache()` whenever roles are assigned or revoked.
 5. **Record audit logs** - Log all permission changes
 6. **Handle errors gracefully** - Catch ForbiddenException and return appropriate responses
 
+

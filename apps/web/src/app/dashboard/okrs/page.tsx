@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,7 +16,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, Search, Filter, Grid3x3, List, Calendar, X } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Plus, Search, Filter, Grid3x3, List, Calendar, X, Edit2, Trash2, Lock, History, LockKeyhole } from 'lucide-react'
 import { Period } from '@okr-nexus/types'
 import { 
   formatPeriod, 
@@ -27,9 +44,16 @@ import {
 } from '@/lib/date-utils'
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
+import { usePermissions } from '@/hooks/usePermissions'
+import { useToast } from '@/hooks/use-toast'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { ObjectiveCard } from '@/components/ui/ObjectiveCard'
+import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
 import api from '@/lib/api'
+import { logTokenInfo } from '@/lib/jwt-debug'
 
 export default function OKRsPage() {
+  const router = useRouter()
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [selectedPeriod, setSelectedPeriod] = useState<string>(getCurrentPeriodFilter())
   const availablePeriods = getAvailablePeriodFilters()
@@ -42,23 +66,64 @@ export default function OKRsPage() {
   
   const { workspaces, teams, currentOrganization } = useWorkspace()
   const { user } = useAuth()
+  const permissions = usePermissions()
+  const { toast } = useToast()
   const [availableUsers, setAvailableUsers] = useState<any[]>([])
   const [okrs, setOkrs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [permissionError, setPermissionError] = useState<string | null>(null)
+  const [activityDrawerOpen, setActivityDrawerOpen] = useState(false)
+  const [activityItems, setActivityItems] = useState<ActivityItem[]>([])
+  const [activityEntityName, setActivityEntityName] = useState('')
+  const [publishLockDialogOpen, setPublishLockDialogOpen] = useState(false)
+  const [pendingDeleteOkr, setPendingDeleteOkr] = useState<{ id: string; title: string } | null>(null)
+  const [activeCycles, setActiveCycles] = useState<Array<{
+    id: string
+    name: string
+    status: string
+    startDate: string
+    endDate: string
+    organizationId: string
+  }>>([])
   
   useEffect(() => {
+    // Debug: Log JWT token info and user context (remove in production)
+    if (process.env.NODE_ENV === 'development') {
+      logTokenInfo()
+      console.log('👤 Current User from Auth Context:', user)
+      console.log('🏢 Current Organization:', currentOrganization)
+      
+      // Check what /users/me actually returns (backend req.user)
+      api.get('/users/me')
+        .then((res) => {
+          console.log('🔍 Backend /users/me response:', res.data)
+          console.log('   organizationId:', res.data.organizationId || '❌ NOT SET')
+        })
+        .catch((err) => {
+          console.error('Failed to fetch /users/me:', err)
+        })
+    }
+    
     loadOKRs()
     loadUsers()
-  }, [currentOrganization?.id])
+    loadActiveCycles()
+  }, [currentOrganization?.id, user])
   
   const loadOKRs = async () => {
     if (!currentOrganization?.id) return
     try {
       setLoading(true)
+      setPermissionError(null)
       const response = await api.get(`/objectives`)
       setOkrs(response.data || [])
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to load OKRs:', error)
+      if (error.response?.status === 403) {
+        setPermissionError('You do not have permission to view OKRs. Please contact your administrator.')
+      } else {
+        setPermissionError('Failed to load OKRs. Please try again later.')
+      }
+      setOkrs([])
     } finally {
       setLoading(false)
     }
@@ -68,8 +133,67 @@ export default function OKRsPage() {
     try {
       const response = await api.get('/users')
       setAvailableUsers(response.data || [])
-    } catch (error) {
-      console.error('Failed to load users:', error)
+    } catch (error: any) {
+      // Users endpoint is optional - only used for filtering
+      // If user doesn't have manage_users permission, just skip it
+      if (error.response?.status !== 403) {
+        console.error('Failed to load users:', error)
+      }
+      setAvailableUsers([])
+    }
+  }
+
+  const loadActiveCycles = async () => {
+    try {
+      const response = await api.get('/objectives/cycles/active')
+      setActiveCycles(response.data || [])
+    } catch (error: any) {
+      // Cycles endpoint is optional - gracefully degrade if no permission
+      if (error.response?.status !== 403) {
+        console.error('Failed to load active cycles:', error)
+      }
+      setActiveCycles([])
+    }
+  }
+
+  const formatCycleDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
+  }
+
+  const getCycleStatusBadge = (status: string) => {
+    switch (status) {
+      case 'LOCKED':
+        return (
+          <Badge variant="secondary" className="bg-slate-600 text-white">
+            <LockKeyhole className="h-3 w-3 mr-1" />
+            Locked
+          </Badge>
+        )
+      case 'ACTIVE':
+        return (
+          <Badge variant="default" className="bg-green-600 text-white">
+            Active
+          </Badge>
+        )
+      case 'DRAFT':
+        return (
+          <Badge variant="outline" className="bg-slate-100 text-slate-700">
+            Draft (planning)
+          </Badge>
+        )
+      case 'ARCHIVED':
+        return (
+          <Badge variant="outline" className="bg-slate-100 text-slate-500">
+            Archived
+          </Badge>
+        )
+      default:
+        return (
+          <Badge variant="outline">
+            {status}
+          </Badge>
+        )
     }
   }
 
@@ -126,22 +250,193 @@ export default function OKRsPage() {
   
   const hasActiveFilters = filterWorkspaceId !== 'all' || filterTeamId !== 'all' || filterOwnerId !== 'all' || searchQuery.length > 0;
 
+  const handleEditOKR = (okr: any) => {
+    const isPublished = okr.isPublished === true
+    const canAdminTenant = permissions.isTenantAdminOrOwner(okr.organizationId || undefined)
+    
+    // must match backend publish lock rules in objective.service.ts and key-result.service.ts
+    // If published and user is NOT tenant admin/owner, show warning and prevent edit
+    if (isPublished && !canAdminTenant) {
+      setPublishLockDialogOpen(true)
+      return
+    }
+    
+    router.push(`/dashboard/builder?okrId=${okr.id}`)
+  }
+
+  const handleDeleteOKR = async (okr: any) => {
+    const isPublished = okr.isPublished === true
+    const canAdminTenant = permissions.isTenantAdminOrOwner(okr.organizationId || undefined)
+    
+    // must match backend publish lock rules in objective.service.ts and key-result.service.ts
+    // If published and user is NOT tenant admin/owner, show warning and prevent delete
+    if (isPublished && !canAdminTenant) {
+      setPublishLockDialogOpen(true)
+      return
+    }
+    
+    // Store pending delete info for confirmation dialog
+    setPendingDeleteOkr({ id: okr.id, title: okr.title })
+  }
+
+  const confirmDeleteOKR = async () => {
+    if (!pendingDeleteOkr) return
+    
+    try {
+      await api.delete(`/objectives/${pendingDeleteOkr.id}`)
+      await loadOKRs() // Reload the list
+      setPendingDeleteOkr(null)
+      toast({
+        title: 'OKR deleted',
+        description: `"${pendingDeleteOkr.title}" has been deleted.`,
+      })
+    } catch (error: any) {
+      console.error('Failed to delete OKR:', error)
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to delete OKR'
+      toast({
+        title: 'Failed to delete OKR',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleOpenActivityDrawer = async (entityType: 'OBJECTIVE' | 'KEY_RESULT', entityId: string, entityTitle?: string) => {
+    try {
+      const endpoint = entityType === 'OBJECTIVE' 
+        ? `/objectives/${entityId}/activity`
+        : `/key-results/${entityId}/activity`
+      
+      const response = await api.get(endpoint)
+      const activities = response.data || []
+      
+      // Transform activity data to ActivityItem format
+      const transformedItems: ActivityItem[] = activities.map((activity: any) => {
+        const actor = availableUsers.find((u) => u.id === activity.userId)
+        const actorName = actor?.name || actor?.email || 'Unknown User'
+        
+        // Format summary based on action type
+        let summary = ''
+        if (activity.action === 'CHECK_IN' && activity.metadata?.checkIn) {
+          summary = `Check-in: value ${activity.metadata.checkIn.value}, confidence ${activity.metadata.checkIn.confidence}/5`
+        } else if (activity.action === 'UPDATED' && activity.metadata?.before && activity.metadata?.after) {
+          const changes: string[] = []
+          if (activity.metadata.before.progress !== activity.metadata.after.progress) {
+            changes.push(`Progress ${activity.metadata.before.progress?.toFixed(0) || 0}% → ${activity.metadata.after.progress?.toFixed(0) || 0}%`)
+          }
+          if (activity.metadata.before.status !== activity.metadata.after.status) {
+            changes.push(`Status ${activity.metadata.before.status} → ${activity.metadata.after.status}`)
+          }
+          if (activity.metadata.before.currentValue !== undefined && activity.metadata.after.currentValue !== undefined) {
+            if (activity.metadata.before.currentValue !== activity.metadata.after.currentValue) {
+              changes.push(`Value ${activity.metadata.before.currentValue} → ${activity.metadata.after.currentValue}`)
+            }
+          }
+          if (activity.metadata.before.targetValue !== undefined && activity.metadata.after.targetValue !== undefined) {
+            if (activity.metadata.before.targetValue !== activity.metadata.after.targetValue) {
+              changes.push(`Target ${activity.metadata.before.targetValue} → ${activity.metadata.after.targetValue}`)
+            }
+          }
+          summary = changes.length > 0 ? changes.join(', ') : 'Updated'
+        } else {
+          summary = activity.action
+        }
+        
+        return {
+          id: activity.id,
+          timestamp: activity.createdAt,
+          actorName,
+          action: activity.action,
+          summary,
+        }
+      })
+      
+      setActivityItems(transformedItems)
+      setActivityEntityName(entityTitle || `${entityType} Activity`)
+      setActivityDrawerOpen(true)
+    } catch (error) {
+      console.error('Failed to load activity:', error)
+      toast({
+        title: 'Failed to load activity',
+        description: 'Could not load activity history',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleCloseActivityDrawer = () => {
+    setActivityDrawerOpen(false)
+    setActivityItems([])
+    setActivityEntityName('')
+  }
+
   return (
     <ProtectedRoute>
       <DashboardLayout>
         <div className="p-8">
           <div className="mb-8">
             <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-slate-900">OKRs</h1>
-                <p className="text-slate-600 mt-1">Manage your objectives and key results</p>
-              </div>
-              <Button>
+              <PageHeader
+                title="Objectives & Key Results"
+                subtitle="Aligned execution, live progress"
+                badges={[
+                  ...(activeCycles.length > 0
+                    ? [
+                        {
+                          label: `Active Cycle: ${activeCycles[0].name}`,
+                          tone: 'neutral' as const,
+                        },
+                      ]
+                    : []),
+                  ...(activeCycles.some((c) => c.status === 'LOCKED')
+                    ? [{ label: 'Locked', tone: 'warning' as const }]
+                    : []),
+                  ...(okrs.filter((o) => o.status === 'AT_RISK').length > 0
+                    ? [
+                        {
+                          label: `${okrs.filter((o) => o.status === 'AT_RISK').length} At Risk`,
+                          tone: 'warning' as const,
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+              <Button className="ml-4">
                 <Plus className="h-4 w-4 mr-2" />
                 New OKR
               </Button>
             </div>
           </div>
+
+          {/* Active Cycle Banner */}
+          {activeCycles.length > 0 && (
+            <div className="mb-6">
+              {activeCycles.map((cycle) => (
+                <div key={cycle.id} className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-semibold text-slate-900">{cycle.name}</h3>
+                          {getCycleStatusBadge(cycle.status)}
+                        </div>
+                        <p className="text-sm text-slate-600 mt-1">
+                          {formatCycleDate(cycle.startDate)} → {formatCycleDate(cycle.endDate)}
+                        </p>
+                        {cycle.status === 'LOCKED' && !permissions.isTenantAdminOrOwner(currentOrganization?.id) && (
+                          <p className="text-sm text-slate-500 mt-2 flex items-center gap-1">
+                            <Lock className="h-3 w-3" />
+                            This cycle is locked. You can't change targets in this period.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {/* TODO: Later we'll surface a CTA for admins to open next cycle / lock current cycle. */}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Filters and Search */}
           <div className="mb-6 space-y-4">
@@ -243,7 +538,6 @@ export default function OKRsPage() {
                 )}
               </div>
             )}
-          </div>
             <div className="flex border rounded-lg">
               <Button
                 variant={viewMode === 'grid' ? 'default' : 'ghost'}
@@ -267,6 +561,18 @@ export default function OKRsPage() {
           {/* OKRs Grid/List */}
           {loading ? (
             <div className="text-center py-12 text-slate-500">Loading OKRs...</div>
+          ) : permissionError ? (
+            <div className="text-center py-12">
+              <div className="max-w-md mx-auto">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-yellow-900 mb-2">Access Restricted</h3>
+                  <p className="text-yellow-800 mb-4">{permissionError}</p>
+                  <p className="text-sm text-yellow-700">
+                    If you believe you should have access, please contact your administrator.
+                  </p>
+                </div>
+              </div>
+            </div>
           ) : filteredOKRs.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-slate-500 mb-4">No OKRs found</p>
@@ -280,104 +586,131 @@ export default function OKRsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredOKRs.map((okr) => {
                 const owner = availableUsers.find(u => u.id === okr.ownerId)
-                const team = teams.find(t => t.id === okr.teamId)
-                const workspace = workspaces.find(w => w.id === okr.workspaceId)
+                const canEdit = permissions.canEditOKR({
+                  ownerId: okr.ownerId,
+                  organizationId: okr.organizationId,
+                  workspaceId: okr.workspaceId,
+                  teamId: okr.teamId,
+                })
+                const canDelete = permissions.canDeleteOKR({
+                  ownerId: okr.ownerId,
+                  organizationId: okr.organizationId,
+                  workspaceId: okr.workspaceId,
+                  teamId: okr.teamId,
+                })
+                const isPublished = okr.isPublished === true
+                const canAdminTenant = permissions.isTenantAdminOrOwner(okr.organizationId || undefined)
+                const canEditPublished = isPublished ? canAdminTenant : canEdit
+                const canDeletePublished = isPublished ? canAdminTenant : canDelete
+                
+                // Find next check-in due date from key results
+                const nextCheckInDue = okr.keyResults?.find((kr: any) => kr.keyResult?.checkInCadence)?.keyResult?.lastCheckInAt
+                
                 return (
-                  <Card key={okr.id} className="hover:shadow-lg transition-shadow cursor-pointer">
-                    <CardHeader>
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex gap-2 flex-wrap">
-                          <Badge variant={okr.status === 'ON_TRACK' ? 'default' : okr.status === 'AT_RISK' ? 'destructive' : 'secondary'} className="text-xs">
-                            {okr.status === 'ON_TRACK' ? 'On Track' : okr.status === 'AT_RISK' ? 'At Risk' : okr.status}
-                          </Badge>
-                          {okr.visibilityLevel === 'PRIVATE' && (
-                            <Badge variant="outline" className="text-xs">🔒 Private</Badge>
-                          )}
-                          {okr.startDate && (
-                            <Badge variant="outline" className="text-xs flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {formatPeriod(okr.period, okr.startDate)}
-                            </Badge>
-                          )}
-                        </div>
-                        <span className="text-2xl font-bold text-slate-900">{Math.round(okr.progress || 0)}%</span>
-                      </div>
-                      <CardTitle className="text-lg">{okr.title}</CardTitle>
-                      <CardDescription>{okr.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        <div className="bg-slate-200 rounded-full h-2">
-                          <div 
-                            className="bg-primary h-2 rounded-full transition-all"
-                            style={{ width: `${Math.min(100, Math.round(okr.progress || 0))}%` }}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-slate-600">{okr.keyResults?.length || 0} Key Results</span>
-                          {team && <span className="text-slate-600">{team.name}</span>}
-                        </div>
-                        <div className="flex items-center gap-2 pt-2 border-t">
-                          <div className="h-6 w-6 rounded-full bg-slate-300 flex items-center justify-center text-xs font-medium">
-                            {owner?.name ? owner.name.split(' ').map((n: string) => n[0]).join('').substring(0, 2) : '?'}
-                          </div>
-                          <span className="text-sm text-slate-600">{owner?.name || 'Unknown'}</span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <ObjectiveCard
+                    key={okr.id}
+                    title={okr.title}
+                    ownerName={owner?.name || owner?.email || 'Unknown'}
+                    ownerAvatarUrl={undefined}
+                    status={okr.status || 'ON_TRACK'}
+                    progressPct={Math.round(okr.progress || 0)}
+                    isPublished={isPublished}
+                    nextCheckInDue={nextCheckInDue}
+                    onOpenHistory={() => handleOpenActivityDrawer('OBJECTIVE', okr.id, okr.title)}
+                    onEdit={() => handleEditOKR(okr)}
+                    onDelete={() => handleDeleteOKR(okr)}
+                    canEdit={canEditPublished}
+                    canDelete={canDeletePublished}
+                  />
                 )
               })}
             </div>
           ) : (
-            <Card>
-              <CardContent className="p-0">
-                <div className="divide-y">
-                  {filteredOKRs.map((okr) => {
-                    const owner = availableUsers.find(u => u.id === okr.ownerId)
-                    const team = teams.find(t => t.id === okr.teamId)
-                    const workspace = workspaces.find(w => w.id === okr.workspaceId)
-                    return (
-                      <div key={okr.id} className="p-6 hover:bg-slate-50 transition-colors cursor-pointer">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2 flex-wrap">
-                              <h3 className="font-semibold text-lg">{okr.title}</h3>
-                              <Badge variant={okr.status === 'ON_TRACK' ? 'default' : okr.status === 'AT_RISK' ? 'destructive' : 'secondary'} className="text-xs">
-                                {okr.status === 'ON_TRACK' ? 'On Track' : okr.status === 'AT_RISK' ? 'At Risk' : okr.status}
-                              </Badge>
-                              {okr.visibilityLevel === 'PRIVATE' && (
-                                <Badge variant="outline" className="text-xs">🔒 Private</Badge>
-                              )}
-                              {okr.startDate && (
-                                <Badge variant="outline" className="text-xs flex items-center gap-1">
-                                  <Calendar className="h-3 w-3" />
-                                  {formatPeriod(okr.period, okr.startDate)}
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-slate-600 mb-3">{okr.description}</p>
-                            <div className="flex items-center gap-4 text-sm text-slate-500 flex-wrap">
-                              {workspace && <span>{workspace.name}</span>}
-                              {team && <span>• {team.name}</span>}
-                              <span>• {okr.keyResults?.length || 0} Key Results</span>
-                              {owner && <span>• Owner: {owner.name}</span>}
-                            </div>
-                          </div>
-                          <div className="ml-6 flex items-center gap-4">
-                            <div className="text-right">
-                              <div className="text-3xl font-bold text-slate-900">{Math.round(okr.progress || 0)}%</div>
-                              <div className="text-xs text-slate-500">Progress</div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+            <div className="space-y-4">
+              {filteredOKRs.map((okr) => {
+                const owner = availableUsers.find(u => u.id === okr.ownerId)
+                const canEdit = permissions.canEditOKR({
+                  ownerId: okr.ownerId,
+                  organizationId: okr.organizationId,
+                  workspaceId: okr.workspaceId,
+                  teamId: okr.teamId,
+                })
+                const canDelete = permissions.canDeleteOKR({
+                  ownerId: okr.ownerId,
+                  organizationId: okr.organizationId,
+                  workspaceId: okr.workspaceId,
+                  teamId: okr.teamId,
+                })
+                const isPublished = okr.isPublished === true
+                const canAdminTenant = permissions.isTenantAdminOrOwner(okr.organizationId || undefined)
+                const canEditPublished = isPublished ? canAdminTenant : canEdit
+                const canDeletePublished = isPublished ? canAdminTenant : canDelete
+                
+                // Find next check-in due date from key results
+                const nextCheckInDue = okr.keyResults?.find((kr: any) => kr.keyResult?.checkInCadence)?.keyResult?.lastCheckInAt
+                
+                return (
+                  <ObjectiveCard
+                    key={okr.id}
+                    title={okr.title}
+                    ownerName={owner?.name || owner?.email || 'Unknown'}
+                    ownerAvatarUrl={undefined}
+                    status={okr.status || 'ON_TRACK'}
+                    progressPct={Math.round(okr.progress || 0)}
+                    isPublished={isPublished}
+                    nextCheckInDue={nextCheckInDue}
+                    onOpenHistory={() => handleOpenActivityDrawer('OBJECTIVE', okr.id, okr.title)}
+                    onEdit={() => handleEditOKR(okr)}
+                    onDelete={() => handleDeleteOKR(okr)}
+                    canEdit={canEditPublished}
+                    canDelete={canDeletePublished}
+                  />
+                )
+              })}
+            </div>
           )}
+
+          {/* Activity Timeline Drawer */}
+          <ActivityDrawer
+            isOpen={activityDrawerOpen}
+            onClose={handleCloseActivityDrawer}
+            items={activityItems}
+            entityName={activityEntityName}
+          />
+
+          {/* Publish Lock Warning Dialog */}
+          <AlertDialog open={publishLockDialogOpen} onOpenChange={setPublishLockDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>OKR is Published and Locked</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This OKR is published and locked. You cannot change targets after publish.
+                  Only tenant administrators can edit or delete published OKRs.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Close</AlertDialogCancel>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Delete Confirmation Dialog */}
+          <AlertDialog open={!!pendingDeleteOkr} onOpenChange={(open) => !open && setPendingDeleteOkr(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete OKR</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete "{pendingDeleteOkr?.title}"? This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setPendingDeleteOkr(null)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmDeleteOKR} className="bg-red-600 hover:bg-red-700">
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </DashboardLayout>
     </ProtectedRoute>

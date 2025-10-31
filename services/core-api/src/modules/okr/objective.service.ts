@@ -2,21 +2,26 @@ import { Injectable, BadRequestException, NotFoundException, ForbiddenException 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RBACService } from '../rbac/rbac.service';
 import { buildResourceContextFromOKR } from '../rbac/helpers';
+import { OkrProgressService } from './okr-progress.service';
+import { ActivityService } from '../activity/activity.service';
 
 @Injectable()
 export class ObjectiveService {
   constructor(
     private prisma: PrismaService,
     private rbacService: RBACService,
+    private okrProgressService: OkrProgressService,
+    private activityService: ActivityService,
   ) {}
 
-  async findAll(userId: string, workspaceId: string | undefined, userOrganizationId: string | null) {
+  async findAll(_userId: string, workspaceId: string | undefined, userOrganizationId: string | null, pillarId?: string) {
     const where: any = {};
 
-    // Tenant isolation: filter by organizationId
-    // If userOrganizationId === null, that means superuser → no org filter, return all OKRs
-    // If userOrganizationId is a string, add org filter
-    // If userOrganizationId is '' or undefined, return [] (safety)
+    // NOTE on organisation scoping:
+    // - userOrganizationId === null       -> superuser (can READ all organisations; still cannot write anywhere).
+    // - typeof userOrganizationId === 'string' and truthy -> normal user (can READ only that organisation).
+    // - userOrganizationId is undefined or '' -> user with no organisation membership (GET /objectives returns []).
+    // This enforces tenant isolation for reads.
     if (userOrganizationId === null) {
       // Superuser: no org filter, return all OKRs
     } else if (userOrganizationId && userOrganizationId !== '') {
@@ -31,6 +36,11 @@ export class ObjectiveService {
       where.workspaceId = workspaceId;
     }
 
+    // Optional pillar filter: filter objectives by strategic pillar
+    if (pillarId) {
+      where.pillarId = pillarId;
+    }
+
     return this.prisma.objective.findMany({
       where,
       include: {
@@ -42,6 +52,13 @@ export class ObjectiveService {
         team: true,
         organization: true,
         workspace: true,
+        pillar: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+          },
+        },
         owner: {
           select: {
             id: true,
@@ -81,6 +98,13 @@ export class ObjectiveService {
         team: true,
         organization: true,
         workspace: true,
+        pillar: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+          },
+        },
         owner: {
           select: {
             id: true,
@@ -132,7 +156,9 @@ export class ObjectiveService {
       // Extract OKR's organizationId from resource context
       const okrOrganizationId = resourceContext.okr?.organizationId;
       
-      // TODO: Define explicit behavior for OKRs that have no organizationId (currently treated as system data, blocks writes)
+      // If the OKR has no organizationId, treat it as system/global data.
+      // System/global OKRs are always read-only. No-one (including superusers) may edit them.
+      // This is intentional. Changing this requires an explicit product decision.
       if (!okrOrganizationId) {
         return false;
       }
@@ -146,6 +172,72 @@ export class ObjectiveService {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Check if cycle lock prevents editing/deleting an objective.
+   * Returns true if locked and user cannot bypass, false otherwise.
+   * 
+   * Cycle lock enforcement:
+   * - If objective.cycle exists AND cycle.status === 'LOCKED' or 'ARCHIVED':
+   *   - Superuser (userOrganizationId === null) => reject (read-only)
+   *   - Require TENANT_OWNER or TENANT_ADMIN for that org
+   *   - Else return true (locked)
+   * - DRAFT and ACTIVE cycles allow normal edits
+   */
+  private async checkCycleLock(
+    objectiveId: string,
+    userId: string,
+    userOrganizationId: string | null,
+  ): Promise<{ locked: boolean; cycleName?: string }> {
+    const objective = await this.prisma.objective.findUnique({
+      where: { id: objectiveId },
+      include: {
+        cycle: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            organizationId: true,
+          },
+        },
+      },
+    });
+
+    // No cycle assigned, no lock
+    if (!objective?.cycle) {
+      return { locked: false };
+    }
+
+    const cycle = objective.cycle;
+    const cycleStatus = cycle.status;
+
+    // DRAFT and ACTIVE cycles allow normal edits
+    if (cycleStatus === 'DRAFT' || cycleStatus === 'ACTIVE') {
+      return { locked: false };
+    }
+
+    // LOCKED or ARCHIVED cycles require admin override
+    if (cycleStatus === 'LOCKED' || cycleStatus === 'ARCHIVED') {
+      // Superuser is read-only, cannot bypass cycle lock
+      if (userOrganizationId === null) {
+        return { locked: true, cycleName: cycle.name };
+      }
+
+      // Check if user has TENANT_OWNER or TENANT_ADMIN role
+      const resourceContext = await buildResourceContextFromOKR(this.prisma, objectiveId);
+      const canEdit = await this.rbacService.canPerformAction(userId, 'edit_okr', resourceContext);
+      
+      if (!canEdit) {
+        return { locked: true, cycleName: cycle.name };
+      }
+
+      // User has admin role, can bypass cycle lock
+      return { locked: false };
+    }
+
+    // Unknown status, default to not locked
+    return { locked: false };
   }
 
   /**
@@ -164,7 +256,9 @@ export class ObjectiveService {
       // Extract OKR's organizationId from resource context
       const okrOrganizationId = resourceContext.okr?.organizationId;
       
-      // TODO: Define explicit behavior for OKRs that have no organizationId (currently treated as system data, blocks writes)
+      // If the OKR has no organizationId, treat it as system/global data.
+      // System/global OKRs are always read-only. No-one (including superusers) may edit them.
+      // This is intentional. Changing this requires an explicit product decision.
       if (!okrOrganizationId) {
         return false;
       }
@@ -310,23 +404,83 @@ export class ObjectiveService {
       }
     }
 
-    return this.prisma.objective.create({
+    const createdObjective = await this.prisma.objective.create({
       data,
       include: {
         keyResults: true,
       },
     });
+
+    // Log activity for creation
+    await this.activityService.createActivity({
+      entityType: 'OBJECTIVE',
+      entityId: createdObjective.id,
+      userId: _userId,
+      action: 'CREATED',
+      metadata: {
+        title: createdObjective.title,
+        ownerId: createdObjective.ownerId,
+      },
+    }).catch(err => {
+      // Log error but don't fail the request
+      console.error('Failed to log activity for objective creation:', err);
+    });
+
+    // If Objective has a parent, trigger progress roll-up for parent
+    if (data.parentId) {
+      await this.okrProgressService.refreshObjectiveProgressCascade(data.parentId);
+    }
+
+    return createdObjective;
   }
 
-  async update(id: string, data: any, userId: string) {
+  async update(id: string, data: any, userId: string, userOrganizationId: string | null) {
     // Verify objective exists and user has permission (already checked in controller)
     const objective = await this.prisma.objective.findUnique({
       where: { id },
+      select: {
+        id: true,
+        organizationId: true,
+        isPublished: true,
+        ownerId: true,
+        workspaceId: true,
+        parentId: true,
+        progress: true,
+        status: true,
+        title: true,
+      },
     });
 
     if (!objective) {
       throw new NotFoundException(`Objective with ID ${id} not found`);
     }
+
+    // CYCLE LOCK: Enforce cycle-level governance (stacks with publish lock)
+    const cycleLock = await this.checkCycleLock(id, userId, userOrganizationId);
+    if (cycleLock.locked) {
+      // Superuser cannot bypass cycle lock (read-only)
+      if (userOrganizationId === null) {
+        throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
+      }
+      throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
+    }
+
+    // PUBLISH LOCK: Enforce edit restriction for published OKRs
+    if (objective.isPublished === true) {
+      // Superuser cannot edit even published OKRs (read-only)
+      if (userOrganizationId === null) {
+        throw new ForbiddenException('This OKR is published and can only be modified by admin roles');
+      }
+      
+      // Check if user has elevated role (TENANT_OWNER or TENANT_ADMIN)
+      const resourceContext = await buildResourceContextFromOKR(this.prisma, id);
+      const canEdit = await this.rbacService.canPerformAction(userId, 'edit_okr', resourceContext);
+      
+      if (!canEdit) {
+        throw new ForbiddenException('This OKR is published and can only be modified by admin roles');
+      }
+    }
+    // TODO: Future version will allow "propose change" workflow instead of hard blocking
 
     // Additional validation: prevent changing ownership without permission
     if (data.ownerId && data.ownerId !== objective.ownerId) {
@@ -362,16 +516,60 @@ export class ObjectiveService {
       }
     }
 
-    return this.prisma.objective.update({
+    const updatedObjective = await this.prisma.objective.update({
       where: { id },
       data,
       include: {
         keyResults: true,
       },
     });
+
+    // Determine if this was a publish action
+    const wasPublish = objective.isPublished === false && updatedObjective.isPublished === true;
+
+    // Log activity for update
+    await this.activityService.createActivity({
+      entityType: 'OBJECTIVE',
+      entityId: updatedObjective.id,
+      userId: userId,
+      action: 'UPDATED', // Using UPDATED for both regular updates and publish (isPublished change noted in metadata)
+      metadata: {
+        wasPublish: wasPublish,
+        before: {
+          progress: objective.progress,
+          status: objective.status,
+          isPublished: objective.isPublished,
+          // Include minimal diff - title if changed
+          ...(data.title && data.title !== objective.title ? { title: objective.title } : {}),
+        },
+        after: {
+          progress: updatedObjective.progress,
+          status: updatedObjective.status,
+          isPublished: updatedObjective.isPublished,
+          ...(data.title ? { title: updatedObjective.title } : {}),
+        },
+      },
+    }).catch(err => {
+      // Log error but don't fail the request
+      console.error('Failed to log activity for objective update:', err);
+    });
+
+    // If parentId changed or Objective itself changed, trigger roll-up
+    if (data.parentId !== undefined || data.children !== undefined) {
+      await this.okrProgressService.refreshObjectiveProgressCascade(id);
+      // If parent changed, also update old and new parents
+      if (objective.parentId && objective.parentId !== data.parentId) {
+        await this.okrProgressService.refreshObjectiveProgressCascade(objective.parentId);
+      }
+      if (data.parentId && data.parentId !== objective.parentId) {
+        await this.okrProgressService.refreshObjectiveProgressCascade(data.parentId);
+      }
+    }
+
+    return updatedObjective;
   }
 
-  async delete(id: string) {
+  async delete(id: string, userId: string, userOrganizationId: string | null) {
     try {
       // Check if objective exists
       const objective = await this.prisma.objective.findUnique({
@@ -387,10 +585,62 @@ export class ObjectiveService {
         throw new NotFoundException(`Objective with ID ${id} not found`);
       }
 
+      // CYCLE LOCK: Enforce cycle-level governance (stacks with publish lock)
+      const cycleLock = await this.checkCycleLock(id, userId, userOrganizationId);
+      if (cycleLock.locked) {
+        // Superuser cannot bypass cycle lock (read-only)
+        if (userOrganizationId === null) {
+          throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
+        }
+        throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
+      }
+
+      // PUBLISH LOCK: Enforce delete restriction for published OKRs
+      if (objective.isPublished === true) {
+        // Superuser cannot delete even published OKRs (read-only)
+        if (userOrganizationId === null) {
+          throw new ForbiddenException('This OKR is published and can only be modified by admin roles');
+        }
+        
+        // Check if user has elevated role (TENANT_OWNER or TENANT_ADMIN)
+        const resourceContext = await buildResourceContextFromOKR(this.prisma, id);
+        const canDelete = await this.rbacService.canPerformAction(userId, 'delete_okr', resourceContext);
+        
+        if (!canDelete) {
+          throw new ForbiddenException('This OKR is published and can only be modified by admin roles');
+        }
+      }
+      // TODO: Future version will allow "propose change" workflow instead of hard blocking
+
+      // Get parent ID before deletion (for progress roll-up)
+      const parentId = objective.parentId;
+
+      // Log activity for deletion (before deletion)
+      await this.activityService.createActivity({
+        entityType: 'OBJECTIVE',
+        entityId: objective.id,
+        userId: userId,
+        action: 'DELETED',
+        metadata: {
+          title: objective.title,
+          ownerId: objective.ownerId,
+        },
+      }).catch(err => {
+        // Log error but don't fail the request
+        console.error('Failed to log activity for objective deletion:', err);
+      });
+
       // Delete objective (cascades will handle related records)
-      return await this.prisma.objective.delete({
+      await this.prisma.objective.delete({
         where: { id },
       });
+
+      // Trigger progress roll-up for parent Objective after deletion
+      if (parentId) {
+        await this.okrProgressService.refreshObjectiveProgressCascade(parentId);
+      }
+
+      return { id };
     } catch (error: any) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -400,6 +650,553 @@ export class ObjectiveService {
         `Failed to delete objective: ${error.message || 'Unknown error'}`
       );
     }
+  }
+
+  /**
+   * Get organization-level summary statistics for analytics.
+   * 
+   * Early reporting endpoint - will likely move under /reports/* in a later iteration.
+   * 
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @returns Summary object with total objectives, counts by status, and at-risk ratio
+   */
+  async getOrgSummary(userOrganizationId: string | null | undefined): Promise<{
+    totalObjectives: number;
+    byStatus: { [status: string]: number };
+    atRiskRatio: number;
+  }> {
+    const where: any = {};
+
+    // Tenant isolation: same logic as findAll()
+    if (userOrganizationId === null) {
+      // Superuser: aggregate across ALL organisations
+    } else if (userOrganizationId && userOrganizationId !== '') {
+      where.organizationId = userOrganizationId;
+    } else {
+      // User has no org → return empty summary
+      return {
+        totalObjectives: 0,
+        byStatus: {},
+        atRiskRatio: 0,
+      };
+    }
+
+    // Get all objectives with their status
+    const objectives = await this.prisma.objective.findMany({
+      where,
+      select: {
+        status: true,
+      },
+    });
+
+    const totalObjectives = objectives.length;
+    const byStatus: { [status: string]: number } = {};
+    let atRiskCount = 0;
+
+    // Count by status
+    for (const obj of objectives) {
+      const status = obj.status || 'ON_TRACK';
+      byStatus[status] = (byStatus[status] || 0) + 1;
+      if (status === 'AT_RISK') {
+        atRiskCount++;
+      }
+    }
+
+    // Calculate at-risk ratio (0-1 float)
+    const atRiskRatio = totalObjectives > 0 ? atRiskCount / totalObjectives : 0;
+
+    return {
+      totalObjectives,
+      byStatus,
+      atRiskRatio,
+    };
+  }
+
+  /**
+   * Export objectives and key results to CSV format
+   * 
+   * Early export MVP - exports all objectives visible to the caller with their key results flattened.
+   * Each row represents one key result (objectives with multiple KRs appear multiple times).
+   * Objectives with no KRs appear once with blank KR columns.
+   * 
+   * Tenant isolation: respects the same scoping rules as findAll().
+   * - Superuser (userOrganizationId === null): includes all orgs
+   * - Normal user (string): only their org
+   * - No org (undefined/falsy): returns empty CSV with headers only
+   * 
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @returns CSV string with headers
+   */
+  async exportObjectivesCSV(userOrganizationId: string | null | undefined): Promise<string> {
+    const where: any = {};
+
+    // Tenant isolation: same logic as findAll()
+    if (userOrganizationId === null) {
+      // Superuser: no org filter, return all OKRs
+    } else if (userOrganizationId && userOrganizationId !== '') {
+      where.organizationId = userOrganizationId;
+    } else {
+      // User has no org or invalid org → return empty CSV with headers only
+      const headers = [
+        'objectiveId',
+        'title',
+        'ownerName',
+        'status',
+        'progress',
+        'isPublished',
+        'period',
+        'startDate',
+        'endDate',
+        'parentId',
+        'orgId',
+        'keyResultId',
+        'keyResultTitle',
+        'keyResultOwnerName',
+        'keyResultStatus',
+        'keyResultProgress',
+        'keyResultTargetValue',
+        'keyResultCurrentValue',
+      ];
+      return headers.join(',') + '\n';
+    }
+
+    // Fetch all objectives with their key results
+    const objectives = await this.prisma.objective.findMany({
+      where,
+      include: {
+        keyResults: {
+          include: {
+            keyResult: true,
+          },
+        },
+        owner: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    // Fetch all unique owner IDs for key results
+    const krOwnerIds = new Set<string>();
+    for (const obj of objectives) {
+      if (obj.keyResults) {
+        for (const objKr of obj.keyResults) {
+          if (objKr.keyResult.ownerId) {
+            krOwnerIds.add(objKr.keyResult.ownerId);
+          }
+        }
+      }
+    }
+
+    // Fetch owner names for key results
+    const krOwners = await this.prisma.user.findMany({
+      where: {
+        id: { in: Array.from(krOwnerIds) },
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    const krOwnerMap = new Map(krOwners.map(u => [u.id, u.name || '']));
+
+    // Build CSV rows
+    const rows: string[] = [];
+    
+    // CSV header row
+    const headers = [
+      'objectiveId',
+      'title',
+      'ownerName',
+      'status',
+      'progress',
+      'isPublished',
+      'period',
+      'startDate',
+      'endDate',
+      'parentId',
+      'orgId',
+      'keyResultId',
+      'keyResultTitle',
+      'keyResultOwnerName',
+      'keyResultStatus',
+      'keyResultProgress',
+      'keyResultTargetValue',
+      'keyResultCurrentValue',
+    ];
+    rows.push(headers.join(','));
+
+    // Helper function to escape CSV values
+    const escapeCSV = (value: any): string => {
+      if (value === null || value === undefined) {
+        return '';
+      }
+      const str = String(value);
+      // If contains comma, quote, or newline, wrap in quotes and escape quotes
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    // Process each objective
+    for (const obj of objectives) {
+      const ownerName = obj.owner?.name || '';
+      const objRowBase = [
+        escapeCSV(obj.id),
+        escapeCSV(obj.title),
+        escapeCSV(ownerName),
+        escapeCSV(obj.status),
+        escapeCSV(obj.progress),
+        escapeCSV(obj.isPublished),
+        escapeCSV(obj.period),
+        escapeCSV(obj.startDate?.toISOString().split('T')[0] || ''),
+        escapeCSV(obj.endDate?.toISOString().split('T')[0] || ''),
+        escapeCSV(obj.parentId),
+        escapeCSV(obj.organizationId),
+      ];
+
+      // If objective has key results, create one row per KR
+      if (obj.keyResults && obj.keyResults.length > 0) {
+        for (const objKr of obj.keyResults) {
+          const kr = objKr.keyResult;
+          const krOwnerName = krOwnerMap.get(kr.ownerId) || '';
+          const row = [
+            ...objRowBase,
+            escapeCSV(kr.id),
+            escapeCSV(kr.title),
+            escapeCSV(krOwnerName),
+            escapeCSV(kr.status),
+            escapeCSV(kr.progress),
+            escapeCSV(kr.targetValue),
+            escapeCSV(kr.currentValue),
+          ];
+          rows.push(row.join(','));
+        }
+      } else {
+        // Objective with no KRs: one row with blank KR columns
+        const row = [
+          ...objRowBase,
+          '', // keyResultId
+          '', // keyResultTitle
+          '', // keyResultOwnerName
+          '', // keyResultStatus
+          '', // keyResultProgress
+          '', // keyResultTargetValue
+          '', // keyResultCurrentValue
+        ];
+        rows.push(row.join(','));
+      }
+    }
+
+    return rows.join('\n');
+  }
+
+  /**
+   * Get strategic pillars for an organization.
+   * 
+   * Tenant isolation:
+   * - If userOrganizationId === null (superuser): returns all pillars across all orgs
+   * - Else if userOrganizationId is a non-empty string: return only pillars for that org
+   * - Else (undefined/falsy): return []
+   * 
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @returns Array of pillars with id, name, color, description, and objectiveCount
+   */
+  async getPillarsForOrg(userOrganizationId: string | null | undefined): Promise<Array<{
+    id: string;
+    name: string;
+    color: string | null;
+    description: string | null;
+    objectiveCount: number;
+  }>> {
+    const where: any = {};
+
+    // Tenant isolation: same logic as findAll()
+    if (userOrganizationId === null) {
+      // Superuser: no org filter, return all pillars across all orgs
+    } else if (userOrganizationId && userOrganizationId !== '') {
+      where.organizationId = userOrganizationId;
+    } else {
+      // User has no org or invalid org → return empty array
+      return [];
+    }
+
+    const pillars = await this.prisma.strategicPillar.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        description: true,
+        _count: {
+          select: {
+            objectives: true,
+          },
+        },
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+
+    // Transform to include objectiveCount
+    return pillars.map((pillar: {
+      id: string;
+      name: string;
+      color: string | null;
+      description: string | null;
+      _count: { objectives: number };
+    }) => ({
+      id: pillar.id,
+      name: pillar.name,
+      color: pillar.color,
+      description: pillar.description,
+      objectiveCount: pillar._count.objectives,
+    }));
+  }
+
+  /**
+   * Get active cycles for an organization.
+   * 
+   * Tenant isolation:
+   * - If userOrganizationId === null (superuser): returns all ACTIVE cycles across all orgs
+   * - Else if userOrganizationId is a non-empty string: return ACTIVE cycle(s) for that org
+   * - Else (undefined/falsy): return []
+   * 
+   * This is for UI to show "Current cycle" banner.
+   * 
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @returns Array of active cycles with id, name, status, startDate, endDate
+   */
+  async getActiveCycleForOrg(userOrganizationId: string | null | undefined): Promise<Array<{
+    id: string;
+    name: string;
+    status: string;
+    startDate: Date;
+    endDate: Date;
+    organizationId: string;
+  }>> {
+    const where: any = {
+      status: 'ACTIVE',
+    };
+
+    // Tenant isolation: same logic as findAll()
+    if (userOrganizationId === null) {
+      // Superuser: no org filter, return all ACTIVE cycles across all orgs
+    } else if (userOrganizationId && userOrganizationId !== '') {
+      where.organizationId = userOrganizationId;
+    } else {
+      // User has no org or invalid org → return empty array
+      return [];
+    }
+
+    const cycles = await this.prisma.cycle.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        organizationId: true,
+      },
+      orderBy: {
+        startDate: 'desc',
+      },
+    });
+
+    return cycles;
+  }
+
+  /**
+   * Get strategic pillar coverage for the active cycle.
+   * 
+   * Shows which pillars have active Objectives in the currently ACTIVE cycle.
+   * Returns pillars with zero Objectives flagged for visibility.
+   * 
+   * Tenant isolation:
+   * - If userOrganizationId === null (superuser): returns coverage for all orgs
+   * - Else if userOrganizationId is a non-empty string: return coverage for that org
+   * - Else (undefined/falsy): return []
+   * 
+   * TODO: Later we should handle multiple active cycles, but for now assume at most one active cycle per org.
+   * 
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @returns Array of pillars with id, name, and objectiveCountInActiveCycle
+   */
+  async getPillarCoverageForActiveCycle(userOrganizationId: string | null | undefined): Promise<Array<{
+    pillarId: string;
+    pillarName: string;
+    objectiveCountInActiveCycle: number;
+  }>> {
+    // Tenant isolation: if user has no org, return empty
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      return [];
+    }
+
+    // Build where clause for cycles (tenant isolation)
+    const cycleWhere: any = {
+      status: 'ACTIVE',
+    };
+    if (userOrganizationId !== null) {
+      // Normal user: only their org
+      cycleWhere.organizationId = userOrganizationId;
+    }
+    // Superuser (null): no filter, see all orgs
+
+    // Get active cycle(s) for this org
+    const activeCycles = await this.prisma.cycle.findMany({
+      where: cycleWhere,
+      select: {
+        id: true,
+        organizationId: true,
+      },
+    });
+
+    // If no active cycles, return empty array
+    if (activeCycles.length === 0) {
+      return [];
+    }
+
+    // Build where clause for pillars (tenant isolation)
+    const pillarWhere: any = {};
+    if (userOrganizationId !== null) {
+      // Normal user: only their org
+      pillarWhere.organizationId = userOrganizationId;
+    }
+    // Superuser (null): no filter, see all orgs
+
+    // Get all pillars in scope
+    const pillars = await this.prisma.strategicPillar.findMany({
+      where: pillarWhere,
+      select: {
+        id: true,
+        name: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+
+    // For each pillar, count Objectives in active cycle(s)
+    const cycleIds = activeCycles.map((c: { id: string }) => c.id);
+    const coverage = await Promise.all(
+      pillars.map(async (pillar: { id: string; name: string }) => {
+        // Count Objectives where:
+        // - pillarId matches this pillar
+        // - cycleId is in active cycle(s)
+        const objectiveCount = await this.prisma.objective.count({
+          where: {
+            pillarId: pillar.id,
+            cycleId: {
+              in: cycleIds,
+            },
+          },
+        });
+
+        return {
+          pillarId: pillar.id,
+          pillarName: pillar.name,
+          objectiveCountInActiveCycle: objectiveCount,
+        };
+      })
+    );
+
+    return coverage;
+  }
+
+  /**
+   * Get Objectives owned by a specific user.
+   * 
+   * Tenant isolation:
+   * - If userOrganizationId === null (superuser): returns all Objectives owned by userId across all orgs
+   * - Else if userOrganizationId is a non-empty string: return only Objectives owned by userId in that org
+   * - Else (undefined/falsy): return []
+   * 
+   * @param userId - The user ID to filter by (ownerId)
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @returns Array of Objectives with id, title, status, progress, isPublished, cycle status, pillar info, team/workspace names
+   */
+  async getUserOwnedObjectives(userId: string, userOrganizationId: string | null | undefined): Promise<Array<{
+    id: string;
+    title: string;
+    status: string;
+    progress: number;
+    isPublished: boolean;
+    cycleStatus: string | null;
+    pillar: { id: string; name: string } | null;
+    teamName: string | null;
+    workspaceName: string | null;
+  }>> {
+    // Tenant isolation: if user has no org, return empty
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      return [];
+    }
+
+    const where: any = {
+      ownerId: userId,
+    };
+
+    // Tenant isolation: filter by org
+    if (userOrganizationId !== null) {
+      // Normal user: only their org
+      where.organizationId = userOrganizationId;
+    }
+    // Superuser (null): no org filter, see all orgs
+
+    const objectives = await this.prisma.objective.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        progress: true,
+        isPublished: true,
+        cycle: {
+          select: {
+            status: true,
+          },
+        },
+        pillar: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        team: {
+          select: {
+            name: true,
+          },
+        },
+        workspace: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+
+    // Transform to match return type
+    return objectives.map((obj) => ({
+      id: obj.id,
+      title: obj.title,
+      status: obj.status,
+      progress: obj.progress,
+      isPublished: obj.isPublished,
+      cycleStatus: obj.cycle?.status || null,
+      pillar: obj.pillar,
+      teamName: obj.team?.name || null,
+      workspaceName: obj.workspace?.name || null,
+    }));
   }
 }
 

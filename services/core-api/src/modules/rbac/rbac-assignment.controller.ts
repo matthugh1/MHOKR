@@ -45,6 +45,70 @@ export class RBACAssignmentController {
     private prisma: PrismaService,
   ) {}
 
+  @Get('me')
+  @ApiOperation({ summary: 'Get current user RBAC roles' })
+  async getMyRoles(@Request() req: any) {
+    const assignments = await this.rbacService.getUserRoleAssignments(req.user.id);
+
+    // Group assignments by scopeType
+    const rolesByScope: {
+      tenant: Array<{ organizationId: string; roles: string[] }>;
+      workspace: Array<{ workspaceId: string; roles: string[] }>;
+      team: Array<{ teamId: string; roles: string[] }>;
+    } = {
+      tenant: [],
+      workspace: [],
+      team: [],
+    };
+
+    // Use Maps to merge roles for the same scopeId
+    const tenantMap = new Map<string, string[]>();
+    const workspaceMap = new Map<string, string[]>();
+    const teamMap = new Map<string, string[]>();
+
+    for (const assignment of assignments) {
+      const role = assignment.role;
+
+      switch (assignment.scopeType) {
+        case 'TENANT':
+          if (assignment.scopeId) {
+            const existing = tenantMap.get(assignment.scopeId) || [];
+            tenantMap.set(assignment.scopeId, [...existing, role]);
+          }
+          break;
+        case 'WORKSPACE':
+          if (assignment.scopeId) {
+            const existing = workspaceMap.get(assignment.scopeId) || [];
+            workspaceMap.set(assignment.scopeId, [...existing, role]);
+          }
+          break;
+        case 'TEAM':
+          if (assignment.scopeId) {
+            const existing = teamMap.get(assignment.scopeId) || [];
+            teamMap.set(assignment.scopeId, [...existing, role]);
+          }
+          break;
+      }
+    }
+
+    // Convert maps to arrays
+    for (const [organizationId, roles] of tenantMap.entries()) {
+      rolesByScope.tenant.push({ organizationId, roles });
+    }
+    for (const [workspaceId, roles] of workspaceMap.entries()) {
+      rolesByScope.workspace.push({ workspaceId, roles });
+    }
+    for (const [teamId, roles] of teamMap.entries()) {
+      rolesByScope.team.push({ teamId, roles });
+    }
+
+    return {
+      userId: req.user.id,
+      isSuperuser: req.user.isSuperuser || false,
+      roles: rolesByScope,
+    };
+  }
+
   @Get()
   @RequireAction('manage_users')
   @ApiOperation({ summary: 'Get role assignments' })
