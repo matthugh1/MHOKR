@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { TrendingUp, AlertTriangle, CheckCircle2, Download } from 'lucide-react'
 import api from '@/lib/api'
 import { useWorkspace } from '@/contexts/workspace.context'
-import { useTenantAdmin } from '@/hooks/useTenantAdmin'
+import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 
 interface AnalyticsSummary {
   totalObjectives: number
@@ -51,7 +51,7 @@ interface PillarCoverageItem {
 
 export default function AnalyticsPage() {
   const { currentOrganization } = useWorkspace()
-  const { isTenantAdmin } = useTenantAdmin()
+  const { canExportData } = useTenantPermissions()
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null)
   const [feed, setFeed] = useState<CheckInFeedItem[]>([])
   const [overdue, setOverdue] = useState<OverdueCheckInItem[]>([])
@@ -197,8 +197,8 @@ export default function AnalyticsPage() {
                   ]}
                 />
               </div>
-              {/* must match backend canExportData() logic - only show for tenant admins */}
-              {isTenantAdmin && (
+              {/* TODO [phase6-frontend-hardening]: canExportData() must stay aligned with backend RBACService.canExportData() */}
+              {canExportData() && (
                 <Button
                   onClick={handleExportCSV}
                   disabled={exporting || loading}
