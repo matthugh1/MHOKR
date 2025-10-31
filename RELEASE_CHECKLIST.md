@@ -67,3 +67,22 @@ For questions or issues, refer to:
 - Component docs: See JSDoc in `apps/web/src/components/ui/`
 - Design system: `docs/architecture/DESIGN_SYSTEM.md`
 
+## Pre-merge validation (Phase 13)
+
+- [ ] Run `node scripts/pre-merge-audit.js`
+- [ ] Confirm analytics dashboard (`/dashboard/analytics`) loads with:
+  - KPI StatCards
+  - SectionHeader blocks
+  - Strategic coverage
+  - Overdue check-ins data
+  - Activity feed cards
+- [ ] Confirm OKR dashboard (`/dashboard/okrs`) loads with:
+  - Objectives list (or clean empty state)
+  - Edit / Delete buttons respect lock rules
+  - PublishLockWarningModal triggers for locked OKRs
+  - Activity drawer opens and paginates (even if hasMore=false)
+- [ ] Confirm CSV export button:
+  - is only visible to a tenant admin/owner
+  - produces CSV or a graceful inline error message
+- [ ] Confirm non-admin user can still load dashboards with no crash
+
