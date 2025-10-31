@@ -36,6 +36,7 @@ import { EditPanel } from './components/EditPanel'
 import { EditFormTabs } from './components/EditFormTabs'
 import { ObjectiveNode, KeyResultNode, InitiativeNode } from './components/EnhancedNodes'
 import { useAutoSave } from './hooks/useAutoSave'
+import { CycleSelector } from '@/components/ui/CycleSelector'
 import { 
   calculateEndDate, 
   formatDateForInput, 
@@ -73,6 +74,15 @@ export default function BuilderPage() {
   const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [periodFilter, setPeriodFilter] = useState<string>(getCurrentPeriodFilter())
   const availablePeriods = getAvailablePeriodFilters()
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null)
+  const [activeCycles, setActiveCycles] = useState<Array<{
+    id: string
+    name: string
+    status: string
+    startDate: string
+    endDate: string
+    organizationId: string
+  }>>([])
 
   // Auto-save positions - Temporarily disabled until endpoint is verified
   useAutoSave(nodes, {
@@ -130,10 +140,28 @@ export default function BuilderPage() {
 
   const levelDisplay = getOKRLevelDisplay()
 
-  // Filter nodes based on period
+  // Transform cycles for CycleSelector (map startDate/endDate to startsAt/endsAt)
+  const cyclesForSelector = activeCycles.map(cycle => ({
+    id: cycle.id,
+    name: cycle.name,
+    status: cycle.status,
+    startsAt: cycle.startDate,
+    endsAt: cycle.endDate,
+  }))
+
+  // Filter nodes based on cycle or period
   const selectedPeriodOption = availablePeriods.find(p => p.value === periodFilter)
-  const filteredNodes = periodFilter === 'all' 
-    ? nodes 
+  const filteredNodes = selectedCycleId
+    ? nodes.filter(node => {
+        // Filter by cycleId for objectives
+        if (node.type === 'objective') {
+          return node.data.cycleId === selectedCycleId
+        }
+        // Show key results and initiatives (they don't have cycleId, show all)
+        return true
+      })
+    : periodFilter === 'all'
+    ? nodes
     : nodes.filter(node => {
         if (node.type === 'objective' && node.data.startDate && node.data.endDate && selectedPeriodOption) {
           return doesOKRMatchPeriod(node.data.startDate, node.data.endDate, selectedPeriodOption)
@@ -146,8 +174,28 @@ export default function BuilderPage() {
     // Only load if we have an organization context
     if (currentOrganization?.id) {
       loadOKRs()
+      loadActiveCycles()
     }
   }, [currentOrganization?.id])
+
+  const loadActiveCycles = async () => {
+    try {
+      const response = await api.get('/objectives/cycles/active')
+      const cycles = response.data || []
+      setActiveCycles(cycles)
+      // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
+      // Set default selected cycle to first active cycle if available
+      if (cycles.length > 0 && !selectedCycleId) {
+        setSelectedCycleId(cycles[0].id)
+      }
+    } catch (error: any) {
+      // Cycles endpoint is optional - gracefully degrade if no permission
+      if (error.response?.status !== 403) {
+        console.error('Failed to load active cycles:', error)
+      }
+      setActiveCycles([])
+    }
+  }
 
   const loadOKRs = async () => {
     try {
@@ -204,6 +252,7 @@ export default function BuilderPage() {
               period: obj.period,
               startDate: obj.startDate ? formatDateForInput(obj.startDate) : undefined,
               endDate: obj.endDate ? formatDateForInput(obj.endDate) : undefined,
+              cycleId: obj.cycleId || null,
               onEdit: handleEditNode,
               onQuickSave: handleQuickSave,
               okrId: obj.id,
@@ -809,28 +858,40 @@ export default function BuilderPage() {
                     </div>
                   </div>
                   <div className="flex gap-2 items-center">
-                <select
-                  value={periodFilter}
-                  onChange={(e) => setPeriodFilter(e.target.value)}
-                  className="flex h-9 rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm min-w-[160px]"
-                >
-                  <option value="all">All Time Periods</option>
-                  <optgroup label="Years">
-                    {availablePeriods.filter(p => p.period === Period.ANNUAL).map(period => (
-                      <option key={period.value} value={period.value}>{period.label}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Quarters">
-                    {availablePeriods.filter(p => p.period === Period.QUARTERLY).map(period => (
-                      <option key={period.value} value={period.value}>{period.label}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Months">
-                    {availablePeriods.filter(p => p.period === Period.MONTHLY).map(period => (
-                      <option key={period.value} value={period.value}>{period.label}</option>
-                    ))}
-                  </optgroup>
-                </select>
+                {cyclesForSelector.length > 0 ? (
+                  <CycleSelector
+                    cycles={cyclesForSelector}
+                    selectedCycleId={selectedCycleId}
+                    onSelect={(id) => {
+                      setSelectedCycleId(id)
+                      // Clear period filter when cycle is selected
+                      setPeriodFilter('all')
+                    }}
+                  />
+                ) : (
+                  <select
+                    value={periodFilter}
+                    onChange={(e) => setPeriodFilter(e.target.value)}
+                    className="flex h-9 rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm min-w-[160px]"
+                  >
+                    <option value="all">All Time Periods</option>
+                    <optgroup label="Years">
+                      {availablePeriods.filter(p => p.period === Period.ANNUAL).map(period => (
+                        <option key={period.value} value={period.value}>{period.label}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Quarters">
+                      {availablePeriods.filter(p => p.period === Period.QUARTERLY).map(period => (
+                        <option key={period.value} value={period.value}>{period.label}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Months">
+                      {availablePeriods.filter(p => p.period === Period.MONTHLY).map(period => (
+                        <option key={period.value} value={period.value}>{period.label}</option>
+                      ))}
+                    </optgroup>
+                  </select>
+                )}
                 <Button variant="outline" onClick={() => setShowNodeCreator(!showNodeCreator)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Node
