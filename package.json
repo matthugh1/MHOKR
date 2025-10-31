@@ -27,7 +27,8 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "lint": "eslint \"**/*.{ts,tsx,js,jsx}\" --fix",
     "typecheck": "tsc --noEmit",
-    "premerge:audit": "node scripts/pre-merge-audit.js"
+    "premerge:audit": "node scripts/pre-merge-audit.js",
+    "todo:audit": "node scripts/todo-audit.js"
   },
   "workspaces": [
     "apps/*",

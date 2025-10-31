@@ -56,7 +56,7 @@ export const AUDITABLE_ACTIONS: Set<string> = new Set([
  * @param event - The audit log event to record
  */
 export async function recordAuditEvent(event: AuditLog): Promise<void> {
-  // TODO: Implement actual audit logging
+  // TODO [phase7-hardening]: Implement actual audit logging for RBAC changes for audit/compliance visibility
   // This should write to the database and/or external logging service
   
   // For now, log to console (in production, this should be removed or sent to logging service)

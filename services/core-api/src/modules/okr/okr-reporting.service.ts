@@ -28,7 +28,7 @@ export class OkrReportingService {
    * 
    * Moved from ObjectiveService.getOrgSummary() in Phase 4.
    * 
-   * TODO [phase4-reporting]: Early reporting endpoint - may need optimization for large datasets.
+   * TODO [phase7-performance]: May need optimization for large datasets.
    * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
    * @returns Summary object with total objectives, counts by status, and at-risk ratio
@@ -100,7 +100,7 @@ export class OkrReportingService {
    * - Normal user (string): only their org
    * - No org (undefined/falsy): returns empty CSV with headers only
    * 
-   * TODO [phase4-reporting]: May need optimization for memory usage with large datasets.
+   * TODO [phase7-performance]: May need optimization for memory usage with large datasets.
    * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
    * @returns CSV string with headers
@@ -285,8 +285,6 @@ export class OkrReportingService {
    * Tenant isolation MUST apply - only includes check-ins for KRs whose parent objectives
    * are in the user's organization (or all orgs if superuser).
    * 
-   * TODO [phase4-reporting]: Early reporting endpoint - moved to /reports/* in Phase 4.
-   * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
    * @returns Array of recent check-ins with KR title, user info, value, confidence, timestamp
    */
@@ -378,7 +376,7 @@ export class OkrReportingService {
    * - Else if userOrganizationId is a non-empty string: return only pillars for that org
    * - Else (undefined/falsy): return []
    * 
-   * TODO [phase4-reporting]: Frontend will use to populate 'filter by strategic bet' dropdown.
+   * TODO [phase7-hardening]: Frontend will use to populate 'filter by strategic bet' dropdown.
    * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
    * @returns Array of pillars with id, name, color, description, and objectiveCount
@@ -449,7 +447,7 @@ export class OkrReportingService {
    * 
    * This is for UI to show "Current cycle" banner.
    * 
-   * TODO [phase4-reporting]: Later we should handle multiple active cycles, but for now assume at most one active cycle per org.
+   * TODO [phase7-hardening]: Later we should handle multiple active cycles, but for now assume at most one active cycle per org.
    * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
    * @returns Array of active cycles with id, name, status, startDate, endDate, organizationId
@@ -508,8 +506,8 @@ export class OkrReportingService {
    * - Else if userOrganizationId is a non-empty string: return coverage for that org
    * - Else (undefined/falsy): return []
    * 
-   * TODO [phase4-reporting]: Later we should handle multiple active cycles, but for now assume at most one active cycle per org.
-   * TODO [phase4-reporting]: Frontend - highlight strategic gaps (pillars with zero objectives).
+   * TODO [phase7-hardening]: Later we should handle multiple active cycles, but for now assume at most one active cycle per org.
+   * TODO [phase6-polish]: Frontend - highlight strategic gaps (pillars with zero objectives).
    * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
    * @returns Array of pillars with id, name, and objectiveCountInActiveCycle
@@ -693,7 +691,7 @@ export class OkrReportingService {
    * Returns Key Results that haven't been checked in within their expected cadence period.
    * Tenant isolation applies: null (superuser) sees all orgs, string sees that org only, undefined returns [].
    * 
-   * TODO [phase4-reporting]: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
+   * TODO [phase7-performance]: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
    * Future optimization: use SQL window functions or subqueries to calculate overdue in database.
    * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
@@ -724,7 +722,7 @@ export class OkrReportingService {
     }
     // Superuser (null): no filter, see all orgs
 
-    // TODO: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
+    // TODO [phase7-performance]: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
     // Future optimization: use SQL window functions or subqueries to calculate overdue in database.
 
     // Fetch all Key Results in scope with their objectives and latest check-in

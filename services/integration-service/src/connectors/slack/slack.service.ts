@@ -12,7 +12,7 @@ export class SlackService {
   ) {}
 
   async sendMessage(channel: string, message: string) {
-    // TODO: Implement Slack API call
+    // TODO [phase7-hardening]: Implement Slack API call for integration with Slack
     console.log(`Sending message to ${channel}: ${message}`);
     return { success: true };
   }

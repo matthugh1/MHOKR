@@ -1,7 +1,6 @@
 import { Controller, Get, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { ObjectiveService } from './objective.service';
-import { KeyResultService } from './key-result.service';
+import { OkrReportingService } from './okr-reporting.service';
 import { ActivityService } from '../activity/activity.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
@@ -12,8 +11,7 @@ import { RBACGuard, RequireAction } from '../rbac';
 @ApiBearerAuth()
 export class MeController {
   constructor(
-    private readonly objectiveService: ObjectiveService,
-    private readonly keyResultService: KeyResultService,
+    private readonly reportingService: OkrReportingService,
     private readonly activityService: ActivityService,
   ) {}
 
@@ -21,20 +19,20 @@ export class MeController {
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get user dashboard summary' })
   async getSummary(@Req() req: any) {
-    // TODO: Frontend: this powers a 'My dashboard' view; later we can add widgets for only-my-team.
+    // TODO [phase7-hardening]: Expose this data in a dedicated 'My dashboard' view in frontend
     const userId = req.user.id;
     const userOrganizationId = req.user.organizationId;
 
     // Get user's owned Objectives and Key Results
     const [ownedObjectives, ownedKeyResults, recentActivity, allOverdueCheckIns] = await Promise.all([
-      this.objectiveService.getUserOwnedObjectives(userId, userOrganizationId),
-      this.keyResultService.getUserOwnedKeyResults(userId, userOrganizationId),
+      this.reportingService.getUserOwnedObjectives(userId, userOrganizationId),
+      this.reportingService.getUserOwnedKeyResults(userId, userOrganizationId),
       this.activityService.getRecentActivityForUserScope(userId, userOrganizationId),
-      this.keyResultService.getOverdueCheckIns(userOrganizationId),
+      this.reportingService.getOverdueCheckIns(userOrganizationId),
     ]);
 
     // Filter overdue check-ins to only those owned by this user
-    const overdueCheckIns = allOverdueCheckIns.filter((item) => item.ownerId === userId);
+    const overdueCheckIns = allOverdueCheckIns.filter((item: { ownerId: string }) => item.ownerId === userId);
 
     return {
       ownedObjectives,

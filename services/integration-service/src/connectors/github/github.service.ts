@@ -10,7 +10,7 @@ export class GitHubService {
   ) {}
 
   async getRepository(_owner: string, _repo: string) {
-    // TODO: Implement GitHub API call
+    // TODO [phase7-hardening]: Implement GitHub API call for integration with GitHub repositories
     return {};
   }
 }

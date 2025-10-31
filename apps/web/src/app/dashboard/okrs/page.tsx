@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
@@ -50,7 +50,6 @@ import { useToast } from '@/hooks/use-toast'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ObjectiveCard } from '@/components/ui/ObjectiveCard'
 import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
-import { BuildStamp } from '@/components/ui/BuildStamp'
 import { PublishLockWarningModal } from './components/PublishLockWarningModal'
 import { CycleSelector } from '@/components/ui/CycleSelector'
 import api from '@/lib/api'
@@ -61,7 +60,6 @@ export default function OKRsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [selectedPeriod, setSelectedPeriod] = useState<string>(getCurrentPeriodFilter())
   const availablePeriods = getAvailablePeriodFilters()
-  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null)
   
   // Filter states
   const [filterWorkspaceId, setFilterWorkspaceId] = useState<string>('all')
@@ -92,6 +90,45 @@ export default function OKRsPage() {
     endDate: string
     organizationId: string
   }>>([])
+  
+  // Helper to normalize a label string to a timeframeKey
+  const normaliseLabelToKey = (label: string): string => {
+    return label
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '') // Remove punctuation except hyphens
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-') // Collapse multiple hyphens
+      .replace(/^-|-$/g, '') // Remove leading/trailing hyphens
+  }
+  
+  // Helper to map raw objective from API to view model with timeframeKey
+  const mapObjectiveToViewModel = (rawObjective: any): any => {
+    let timeframeKey: string = 'unassigned'
+    
+    // Priority 1: cycleId
+    if (rawObjective.cycleId) {
+      timeframeKey = rawObjective.cycleId
+    }
+    // Priority 2: plannedCycleId (if exists)
+    else if (rawObjective.plannedCycleId) {
+      timeframeKey = rawObjective.plannedCycleId
+    }
+    // Priority 3: cycle-like label fields (cycleName, periodLabel, timeframeLabel, etc.)
+    else if (rawObjective.cycleName) {
+      timeframeKey = normaliseLabelToKey(rawObjective.cycleName)
+    } else if (rawObjective.periodLabel) {
+      timeframeKey = normaliseLabelToKey(rawObjective.periodLabel)
+    } else if (rawObjective.timeframeLabel) {
+      timeframeKey = normaliseLabelToKey(rawObjective.timeframeLabel)
+    }
+    // Priority 4: fallback to 'unassigned'
+    
+    return {
+      ...rawObjective,
+      timeframeKey,
+    }
+  }
   
   useEffect(() => {
     // Debug: Log JWT token info and user context (remove in production)
@@ -157,8 +194,9 @@ export default function OKRsPage() {
       setActiveCycles(cycles)
       // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
       // Set default selected cycle to first active cycle if available
-      if (cycles.length > 0 && !selectedCycleId) {
-        setSelectedCycleId(cycles[0].id)
+      if (cycles.length > 0) {
+        setSelectedTimeframeKey(cycles[0].id)
+        setSelectedTimeframeLabel(cycles[0].name)
       }
     } catch (error: any) {
       // Cycles endpoint is optional - gracefully degrade if no permission
@@ -213,36 +251,79 @@ export default function OKRsPage() {
   const selectedPeriodOption = availablePeriods.find(p => p.value === selectedPeriod);
   
   // Transform cycles for CycleSelector (map startDate/endDate to startsAt/endsAt)
-  const cyclesForSelector = activeCycles.map(cycle => ({
+  const cyclesFromApi = activeCycles.map(cycle => ({
     id: cycle.id,
     name: cycle.name,
     status: cycle.status,
     startsAt: cycle.startDate,
     endsAt: cycle.endDate,
   }))
+
+  // Normalize cycles with synthetic fallback
+  const normalizedCycles = useMemo(() => {
+    if (cyclesFromApi && cyclesFromApi.length > 0) {
+      return cyclesFromApi.map(c => ({
+        id: c.id,
+        name: c.name ?? 'Unnamed Cycle',
+        status: c.status ?? 'ACTIVE',
+        startsAt: c.startsAt,
+        endsAt: c.endsAt,
+      }))
+    }
+    return [
+      {
+        id: 'synthetic-active-cycle',
+        name: 'Q4 2025 (Active)',
+        status: 'ACTIVE',
+        startsAt: undefined,
+        endsAt: undefined,
+      },
+    ]
+  }, [cyclesFromApi])
+
+  // Build legacy periods list
+  const legacyPeriods = useMemo(() => [
+    { id: '2025-Q4', label: 'Q4 2025 (current)' },
+    { id: '2026-Q1-planning', label: 'Q1 2026 (planning)', isFuture: true },
+    { id: '2026-Q2-draft', label: 'Q2 2026 (draft)', isFuture: true },
+    // [phase6-polish]: hydrate from backend once periods endpoint exists
+  ], [])
+
+  // State for timeframe selection (key and label)
+  const [selectedTimeframeKey, setSelectedTimeframeKey] = useState<string | null>(() => {
+    if (normalizedCycles.length > 0) return normalizedCycles[0].id
+    if (legacyPeriods.length > 0) return legacyPeriods[0].id
+    return 'all' // Default to 'all' if no cycles available
+  })
+  const [selectedTimeframeLabel, setSelectedTimeframeLabel] = useState<string>(() => {
+    if (normalizedCycles.length > 0) return normalizedCycles[0].name
+    if (legacyPeriods.length > 0) return legacyPeriods[0].label
+    return 'All periods'
+  })
+  
+  // Legacy selectedId for backwards compatibility during transition
+  const selectedId = selectedTimeframeKey
+  
+  // Map all objectives to view models with timeframeKey
+  const objectivesViewModel = useMemo(() => {
+    const safeObjectives = Array.isArray(okrs) ? okrs : []
+    return safeObjectives.map(mapObjectiveToViewModel)
+  }, [okrs])
   
   // Apply filters and visibility checks with safe defaults
-  const safeObjectives = Array.isArray(okrs) ? okrs : []
-  const filteredOKRs = safeObjectives.filter(okr => {
+  const filteredOKRs = objectivesViewModel.filter(okr => {
     // Apply visibility check
     if (!canSeeObjective(okr)) {
       return false
     }
-    // Cycle filter (takes precedence over period filter)
-    if (selectedCycleId) {
-      if (okr.cycleId !== selectedCycleId) {
-        return false
-      }
+    
+    // Strict filtering by timeframeKey
+    if (!selectedTimeframeKey || selectedTimeframeKey === 'all') {
+      // Show all when 'all' is selected or no selection
     } else {
-      // Period filter (only applies when no cycle is selected)
-      if (selectedPeriod !== 'all' && selectedPeriodOption) {
-        if (okr.startDate && okr.endDate) {
-          if (!doesOKRMatchPeriod(okr.startDate, okr.endDate, selectedPeriodOption)) {
-            return false
-          }
-        } else {
-          return false
-        }
+      // Strict match: only include if timeframeKey matches
+      if (okr.timeframeKey !== selectedTimeframeKey) {
+        return false
       }
     }
     
@@ -441,34 +522,41 @@ export default function OKRsPage() {
       <DashboardLayout>
         <div className="p-8">
           <div className="mb-8">
-            <div className="flex items-start justify-between gap-4">
-              <PageHeader
-                title="Objectives & Key Results"
-                subtitle="Aligned execution, live progress"
-                badges={[
-                  ...(activeCycles.length > 0
-                    ? [
-                        {
-                          label: `Active Cycle: ${activeCycles[0].name}`,
-                          tone: 'neutral' as const,
-                        },
-                      ]
-                    : []),
-                  ...(activeCycles.some((c) => c.status === 'LOCKED')
-                    ? [{ label: 'Locked', tone: 'warning' as const }]
-                    : []),
-                  ...(okrs.filter((o) => o.status === 'AT_RISK').length > 0
-                    ? [
-                        {
-                          label: `${okrs.filter((o) => o.status === 'AT_RISK').length} At Risk`,
-                          tone: 'warning' as const,
-                        },
-                      ]
-                    : []),
+            <div className="flex items-start justify-between flex-wrap gap-4">
+              <div className="flex-1">
+                <PageHeader
+                  title="Objectives & Key Results"
+                  subtitle="Aligned execution, live progress"
+                  badges={[
+                    ...(selectedTimeframeLabel ? [
+                      {
+                        label: `Viewing: ${selectedTimeframeLabel}`,
+                        tone: 'neutral' as const,
+                      },
+                    ] : []),
+                    ...(activeCycles.length > 0
+                      ? [
+                          {
+                            label: `Active Cycle: ${activeCycles[0].name}`,
+                            tone: 'neutral' as const,
+                          },
+                        ]
+                      : []),
+                    ...(activeCycles.some((c) => c.status === 'LOCKED')
+                      ? [{ label: 'Locked', tone: 'warning' as const }]
+                      : []),
+                    ...(okrs.filter((o) => o.status === 'AT_RISK').length > 0
+                      ? [
+                          {
+                            label: `${okrs.filter((o) => o.status === 'AT_RISK').length} At Risk`,
+                            tone: 'warning' as const,
+                          },
+                        ]
+                      : []),
                   ]}
-              />
+                />
+              </div>
               <div className="flex items-center gap-4">
-                <BuildStamp variant="inline" />
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
                   New OKR
@@ -556,40 +644,15 @@ export default function OKRsPage() {
                 </SelectContent>
               </Select>
               
-              {cyclesForSelector.length > 0 ? (
-                <CycleSelector
-                  cycles={cyclesForSelector}
-                  selectedCycleId={selectedCycleId}
-                  onSelect={(id) => {
-                    setSelectedCycleId(id)
-                    // Clear period filter when cycle is selected
-                    setSelectedPeriod('all')
-                  }}
-                />
-              ) : (
-                <select
-                  value={selectedPeriod}
-                  onChange={(e) => setSelectedPeriod(e.target.value)}
-                  className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm min-w-[160px]"
-                >
-                  <option value="all">All Time Periods</option>
-                  <optgroup label="Years">
-                    {availablePeriods.filter(p => p.period === Period.ANNUAL).map(period => (
-                      <option key={period.value} value={period.value}>{period.label}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Quarters">
-                    {availablePeriods.filter(p => p.period === Period.QUARTERLY).map(period => (
-                      <option key={period.value} value={period.value}>{period.label}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Months">
-                    {availablePeriods.filter(p => p.period === Period.MONTHLY).map(period => (
-                      <option key={period.value} value={period.value}>{period.label}</option>
-                    ))}
-                  </optgroup>
-                </select>
-              )}
+              <CycleSelector
+                cycles={normalizedCycles}
+                legacyPeriods={legacyPeriods}
+                selectedId={selectedTimeframeKey}
+                onSelect={(opt: { key: string; label: string }) => {
+                  setSelectedTimeframeKey(opt.key)
+                  setSelectedTimeframeLabel(opt.label)
+                }}
+              />
               
               {hasActiveFilters && (
                 <Button variant="outline" size="sm" onClick={clearFilters}>
@@ -656,19 +719,28 @@ export default function OKRsPage() {
             </div>
           ) : filteredOKRs.length === 0 ? (
             <div className="text-center py-12">
-              {safeObjectives.filter(canSeeObjective).length === 0 ? (
+              {objectivesViewModel.filter(canSeeObjective).length === 0 ? (
                 <div className="rounded-xl border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500 shadow-sm">
                   No objectives are visible in this workspace.
                   {/* TODO [phase6-polish]: add illustration + CTA when we allow creation */}
                 </div>
               ) : (
-                <div className="rounded-xl border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500 shadow-sm">
-                  <p className="mb-4">No OKRs found</p>
-                  {hasActiveFilters && (
-                    <Button variant="outline" onClick={clearFilters}>
-                      Clear filters to see all OKRs
-                    </Button>
+                <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm text-neutral-600">
+                  {selectedTimeframeKey === 'unassigned' ? (
+                    <p>No objectives are currently unassigned to a planning cycle.</p>
+                  ) : selectedTimeframeKey && selectedTimeframeKey !== 'all' ? (
+                    <p>No objectives defined for {selectedTimeframeLabel} yet.</p>
+                  ) : (
+                    <>
+                      <p className="mb-4">No OKRs found</p>
+                      {hasActiveFilters && (
+                        <Button variant="outline" onClick={clearFilters}>
+                          Clear filters to see all OKRs
+                        </Button>
+                      )}
+                    </>
                   )}
+                  {/* TODO [phase6-polish]: add CTA "Create first objective in this cycle" for admins */}
                 </div>
               )}
             </div>

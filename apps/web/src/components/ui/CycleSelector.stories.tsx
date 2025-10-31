@@ -61,28 +61,29 @@ const mockCyclesDefault = [
 ]
 
 // Interactive wrapper component
-const InteractiveCycleSelector = ({ cycles, initialSelected }: { cycles: typeof mockCyclesDefault; initialSelected?: string | null }) => {
-  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(initialSelected || cycles[0]?.id || null)
+const InteractiveCycleSelector = ({ cycles, legacyPeriods, initialSelected }: { cycles: typeof mockCyclesDefault; legacyPeriods?: Array<{ id: string; label: string; isFuture?: boolean }>; initialSelected?: string | null }) => {
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelected || cycles[0]?.id || null)
   
   return (
     <CycleSelector
       cycles={cycles}
-      selectedCycleId={selectedCycleId}
-      onSelect={(id) => setSelectedCycleId(id)}
+      legacyPeriods={legacyPeriods || []}
+      selectedId={selectedId}
+      onSelect={(opt) => setSelectedId(opt.key)}
     />
   )
 }
 
 export const Default: Story = {
-  render: () => <InteractiveCycleSelector cycles={mockCyclesDefault} />,
+  render: () => <InteractiveCycleSelector cycles={mockCyclesDefault} legacyPeriods={[]} />,
 }
 
 export const LockedCycleSelected: Story = {
-  render: () => <InteractiveCycleSelector cycles={mockCyclesDefault} initialSelected="cycle-3" />,
+  render: () => <InteractiveCycleSelector cycles={mockCyclesDefault} legacyPeriods={[]} initialSelected="cycle-3" />,
 }
 
 export const DraftUpcomingCycle: Story = {
-  render: () => <InteractiveCycleSelector cycles={mockCyclesDefault} initialSelected="cycle-2" />,
+  render: () => <InteractiveCycleSelector cycles={mockCyclesDefault} legacyPeriods={[]} initialSelected="cycle-2" />,
 }
 
 export const ManyCycles: Story = {
@@ -111,11 +112,11 @@ export const ManyCycles: Story = {
         endsAt: '2024-09-30T23:59:59Z',
       },
     ]
-    return <InteractiveCycleSelector cycles={manyCycles} />
+    return <InteractiveCycleSelector cycles={manyCycles} legacyPeriods={[]} />
   },
 }
 
 export const EmptyState: Story = {
-  render: () => <InteractiveCycleSelector cycles={[]} initialSelected={null} />,
+  render: () => <InteractiveCycleSelector cycles={[]} legacyPeriods={[]} initialSelected={null} />,
 }
 

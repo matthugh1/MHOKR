@@ -398,8 +398,8 @@ export class ObjectiveService {
       },
       rbacService: this.rbacService,
     });
-    // TODO [phase3-governance]: Governance logic moved to OkrGovernanceService
-    // TODO [propose-change-workflow]: Future version will allow "propose change" workflow instead of hard blocking
+    // TODO [phase7-hardening]: Governance logic moved to OkrGovernanceService
+    // TODO [phase7-hardening]: Future version will allow "propose change" workflow instead of hard blocking
 
     // Additional validation: prevent changing ownership without permission
     if (data.ownerId && data.ownerId !== objective.ownerId) {
@@ -516,8 +516,8 @@ export class ObjectiveService {
         },
         rbacService: this.rbacService,
       });
-      // TODO [phase3-governance]: Governance logic moved to OkrGovernanceService
-      // TODO [propose-change-workflow]: Future version will allow "propose change" workflow instead of hard blocking
+      // TODO [phase7-hardening]: Governance logic moved to OkrGovernanceService
+      // TODO [phase7-hardening]: Future version will allow "propose change" workflow instead of hard blocking
 
       // Get parent ID before deletion (for progress roll-up)
       const parentId = objective.parentId;

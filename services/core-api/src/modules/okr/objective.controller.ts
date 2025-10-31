@@ -79,7 +79,7 @@ export class ObjectiveController {
     if (!canEdit) {
       throw new ForbiddenException('You do not have permission to edit this OKR');
     }
-    // TODO: Frontend - show warning modal when attempting to edit published OKR
+    // TODO [phase7-hardening]: Frontend - show warning modal when attempting to edit published OKR
     return this.objectiveService.update(id, data, req.user.id, req.user.organizationId);
   }
 
@@ -95,7 +95,7 @@ export class ObjectiveController {
     if (!canDelete) {
       throw new ForbiddenException('You do not have permission to delete this OKR');
     }
-    // TODO: Frontend - show warning modal when attempting to delete published OKR
+    // TODO [phase7-hardening]: Frontend - show warning modal when attempting to delete published OKR
     return this.objectiveService.delete(id, req.user.id, req.user.organizationId);
   }
 

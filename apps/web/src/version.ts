@@ -6,6 +6,6 @@
  * so we can tag demo builds without redeploying core-api.
  */
 
-export const BUILD_VERSION = '1.0.0'
-export const BUILD_ENV = process.env.NEXT_PUBLIC_ENV || 'development'
-export const BUILD_GIT_SHA = process.env.NEXT_PUBLIC_GIT_SHA || 'dev'
+export const APP_VERSION = 'v1.0.0-refactor-baseline'
+export const DEPLOY_ENV = process.env.NEXT_PUBLIC_ENV || 'local-dev'
+export const GIT_SHA = process.env.NEXT_PUBLIC_GIT_SHA || '6d2013d'
