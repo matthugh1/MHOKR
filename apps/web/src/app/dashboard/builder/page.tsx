@@ -94,6 +94,7 @@ export default function BuilderPage() {
     loading: workspaceLoading 
   } = useWorkspace()
   const { user } = useAuth()
+  const tenantPermissions = useTenantPermissions()
 
   const getOKRLevelDisplay = () => {
     switch (currentOKRLevel) {
