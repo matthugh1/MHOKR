@@ -203,8 +203,9 @@ export default function OKRsPage() {
 
   const selectedPeriodOption = availablePeriods.find(p => p.value === selectedPeriod);
   
-  // Apply filters and visibility checks
-  const filteredOKRs = okrs.filter(okr => {
+  // Apply filters and visibility checks with safe defaults
+  const safeObjectives = Array.isArray(okrs) ? okrs : []
+  const filteredOKRs = safeObjectives.filter(okr => {
     // Apply visibility check
     if (!canSeeObjective(okr)) {
       return false
@@ -615,11 +616,20 @@ export default function OKRsPage() {
             </div>
           ) : filteredOKRs.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-slate-500 mb-4">No OKRs found</p>
-              {hasActiveFilters && (
-                <Button variant="outline" onClick={clearFilters}>
-                  Clear filters to see all OKRs
-                </Button>
+              {safeObjectives.filter(canSeeObjective).length === 0 ? (
+                <div className="text-sm text-neutral-500">
+                  No objectives are visible in this workspace.
+                  {/* TODO [phase6-polish]: styled empty state illustration */}
+                </div>
+              ) : (
+                <>
+                  <p className="text-slate-500 mb-4">No OKRs found</p>
+                  {hasActiveFilters && (
+                    <Button variant="outline" onClick={clearFilters}>
+                      Clear filters to see all OKRs
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           ) : viewMode === 'grid' ? (
@@ -725,8 +735,8 @@ export default function OKRsPage() {
           <ActivityDrawer
             isOpen={activityDrawerOpen}
             onClose={handleCloseActivityDrawer}
-            items={activityItems}
-            entityName={activityEntityName}
+            items={Array.isArray(activityItems) ? activityItems : []}
+            entityName={activityEntityName || 'Activity'}
             hasMore={false}
           />
 
@@ -747,6 +757,8 @@ export default function OKRsPage() {
                 : null,
             }
             const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
+            // TODO [phase6-polish]: improve copy for lock reasons
+            const lockMessage = lockInfo.message || 'This item is locked and cannot be changed in the current cycle.'
             
             return (
               <PublishLockWarningModal
@@ -756,7 +768,7 @@ export default function OKRsPage() {
                   setSelectedObjectiveForLock(null)
                 }}
                 lockReason={lockInfo.reason}
-                lockMessage={lockInfo.message}
+                lockMessage={lockMessage}
                 entityName={selectedObjectiveForLock.title}
               />
             )

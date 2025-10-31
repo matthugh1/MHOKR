@@ -47,6 +47,9 @@ export function ActivityDrawer({
   hasMore,
   onLoadMore,
 }: ActivityDrawerProps) {
+  // TODO [phase6-polish]: nicer header (avatar, KR/Objective metadata)
+  const headerTitle = entityName || 'Activity'
+  const safeItems = Array.isArray(items) ? items : []
 
   return (
     <AnimatePresence>
@@ -83,7 +86,7 @@ export function ActivityDrawer({
                     Activity Timeline
                   </h2>
                   <p className="text-sm text-slate-600 mt-1 truncate">
-                    {entityName}
+                    {headerTitle}
                   </p>
                 </div>
                 <Button
@@ -99,9 +102,10 @@ export function ActivityDrawer({
 
             {/* Scrollable body */}
             <div className="flex-1 overflow-y-auto p-6">
-              {items.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
-                  No activity recorded yet
+              {(!safeItems || safeItems.length === 0) ? (
+                <div className="text-sm text-neutral-500">
+                  No recent activity.
+                  {/* TODO [phase6-polish]: nicer empty state */}
                 </div>
               ) : (
                 <div className="relative">
@@ -110,7 +114,7 @@ export function ActivityDrawer({
 
                   {/* Activity items */}
                   <div className="space-y-6">
-                    {items.map((item, index) => (
+                    {safeItems.map((item, index) => (
                       <div key={item.id} className="relative flex gap-4">
                         {/* Timeline bullet */}
                         <div className="flex-shrink-0 relative z-10">
