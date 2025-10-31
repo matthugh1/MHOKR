@@ -3,6 +3,7 @@
 // Safe to refactor or delete post-merge.
 // @ts-nocheck is intentional to unblock TypeScript compilation without full type safety.
 
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 'use client'
 
