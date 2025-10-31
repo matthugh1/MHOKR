@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { StatCard } from '@/components/ui/StatCard'
 import { ActivityItemCard } from '@/components/ui/ActivityItemCard'
+import { BuildStamp } from '@/components/ui/BuildStamp'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default function AIAssistantPage() {
@@ -39,16 +40,23 @@ export default function AIAssistantPage() {
     <ProtectedRoute>
       <DashboardLayout>
         <div className="p-8">
-          <PageHeader
-            title="AI Assistant"
-            subtitle="AI-powered insights and recommendations for your OKRs"
-            badges={[
-              {
-                label: ' β',
-                tone: 'neutral',
-              },
-            ]}
-          />
+          <div className="mb-8">
+            <div className="flex items-start justify-between flex-wrap gap-4">
+              <div className="flex-1">
+                <PageHeader
+                  title="AI Assistant"
+                  subtitle="AI-powered insights and recommendations for your OKRs"
+                  badges={[
+                    {
+                      label: ' β',
+                      tone: 'neutral',
+                    },
+                  ]}
+                />
+              </div>
+              <BuildStamp variant="inline" />
+            </div>
+          </div>
 
           {/* Insights Generated for You */}
           <div className="mb-8">
