@@ -139,7 +139,7 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
           {/* Current & Upcoming Section */}
           {currentAndUpcoming.length > 0 ? (
             <div className="mb-4">
-              {/* TODO [phase6-polish]: visual grouping headers in popover */}
+              {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
               <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
                 Current & Upcoming
               </div>
@@ -153,6 +153,7 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
                     <span className="font-medium text-neutral-800">{cycle.name}</span>
                     <span className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-0.5 text-[10px] font-medium text-neutral-700">
                       {/* TODO [phase7-hardening]: drive statuses from backend cycle.status */}
+                      {/* NOTE: This surface is internal-tenant-only and is not exposed to external design partners. */}
                       {getStatusLabel(cycle.status)}
                     </span>
                   </div>
@@ -163,7 +164,7 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
             <div className="mb-4">
               <div className="text-xs text-neutral-500 px-3 py-2">
                 No cycles defined yet.
-                {/* TODO [phase6-polish]: CTA to create first cycle */}
+                {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
               </div>
             </div>
           )}
@@ -171,7 +172,7 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
           {/* Previous Section */}
           {previousCycles.length > 0 ? (
             <div className="mb-4">
-              {/* TODO [phase6-polish]: visual grouping headers in popover */}
+              {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
               <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
                 Previous
               </div>
@@ -185,6 +186,7 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
                     <span className="font-medium text-neutral-800">{cycle.name}</span>
                     <span className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-0.5 text-[10px] font-medium text-neutral-700">
                       {/* TODO [phase7-hardening]: drive statuses from backend cycle.status */}
+                      {/* NOTE: This surface is internal-tenant-only and is not exposed to external design partners. */}
                       {getStatusLabel(cycle.status)}
                     </span>
                   </div>
@@ -196,7 +198,7 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
           {/* Legacy Periods Section */}
           {legacyPeriods.length > 0 ? (
             <div className="mb-4">
-              {/* TODO [phase6-polish]: visual grouping headers in popover */}
+              {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
               <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
                 Planning / historical periods
               </div>

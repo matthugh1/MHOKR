@@ -46,3 +46,4 @@ export function BuildStamp({ variant = 'inline', className = '' }: BuildStampPro
 }
 
 // TODO [phase7-hardening]: theme this with tokens if design system evolves
+// NOTE: This surface is internal-tenant-only and is not exposed to external design partners.

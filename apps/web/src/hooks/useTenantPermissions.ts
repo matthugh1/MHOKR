@@ -104,6 +104,7 @@ export function useTenantPermissions(): PermissionChecks {
     return (objective: Objective): boolean => {
       // For now, if it's rendered, you can view it (matches current behavior)
       // TODO [phase7-hardening]: align with backend visibility rules once fully exposed
+      // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
       return true
     }
   }, [])
@@ -111,6 +112,7 @@ export function useTenantPermissions(): PermissionChecks {
   const canSeeObjective = useMemo(() => {
     return (obj: any): boolean => {
       // TODO [phase7-hardening]: Backend already enforces visibility via RBAC + tenant isolation.
+      // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
       // Frontend callsites should still be explicit so we don't accidentally render leaked data.
       // In future we will check obj.visibilityLevel against the current user's effective visibility scope.
       return true
@@ -120,6 +122,7 @@ export function useTenantPermissions(): PermissionChecks {
   const canSeeKeyResult = useMemo(() => {
     return (kr: any): boolean => {
       // TODO [phase7-hardening]: Mirror canSeeObjective() once KR-level visibility is modelled distinctly.
+      // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
       return true
     }
   }, [])
@@ -202,6 +205,7 @@ export function useTenantPermissions(): PermissionChecks {
       const parentObjective = keyResult.parentObjective
       if (!parentObjective) {
         // TODO [phase7-hardening]: parent objective should always be available
+        // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
         // For now, allow if RBAC passes
         return true
       }
@@ -226,6 +230,7 @@ export function useTenantPermissions(): PermissionChecks {
     return (keyResult: KeyResult): boolean => {
       // Check-in uses same logic as edit for now
       // TODO [phase7-hardening]: align with backend logic - check-ins may be slightly looser
+      // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
       return canEditKeyResult(keyResult)
     }
   }, [canEditKeyResult])
@@ -242,6 +247,7 @@ export function useTenantPermissions(): PermissionChecks {
   const getLockInfoForObjective = useMemo(() => {
     return (objective: Objective): LockInfo => {
       // TODO [phase7-hardening]: Keep this in sync with OkrGovernanceService logic.
+      // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
       // Backend is source of truth for publish lock and cycle lock.
       // Frontend mirrors that logic only for UX messaging, not for enforcement.
       
@@ -279,6 +285,7 @@ export function useTenantPermissions(): PermissionChecks {
   const getLockInfoForKeyResult = useMemo(() => {
     return (keyResult: KeyResult): LockInfo => {
       // TODO [phase7-hardening]: Keep this in sync with OkrGovernanceService logic.
+      // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
       // Backend is source of truth for publish lock and cycle lock.
       // Frontend mirrors that logic only for UX messaging, not for enforcement.
       

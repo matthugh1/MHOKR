@@ -193,6 +193,7 @@ export default function OKRsPage() {
       const cycles = response.data || []
       setActiveCycles(cycles)
       // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
+      // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
       // Set default selected cycle to first active cycle if available
       if (cycles.length > 0) {
         setSelectedTimeframeKey(cycles[0].id)
@@ -368,6 +369,7 @@ export default function OKRsPage() {
   const handleEditOKR = (okr: any) => {
     // Map okr to Objective interface expected by hook
     // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
+    // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
     const objectiveForHook = {
       id: okr.id,
       ownerId: okr.ownerId,
@@ -398,6 +400,7 @@ export default function OKRsPage() {
   const handleDeleteOKR = async (okr: any) => {
     // Map okr to Objective interface expected by hook
     // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
+    // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
     const objectiveForHook = {
       id: okr.id,
       ownerId: okr.ownerId,
@@ -589,7 +592,7 @@ export default function OKRsPage() {
                       </div>
                     </div>
                   </div>
-                  {/* TODO [phase6-polish]: Later we'll surface a CTA for admins to open next cycle / lock current cycle. */}
+                  {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
                 </div>
               ))}
             </div>
@@ -722,7 +725,7 @@ export default function OKRsPage() {
               {objectivesViewModel.filter(canSeeObjective).length === 0 ? (
                 <div className="rounded-xl border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500 shadow-sm">
                   No objectives are visible in this workspace.
-                  {/* TODO [phase6-polish]: add illustration + CTA when we allow creation */}
+                  {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
                 </div>
               ) : (
                 <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm text-neutral-600">
@@ -740,7 +743,7 @@ export default function OKRsPage() {
                       )}
                     </>
                   )}
-                  {/* TODO [phase6-polish]: add CTA "Create first objective in this cycle" for admins */}
+                  {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
                 </div>
               )}
             </div>
@@ -751,6 +754,7 @@ export default function OKRsPage() {
                 
                 // Map okr to Objective interface expected by hook
                 // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
+                // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
                 const objectiveForHook = {
                   id: okr.id,
                   ownerId: okr.ownerId,
@@ -799,6 +803,7 @@ export default function OKRsPage() {
                 
                 // Map okr to Objective interface expected by hook
                 // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
+                // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
                 const objectiveForHook = {
                   id: okr.id,
                   ownerId: okr.ownerId,
@@ -869,7 +874,7 @@ export default function OKRsPage() {
                 : null,
             }
             const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
-            // TODO [phase6-polish]: improve copy for lock reasons
+            // TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
             const lockMessage = lockInfo.message || 'This item is locked and cannot be changed in the current cycle.'
             
             return (

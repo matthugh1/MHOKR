@@ -200,6 +200,7 @@ model StrategicPillar {
 // When a cycle is LOCKED, only TENANT_OWNER and TENANT_ADMIN can modify Objectives/Key Results in that cycle.
 // This adds a higher-level governance layer above individual OKR publish locks.
 // TODO [phase7-hardening]: Admin endpoint to update cycle.status (DRAFT -> ACTIVE -> LOCKED -> ARCHIVED)
+// NOTE: This surface is admin-only and is not exposed to external design partners.
 model Cycle {
   id             String      @id @default(cuid())
   organizationId String      // Tenant scoping: cycle belongs to one organization

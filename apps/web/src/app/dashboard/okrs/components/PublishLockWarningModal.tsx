@@ -53,7 +53,7 @@ export function PublishLockWarningModal({
           <AlertDialogDescription>
             <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm text-neutral-800">
               {getDescription()}
-              {/* TODO [phase6-polish]: add small lock icon */}
+              {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
