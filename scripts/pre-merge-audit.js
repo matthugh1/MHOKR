@@ -193,7 +193,38 @@ checkFileDoesNotContain(
 const statusBadgePath = path.join(repoRoot, 'apps/web/src/components/ui/StatusBadge.tsx');
 checkFileExists(statusBadgePath, 'StatusBadge component must exist in components/ui');
 
-// Check 8: Contributing and Coding Standards docs must exist
+// Check 8: Builder pages should use useTenantPermissions, not useTenantAdmin or raw role checks
+const builderDir = path.join(repoRoot, 'apps/web/src/app/dashboard/builder');
+if (fs.existsSync(builderDir)) {
+  const builderFiles = findAllFiles(builderDir, '.tsx');
+  builderFiles.forEach((filePath) => {
+    // Skip test files
+    if (filePath.includes('__tests__') || filePath.includes('.test.')) {
+      return;
+    }
+    const content = fs.readFileSync(filePath, 'utf8');
+    
+    // Check for useTenantAdmin import (violation)
+    if (content.includes('useTenantAdmin') || content.includes('from \'@/hooks/useTenantAdmin\'')) {
+      VIOLATIONS.push(`[VIOLATION] Builder file should not import useTenantAdmin. Use useTenantPermissions instead: ${filePath}`);
+    }
+    
+    // Check for raw role checks (isTenantAdmin, isTenantOwner, etc.) without useTenantPermissions
+    const rawRoleCheckPatterns = [
+      /isTenantAdmin\s*\(/,
+      /isTenantOwner\s*\(/,
+      /canAdministerTenant\s*\(/,
+    ];
+    const hasRawRoleCheck = rawRoleCheckPatterns.some(pattern => pattern.test(content));
+    const hasUseTenantPermissions = content.includes('useTenantPermissions');
+    
+    if (hasRawRoleCheck && !hasUseTenantPermissions) {
+      VIOLATIONS.push(`[VIOLATION] Builder file contains raw role checks without useTenantPermissions. Must use useTenantPermissions hook: ${filePath}`);
+    }
+  });
+}
+
+// Check 9: Contributing and Coding Standards docs must exist
 const contributingPath = path.join(repoRoot, 'CONTRIBUTING.md');
 const codingStandardsPath = path.join(repoRoot, 'CODING_STANDARDS.md');
 

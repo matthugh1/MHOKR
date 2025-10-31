@@ -54,7 +54,14 @@ apps/web/src/
 4. **Builder (`/dashboard/builder`)**
    - Visual builder for creating/editing OKRs
    - ReactFlow-based graph visualization
-   - Form-based editing
+   - Form-based editing via slide-out EditPanel
+   - **Governed surface:** Consumes `useTenantPermissions()` just like OKRs page
+   - Respects publish lock and cycle lock (form fields disabled, lock messaging shown inline)
+   - Visually standardized with design system tokens:
+     - Main edit panel uses `rounded-xl border border-neutral-200 bg-white p-4 shadow-sm`
+     - SectionHeader components for form sections
+     - Inline lock callout with neutral styling (`rounded-lg border border-neutral-100 bg-neutral-50 p-3 text-sm text-neutral-600 shadow-sm`)
+   - Part of the 'governed surfaces' group alongside Analytics and OKRs
 
 5. **Activity Drawer** (overlay)
    - Shows activity timeline for selected objective/key result

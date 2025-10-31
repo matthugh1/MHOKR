@@ -15,13 +15,16 @@ Use this checklist before merging to `main` and preparing for release.
 
 ### Testing
 - [ ] Unit tests pass (`npm test` or equivalent)
-- [ ] Smoke tests pass for critical pages (Analytics, OKRs)
+- [ ] Smoke tests pass for critical pages (Analytics, OKRs, Builder)
 - [ ] Manual demo walkthrough verified:
   - [ ] Dashboard loads and displays user's OKRs
   - [ ] Analytics page shows KPIs and sections
   - [ ] OKRs page displays objectives with correct permissions
   - [ ] Activity drawer opens and displays history
   - [ ] CSV export works (if user has permission)
+  - [ ] OKR lock messaging works
+  - [ ] Builder form respects publish/cycle lock (fields disabled, no edit CTA when locked)
+  - [ ] Builder shows lock reason inline in a neutral callout
 
 ### Documentation
 - [ ] Architecture docs up to date (`docs/architecture/`)
