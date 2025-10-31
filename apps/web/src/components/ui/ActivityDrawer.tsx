@@ -18,6 +18,8 @@ interface ActivityDrawerProps {
   onClose: () => void
   items: ActivityItem[]
   entityName: string // Objective/Key Result title for header
+  hasMore?: boolean
+  onLoadMore?: () => void
 }
 
 const formatTimeAgo = (dateString: string) => {
@@ -42,8 +44,9 @@ export function ActivityDrawer({
   onClose,
   items,
   entityName,
+  hasMore,
+  onLoadMore,
 }: ActivityDrawerProps) {
-  // TODO: pagination/filter later
 
   return (
     <AnimatePresence>
@@ -136,6 +139,19 @@ export function ActivityDrawer({
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+              
+              {/* Load more button */}
+              {hasMore && onLoadMore && (
+                <div className="pt-4 border-t border-slate-200">
+                  {/* TODO [phase7-performance]: Wire this to /activity/* with pagination params (limit, cursor) */}
+                  <button
+                    onClick={onLoadMore}
+                    className="text-sm text-blue-600 hover:text-blue-700 underline w-full text-center"
+                  >
+                    Load more…
+                  </button>
                 </div>
               )}
             </div>

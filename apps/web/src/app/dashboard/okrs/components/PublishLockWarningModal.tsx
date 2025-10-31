@@ -15,6 +15,7 @@ interface PublishLockWarningModalProps {
   open: boolean
   onClose: () => void
   lockReason: 'published' | 'cycle_locked' | null
+  lockMessage?: string
   entityName?: string
 }
 
@@ -22,6 +23,7 @@ export function PublishLockWarningModal({
   open,
   onClose,
   lockReason,
+  lockMessage,
   entityName,
 }: PublishLockWarningModalProps) {
   const getTitle = () => {
@@ -32,6 +34,11 @@ export function PublishLockWarningModal({
   }
 
   const getDescription = () => {
+    // Use lockMessage if provided, otherwise fall back to default messages
+    if (lockMessage) {
+      return lockMessage
+    }
+    // Fallback for backwards compatibility
     if (lockReason === 'cycle_locked') {
       return `This OKR is locked because its cycle is locked. You cannot change targets during a locked cycle. Only tenant administrators can edit or delete OKRs in locked cycles.`
     }

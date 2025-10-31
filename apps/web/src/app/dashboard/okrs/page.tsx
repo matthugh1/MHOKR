@@ -69,7 +69,7 @@ export default function OKRsPage() {
   const { workspaces, teams, currentOrganization } = useWorkspace()
   const { user } = useAuth()
   const permissions = usePermissions()
-  const tenantPermissions = useTenantPermissions()
+  const { canSeeObjective, canSeeKeyResult, ...tenantPermissions } = useTenantPermissions()
   const { toast } = useToast()
   const [availableUsers, setAvailableUsers] = useState<any[]>([])
   const [okrs, setOkrs] = useState<any[]>([])
@@ -203,8 +203,12 @@ export default function OKRsPage() {
 
   const selectedPeriodOption = availablePeriods.find(p => p.value === selectedPeriod);
   
-  // Apply filters
+  // Apply filters and visibility checks
   const filteredOKRs = okrs.filter(okr => {
+    // Apply visibility check
+    if (!canSeeObjective(okr)) {
+      return false
+    }
     // Period filter
     if (selectedPeriod !== 'all' && selectedPeriodOption) {
       if (okr.startDate && okr.endDate) {
@@ -624,7 +628,7 @@ export default function OKRsPage() {
                 const owner = availableUsers.find(u => u.id === okr.ownerId)
                 
                 // Map okr to Objective interface expected by hook
-                // TODO [phase6-frontend-hardening]: align with backend once cycle status is fully exposed in API responses
+                // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
                 const objectiveForHook = {
                   id: okr.id,
                   ownerId: okr.ownerId,
@@ -672,7 +676,7 @@ export default function OKRsPage() {
                 const owner = availableUsers.find(u => u.id === okr.ownerId)
                 
                 // Map okr to Objective interface expected by hook
-                // TODO [phase6-frontend-hardening]: align with backend once cycle status is fully exposed in API responses
+                // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
                 const objectiveForHook = {
                   id: okr.id,
                   ownerId: okr.ownerId,
@@ -717,11 +721,13 @@ export default function OKRsPage() {
           )}
 
           {/* Activity Timeline Drawer */}
+          {/* TODO [phase7-performance]: pass pagination cursor + load handler once backend supports it. */}
           <ActivityDrawer
             isOpen={activityDrawerOpen}
             onClose={handleCloseActivityDrawer}
             items={activityItems}
             entityName={activityEntityName}
+            hasMore={false}
           />
 
           {/* Publish Lock Warning Dialog */}
@@ -750,6 +756,7 @@ export default function OKRsPage() {
                   setSelectedObjectiveForLock(null)
                 }}
                 lockReason={lockInfo.reason}
+                lockMessage={lockInfo.message}
                 entityName={selectedObjectiveForLock.title}
               />
             )
