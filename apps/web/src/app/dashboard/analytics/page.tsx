@@ -77,11 +77,11 @@ export default function AnalyticsPage() {
       try {
         setLoading(true)
         const [summaryRes, feedRes, overdueRes, coverageRes, cyclesRes] = await Promise.all([
-          api.get('/objectives/analytics/summary'),
-          api.get('/objectives/analytics/feed'),
-          api.get('/key-results/overdue'),
-          api.get('/objectives/pillars/coverage'),
-          api.get('/objectives/cycles/active'),
+          api.get('/reports/analytics/summary'),
+          api.get('/reports/analytics/feed'),
+          api.get('/reports/check-ins/overdue'),
+          api.get('/reports/pillars/coverage'),
+          api.get('/reports/cycles/active'),
         ])
 
         setSummary(summaryRes.data)
@@ -135,10 +135,10 @@ export default function AnalyticsPage() {
 
   const handleExportCSV = async () => {
     // This endpoint is tenant-scoped and already RBAC-protected server-side
-    // must match backend RBAC canExportData() for CSV export
+    // TODO [phase7-hardening]: must stay aligned with backend RBACService.canExportData()
     try {
       setExporting(true)
-      const response = await api.get('/objectives/export/csv', {
+      const response = await api.get('/reports/export/csv', {
         responseType: 'blob',
       })
       
@@ -197,7 +197,7 @@ export default function AnalyticsPage() {
                   ]}
                 />
               </div>
-              {/* TODO [phase6-frontend-hardening]: canExportData() must stay aligned with backend RBACService.canExportData() */}
+              {/* TODO [phase7-hardening]: canExportData() must stay aligned with backend RBACService.canExportData() */}
               {canExportData() && (
                 <Button
                   onClick={handleExportCSV}
