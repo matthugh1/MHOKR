@@ -6,9 +6,8 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { StatCard } from '@/components/ui/StatCard'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { TrendingUp, AlertTriangle, CheckCircle2, Download } from 'lucide-react'
+import { Download } from 'lucide-react'
 import api from '@/lib/api'
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useTenantPermissions } from '@/hooks/useTenantPermissions'
@@ -66,6 +65,7 @@ export default function AnalyticsPage() {
   }>>([])
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchAnalytics = async () => {
@@ -76,22 +76,44 @@ export default function AnalyticsPage() {
 
       try {
         setLoading(true)
-        const [summaryRes, feedRes, overdueRes, coverageRes, cyclesRes] = await Promise.all([
-          api.get('/reports/analytics/summary'),
-          api.get('/reports/analytics/feed'),
-          api.get('/reports/check-ins/overdue'),
-          api.get('/reports/pillars/coverage'),
-          api.get('/reports/cycles/active'),
+        // TODO [phase6-polish]: replace with proper skeleton loaders
+        const [summaryRes, feedRes, overdueRes, coverageRes, cyclesRes] = await Promise.allSettled([
+          api.get('/reports/analytics/summary').catch(() => ({ data: { totalObjectives: 0, byStatus: {}, atRiskRatio: 0 } })),
+          api.get('/reports/analytics/feed').catch(() => ({ data: [] })),
+          api.get('/reports/check-ins/overdue').catch(() => ({ data: [] })),
+          api.get('/reports/pillars/coverage').catch(() => ({ data: [] })),
+          api.get('/reports/cycles/active').catch(() => ({ data: [] })),
         ])
 
-        setSummary(summaryRes.data)
-        setFeed(feedRes.data || [])
-        setOverdue(overdueRes.data || [])
-        setPillarCoverage(coverageRes.data || [])
-        setActiveCycles(cyclesRes.data || [])
+        // Extract data safely, fallback to empty defaults
+        setSummary(
+          summaryRes.status === 'fulfilled' && summaryRes.value?.data
+            ? summaryRes.value.data
+            : { totalObjectives: 0, byStatus: {}, atRiskRatio: 0 }
+        )
+        setFeed(
+          feedRes.status === 'fulfilled' && Array.isArray(feedRes.value?.data)
+            ? feedRes.value.data
+            : []
+        )
+        setOverdue(
+          overdueRes.status === 'fulfilled' && Array.isArray(overdueRes.value?.data)
+            ? overdueRes.value.data
+            : []
+        )
+        setPillarCoverage(
+          coverageRes.status === 'fulfilled' && Array.isArray(coverageRes.value?.data)
+            ? coverageRes.value.data
+            : []
+        )
+        setActiveCycles(
+          cyclesRes.status === 'fulfilled' && Array.isArray(cyclesRes.value?.data)
+            ? cyclesRes.value.data
+            : []
+        )
       } catch (error) {
         console.error('Failed to fetch analytics:', error)
-        // Set empty state on error
+        // Set empty state on error - page should still render
         setSummary({
           totalObjectives: 0,
           byStatus: {},
@@ -109,12 +131,18 @@ export default function AnalyticsPage() {
     fetchAnalytics()
   }, [currentOrganization?.id])
 
-  const onTrackCount = summary?.byStatus['ON_TRACK'] || 0
-  const atRiskCount = summary?.byStatus['AT_RISK'] || 0
-  const offTrackCount = summary?.byStatus['OFF_TRACK'] || 0
-  const completedCount = summary?.byStatus['COMPLETED'] || 0
+  // TODO [phase7-performance]: lift this into a shared util if we reuse it
+  function safePercent(numerator: number, denominator: number): number {
+    if (!denominator || denominator <= 0) return 0
+    if (!numerator || numerator < 0) return 0
+    return Math.round((numerator / denominator) * 100)
+  }
+
+  const onTrackCount = summary?.byStatus?.['ON_TRACK'] || 0
+  const atRiskCount = summary?.byStatus?.['AT_RISK'] || 0
+  const offTrackCount = summary?.byStatus?.['OFF_TRACK'] || 0
+  const completedCount = summary?.byStatus?.['COMPLETED'] || 0
   const totalObjectives = summary?.totalObjectives || 0
-  const atRiskPercentage = summary ? Math.round(summary.atRiskRatio * 100) : 0
 
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString)
@@ -135,9 +163,10 @@ export default function AnalyticsPage() {
 
   const handleExportCSV = async () => {
     // This endpoint is tenant-scoped and already RBAC-protected server-side
-    // TODO [phase7-hardening]: must stay aligned with backend RBACService.canExportData()
+    // TODO [phase7-hardening]: align this with backend export permissions dynamically per-tenant, not just role check.
     try {
       setExporting(true)
+      setExportError(null)
       const response = await api.get('/reports/export/csv', {
         responseType: 'blob',
       })
@@ -152,10 +181,19 @@ export default function AnalyticsPage() {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export CSV:', error)
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to export CSV'
-      alert(`Failed to export: ${errorMessage}`)
+      let errorMessage = 'Failed to export CSV'
+      if (error instanceof Error) {
+        errorMessage = error.message
+      } else if (typeof error === 'object' && error !== null && 'response' in error) {
+        const response = (error as { response?: { data?: { message?: string } } }).response
+        if (response?.data?.message) {
+          errorMessage = response.data.message
+        }
+      }
+      setExportError(errorMessage)
+      // TODO [phase6-polish]: turn this into toast
     } finally {
       setExporting(false)
     }
@@ -199,15 +237,23 @@ export default function AnalyticsPage() {
               </div>
               {/* TODO [phase7-hardening]: canExportData() must stay aligned with backend RBACService.canExportData() */}
               {canExportData() && (
-                <Button
-                  onClick={handleExportCSV}
-                  disabled={exporting || loading}
-                  variant="outline"
-                  className="shrink-0"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  {exporting ? 'Exporting...' : 'Export CSV'}
-                </Button>
+                <div className="flex flex-col items-end gap-2">
+                  <Button
+                    onClick={handleExportCSV}
+                    disabled={exporting || loading}
+                    variant="outline"
+                    className="shrink-0"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    {exporting ? 'Exporting...' : 'Export CSV'}
+                  </Button>
+                  {exportError && (
+                    <div className="text-xs text-red-500">
+                      {exportError}
+                      {/* TODO [phase6-polish]: turn this into toast */}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -227,14 +273,14 @@ export default function AnalyticsPage() {
                 />
                 <StatCard
                   label="Completion Rate"
-                  value={`${totalObjectives > 0 ? Math.round((completedCount / totalObjectives) * 100) : 0}%`}
+                  value={`${safePercent(completedCount, totalObjectives)}%`}
                   hint={`${completedCount} of ${totalObjectives} completed`}
                   tone={completedCount > 0 ? 'success' : 'default'}
                 />
                 <StatCard
                   label="At Risk OKRs"
                   value={atRiskCount.toString()}
-                  hint={`${atRiskPercentage}% of active OKRs`}
+                  hint={`${safePercent(atRiskCount, totalObjectives)}% of active OKRs`}
                   tone={atRiskCount > 0 ? 'warning' : 'default'}
                 />
                 <StatCard
