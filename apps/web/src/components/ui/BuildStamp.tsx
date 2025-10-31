@@ -1,6 +1,6 @@
 'use client'
 
-import { BUILD_VERSION, BUILD_ENV, BUILD_GIT_SHA } from '@/version'
+import { APP_VERSION, GIT_SHA, DEPLOY_ENV } from '@/version'
 
 export interface BuildStampProps {
   variant?: 'inline' | 'footer'
@@ -26,8 +26,8 @@ export interface BuildStampProps {
  * ```
  */
 export function BuildStamp({ variant = 'inline', className = '' }: BuildStampProps) {
-  const shortSha = BUILD_GIT_SHA.substring(0, 7)
-  const displayText = `${BUILD_VERSION} • ${BUILD_ENV} • ${shortSha}`
+  const shortSha = GIT_SHA.substring(0, 7)
+  const displayText = `${APP_VERSION} • ${DEPLOY_ENV} • ${shortSha}`
 
   if (variant === 'footer') {
     return (
@@ -37,9 +37,12 @@ export function BuildStamp({ variant = 'inline', className = '' }: BuildStampPro
     )
   }
 
+  // inline variant
   return (
-    <div className={`text-[10px] text-neutral-500 font-mono ${className}`}>
+    <div className={`rounded-lg border border-neutral-200 bg-white px-2 py-1 text-[10px] text-neutral-600 shadow-sm ${className}`}>
       {displayText}
     </div>
   )
 }
+
+// TODO [phase7-hardening]: theme this with tokens if design system evolves
