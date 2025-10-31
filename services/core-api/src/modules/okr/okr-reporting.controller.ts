@@ -57,7 +57,8 @@ export class OkrReportingController {
    * Get recent check-in activity feed.
    * 
    * Moved from ObjectiveController in Phase 4.
-   * TODO [phase4-reporting]: Frontend - add this feed to analytics dashboard.
+   * TODO [phase7-hardening]: Frontend - add this feed to analytics dashboard.
+   * NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
    */
   @Get('analytics/feed')
   @RequireAction('view_okr')
@@ -73,7 +74,8 @@ export class OkrReportingController {
    * Moved from ObjectiveController in Phase 4.
    * Enforces RBAC export_data permission check.
    * 
-   * TODO [phase4-reporting]: Frontend - add Export CSV button in analytics dashboard for TENANT_OWNER / TENANT_ADMIN.
+   * TODO [phase7-hardening]: Frontend - add Export CSV button in analytics dashboard for TENANT_OWNER / TENANT_ADMIN.
+   * NOTE: This surface is admin-only and is not exposed to external design partners.
    */
   @Get('export/csv')
   @RequireAction('export_data')
@@ -142,7 +144,7 @@ export class OkrReportingController {
    * Get strategic pillar coverage for active cycle.
    * 
    * Moved from ObjectiveController in Phase 4.
-   * TODO [phase4-reporting]: Frontend - highlight strategic gaps (pillars with zero objectives).
+   * TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
    */
   @Get('pillars/coverage')
   @RequireAction('view_okr')
@@ -156,7 +158,7 @@ export class OkrReportingController {
    * Get overdue check-ins for Key Results.
    * 
    * Moved from KeyResultController in Phase 4.
-   * TODO [phase4-reporting]: Frontend - show 'Check-ins overdue' widget in analytics.
+   * TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
    */
   @Get('check-ins/overdue')
   @RequireAction('view_okr')

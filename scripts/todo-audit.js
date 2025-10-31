@@ -147,7 +147,9 @@ function scanFile(filePath) {
       }
 
       // Skip the script's own internal strings and comments that mention TODO/FIXME/HACK in documentation
-      if (filePath.includes('scripts/todo-audit.js')) {
+      // Also skip workflow files that mention "TODO compliance audit" as step names
+      if (filePath.includes('scripts/todo-audit.js') || 
+          (filePath.includes('.github/workflows/') && line.includes('TODO compliance audit'))) {
         // Skip JSDoc headers
         if (line.includes('TODO / FIXME / HACK / NOTE Compliance Audit') || line.includes('Scans the repository')) {
           return;
