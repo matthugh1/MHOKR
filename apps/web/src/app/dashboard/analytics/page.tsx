@@ -6,6 +6,7 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { StatCard } from '@/components/ui/StatCard'
 import { SectionHeader } from '@/components/ui/SectionHeader'
+import { BuildStamp } from '@/components/ui/BuildStamp'
 import { Download } from 'lucide-react'
 import api from '@/lib/api'
 import { useWorkspace } from '@/contexts/workspace.context'
@@ -235,6 +236,7 @@ export default function AnalyticsPage() {
                   ]}
                 />
               </div>
+              <BuildStamp variant="inline" />
             </div>
           </div>
 

@@ -50,6 +50,7 @@ import { useToast } from '@/hooks/use-toast'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ObjectiveCard } from '@/components/ui/ObjectiveCard'
 import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
+import { BuildStamp } from '@/components/ui/BuildStamp'
 import { PublishLockWarningModal } from './components/PublishLockWarningModal'
 import api from '@/lib/api'
 import { logTokenInfo } from '@/lib/jwt-debug'
@@ -416,7 +417,7 @@ export default function OKRsPage() {
       <DashboardLayout>
         <div className="p-8">
           <div className="mb-8">
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-4">
               <PageHeader
                 title="Objectives & Key Results"
                 subtitle="Aligned execution, live progress"
@@ -440,12 +441,15 @@ export default function OKRsPage() {
                         },
                       ]
                     : []),
-                ]}
+                  ]}
               />
-              <Button className="ml-4">
-                <Plus className="h-4 w-4 mr-2" />
-                New OKR
-              </Button>
+              <div className="flex items-center gap-4">
+                <BuildStamp variant="inline" />
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New OKR
+                </Button>
+              </div>
             </div>
           </div>
 

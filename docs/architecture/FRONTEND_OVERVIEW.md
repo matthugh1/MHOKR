@@ -220,6 +220,37 @@ All components use Phase 9 design tokens (see `DESIGN_SYSTEM.md`).
 - **React Query:** (Optional) For API caching (not currently used extensively)
 - **Local State:** Component-level state via `useState`/`useEffect`
 
+## Build Provenance
+
+BuildStamp is mandatory on any page we demo live. It displays build version, environment, and git SHA to ensure stakeholders always know which build they're looking at.
+
+### Where BuildStamp MUST Appear
+
+BuildStamp must be rendered on the following demo surfaces:
+
+1. **Analytics header** (`apps/web/src/app/dashboard/analytics/page.tsx`) - Inline variant, top-right
+2. **OKRs header** (`apps/web/src/app/dashboard/okrs/page.tsx`) - Inline variant, top-right
+3. **Builder header** (`apps/web/src/app/dashboard/builder/page.tsx`) - Inline variant, top-right with SectionHeader
+4. **AI dashboard header** (`apps/web/src/app/dashboard/ai/page.tsx`) - Inline variant, top-right
+5. **ActivityDrawer footer** (`apps/web/src/components/ui/ActivityDrawer.tsx`) - Footer variant, centered at bottom
+
+### Usage
+
+```tsx
+import { BuildStamp } from '@/components/ui/BuildStamp'
+
+// Inline variant (for headers)
+<div className="flex items-start justify-between gap-4">
+  <SectionHeader title="Page Title" subtitle="Description" />
+  <BuildStamp variant="inline" />
+</div>
+
+// Footer variant (for ActivityDrawer)
+<BuildStamp variant="footer" />
+```
+
+**Do not remove BuildStamp or hide it on demo branches unless explicitly approved.** See `docs/BUILD_INFO.md` for details on updating version/env/SHA.
+
 ## TODO: Future Improvements
 
 - [ ] Implement React Query for API caching

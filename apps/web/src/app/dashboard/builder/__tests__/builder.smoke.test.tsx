@@ -92,6 +92,16 @@ jest.mock('../hooks/useAutoSave', () => ({
   useAutoSave: () => {},
 }))
 
+jest.mock('@/version', () => ({
+  BUILD_VERSION: '1.0.0',
+  BUILD_ENV: 'test',
+  BUILD_GIT_SHA: 'a1b2c3d',
+}))
+
+jest.mock('@/components/ui/BuildStamp', () => ({
+  BuildStamp: () => <div data-testid="build-stamp">1.0.0 • test • a1b2c3d</div>,
+}))
+
 describe('Builder Page Smoke Test', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -136,6 +146,16 @@ describe('Builder Page Smoke Test', () => {
       // Check for design system card classes in the component tree
       const cards = container.querySelectorAll('.rounded-xl.border.border-neutral-200')
       expect(cards.length).toBeGreaterThan(0)
+    })
+  })
+
+  it('renders the BuildStamp component', async () => {
+    render(<BuilderPage />)
+    await waitFor(() => {
+      expect(screen.getByTestId('build-stamp')).toBeInTheDocument()
+      // Assert that at least part of the version.ts content appears
+      expect(screen.getByText(/1\.0\.0/)).toBeInTheDocument()
+      expect(screen.getByText(/test/)).toBeInTheDocument()
     })
   })
 })

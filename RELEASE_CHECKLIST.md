@@ -16,6 +16,7 @@ Use this checklist before merging to `main` and preparing for release.
 ### Testing
 - [ ] Unit tests pass (`npm test` or equivalent)
 - [ ] Smoke tests pass for critical pages (Analytics, OKRs, Builder)
+- [ ] builder.smoke.test.tsx passes and confirms BuildStamp is rendered
 - [ ] Manual demo walkthrough verified:
   - [ ] Dashboard loads and displays user's OKRs
   - [ ] Analytics page shows KPIs and sections
@@ -25,6 +26,7 @@ Use this checklist before merging to `main` and preparing for release.
   - [ ] OKR lock messaging works
   - [ ] Builder form respects publish/cycle lock (fields disabled, no edit CTA when locked)
   - [ ] Builder shows lock reason inline in a neutral callout
+  - [ ] Every demo surface displays BuildStamp (Analytics, OKRs, Builder, AI dashboard, Activity Drawer)
 
 ### Documentation
 - [ ] Architecture docs up to date (`docs/architecture/`)
@@ -73,6 +75,8 @@ For questions or issues, refer to:
 ## Pre-merge validation (Phase 13)
 
 - [ ] Run `node scripts/pre-merge-audit.js`
+- [ ] Pre-merge CI gates:
+  - [ ] builder.smoke.test.tsx passes and confirms BuildStamp is rendered
 - [ ] Ensure GitHub Action 'premerge-check' passes green on PR release/main-merge-prep → main
 - [ ] Confirm analytics dashboard (`/dashboard/analytics`) loads with:
   - KPI StatCards
@@ -89,4 +93,9 @@ For questions or issues, refer to:
   - is only visible to a tenant admin/owner
   - produces CSV or a graceful inline error message
 - [ ] Confirm non-admin user can still load dashboards with no crash
+
+## What to tell stakeholders when demoing
+
+- Always read out loud the BuildStamp line at the start of the call, so everyone knows which build we're looking at.
+- Capture screenshots with the BuildStamp visible to avoid confusion later.
 

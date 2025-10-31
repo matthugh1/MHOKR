@@ -231,6 +231,31 @@ const codingStandardsPath = path.join(repoRoot, 'CODING_STANDARDS.md');
 checkFileExists(contributingPath, 'CONTRIBUTING.md must exist in repo root');
 checkFileExists(codingStandardsPath, 'CODING_STANDARDS.md must exist in repo root');
 
+// Check 10: Verify BuildStamp is imported in dashboard page files
+const expectedBuildStampPages = [
+  path.join(repoRoot, 'apps/web/src/app/dashboard/analytics/page.tsx'),
+  path.join(repoRoot, 'apps/web/src/app/dashboard/okrs/page.tsx'),
+  path.join(repoRoot, 'apps/web/src/app/dashboard/ai/page.tsx'),
+  path.join(repoRoot, 'apps/web/src/app/dashboard/builder/page.tsx'),
+];
+
+expectedBuildStampPages.forEach((filePath) => {
+  checkFileContent(
+    filePath,
+    `BuildStamp must be imported in ${path.basename(filePath)}`,
+    'from \'@/components/ui/BuildStamp\''
+  );
+});
+
+// Check 11: Verify BuildStamp is imported in ActivityDrawer
+const activityDrawerPath = path.join(repoRoot, 'apps/web/src/components/ui/ActivityDrawer.tsx');
+
+checkFileContent(
+  activityDrawerPath,
+  'BuildStamp must be imported in ActivityDrawer.tsx',
+  'from \'./BuildStamp\''
+);
+
 // Report results
 console.log(`\n📊 Audit complete. Found ${VIOLATIONS.length} violation(s).\n`);
 

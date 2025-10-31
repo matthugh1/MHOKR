@@ -53,6 +53,8 @@ import {
   doesOKRMatchPeriod,
   type PeriodFilterOption
 } from '@/lib/date-utils'
+import { SectionHeader } from '@/components/ui/SectionHeader'
+import { BuildStamp } from '@/components/ui/BuildStamp'
 
 // Node components are now imported from EnhancedNodes.tsx
 
@@ -783,6 +785,10 @@ export default function BuilderPage() {
       <DashboardLayout>
         <div className="h-full flex flex-col">
           <div className="p-6 border-b bg-white">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <SectionHeader title="Builder" subtitle="Plan or adjust your strategic map" />
+              <BuildStamp variant="inline" />
+            </div>
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-2xl font-bold text-slate-900">Visual OKR Builder</h1>
