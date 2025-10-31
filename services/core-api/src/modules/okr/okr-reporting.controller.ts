@@ -113,7 +113,7 @@ export class OkrReportingController {
    * Get active cycles for the organization.
    * 
    * Moved from ObjectiveController in Phase 4.
-   * TODO [phase4-reporting]: Frontend - show active cycle name at the top of the OKR dashboard and mark locked cycles.
+   * TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
    */
   @Get('cycles/active')
   @RequireAction('view_okr')

@@ -176,6 +176,12 @@ function scanFile(filePath) {
             (line.includes('startsWith') || line.includes('trim()') || line.includes('line.includes'))) {
           return;
         }
+        // Skip lines that check for TODO/FIXME/HACK in conditional logic
+        if (line.includes('hasTodoMarker') || line.includes('hasNoteMarker') || 
+            line.includes('includes(\'TODO\')') || line.includes('includes(\'FIXME\')') || 
+            line.includes('includes(\'HACK\')')) {
+          return;
+        }
       }
 
       // Check if line contains any of our match patterns
