@@ -7,6 +7,9 @@ export interface SectionHeaderProps {
 }
 
 /**
+ * @module SectionHeader
+ * @see {@link https://github.com/matthugh1/MHOKR/blob/main/docs/architecture/DESIGN_SYSTEM.md Design System Documentation}
+ * 
  * SectionHeader - Consistent section header pattern for dashboard sections
  * 
  * Used for grouping related content with a title and optional subtitle/metadata.

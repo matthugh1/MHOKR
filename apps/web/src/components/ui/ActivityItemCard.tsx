@@ -25,6 +25,9 @@ export interface ActivityItemCardProps {
 }
 
 /**
+ * @module ActivityItemCard
+ * @see {@link https://github.com/matthugh1/MHOKR/blob/main/docs/architecture/DESIGN_SYSTEM.md Design System Documentation}
+ * 
  * ActivityItemCard - Card component for displaying individual activity feed items
  * 
  * Uses Phase 9 design tokens: rounded-lg, border-neutral-200, bg-white, shadow-sm
