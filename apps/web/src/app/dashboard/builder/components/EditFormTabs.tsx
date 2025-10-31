@@ -1,35 +1,30 @@
-// NOTE [phase14-hardening]:
-// Currently unused in the live flow. Kept for future Builder work.
-// Safe to refactor or delete post-merge.
-// @ts-nocheck is intentional to unblock TypeScript compilation without full type safety.
-
-/* eslint-disable @typescript-eslint/ban-ts-comment */
-// @ts-nocheck
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Calendar, User, Building2, Users, Target, Search, ChevronDown } from 'lucide-react'
 import { Period } from '@okr-nexus/types'
 
 import { 
   formatDateForInput, 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getQuarterFromDate, 
   getQuarterDates, 
   getMonthDates, 
   getYearDates,
   getAvailableYears,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getMonthName,
   formatPeriod,
 } from '@/lib/date-utils'
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
+import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import api from '@/lib/api'
-import { useEffect } from 'react'
+
+type UnknownObjective = Record<string, unknown> // TODO [phase7-hardening]: tighten typing
+type UnknownKeyResult = Record<string, unknown> // TODO [phase7-hardening]: tighten typing
 
 interface EditFormTabsProps {
   nodeId: string
@@ -50,6 +45,7 @@ export function EditFormTabs({
 }: EditFormTabsProps) {
   const { organizations, workspaces, teams, currentOrganization } = useWorkspace()
   const { user } = useAuth()
+  const tenantPermissions = useTenantPermissions()
   const [showOwnerDropdown, setShowOwnerDropdown] = useState(false)
   const [showContextDropdown, setShowContextDropdown] = useState(false)
   const [showParentDropdown, setShowParentDropdown] = useState(false)
@@ -58,6 +54,54 @@ export function EditFormTabs({
   const [parentSearch, setParentSearch] = useState('')
   const [availableUsers, setAvailableUsers] = useState<Array<{ id: string; name: string }>>([])
   const [availableObjectives, setAvailableObjectives] = useState<Array<{ id: string; title: string }>>([])
+
+  // Determine if editing is allowed based on node type
+  // TODO [phase7-hardening]: parent objective should always be available for KR checks
+  const canEdit = nodeType === 'obj' 
+    ? tenantPermissions.canEditObjective({
+        id: formData.okrId as string || '',
+        ownerId: formData.ownerId as string || '',
+        organizationId: formData.organizationId as string | null || null,
+        workspaceId: formData.workspaceId as string | null || null,
+        teamId: formData.teamId as string | null || null,
+        isPublished: formData.isPublished as boolean || false,
+        cycle: formData.cycle as { id: string; status: string } | null || null,
+        cycleStatus: formData.cycleStatus as string | null || null,
+      })
+    : nodeType === 'kr'
+    ? tenantPermissions.canEditKeyResult({
+        id: formData.okrId as string || '',
+        ownerId: formData.ownerId as string || '',
+        organizationId: formData.organizationId as string | null || null,
+        workspaceId: formData.workspaceId as string | null || null,
+        teamId: formData.teamId as string | null || null,
+        // @ts-expect-error TODO [phase7-hardening]: tighten typing - parentObjective needs proper interface
+        parentObjective: formData.parentObjective as UnknownObjective || null,
+      })
+    : true // Initiatives don't have lock logic yet
+
+  const lockInfo = nodeType === 'obj'
+    ? tenantPermissions.getLockInfoForObjective({
+        id: formData.okrId as string || '',
+        ownerId: formData.ownerId as string || '',
+        organizationId: formData.organizationId as string | null || null,
+        workspaceId: formData.workspaceId as string | null || null,
+        teamId: formData.teamId as string | null || null,
+        isPublished: formData.isPublished as boolean || false,
+        cycle: formData.cycle as { id: string; status: string } | null || null,
+        cycleStatus: formData.cycleStatus as string | null || null,
+      })
+    : nodeType === 'kr'
+    ? tenantPermissions.getLockInfoForKeyResult({
+        id: formData.okrId as string || '',
+        ownerId: formData.ownerId as string || '',
+        organizationId: formData.organizationId as string | null || null,
+        workspaceId: formData.workspaceId as string | null || null,
+        teamId: formData.teamId as string | null || null,
+        // @ts-expect-error TODO [phase7-hardening]: tighten typing - parentObjective needs proper interface
+        parentObjective: formData.parentObjective as UnknownObjective || null,
+      })
+    : { isLocked: false, reason: null, message: '' }
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -89,7 +133,10 @@ export function EditFormTabs({
   const getOwnerDisplay = () => {
     const ownerId = formData.ownerId as string | undefined
     if (ownerId === user?.id) {
-      return `👤 ${user?.name || 'You'}`
+      const userName = user?.firstName && user?.lastName 
+        ? `${user.firstName} ${user.lastName}` 
+        : user?.email || 'You'
+      return `👤 ${userName}`
     }
     const selectedUser = availableUsers.find(u => u.id === ownerId)
     return selectedUser ? `👤 ${selectedUser.name}` : 'Select owner...'
@@ -120,27 +167,44 @@ export function EditFormTabs({
   }
 
   return (
-    <Tabs defaultValue="basic" className="w-full">
-      <TabsList className="grid w-full grid-cols-3">
-        <TabsTrigger value="basic">Basic</TabsTrigger>
-        <TabsTrigger value="details">Details</TabsTrigger>
-        <TabsTrigger value="advanced">Advanced</TabsTrigger>
-      </TabsList>
+    <div className="space-y-4">
+      {/* Lock messaging */}
+      {lockInfo.isLocked && (
+        <>
+          <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-3 text-sm text-neutral-600 shadow-sm">
+            {lockInfo.message || 'This item is locked.'}
+          </div>
+          {/* TODO [phase6-polish]: replace with a nicer inline callout component */}
+        </>
+      )}
 
-      {/* Basic Tab - Most common fields */}
-      <TabsContent value="basic" className="space-y-4 mt-4">
-        <div>
-          <Label htmlFor="label">
-            {nodeType === 'obj' ? 'Objective' : nodeType === 'kr' ? 'Key Result' : 'Initiative'} Title *
-          </Label>
-          <Input
-            id="label"
-            value={formData.label || ''}
-            onChange={(e) => setFormData({ ...formData, label: e.target.value })}
-            placeholder="Enter title..."
-            className="mt-1"
+      <Tabs defaultValue="basic" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="basic">Basic</TabsTrigger>
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="advanced">Advanced</TabsTrigger>
+        </TabsList>
+
+        {/* Basic Tab - Most common fields */}
+        <TabsContent value="basic" className="space-y-4 mt-4">
+          <SectionHeader
+            title={nodeType === 'obj' ? 'Draft Objective' : nodeType === 'kr' ? 'Draft Key Result' : 'Draft Initiative'}
+            subtitle="Work in progress — not yet published"
           />
-        </div>
+          <div>
+            <Label htmlFor="label">
+              {nodeType === 'obj' ? 'Objective' : nodeType === 'kr' ? 'Key Result' : 'Initiative'} Title *
+            </Label>
+            <Input
+              id="label"
+              value={(formData.label as string) || ''}
+              onChange={(e) => setFormData({ ...formData, label: e.target.value })}
+              placeholder="Enter title..."
+              className="mt-1"
+              readOnly={!canEdit}
+              disabled={!canEdit}
+            />
+          </div>
 
         {nodeType === 'obj' && (
           <div>
@@ -148,9 +212,11 @@ export function EditFormTabs({
             <textarea
               id="description"
               className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-              value={formData.description || ''}
+              value={(formData.description as string) || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="What do you want to achieve?"
+              readOnly={!canEdit}
+              disabled={!canEdit}
             />
           </div>
         )}
@@ -163,9 +229,11 @@ export function EditFormTabs({
                 <Input
                   id="current"
                   type="number"
-                  value={formData.current || 0}
+                  value={(formData.current as number) || 0}
                   onChange={(e) => setFormData({ ...formData, current: parseFloat(e.target.value) || 0 })}
                   className="mt-1"
+                  readOnly={!canEdit}
+                  disabled={!canEdit}
                 />
               </div>
               <div>
@@ -173,9 +241,11 @@ export function EditFormTabs({
                 <Input
                   id="target"
                   type="number"
-                  value={formData.target || 100}
+                  value={(formData.target as number) || 100}
                   onChange={(e) => setFormData({ ...formData, target: parseFloat(e.target.value) || 100 })}
                   className="mt-1"
+                  readOnly={!canEdit}
+                  disabled={!canEdit}
                 />
               </div>
             </div>
@@ -183,10 +253,12 @@ export function EditFormTabs({
               <Label htmlFor="unit">Unit</Label>
               <Input
                 id="unit"
-                value={formData.unit || ''}
+                value={(formData.unit as string) || ''}
                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                 placeholder="e.g., users, %, items, $"
                 className="mt-1"
+                readOnly={!canEdit}
+                disabled={!canEdit}
               />
             </div>
             <div className="bg-slate-50 p-3 rounded-md">
@@ -196,12 +268,12 @@ export function EditFormTabs({
                   <div 
                     className="bg-green-500 h-2 rounded-full transition-all"
                     style={{ 
-                      width: `${Math.min(100, ((formData.current || 0) / (formData.target || 1)) * 100)}%` 
+                      width: `${Math.min(100, (((formData.current as number) || 0) / ((formData.target as number) || 1)) * 100)}%` 
                     }}
                   />
                 </div>
                 <span className="text-sm font-medium">
-                  {Math.round(((formData.current || 0) / (formData.target || 1)) * 100)}%
+                  {Math.round((((formData.current as number) || 0) / ((formData.target as number) || 1)) * 100)}%
                 </span>
               </div>
             </div>
@@ -214,7 +286,7 @@ export function EditFormTabs({
             <select
               id="status"
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-              value={formData.status || 'NOT_STARTED'}
+              value={(formData.status as string) || 'NOT_STARTED'}
               onChange={(e) => setFormData({ ...formData, status: e.target.value })}
             >
               <option value="NOT_STARTED">Not Started</option>
@@ -233,10 +305,12 @@ export function EditFormTabs({
               type="number"
               min="0"
               max="100"
-              value={formData.progress || 0}
+              value={(formData.progress as number) || 0}
               onChange={(e) => setFormData({ ...formData, progress: parseInt(e.target.value) || 0 })}
               placeholder="0"
               className="mt-1"
+              readOnly={!canEdit}
+              disabled={!canEdit}
             />
           </div>
         )}
@@ -254,25 +328,26 @@ export function EditFormTabs({
           <select
             id="period"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-            value={formData.period || Period.QUARTERLY}
+            value={(formData.period as Period) || Period.QUARTERLY}
+            disabled={!canEdit}
             onChange={(e) => {
               const newPeriod = e.target.value as Period
               let dates = { startDate: formData.startDate, endDate: formData.endDate }
               
               if (newPeriod === Period.QUARTERLY) {
-                const quarterDates = getQuarterDates(formData.quarter, formData.year)
+                const quarterDates = getQuarterDates((formData.quarter as number) || 1, (formData.year as number) || new Date().getFullYear())
                 dates = {
                   startDate: formatDateForInput(quarterDates.startDate),
                   endDate: formatDateForInput(quarterDates.endDate)
                 }
               } else if (newPeriod === Period.MONTHLY) {
-                const monthDates = getMonthDates(formData.month, formData.year)
+                const monthDates = getMonthDates((formData.month as number) || 0, (formData.year as number) || new Date().getFullYear())
                 dates = {
                   startDate: formatDateForInput(monthDates.startDate),
                   endDate: formatDateForInput(monthDates.endDate)
                 }
               } else if (newPeriod === Period.ANNUAL) {
-                const yearDates = getYearDates(formData.year)
+                const yearDates = getYearDates((formData.year as number) || new Date().getFullYear())
                 dates = {
                   startDate: formatDateForInput(yearDates.startDate),
                   endDate: formatDateForInput(yearDates.endDate)
@@ -301,10 +376,10 @@ export function EditFormTabs({
               <select
                 id="quarter"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm mt-1"
-                value={formData.quarter}
+                value={(formData.quarter as number) || 1}
                 onChange={(e) => {
                   const newQuarter = parseInt(e.target.value)
-                  const dates = getQuarterDates(newQuarter, formData.year)
+                  const dates = getQuarterDates(newQuarter, (formData.year as number) || new Date().getFullYear())
                   setFormData({
                     ...formData,
                     quarter: newQuarter,
@@ -324,10 +399,10 @@ export function EditFormTabs({
               <select
                 id="year"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm mt-1"
-                value={formData.year}
+                value={(formData.year as number) || new Date().getFullYear()}
                 onChange={(e) => {
                   const newYear = parseInt(e.target.value)
-                  const dates = getQuarterDates(formData.quarter, newYear)
+                  const dates = getQuarterDates((formData.quarter as number) || 1, newYear)
                   setFormData({
                     ...formData,
                     year: newYear,
@@ -344,16 +419,18 @@ export function EditFormTabs({
           </div>
         )}
 
-        {formData.period === Period.CUSTOM && (
+        {(formData.period as Period) === Period.CUSTOM && (
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="startDate">Start Date</Label>
               <Input
                 id="startDate"
                 type="date"
-                value={formData.startDate}
+                value={(formData.startDate as string) || ''}
                 onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                 className="mt-1"
+                readOnly={!canEdit}
+                disabled={!canEdit}
               />
             </div>
             <div>
@@ -361,9 +438,11 @@ export function EditFormTabs({
               <Input
                 id="endDate"
                 type="date"
-                value={formData.endDate}
+                value={(formData.endDate as string) || ''}
                 onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                 className="mt-1"
+                readOnly={!canEdit}
+                disabled={!canEdit}
               />
             </div>
           </div>
@@ -372,9 +451,9 @@ export function EditFormTabs({
         {formData.startDate && formData.endDate && (
           <div className="bg-slate-50 p-3 rounded-md">
             <div className="text-xs text-slate-600">
-              <strong>Duration:</strong> {formatPeriod(formData.period as Period, formData.startDate)}
+              <strong>Duration:</strong> {formatPeriod((formData.period as Period) || Period.QUARTERLY, (formData.startDate as string) || '')}
               {' • '}
-              {Math.ceil((new Date(formData.endDate).getTime() - new Date(formData.startDate).getTime()) / (1000 * 60 * 60 * 24))} days
+              {Math.ceil((new Date((formData.endDate as string) || '').getTime() - new Date((formData.startDate as string) || '').getTime()) / (1000 * 60 * 60 * 24))} days
             </div>
           </div>
         )}
@@ -390,7 +469,8 @@ export function EditFormTabs({
               <select
                 id="visibilityLevel"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-                value={formData.visibilityLevel || 'PUBLIC_TENANT'}
+                value={(formData.visibilityLevel as string) || 'PUBLIC_TENANT'}
+                disabled={!canEdit}
                 onChange={(e) => setFormData({ ...formData, visibilityLevel: e.target.value })}
               >
                 <option value="PUBLIC_TENANT">Public (Visible to everyone - default)</option>
@@ -435,13 +515,19 @@ export function EditFormTabs({
                     <div className="max-h-48 overflow-y-auto">
                       <button
                         onClick={() => {
-                          setFormData({ ...formData, ownerId: user?.id || '', ownerName: user?.name || '' })
+                          const userName = user?.firstName && user?.lastName 
+                            ? `${user.firstName} ${user.lastName}` 
+                            : user?.email || ''
+                          setFormData({ ...formData, ownerId: user?.id || '', ownerName: userName })
                           setShowOwnerDropdown(false)
                         }}
                         className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
+                        disabled={!canEdit}
                       >
                         <User className="h-4 w-4" />
-                        {user?.name || 'You'} (You)
+                        {user?.firstName && user?.lastName 
+                          ? `${user.firstName} ${user.lastName}` 
+                          : user?.email || 'You'} (You)
                       </button>
                       {availableUsers
                         .filter(u => u.id !== user?.id && u.name.toLowerCase().includes(ownerSearch.toLowerCase()))
@@ -613,7 +699,7 @@ export function EditFormTabs({
             <select
               id="metricType"
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-              value={formData.metricType || 'INCREASE'}
+              value={(formData.metricType as string) || 'INCREASE'}
               onChange={(e) => setFormData({ ...formData, metricType: e.target.value })}
             >
               <option value="INCREASE">Increase</option>
@@ -625,6 +711,7 @@ export function EditFormTabs({
         )}
       </TabsContent>
     </Tabs>
+    </div>
   )
 }
 

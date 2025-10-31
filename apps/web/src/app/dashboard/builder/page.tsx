@@ -22,6 +22,7 @@ import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
+import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -64,8 +65,9 @@ const nodeTypes = {
 export default function BuilderPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChangeBase] = useEdgesState([])
-  const [editingNode, setEditingNode] = useState<{ id: string; data: any } | null>(null)
-  const [editingFormData, setEditingFormData] = useState<any>(null)
+  // TODO [phase7-hardening]: tighten typing - replace Record<string, unknown> with proper node types
+  const [editingNode, setEditingNode] = useState<{ id: string; data: Record<string, unknown> } | null>(null)
+  const [editingFormData, setEditingFormData] = useState<Record<string, unknown> | null>(null)
   const [showNodeCreator, setShowNodeCreator] = useState(false)
   const [loading, setLoading] = useState(false)
   const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved'>('idle')
@@ -981,6 +983,86 @@ export default function BuilderPage() {
           onDelete={handleDeleteNode}
           formData={editingFormData}
           setFormData={setEditingFormData}
+          canEdit={editingNode && editingFormData ? (() => {
+            const nodeType = editingNode.id.startsWith('obj') ? 'obj' : editingNode.id.startsWith('kr') ? 'kr' : 'init'
+            if (nodeType === 'obj') {
+              return tenantPermissions.canEditObjective({
+                id: editingFormData.okrId as string || '',
+                ownerId: editingFormData.ownerId as string || '',
+                organizationId: editingFormData.organizationId as string | null || null,
+                workspaceId: editingFormData.workspaceId as string | null || null,
+                teamId: editingFormData.teamId as string | null || null,
+                isPublished: editingFormData.isPublished as boolean || false,
+                cycle: editingFormData.cycle as { id: string; status: string } | null || null,
+                cycleStatus: editingFormData.cycleStatus as string | null || null,
+              })
+            } else if (nodeType === 'kr') {
+              return tenantPermissions.canEditKeyResult({
+                id: editingFormData.okrId as string || '',
+                ownerId: editingFormData.ownerId as string || '',
+                organizationId: editingFormData.organizationId as string | null || null,
+                workspaceId: editingFormData.workspaceId as string | null || null,
+                teamId: editingFormData.teamId as string | null || null,
+                parentObjective: editingFormData.parentObjective as Record<string, unknown> || null,
+              })
+            }
+            return true // Initiatives don't have lock logic yet
+          })() : true}
+          canDelete={editingNode && editingFormData ? (() => {
+            const nodeType = editingNode.id.startsWith('obj') ? 'obj' : editingNode.id.startsWith('kr') ? 'kr' : 'init'
+            if (nodeType === 'obj') {
+              return tenantPermissions.canDeleteObjective({
+                id: editingFormData.okrId as string || '',
+                ownerId: editingFormData.ownerId as string || '',
+                organizationId: editingFormData.organizationId as string | null || null,
+                workspaceId: editingFormData.workspaceId as string | null || null,
+                teamId: editingFormData.teamId as string | null || null,
+                isPublished: editingFormData.isPublished as boolean || false,
+                cycle: editingFormData.cycle as { id: string; status: string } | null || null,
+                cycleStatus: editingFormData.cycleStatus as string | null || null,
+              })
+            } else if (nodeType === 'kr') {
+              // Key results inherit delete permission from parent objective
+              return tenantPermissions.canDeleteObjective({
+                id: (editingFormData.parentObjective as Record<string, unknown>)?.id as string || '',
+                ownerId: editingFormData.ownerId as string || '',
+                organizationId: editingFormData.organizationId as string | null || null,
+                workspaceId: editingFormData.workspaceId as string | null || null,
+                teamId: editingFormData.teamId as string | null || null,
+                isPublished: (editingFormData.parentObjective as Record<string, unknown>)?.isPublished as boolean || false,
+                cycle: (editingFormData.parentObjective as Record<string, unknown>)?.cycle as { id: string; status: string } | null || null,
+                cycleStatus: (editingFormData.parentObjective as Record<string, unknown>)?.cycleStatus as string | null || null,
+              })
+            }
+            return true // Initiatives don't have lock logic yet
+          })() : true}
+          lockMessage={editingNode && editingFormData ? (() => {
+            const nodeType = editingNode.id.startsWith('obj') ? 'obj' : editingNode.id.startsWith('kr') ? 'kr' : 'init'
+            if (nodeType === 'obj') {
+              const lockInfo = tenantPermissions.getLockInfoForObjective({
+                id: editingFormData.okrId as string || '',
+                ownerId: editingFormData.ownerId as string || '',
+                organizationId: editingFormData.organizationId as string | null || null,
+                workspaceId: editingFormData.workspaceId as string | null || null,
+                teamId: editingFormData.teamId as string | null || null,
+                isPublished: editingFormData.isPublished as boolean || false,
+                cycle: editingFormData.cycle as { id: string; status: string } | null || null,
+                cycleStatus: editingFormData.cycleStatus as string | null || null,
+              })
+              return lockInfo.isLocked ? lockInfo.message : undefined
+            } else if (nodeType === 'kr') {
+              const lockInfo = tenantPermissions.getLockInfoForKeyResult({
+                id: editingFormData.okrId as string || '',
+                ownerId: editingFormData.ownerId as string || '',
+                organizationId: editingFormData.organizationId as string | null || null,
+                workspaceId: editingFormData.workspaceId as string | null || null,
+                teamId: editingFormData.teamId as string | null || null,
+                parentObjective: editingFormData.parentObjective as Record<string, unknown> || null,
+              })
+              return lockInfo.isLocked ? lockInfo.message : undefined
+            }
+            return undefined
+          })() : undefined}
         >
           {editingFormData && editingNode && (
             <EditFormTabs
