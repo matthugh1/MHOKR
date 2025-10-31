@@ -617,19 +617,19 @@ export default function OKRsPage() {
           ) : filteredOKRs.length === 0 ? (
             <div className="text-center py-12">
               {safeObjectives.filter(canSeeObjective).length === 0 ? (
-                <div className="text-sm text-neutral-500">
+                <div className="rounded-xl border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500 shadow-sm">
                   No objectives are visible in this workspace.
-                  {/* TODO [phase6-polish]: styled empty state illustration */}
+                  {/* TODO [phase6-polish]: add illustration + CTA when we allow creation */}
                 </div>
               ) : (
-                <>
-                  <p className="text-slate-500 mb-4">No OKRs found</p>
+                <div className="rounded-xl border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500 shadow-sm">
+                  <p className="mb-4">No OKRs found</p>
                   {hasActiveFilters && (
                     <Button variant="outline" onClick={clearFilters}>
                       Clear filters to see all OKRs
                     </Button>
                   )}
-                </>
+                </div>
               )}
             </div>
           ) : viewMode === 'grid' ? (
