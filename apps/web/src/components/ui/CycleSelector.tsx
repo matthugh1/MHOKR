@@ -6,23 +6,34 @@ import { ChevronDown } from 'lucide-react'
 export interface CycleSelectorProps {
   cycles: Array<{
     id: string
-    name: string // e.g. "Q4 2025"
-    status: string // e.g. "ACTIVE" | "LOCKED" | "DRAFT" | "ARCHIVED"
-    startsAt?: string // ISO timestamp, optional
-    endsAt?: string // ISO timestamp, optional
+    name: string
+    status: 'ACTIVE' | 'UPCOMING' | 'LOCKED' | 'ARCHIVED' | string
+    startsAt?: string | undefined
+    endsAt?: string | undefined
   }>
-  selectedCycleId: string | null
-  onSelect: (cycleId: string) => void
+  /** legacyPeriods is the list of past/future planning buckets we previously showed in the giant <select> */
+  legacyPeriods: Array<{
+    id: string // e.g. "2025-Q1", "2025-Q2-planning"
+    label: string // e.g. "Q1 2025 (planning)", "Q2 2025 (draft)"
+    isFuture?: boolean // optional marker for styling
+  }>
+  /** currently selected item, can be either a cycle.id or a legacyPeriod.id */
+  selectedId: string | null
+  onSelect: (id: string) => void
 }
 
 const getStatusLabel = (status: string): string => {
   switch (status) {
     case 'ACTIVE':
       return 'Active'
+    case 'UPCOMING':
+      return 'Upcoming'
     case 'LOCKED':
       return 'Locked'
     case 'DRAFT':
       return 'Draft'
+    case 'ARCHIVED':
+      return 'Archived'
     default:
       return status
   }
@@ -32,21 +43,22 @@ const getStatusLabel = (status: string): string => {
  * @module CycleSelector
  * @see {@link https://github.com/matthugh1/MHOKR/blob/main/docs/architecture/DESIGN_SYSTEM.md Design System Documentation}
  * 
- * CycleSelector - Compact, reusable cycle selection component
+ * CycleSelector - Unified cycle and period selection component
  * 
- * Displays the currently selected cycle with a popover menu for selecting from
- * grouped cycles (Current & Upcoming vs Previous). Shows cycle status badges.
+ * Displays the currently selected cycle or period with a popover menu for selecting from
+ * cycles (Current & Upcoming, All Cycles) and legacy planning periods.
  * 
  * @example
  * ```tsx
  * <CycleSelector
  *   cycles={cycles}
- *   selectedCycleId={selectedCycleId}
- *   onSelect={(id) => setSelectedCycleId(id)}
+ *   legacyPeriods={legacyPeriods}
+ *   selectedId={selectedId}
+ *   onSelect={(id) => setSelectedId(id)}
  * />
  * ```
  */
-export function CycleSelector({ cycles, selectedCycleId, onSelect }: CycleSelectorProps) {
+export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: CycleSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -66,37 +78,35 @@ export function CycleSelector({ cycles, selectedCycleId, onSelect }: CycleSelect
     }
   }, [isOpen])
 
-  const selectedCycle = cycles.find(c => c.id === selectedCycleId)
-  const selectedCycleName = selectedCycle?.name || 'Select cycle...'
-  const selectedCycleStatus = selectedCycle?.status || ''
+  // Determine what label to show on the button
+  const selectedCycle = cycles.find(c => c.id === selectedId)
+  const selectedPeriod = legacyPeriods.find(p => p.id === selectedId)
+  const buttonLabel = selectedCycle
+    ? selectedCycle.name
+    : selectedPeriod
+    ? selectedPeriod.label
+    : 'Select cycle / period'
 
-  // Group cycles: Current & Upcoming vs Previous
-  const now = new Date()
+  // Group cycles: Current & Upcoming
   const currentAndUpcoming = cycles.filter(cycle => {
-    // Include ACTIVE or DRAFT cycles
-    if (cycle.status === 'ACTIVE' || cycle.status === 'DRAFT') {
-      return true
-    }
-    // Include cycles with startsAt in the future (if we have timestamps)
-    if (cycle.startsAt) {
-      const startDate = new Date(cycle.startsAt)
-      return startDate >= now
-    }
-    return false
+    return cycle.status === 'ACTIVE' || cycle.status === 'UPCOMING' || cycle.status === 'DRAFT'
   })
 
-  const previous = cycles
-    .filter(cycle => !currentAndUpcoming.includes(cycle))
-    .sort((a, b) => {
-      // Sort descending by startsAt/endsAt if available
-      const aDate = a.startsAt ? new Date(a.startsAt) : (a.endsAt ? new Date(a.endsAt) : new Date(0))
-      const bDate = b.startsAt ? new Date(b.startsAt) : (b.endsAt ? new Date(b.endsAt) : new Date(0))
-      return bDate.getTime() - aDate.getTime()
-    })
-    .slice(0, 5) // Limit to 5 items
+  // All cycles (sorted by status priority, then by date)
+  const allCycles = [...cycles].sort((a, b) => {
+    const statusOrder = { ACTIVE: 0, UPCOMING: 1, DRAFT: 2, LOCKED: 3, ARCHIVED: 4 }
+    const aOrder = statusOrder[a.status as keyof typeof statusOrder] ?? 99
+    const bOrder = statusOrder[b.status as keyof typeof statusOrder] ?? 99
+    if (aOrder !== bOrder) return aOrder - bOrder
+    
+    // If same status, sort by date
+    const aDate = a.startsAt ? new Date(a.startsAt) : (a.endsAt ? new Date(a.endsAt) : new Date(0))
+    const bDate = b.startsAt ? new Date(b.startsAt) : (b.endsAt ? new Date(b.endsAt) : new Date(0))
+    return bDate.getTime() - aDate.getTime()
+  })
 
-  const handleSelect = (cycleId: string) => {
-    onSelect(cycleId)
+  const handleSelect = (id: string) => {
+    onSelect(id)
     setIsOpen(false)
   }
 
@@ -108,87 +118,108 @@ export function CycleSelector({ cycles, selectedCycleId, onSelect }: CycleSelect
         onClick={() => setIsOpen(!isOpen)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        className="rounded-lg border border-neutral-200 bg-white shadow-sm px-3 py-2 text-left flex items-center gap-2 hover:bg-neutral-50 transition-colors"
+        className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700 shadow-sm flex items-center gap-2 hover:bg-neutral-50 transition-colors"
       >
-        <div className="flex flex-col items-start flex-1 min-w-0">
-          <span className="text-sm font-medium text-neutral-900 truncate w-full">
-            {selectedCycleName}
-          </span>
-          {selectedCycleStatus && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full border border-neutral-300 text-neutral-600 bg-neutral-50">
-              {getStatusLabel(selectedCycleStatus)}
-            </span>
-          )}
-        </div>
+        <span className="font-medium text-neutral-800 truncate">{buttonLabel}</span>
         <ChevronDown className={`h-4 w-4 text-neutral-400 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Popover Menu */}
       {isOpen && (
-        <div className="absolute z-50 mt-2 w-64 rounded-lg border border-neutral-200 bg-white shadow-lg p-3">
+        <div className="absolute z-50 mt-2 w-72 rounded-lg border border-neutral-200 bg-white shadow-lg p-3">
           {/* Current & Upcoming Section */}
-          {currentAndUpcoming.length > 0 && (
-            <div className="mb-3">
+          {currentAndUpcoming.length > 0 ? (
+            <div className="mb-4">
               <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
                 Current & Upcoming
               </div>
               <div className="space-y-1">
                 {currentAndUpcoming.map((cycle) => (
-                  <button
+                  <div
                     key={cycle.id}
-                    type="button"
                     onClick={() => handleSelect(cycle.id)}
-                    className={`w-full text-left px-2 py-2 rounded-md hover:bg-neutral-50 flex items-center justify-between ${
-                      cycle.id === selectedCycleId ? 'bg-neutral-100' : ''
+                    className={`flex items-center justify-between px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 cursor-pointer rounded-md ${
+                      cycle.id === selectedId ? 'bg-neutral-100' : ''
                     }`}
                   >
-                    <span className="text-sm text-neutral-900">{cycle.name}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-neutral-300 text-neutral-600 bg-neutral-50">
+                    <span className="font-medium text-neutral-800">{cycle.name}</span>
+                    <span className="text-[10px] px-2 py-[2px] rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
                       {getStatusLabel(cycle.status)}
                     </span>
-                  </button>
+                  </div>
                 ))}
+              </div>
+            </div>
+          ) : (
+            <div className="mb-4">
+              <div className="text-xs text-neutral-500 px-3 py-2">
+                No cycles defined yet.
+                {/* [phase6-polish]: CTA to create first cycle */}
               </div>
             </div>
           )}
 
-          {/* Previous Section */}
-          {previous.length > 0 && (
+          {/* All Cycles Section */}
+          {allCycles.length > 0 ? (
+            <div className="mb-4">
+              <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
+                All Cycles
+              </div>
+              <div className="max-h-[160px] overflow-y-auto space-y-1">
+                {allCycles.map((cycle) => (
+                  <div
+                    key={cycle.id}
+                    onClick={() => handleSelect(cycle.id)}
+                    className={`flex items-center justify-between px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 cursor-pointer rounded-md ${
+                      cycle.id === selectedId ? 'bg-neutral-100' : ''
+                    }`}
+                  >
+                    <div className="flex flex-col">
+                      <span className="font-medium text-neutral-800">{cycle.name}</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-[2px] rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
+                      {getStatusLabel(cycle.status)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Planning / Historical Periods Section */}
+          {legacyPeriods.length > 0 ? (
             <div>
               <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
-                Previous
+                Planning / historical periods
               </div>
-              <div className="space-y-1">
-                {previous.map((cycle) => (
-                  <button
-                    key={cycle.id}
-                    type="button"
-                    onClick={() => handleSelect(cycle.id)}
-                    className={`w-full text-left px-2 py-2 rounded-md hover:bg-neutral-50 flex items-center justify-between ${
-                      cycle.id === selectedCycleId ? 'bg-neutral-100' : ''
+              <div className="max-h-[160px] overflow-y-auto space-y-1">
+                {legacyPeriods.map((period) => (
+                  <div
+                    key={period.id}
+                    onClick={() => handleSelect(period.id)}
+                    className={`flex items-center justify-between px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 cursor-pointer rounded-md ${
+                      period.id === selectedId ? 'bg-neutral-100' : ''
                     }`}
                   >
-                    <span className="text-sm text-neutral-900">{cycle.name}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-neutral-300 text-neutral-600 bg-neutral-50">
-                      {getStatusLabel(cycle.status)}
-                    </span>
-                  </button>
+                    <span className="font-medium text-neutral-800">{period.label}</span>
+                    {period.isFuture && (
+                      <span className="text-[10px] px-2 py-[2px] rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
+                        Future
+                      </span>
+                    )}
+                  </div>
                 ))}
               </div>
-              {/* TODO [phase7-hardening]: Implement full "view all cycles" navigation */}
-              {cycles.length > currentAndUpcoming.length + previous.length && (
-                <div className="text-xs text-neutral-400 italic px-2 py-1 mt-2">
-                  View all cycles…
-                </div>
-              )}
             </div>
-          )}
-
-          {/* Empty State */}
-          {currentAndUpcoming.length === 0 && previous.length === 0 && (
-            <div className="text-xs text-neutral-500 px-2 py-2">
-              No cycles available yet.
-              {/* [phase6-polish]: replace with CTA to create first planning cycle */}
+          ) : (
+            <div>
+              <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
+                Planning / historical periods
+              </div>
+              <div className="text-xs text-neutral-500 px-3 py-2">
+                No historical / planning periods.
+                {/* [phase6-polish]: This will list planning windows once defined */}
+              </div>
             </div>
           )}
         </div>
@@ -196,4 +227,3 @@ export function CycleSelector({ cycles, selectedCycleId, onSelect }: CycleSelect
     </div>
   )
 }
-

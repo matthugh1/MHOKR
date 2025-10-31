@@ -74,10 +74,6 @@ export default function BuilderPage() {
   const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [periodFilter, setPeriodFilter] = useState<string>(getCurrentPeriodFilter())
   const availablePeriods = getAvailablePeriodFilters()
-  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(() => {
-    // Will be updated when cycles load, but initialize with synthetic fallback
-    return 'synthetic-active-cycle'
-  })
   const [activeCycles, setActiveCycles] = useState<Array<{
     id: string
     name: string
@@ -152,16 +148,21 @@ export default function BuilderPage() {
     endsAt: cycle.endDate,
   }))
 
-  // Always ensure at least one cycle exists (synthetic fallback for dev)
-  const effectiveCycles = useMemo(() => {
+  // Normalize cycles with synthetic fallback
+  const normalizedCycles = useMemo(() => {
     if (cyclesFromApi && cyclesFromApi.length > 0) {
-      return cyclesFromApi
+      return cyclesFromApi.map(c => ({
+        id: c.id,
+        name: c.name ?? 'Unnamed Cycle',
+        status: c.status ?? 'ACTIVE',
+        startsAt: c.startsAt,
+        endsAt: c.endsAt,
+      }))
     }
-    // fallback synthetic cycle for local/dev/demo when API returns nothing
     return [
       {
         id: 'synthetic-active-cycle',
-        name: 'Q4 2025',
+        name: 'Q4 2025 (Active)',
         status: 'ACTIVE',
         startsAt: undefined,
         endsAt: undefined,
@@ -169,25 +170,40 @@ export default function BuilderPage() {
     ]
   }, [cyclesFromApi])
 
-  // Filter nodes based on cycle or period
-  const selectedPeriodOption = availablePeriods.find(p => p.value === periodFilter)
-  const filteredNodes = selectedCycleId && selectedCycleId !== 'synthetic-active-cycle'
+  // Build legacy periods list
+  const legacyPeriods = useMemo(() => [
+    { id: '2025-Q4', label: 'Q4 2025 (current)' },
+    { id: '2026-Q1-planning', label: 'Q1 2026 (planning)', isFuture: true },
+    { id: '2026-Q2-draft', label: 'Q2 2026 (draft)', isFuture: true },
+    // [phase6-polish]: hydrate from backend once periods endpoint exists
+  ], [])
+
+  // Unified selectedId state
+  const [selectedId, setSelectedId] = useState<string>(() => {
+    if (normalizedCycles.length > 0) return normalizedCycles[0].id
+    if (legacyPeriods.length > 0) return legacyPeriods[0].id
+    return 'synthetic-active-cycle'
+  })
+
+  // Filter nodes based on unified selectedId (cycle or period)
+  // [phase7-hardening]: unifying cycle/period filters
+  const filteredNodes = selectedId && selectedId !== 'synthetic-active-cycle'
     ? nodes.filter(node => {
         // Filter by cycleId for objectives
         if (node.type === 'objective') {
-          return node.data.cycleId === selectedCycleId
+          if (node.data.cycleId === selectedId) {
+            return true
+          }
+          // If it's a legacy period ID, show all for now
+          if (selectedId.startsWith('2025-') || selectedId.startsWith('2026-')) {
+            return true // [phase7-hardening]: implement period matching when backend supports it
+          }
+          return false
         }
         // Show key results and initiatives (they don't have cycleId, show all)
         return true
       })
-    : periodFilter === 'all'
-    ? nodes
-    : nodes.filter(node => {
-        if (node.type === 'objective' && node.data.startDate && node.data.endDate && selectedPeriodOption) {
-          return doesOKRMatchPeriod(node.data.startDate, node.data.endDate, selectedPeriodOption)
-        }
-        return true // Show key results and initiatives
-      })
+    : nodes
 
   // Load existing OKRs from backend
   useEffect(() => {
@@ -206,7 +222,7 @@ export default function BuilderPage() {
       // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
       // Set default selected cycle to first active cycle if available
       if (cycles.length > 0) {
-        setSelectedCycleId(cycles[0].id)
+        setSelectedId(cycles[0].id)
       }
     } catch (error: any) {
       // Cycles endpoint is optional - gracefully degrade if no permission
@@ -879,12 +895,11 @@ export default function BuilderPage() {
                   </div>
                   <div className="flex gap-2 items-center">
                 <CycleSelector
-                  cycles={effectiveCycles}
-                  selectedCycleId={selectedCycleId}
+                  cycles={normalizedCycles}
+                  legacyPeriods={legacyPeriods}
+                  selectedId={selectedId}
                   onSelect={(id) => {
-                    setSelectedCycleId(id)
-                    // Clear period filter when cycle is selected
-                    setPeriodFilter('all')
+                    setSelectedId(id)
                     // [phase7-hardening]: hook this into Builder graph filtering once multi-cycle view is ready
                   }}
                 />

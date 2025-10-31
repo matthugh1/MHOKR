@@ -60,10 +60,6 @@ export default function OKRsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [selectedPeriod, setSelectedPeriod] = useState<string>(getCurrentPeriodFilter())
   const availablePeriods = getAvailablePeriodFilters()
-  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(() => {
-    // Will be updated when cycles load, but initialize with synthetic fallback
-    return 'synthetic-active-cycle'
-  })
   
   // Filter states
   const [filterWorkspaceId, setFilterWorkspaceId] = useState<string>('all')
@@ -160,7 +156,7 @@ export default function OKRsPage() {
       // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
       // Set default selected cycle to first active cycle if available
       if (cycles.length > 0) {
-        setSelectedCycleId(cycles[0].id)
+        setSelectedId(cycles[0].id)
       }
     } catch (error: any) {
       // Cycles endpoint is optional - gracefully degrade if no permission
@@ -223,22 +219,42 @@ export default function OKRsPage() {
     endsAt: cycle.endDate,
   }))
 
-  // Always ensure at least one cycle exists (synthetic fallback for dev)
-  const effectiveCycles = useMemo(() => {
+  // Normalize cycles with synthetic fallback
+  const normalizedCycles = useMemo(() => {
     if (cyclesFromApi && cyclesFromApi.length > 0) {
-      return cyclesFromApi
+      return cyclesFromApi.map(c => ({
+        id: c.id,
+        name: c.name ?? 'Unnamed Cycle',
+        status: c.status ?? 'ACTIVE',
+        startsAt: c.startsAt,
+        endsAt: c.endsAt,
+      }))
     }
-    // fallback synthetic cycle for local/dev/demo when API returns nothing
     return [
       {
         id: 'synthetic-active-cycle',
-        name: 'Q4 2025',
+        name: 'Q4 2025 (Active)',
         status: 'ACTIVE',
         startsAt: undefined,
         endsAt: undefined,
       },
     ]
   }, [cyclesFromApi])
+
+  // Build legacy periods list
+  const legacyPeriods = useMemo(() => [
+    { id: '2025-Q4', label: 'Q4 2025 (current)' },
+    { id: '2026-Q1-planning', label: 'Q1 2026 (planning)', isFuture: true },
+    { id: '2026-Q2-draft', label: 'Q2 2026 (draft)', isFuture: true },
+    // [phase6-polish]: hydrate from backend once periods endpoint exists
+  ], [])
+
+  // Unified selectedId state
+  const [selectedId, setSelectedId] = useState<string>(() => {
+    if (normalizedCycles.length > 0) return normalizedCycles[0].id
+    if (legacyPeriods.length > 0) return legacyPeriods[0].id
+    return 'synthetic-active-cycle'
+  })
   
   // Apply filters and visibility checks with safe defaults
   const safeObjectives = Array.isArray(okrs) ? okrs : []
@@ -247,22 +263,19 @@ export default function OKRsPage() {
     if (!canSeeObjective(okr)) {
       return false
     }
-    // Cycle filter (takes precedence over period filter)
-    // Skip filtering for synthetic cycle (show all OKRs)
-    if (selectedCycleId && selectedCycleId !== 'synthetic-active-cycle') {
-      if (okr.cycleId !== selectedCycleId) {
+    // Unified filter using selectedId (can be cycle or period)
+    // [phase7-hardening]: once backend distinguishes 'cycle' vs 'period', align this
+    if (selectedId && selectedId !== 'synthetic-active-cycle') {
+      // Check if it matches cycleId
+      if (okr.cycleId === selectedId) {
+        // Matches cycle - include this OKR
+      } else if (selectedId.startsWith('2025-') || selectedId.startsWith('2026-')) {
+        // Legacy period filter - for now show all if period selected
+        // [phase7-hardening]: implement period matching logic when backend supports it
+        // For now, include all OKRs when a period is selected
+      } else {
+        // No match - exclude this OKR
         return false
-      }
-    } else {
-      // Period filter (only applies when synthetic cycle is selected or no cycle)
-      if (selectedPeriod !== 'all' && selectedPeriodOption) {
-        if (okr.startDate && okr.endDate) {
-          if (!doesOKRMatchPeriod(okr.startDate, okr.endDate, selectedPeriodOption)) {
-            return false
-          }
-        } else {
-          return false
-        }
       }
     }
     
@@ -578,13 +591,12 @@ export default function OKRsPage() {
               </Select>
               
               <CycleSelector
-                cycles={effectiveCycles}
-                selectedCycleId={selectedCycleId}
+                cycles={normalizedCycles}
+                legacyPeriods={legacyPeriods}
+                selectedId={selectedId}
                 onSelect={(id) => {
-                  setSelectedCycleId(id)
-                  // Clear period filter when cycle is selected
-                  setSelectedPeriod('all')
-                  // [phase7-hardening]: make sure backend supports historical cycles later
+                  setSelectedId(id)
+                  // [phase7-hardening]: trigger refetch / filter view model for this period
                 }}
               />
               
