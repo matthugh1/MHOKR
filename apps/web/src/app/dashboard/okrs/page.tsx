@@ -52,6 +52,7 @@ import { ObjectiveCard } from '@/components/ui/ObjectiveCard'
 import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
 import { BuildStamp } from '@/components/ui/BuildStamp'
 import { PublishLockWarningModal } from './components/PublishLockWarningModal'
+import { CycleSelector } from '@/components/ui/CycleSelector'
 import api from '@/lib/api'
 import { logTokenInfo } from '@/lib/jwt-debug'
 
@@ -60,6 +61,7 @@ export default function OKRsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [selectedPeriod, setSelectedPeriod] = useState<string>(getCurrentPeriodFilter())
   const availablePeriods = getAvailablePeriodFilters()
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null)
   
   // Filter states
   const [filterWorkspaceId, setFilterWorkspaceId] = useState<string>('all')
@@ -151,7 +153,13 @@ export default function OKRsPage() {
   const loadActiveCycles = async () => {
     try {
       const response = await api.get('/objectives/cycles/active')
-      setActiveCycles(response.data || [])
+      const cycles = response.data || []
+      setActiveCycles(cycles)
+      // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
+      // Set default selected cycle to first active cycle if available
+      if (cycles.length > 0 && !selectedCycleId) {
+        setSelectedCycleId(cycles[0].id)
+      }
     } catch (error: any) {
       // Cycles endpoint is optional - gracefully degrade if no permission
       if (error.response?.status !== 403) {
@@ -204,6 +212,15 @@ export default function OKRsPage() {
 
   const selectedPeriodOption = availablePeriods.find(p => p.value === selectedPeriod);
   
+  // Transform cycles for CycleSelector (map startDate/endDate to startsAt/endsAt)
+  const cyclesForSelector = activeCycles.map(cycle => ({
+    id: cycle.id,
+    name: cycle.name,
+    status: cycle.status,
+    startsAt: cycle.startDate,
+    endsAt: cycle.endDate,
+  }))
+  
   // Apply filters and visibility checks with safe defaults
   const safeObjectives = Array.isArray(okrs) ? okrs : []
   const filteredOKRs = safeObjectives.filter(okr => {
@@ -211,14 +228,21 @@ export default function OKRsPage() {
     if (!canSeeObjective(okr)) {
       return false
     }
-    // Period filter
-    if (selectedPeriod !== 'all' && selectedPeriodOption) {
-      if (okr.startDate && okr.endDate) {
-        if (!doesOKRMatchPeriod(okr.startDate, okr.endDate, selectedPeriodOption)) {
+    // Cycle filter (takes precedence over period filter)
+    if (selectedCycleId) {
+      if (okr.cycleId !== selectedCycleId) {
+        return false
+      }
+    } else {
+      // Period filter (only applies when no cycle is selected)
+      if (selectedPeriod !== 'all' && selectedPeriodOption) {
+        if (okr.startDate && okr.endDate) {
+          if (!doesOKRMatchPeriod(okr.startDate, okr.endDate, selectedPeriodOption)) {
+            return false
+          }
+        } else {
           return false
         }
-      } else {
-        return false
       }
     }
     
@@ -532,28 +556,40 @@ export default function OKRsPage() {
                 </SelectContent>
               </Select>
               
-              <select
-                value={selectedPeriod}
-                onChange={(e) => setSelectedPeriod(e.target.value)}
-                className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm min-w-[160px]"
-              >
-                <option value="all">All Time Periods</option>
-                <optgroup label="Years">
-                  {availablePeriods.filter(p => p.period === Period.ANNUAL).map(period => (
-                    <option key={period.value} value={period.value}>{period.label}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Quarters">
-                  {availablePeriods.filter(p => p.period === Period.QUARTERLY).map(period => (
-                    <option key={period.value} value={period.value}>{period.label}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Months">
-                  {availablePeriods.filter(p => p.period === Period.MONTHLY).map(period => (
-                    <option key={period.value} value={period.value}>{period.label}</option>
-                  ))}
-                </optgroup>
-              </select>
+              {cyclesForSelector.length > 0 ? (
+                <CycleSelector
+                  cycles={cyclesForSelector}
+                  selectedCycleId={selectedCycleId}
+                  onSelect={(id) => {
+                    setSelectedCycleId(id)
+                    // Clear period filter when cycle is selected
+                    setSelectedPeriod('all')
+                  }}
+                />
+              ) : (
+                <select
+                  value={selectedPeriod}
+                  onChange={(e) => setSelectedPeriod(e.target.value)}
+                  className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm min-w-[160px]"
+                >
+                  <option value="all">All Time Periods</option>
+                  <optgroup label="Years">
+                    {availablePeriods.filter(p => p.period === Period.ANNUAL).map(period => (
+                      <option key={period.value} value={period.value}>{period.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Quarters">
+                    {availablePeriods.filter(p => p.period === Period.QUARTERLY).map(period => (
+                      <option key={period.value} value={period.value}>{period.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Months">
+                    {availablePeriods.filter(p => p.period === Period.MONTHLY).map(period => (
+                      <option key={period.value} value={period.value}>{period.label}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              )}
               
               {hasActiveFilters && (
                 <Button variant="outline" size="sm" onClick={clearFilters}>
