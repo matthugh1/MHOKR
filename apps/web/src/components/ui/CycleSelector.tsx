@@ -19,7 +19,7 @@ export interface CycleSelectorProps {
   }>
   /** currently selected item, can be either a cycle.id or a legacyPeriod.id */
   selectedId: string | null
-  onSelect: (id: string) => void
+  onSelect: (opt: { key: string; label: string }) => void
 }
 
 const getStatusLabel = (status: string): string => {
@@ -85,11 +85,20 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
     ? selectedCycle.name
     : selectedPeriod
     ? selectedPeriod.label
+    : selectedId === 'unassigned'
+    ? 'Unassigned / Backlog'
+    : selectedId === 'all'
+    ? 'All periods'
     : 'Select cycle / period'
 
   // Group cycles: Current & Upcoming
   const currentAndUpcoming = cycles.filter(cycle => {
     return cycle.status === 'ACTIVE' || cycle.status === 'UPCOMING' || cycle.status === 'DRAFT'
+  })
+
+  // Previous cycles (LOCKED, ARCHIVED)
+  const previousCycles = cycles.filter(cycle => {
+    return cycle.status === 'LOCKED' || cycle.status === 'ARCHIVED'
   })
 
   // All cycles (sorted by status priority, then by date)
@@ -105,8 +114,8 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
     return bDate.getTime() - aDate.getTime()
   })
 
-  const handleSelect = (id: string) => {
-    onSelect(id)
+  const handleSelect = (key: string, label: string) => {
+    onSelect({ key, label })
     setIsOpen(false)
   }
 
@@ -130,6 +139,7 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
           {/* Current & Upcoming Section */}
           {currentAndUpcoming.length > 0 ? (
             <div className="mb-4">
+              {/* TODO [phase6-polish]: visual grouping headers in popover */}
               <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
                 Current & Upcoming
               </div>
@@ -137,13 +147,12 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
                 {currentAndUpcoming.map((cycle) => (
                   <div
                     key={cycle.id}
-                    onClick={() => handleSelect(cycle.id)}
-                    className={`flex items-center justify-between px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 cursor-pointer rounded-md ${
-                      cycle.id === selectedId ? 'bg-neutral-100' : ''
-                    }`}
+                    onClick={() => handleSelect(cycle.id, cycle.name)}
+                    className="rounded-md hover:bg-neutral-100 cursor-pointer text-sm text-neutral-700 flex items-center justify-between w-full px-3 py-2"
                   >
                     <span className="font-medium text-neutral-800">{cycle.name}</span>
-                    <span className="text-[10px] px-2 py-[2px] rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
+                    <span className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-0.5 text-[10px] font-medium text-neutral-700">
+                      {/* TODO [phase7-hardening]: drive statuses from backend cycle.status */}
                       {getStatusLabel(cycle.status)}
                     </span>
                   </div>
@@ -154,30 +163,28 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
             <div className="mb-4">
               <div className="text-xs text-neutral-500 px-3 py-2">
                 No cycles defined yet.
-                {/* [phase6-polish]: CTA to create first cycle */}
+                {/* TODO [phase6-polish]: CTA to create first cycle */}
               </div>
             </div>
           )}
 
-          {/* All Cycles Section */}
-          {allCycles.length > 0 ? (
+          {/* Previous Section */}
+          {previousCycles.length > 0 ? (
             <div className="mb-4">
+              {/* TODO [phase6-polish]: visual grouping headers in popover */}
               <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
-                All Cycles
+                Previous
               </div>
               <div className="max-h-[160px] overflow-y-auto space-y-1">
-                {allCycles.map((cycle) => (
+                {previousCycles.map((cycle) => (
                   <div
                     key={cycle.id}
-                    onClick={() => handleSelect(cycle.id)}
-                    className={`flex items-center justify-between px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 cursor-pointer rounded-md ${
-                      cycle.id === selectedId ? 'bg-neutral-100' : ''
-                    }`}
+                    onClick={() => handleSelect(cycle.id, cycle.name)}
+                    className="rounded-md hover:bg-neutral-100 cursor-pointer text-sm text-neutral-700 flex items-center justify-between w-full px-3 py-2"
                   >
-                    <div className="flex flex-col">
-                      <span className="font-medium text-neutral-800">{cycle.name}</span>
-                    </div>
-                    <span className="text-[10px] px-2 py-[2px] rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
+                    <span className="font-medium text-neutral-800">{cycle.name}</span>
+                    <span className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-0.5 text-[10px] font-medium text-neutral-700">
+                      {/* TODO [phase7-hardening]: drive statuses from backend cycle.status */}
                       {getStatusLabel(cycle.status)}
                     </span>
                   </div>
@@ -186,9 +193,10 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
             </div>
           ) : null}
 
-          {/* Planning / Historical Periods Section */}
+          {/* Legacy Periods Section */}
           {legacyPeriods.length > 0 ? (
-            <div>
+            <div className="mb-4">
+              {/* TODO [phase6-polish]: visual grouping headers in popover */}
               <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
                 Planning / historical periods
               </div>
@@ -196,14 +204,12 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
                 {legacyPeriods.map((period) => (
                   <div
                     key={period.id}
-                    onClick={() => handleSelect(period.id)}
-                    className={`flex items-center justify-between px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 cursor-pointer rounded-md ${
-                      period.id === selectedId ? 'bg-neutral-100' : ''
-                    }`}
+                    onClick={() => handleSelect(period.id, period.label)}
+                    className="rounded-md hover:bg-neutral-100 cursor-pointer text-sm text-neutral-700 flex items-center justify-between w-full px-3 py-2"
                   >
                     <span className="font-medium text-neutral-800">{period.label}</span>
                     {period.isFuture && (
-                      <span className="text-[10px] px-2 py-[2px] rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
+                      <span className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-0.5 text-[10px] font-medium text-neutral-700">
                         Future
                       </span>
                     )}
@@ -211,17 +217,33 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
                 ))}
               </div>
             </div>
-          ) : (
-            <div>
-              <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
-                Planning / historical periods
+          ) : null}
+
+          {/* Special Section */}
+          <div>
+            {/* TODO [phase6-polish]: visual grouping headers in popover */}
+            <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
+              Special
+            </div>
+            <div className="space-y-1">
+              <div
+                onClick={() => handleSelect('unassigned', 'Unassigned / Backlog')}
+                className={`rounded-md hover:bg-neutral-100 cursor-pointer text-sm text-neutral-700 flex items-center justify-between w-full px-3 py-2 ${
+                  selectedId === 'unassigned' ? 'bg-neutral-100' : ''
+                }`}
+              >
+                <span className="font-medium text-neutral-800">Unassigned / Backlog</span>
               </div>
-              <div className="text-xs text-neutral-500 px-3 py-2">
-                No historical / planning periods.
-                {/* [phase6-polish]: This will list planning windows once defined */}
+              <div
+                onClick={() => handleSelect('all', 'All periods')}
+                className={`rounded-md hover:bg-neutral-100 cursor-pointer text-sm text-neutral-700 flex items-center justify-between w-full px-3 py-2 ${
+                  selectedId === 'all' ? 'bg-neutral-100' : ''
+                }`}
+              >
+                <span className="font-medium text-neutral-800">All periods</span>
               </div>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>

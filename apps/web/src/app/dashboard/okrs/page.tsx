@@ -91,6 +91,45 @@ export default function OKRsPage() {
     organizationId: string
   }>>([])
   
+  // Helper to normalize a label string to a timeframeKey
+  const normaliseLabelToKey = (label: string): string => {
+    return label
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '') // Remove punctuation except hyphens
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-') // Collapse multiple hyphens
+      .replace(/^-|-$/g, '') // Remove leading/trailing hyphens
+  }
+  
+  // Helper to map raw objective from API to view model with timeframeKey
+  const mapObjectiveToViewModel = (rawObjective: any): any => {
+    let timeframeKey: string = 'unassigned'
+    
+    // Priority 1: cycleId
+    if (rawObjective.cycleId) {
+      timeframeKey = rawObjective.cycleId
+    }
+    // Priority 2: plannedCycleId (if exists)
+    else if (rawObjective.plannedCycleId) {
+      timeframeKey = rawObjective.plannedCycleId
+    }
+    // Priority 3: cycle-like label fields (cycleName, periodLabel, timeframeLabel, etc.)
+    else if (rawObjective.cycleName) {
+      timeframeKey = normaliseLabelToKey(rawObjective.cycleName)
+    } else if (rawObjective.periodLabel) {
+      timeframeKey = normaliseLabelToKey(rawObjective.periodLabel)
+    } else if (rawObjective.timeframeLabel) {
+      timeframeKey = normaliseLabelToKey(rawObjective.timeframeLabel)
+    }
+    // Priority 4: fallback to 'unassigned'
+    
+    return {
+      ...rawObjective,
+      timeframeKey,
+    }
+  }
+  
   useEffect(() => {
     // Debug: Log JWT token info and user context (remove in production)
     if (process.env.NODE_ENV === 'development') {
@@ -156,7 +195,8 @@ export default function OKRsPage() {
       // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
       // Set default selected cycle to first active cycle if available
       if (cycles.length > 0) {
-        setSelectedId(cycles[0].id)
+        setSelectedTimeframeKey(cycles[0].id)
+        setSelectedTimeframeLabel(cycles[0].name)
       }
     } catch (error: any) {
       // Cycles endpoint is optional - gracefully degrade if no permission
@@ -249,32 +289,40 @@ export default function OKRsPage() {
     // [phase6-polish]: hydrate from backend once periods endpoint exists
   ], [])
 
-  // Unified selectedId state
-  const [selectedId, setSelectedId] = useState<string>(() => {
+  // State for timeframe selection (key and label)
+  const [selectedTimeframeKey, setSelectedTimeframeKey] = useState<string | null>(() => {
     if (normalizedCycles.length > 0) return normalizedCycles[0].id
     if (legacyPeriods.length > 0) return legacyPeriods[0].id
-    return 'synthetic-active-cycle'
+    return 'all' // Default to 'all' if no cycles available
+  })
+  const [selectedTimeframeLabel, setSelectedTimeframeLabel] = useState<string>(() => {
+    if (normalizedCycles.length > 0) return normalizedCycles[0].name
+    if (legacyPeriods.length > 0) return legacyPeriods[0].label
+    return 'All periods'
   })
   
+  // Legacy selectedId for backwards compatibility during transition
+  const selectedId = selectedTimeframeKey
+  
+  // Map all objectives to view models with timeframeKey
+  const objectivesViewModel = useMemo(() => {
+    const safeObjectives = Array.isArray(okrs) ? okrs : []
+    return safeObjectives.map(mapObjectiveToViewModel)
+  }, [okrs])
+  
   // Apply filters and visibility checks with safe defaults
-  const safeObjectives = Array.isArray(okrs) ? okrs : []
-  const filteredOKRs = safeObjectives.filter(okr => {
+  const filteredOKRs = objectivesViewModel.filter(okr => {
     // Apply visibility check
     if (!canSeeObjective(okr)) {
       return false
     }
-    // Unified filter using selectedId (can be cycle or period)
-    // [phase7-hardening]: once backend distinguishes 'cycle' vs 'period', align this
-    if (selectedId && selectedId !== 'synthetic-active-cycle') {
-      // Check if it matches cycleId
-      if (okr.cycleId === selectedId) {
-        // Matches cycle - include this OKR
-      } else if (selectedId.startsWith('2025-') || selectedId.startsWith('2026-')) {
-        // Legacy period filter - for now show all if period selected
-        // [phase7-hardening]: implement period matching logic when backend supports it
-        // For now, include all OKRs when a period is selected
-      } else {
-        // No match - exclude this OKR
+    
+    // Strict filtering by timeframeKey
+    if (!selectedTimeframeKey || selectedTimeframeKey === 'all') {
+      // Show all when 'all' is selected or no selection
+    } else {
+      // Strict match: only include if timeframeKey matches
+      if (okr.timeframeKey !== selectedTimeframeKey) {
         return false
       }
     }
@@ -480,6 +528,12 @@ export default function OKRsPage() {
                   title="Objectives & Key Results"
                   subtitle="Aligned execution, live progress"
                   badges={[
+                    ...(selectedTimeframeLabel ? [
+                      {
+                        label: `Viewing: ${selectedTimeframeLabel}`,
+                        tone: 'neutral' as const,
+                      },
+                    ] : []),
                     ...(activeCycles.length > 0
                       ? [
                           {
@@ -593,10 +647,10 @@ export default function OKRsPage() {
               <CycleSelector
                 cycles={normalizedCycles}
                 legacyPeriods={legacyPeriods}
-                selectedId={selectedId}
-                onSelect={(id) => {
-                  setSelectedId(id)
-                  // [phase7-hardening]: trigger refetch / filter view model for this period
+                selectedId={selectedTimeframeKey}
+                onSelect={(opt: { key: string; label: string }) => {
+                  setSelectedTimeframeKey(opt.key)
+                  setSelectedTimeframeLabel(opt.label)
                 }}
               />
               
@@ -665,19 +719,28 @@ export default function OKRsPage() {
             </div>
           ) : filteredOKRs.length === 0 ? (
             <div className="text-center py-12">
-              {safeObjectives.filter(canSeeObjective).length === 0 ? (
+              {objectivesViewModel.filter(canSeeObjective).length === 0 ? (
                 <div className="rounded-xl border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500 shadow-sm">
                   No objectives are visible in this workspace.
                   {/* TODO [phase6-polish]: add illustration + CTA when we allow creation */}
                 </div>
               ) : (
-                <div className="rounded-xl border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500 shadow-sm">
-                  <p className="mb-4">No OKRs found</p>
-                  {hasActiveFilters && (
-                    <Button variant="outline" onClick={clearFilters}>
-                      Clear filters to see all OKRs
-                    </Button>
+                <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm text-neutral-600">
+                  {selectedTimeframeKey === 'unassigned' ? (
+                    <p>No objectives are currently unassigned to a planning cycle.</p>
+                  ) : selectedTimeframeKey && selectedTimeframeKey !== 'all' ? (
+                    <p>No objectives defined for {selectedTimeframeLabel} yet.</p>
+                  ) : (
+                    <>
+                      <p className="mb-4">No OKRs found</p>
+                      {hasActiveFilters && (
+                        <Button variant="outline" onClick={clearFilters}>
+                          Clear filters to see all OKRs
+                        </Button>
+                      )}
+                    </>
                   )}
+                  {/* TODO [phase6-polish]: add CTA "Create first objective in this cycle" for admins */}
                 </div>
               )}
             </div>

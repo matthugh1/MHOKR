@@ -178,32 +178,101 @@ export default function BuilderPage() {
     // [phase6-polish]: hydrate from backend once periods endpoint exists
   ], [])
 
-  // Unified selectedId state
-  const [selectedId, setSelectedId] = useState<string>(() => {
+  // Helper to normalize a label string to a timeframeKey
+  const normaliseLabelToKey = (label: string): string => {
+    return label
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '') // Remove punctuation except hyphens
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-') // Collapse multiple hyphens
+      .replace(/^-|-$/g, '') // Remove leading/trailing hyphens
+  }
+  
+  // Helper to map raw objective from API to view model with timeframeKey
+  const mapObjectiveToViewModel = (rawObjective: any): any => {
+    let timeframeKey: string = 'unassigned'
+    
+    // Priority 1: cycleId
+    if (rawObjective.cycleId) {
+      timeframeKey = rawObjective.cycleId
+    }
+    // Priority 2: plannedCycleId (if exists)
+    else if (rawObjective.plannedCycleId) {
+      timeframeKey = rawObjective.plannedCycleId
+    }
+    // Priority 3: cycle-like label fields (cycleName, periodLabel, timeframeLabel, etc.)
+    else if (rawObjective.cycleName) {
+      timeframeKey = normaliseLabelToKey(rawObjective.cycleName)
+    } else if (rawObjective.periodLabel) {
+      timeframeKey = normaliseLabelToKey(rawObjective.periodLabel)
+    } else if (rawObjective.timeframeLabel) {
+      timeframeKey = normaliseLabelToKey(rawObjective.timeframeLabel)
+    }
+    // Priority 4: fallback to 'unassigned'
+    
+    return {
+      ...rawObjective,
+      timeframeKey,
+    }
+  }
+
+  // State for timeframe selection (key and label)
+  const [selectedTimeframeKey, setSelectedTimeframeKey] = useState<string | null>(() => {
     if (normalizedCycles.length > 0) return normalizedCycles[0].id
     if (legacyPeriods.length > 0) return legacyPeriods[0].id
-    return 'synthetic-active-cycle'
+    return 'all' // Default to 'all' if no cycles available
+  })
+  const [selectedTimeframeLabel, setSelectedTimeframeLabel] = useState<string>(() => {
+    if (normalizedCycles.length > 0) return normalizedCycles[0].name
+    if (legacyPeriods.length > 0) return legacyPeriods[0].label
+    return 'All periods'
   })
 
-  // Filter nodes based on unified selectedId (cycle or period)
-  // [phase7-hardening]: unifying cycle/period filters
-  const filteredNodes = selectedId && selectedId !== 'synthetic-active-cycle'
-    ? nodes.filter(node => {
-        // Filter by cycleId for objectives
-        if (node.type === 'objective') {
-          if (node.data.cycleId === selectedId) {
-            return true
-          }
-          // If it's a legacy period ID, show all for now
-          if (selectedId.startsWith('2025-') || selectedId.startsWith('2026-')) {
-            return true // [phase7-hardening]: implement period matching when backend supports it
-          }
-          return false
+  // Map node data to include timeframeKey for objectives (for nodes added dynamically)
+  const nodesWithTimeframeKey = useMemo(() => {
+    return nodes.map(node => {
+      if (node.type === 'objective') {
+        // If timeframeKey already exists, keep it
+        if (node.data.timeframeKey) {
+          return node
         }
-        // Show key results and initiatives (they don't have cycleId, show all)
-        return true
-      })
-    : nodes
+        // Otherwise, map the objective data to view model
+        const viewModel = mapObjectiveToViewModel({
+          cycleId: node.data.cycleId,
+          plannedCycleId: node.data.plannedCycleId,
+          cycleName: node.data.cycleName,
+          periodLabel: node.data.periodLabel,
+          timeframeLabel: node.data.timeframeLabel,
+        })
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            timeframeKey: viewModel.timeframeKey,
+          },
+        }
+      }
+      return node
+    })
+  }, [nodes])
+
+  // Filter nodes based on timeframeKey
+  const filteredNodes = useMemo(() => {
+    if (!selectedTimeframeKey || selectedTimeframeKey === 'all') {
+      return nodesWithTimeframeKey
+    }
+    
+    return nodesWithTimeframeKey.filter(node => {
+      // Only filter objectives by timeframeKey
+      if (node.type === 'objective') {
+        return node.data.timeframeKey === selectedTimeframeKey
+      }
+      // For key results and initiatives, include them if their parent objective matches
+      // For now, include all key results and initiatives (they inherit from parent objective)
+      return true
+    })
+  }, [nodesWithTimeframeKey, selectedTimeframeKey])
 
   // Load existing OKRs from backend
   useEffect(() => {
@@ -222,7 +291,8 @@ export default function BuilderPage() {
       // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
       // Set default selected cycle to first active cycle if available
       if (cycles.length > 0) {
-        setSelectedId(cycles[0].id)
+        setSelectedTimeframeKey(cycles[0].id)
+        setSelectedTimeframeLabel(cycles[0].name)
       }
     } catch (error: any) {
       // Cycles endpoint is optional - gracefully degrade if no permission
@@ -270,6 +340,9 @@ export default function BuilderPage() {
         
         const position = getNodePosition('OBJECTIVE', obj.id, defaultPosition)
         
+        // Map objective to view model to get timeframeKey
+        const objectiveViewModel = mapObjectiveToViewModel(obj)
+        
         loadedNodes.push({
           id: `obj-${obj.id}`,
           type: 'objective',
@@ -289,6 +362,7 @@ export default function BuilderPage() {
               startDate: obj.startDate ? formatDateForInput(obj.startDate) : undefined,
               endDate: obj.endDate ? formatDateForInput(obj.endDate) : undefined,
               cycleId: obj.cycleId || null,
+              timeframeKey: objectiveViewModel.timeframeKey,
               onEdit: handleEditNode,
               onQuickSave: handleQuickSave,
               okrId: obj.id,
@@ -866,7 +940,7 @@ export default function BuilderPage() {
     <ProtectedRoute>
       <DashboardLayout>
         <div className="h-full flex flex-col">
-          <div className="p-6 border-b bg-white">
+            <div className="p-6 border-b bg-white">
             {/* TODO[phase6-polish]: align header spacing with analytics/okrs headers if design tweaks */}
             <div className="flex items-start justify-between gap-4">
               <div className="flex flex-col">
@@ -877,6 +951,11 @@ export default function BuilderPage() {
                       <p className="text-slate-600 text-sm">
                         Drag from the circles on nodes to connect them
                       </p>
+                      {selectedTimeframeLabel && (
+                        <p className="text-xs text-neutral-500">
+                          Viewing: {selectedTimeframeLabel}
+                        </p>
+                      )}
                       {!workspaceLoading && currentWorkspace && currentOrganization && 
                        currentWorkspace.organizationId === currentOrganization.id && (
                         <div className="flex items-center gap-2 text-xs bg-slate-100 px-3 py-1 rounded-full">
@@ -897,10 +976,10 @@ export default function BuilderPage() {
                 <CycleSelector
                   cycles={normalizedCycles}
                   legacyPeriods={legacyPeriods}
-                  selectedId={selectedId}
-                  onSelect={(id) => {
-                    setSelectedId(id)
-                    // [phase7-hardening]: hook this into Builder graph filtering once multi-cycle view is ready
+                  selectedId={selectedTimeframeKey}
+                  onSelect={(opt: { key: string; label: string }) => {
+                    setSelectedTimeframeKey(opt.key)
+                    setSelectedTimeframeLabel(opt.label)
                   }}
                 />
                 <Button variant="outline" onClick={() => setShowNodeCreator(!showNodeCreator)}>
