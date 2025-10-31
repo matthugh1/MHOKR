@@ -1,14 +1,14 @@
 # TODO / FIXME / NOTE Audit
 
-- Timestamp: 2025-10-31T11:37:15.583Z
-- Git SHA: 237bfec
+- Timestamp: 2025-10-31T11:37:34.397Z
+- Git SHA: 39f9685
 
 ## Summary
 
-- Total matches: 143
-- Allowed phase-tag TODOs: 103
+- Total matches: 145
+- Allowed phase-tag TODOs: 98
 - Notes: 36
-- Unapproved TODOs / FIXMEs / HACKs: 4
+- Unapproved TODOs / FIXMEs / HACKs: 11
 
 ## Unapproved TODOs (BLOCKERS)
 
@@ -17,6 +17,13 @@
 scripts/todo-audit.js:109  const hasTodoMarker = lineText.includes('TODO') || lineText.includes('FIXME') || lineText.includes('HACK');
 scripts/todo-audit.js:111  // If it's a NOTE without TODO/FIXME/HACK, classify as note (these are allowed)
 scripts/todo-audit.js:123  // Otherwise it's unapproved (TODO/FIXME/HACK without allowed tag)
+services/core-api/src/modules/okr/okr-reporting.controller.ts:22  * TODO Phase 2: Move the following endpoints from ObjectiveController:
+services/core-api/src/modules/okr/okr-reporting.controller.ts:30  * TODO Phase 2: Move the following endpoints from KeyResultController:
+services/core-api/src/modules/okr/okr-reporting.controller.ts:60  * TODO [phase4-reporting]: Frontend - add this feed to analytics dashboard.
+services/core-api/src/modules/okr/okr-reporting.controller.ts:76  * TODO [phase4-reporting]: Frontend - add Export CSV button in analytics dashboard for TENANT_OWNER / TENANT_ADMIN.
+services/core-api/src/modules/okr/okr-reporting.controller.ts:116  * TODO [phase4-reporting]: Frontend - show active cycle name at the top of the OKR dashboard and mark locked cycles.
+services/core-api/src/modules/okr/okr-reporting.controller.ts:145  * TODO [phase4-reporting]: Frontend - highlight strategic gaps (pillars with zero objectives).
+services/core-api/src/modules/okr/okr-reporting.controller.ts:159  * TODO [phase4-reporting]: Frontend - show 'Check-ins overdue' widget in analytics.
 ```
 
 ## All Allowed Phase TODOs
@@ -43,9 +50,9 @@ apps/web/src/app/dashboard/okrs/page.tsx:595  {/* TODO [phase6-polish]: tracked 
 apps/web/src/app/dashboard/okrs/page.tsx:728  {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
 apps/web/src/app/dashboard/okrs/page.tsx:746  {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
 apps/web/src/app/dashboard/okrs/page.tsx:756  // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
-apps/web/src/app/dashboard/okrs/page.tsx:804  // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
-apps/web/src/app/dashboard/okrs/page.tsx:849  {/* TODO [phase7-performance]: pass pagination cursor + load handler once backend supports it. */}
-apps/web/src/app/dashboard/okrs/page.tsx:875  // TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
+apps/web/src/app/dashboard/okrs/page.tsx:805  // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
+apps/web/src/app/dashboard/okrs/page.tsx:851  {/* TODO [phase7-performance]: pass pagination cursor + load handler once backend supports it. */}
+apps/web/src/app/dashboard/okrs/page.tsx:877  // TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
 apps/web/src/components/dashboard-layout.tsx:146  {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
 apps/web/src/components/ui/ActivityDrawer.tsx:75  {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
 apps/web/src/components/ui/ActivityDrawer.tsx:93  {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
@@ -101,12 +108,7 @@ services/core-api/src/modules/okr/okr-governance.service.ts:313  // TODO [phase7
 services/core-api/src/modules/okr/okr-progress.service.ts:10  * TODO [phase7-hardening]: Add weighting support on ObjectiveKeyResult junction table (e.g., KR1 = 40%, KR2 = 60%)
 services/core-api/src/modules/okr/okr-progress.service.ts:11  * TODO [phase7-performance]: Add performance optimization with batch recalculation
 services/core-api/src/modules/okr/okr-progress.service.ts:12  * TODO [phase7-hardening]: Add transaction support for atomic updates
-services/core-api/src/modules/okr/okr-reporting.controller.ts:49  * TODO [phase7-hardening]: Frontend - add this feed to analytics dashboard.
-services/core-api/src/modules/okr/okr-reporting.controller.ts:66  * TODO [phase7-hardening]: Frontend - add Export CSV button in analytics dashboard for TENANT_OWNER / TENANT_ADMIN.
-services/core-api/src/modules/okr/okr-reporting.controller.ts:107  * TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
-services/core-api/src/modules/okr/okr-reporting.controller.ts:121  * TODO [phase7-hardening]: Frontend - use this to populate a 'filter by strategic bet' dropdown in analytics and OKR list.
-services/core-api/src/modules/okr/okr-reporting.controller.ts:136  * TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
-services/core-api/src/modules/okr/okr-reporting.controller.ts:150  * TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
+services/core-api/src/modules/okr/okr-reporting.controller.ts:130  * TODO [phase7-hardening]: Frontend - use this to populate a 'filter by strategic bet' dropdown in analytics and OKR list.
 services/core-api/src/modules/okr/okr-reporting.service.ts:31  * TODO [phase7-performance]: May need optimization for large datasets.
 services/core-api/src/modules/okr/okr-reporting.service.ts:103  * TODO [phase7-performance]: May need optimization for memory usage with large datasets.
 services/core-api/src/modules/okr/okr-reporting.service.ts:379  * TODO [phase7-hardening]: Frontend will use to populate 'filter by strategic bet' dropdown.
@@ -139,6 +141,8 @@ apps/web/src/app/dashboard/analytics/page.tsx:244  {/* NOTE: This surface is adm
 apps/web/src/app/dashboard/okrs/page.tsx:196  // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
 apps/web/src/app/dashboard/okrs/page.tsx:372  // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
 apps/web/src/app/dashboard/okrs/page.tsx:403  // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
+apps/web/src/app/dashboard/okrs/page.tsx:757  // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
+apps/web/src/app/dashboard/okrs/page.tsx:806  // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
 apps/web/src/components/ui/BuildStamp.tsx:49  // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
 apps/web/src/components/ui/CycleSelector.tsx:156  {/* NOTE: This surface is internal-tenant-only and is not exposed to external design partners. */}
 apps/web/src/components/ui/CycleSelector.tsx:189  {/* NOTE: This surface is internal-tenant-only and is not exposed to external design partners. */}
@@ -159,8 +163,6 @@ services/core-api/src/modules/okr/objective.controller.ts:32  // NOTE: Reporting
 services/core-api/src/modules/okr/objective.controller.ts:102  // NOTE: Activity timeline endpoints moved to ActivityController under /activity/* in Phase 4.
 services/core-api/src/modules/okr/objective.service.ts:13  * NOTE: Reporting / analytics / export logic was moved to OkrReportingService in Phase 4.
 services/core-api/src/modules/okr/objective.service.ts:562  // NOTE: Reporting / analytics / export methods moved to OkrReportingService in Phase 4
-services/core-api/src/modules/okr/okr-reporting.controller.ts:50  * NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
-services/core-api/src/modules/okr/okr-reporting.controller.ts:67  * NOTE: This surface is admin-only and is not exposed to external design partners.
 services/core-api/src/modules/okr/okr-reporting.controller.ts:131  * NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
 services/core-api/src/modules/okr/okr-reporting.service.ts:18  * NOTE: Reporting / analytics / export logic was moved from ObjectiveService and KeyResultService in Phase 4.
 services/core-api/src/modules/rbac/rbac.ts:301  // NOTE: organizationId is the canonical tenant identifier.
