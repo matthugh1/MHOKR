@@ -4,30 +4,12 @@ import { useEffect, useState } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { StatCard } from '@/components/ui/StatCard'
+import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Download } from 'lucide-react'
 import api from '@/lib/api'
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useTenantPermissions } from '@/hooks/useTenantPermissions'
-import type { ReactNode } from 'react'
-
-// TODO [phase6-polish]: unify StatCard styling across dashboard pages
-interface StatCardProps {
-  title: string
-  value: string | number | ReactNode
-  subtitle?: string
-}
-
-function StatCard({ title, value, subtitle }: StatCardProps) {
-  return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-      <div className="text-xs text-neutral-500">{title}</div>
-      <div className="text-2xl font-semibold text-neutral-900">{value}</div>
-      {subtitle && (
-        <div className="text-[11px] text-neutral-500 mt-1">{subtitle}</div>
-      )}
-    </div>
-  )
-}
 
 interface AnalyticsSummary {
   totalObjectives: number
@@ -309,16 +291,11 @@ export default function AnalyticsPage() {
               </div>
 
               {/* Strategic Coverage */}
-              {/* TODO [phase6-polish]: extract SectionHeader into shared component if reused 3+ times */}
               <div className="mb-8">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-sm font-medium text-neutral-900">
-                    Strategic Coverage
-                  </div>
-                  <div className="text-[11px] text-neutral-500">
-                    Pillar coverage in active cycle
-                  </div>
-                </div>
+                <SectionHeader
+                  title="Strategic Coverage"
+                  subtitle="Pillar coverage in active cycle"
+                />
                 <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
                   {pillarCoverage.length === 0 ? (
                     <div className="text-sm text-neutral-500 text-center py-6">
@@ -356,16 +333,11 @@ export default function AnalyticsPage() {
               </div>
 
               {/* Execution Risk */}
-              {/* TODO [phase6-polish]: extract SectionHeader into shared component if reused 3+ times */}
               <div className="mb-8">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-sm font-medium text-neutral-900">
-                    Execution Risk
-                  </div>
-                  <div className="text-[11px] text-neutral-500">
-                    Key Results overdue for check-in
-                  </div>
-                </div>
+                <SectionHeader
+                  title="Execution Risk"
+                  subtitle="Key Results overdue for check-in"
+                />
                 <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
                   {overdue.length === 0 ? (
                     <div className="text-sm text-neutral-500 text-center py-6">
@@ -406,16 +378,11 @@ export default function AnalyticsPage() {
               </div>
 
               {/* Recent Activity Feed */}
-              {/* TODO [phase6-polish]: extract SectionHeader into shared component if reused 3+ times */}
               <div className="mb-8">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-sm font-medium text-neutral-900">
-                    Recent Activity
-                  </div>
-                  <div className="text-[11px] text-neutral-500">
-                    Last 10 check-ins
-                  </div>
-                </div>
+                <SectionHeader
+                  title="Recent Activity"
+                  subtitle="Last 10 check-ins"
+                />
                 <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
                   {feed.length === 0 ? (
                     <div className="text-sm text-neutral-500 text-center py-6">

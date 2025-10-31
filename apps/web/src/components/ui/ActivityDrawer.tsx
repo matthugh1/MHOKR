@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import { Button } from './button'
+import { ActivityItemCard } from './ActivityItemCard'
 import { cn } from '@/lib/utils'
 
 export interface ActivityItem {
@@ -20,52 +21,6 @@ interface ActivityDrawerProps {
   entityName: string // Objective/Key Result title for header
   hasMore?: boolean
   onLoadMore?: () => void
-}
-
-const formatTimeAgo = (dateString: string) => {
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-
-  if (diffMins < 60) {
-    return `${diffMins}m ago`
-  } else if (diffHours < 24) {
-    return `${diffHours}h ago`
-  } else {
-    return `${diffDays}d ago`
-  }
-}
-
-// TODO [phase6-polish]: extract ActivityItemCard once content format is stable
-interface ActivityItemCardProps {
-  actorName: string
-  timestamp: string
-  action: string
-  summary: string
-}
-
-function ActivityItemCard({ actorName, timestamp, action, summary }: ActivityItemCardProps) {
-  return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-3 shadow-sm text-sm text-neutral-800">
-      <div className="flex items-center gap-2 mb-1">
-        <span className="text-sm font-medium text-neutral-900">
-          {actorName}
-        </span>
-        <span className="text-xs text-neutral-500">
-          {formatTimeAgo(timestamp)}
-        </span>
-      </div>
-      <p className="text-sm text-neutral-700 mb-1">
-        {action}
-      </p>
-      <p className="text-xs text-neutral-600">
-        {summary}
-      </p>
-    </div>
-  )
 }
 
 export function ActivityDrawer({
