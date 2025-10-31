@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RBACService } from '../rbac/rbac.service';
+import { buildResourceContextFromOKR } from '../rbac/helpers';
 
 /**
  * OKR Governance Service
@@ -13,103 +14,304 @@ import { RBACService } from '../rbac/rbac.service';
  * - Check publish lock (isPublished === true → only admins can edit/delete)
  * - Check cycle lock (cycle.status === LOCKED/ARCHIVED → only admins can edit/delete)
  * - Future: propose change workflow (instead of hard blocking)
- * 
- * TODO Phase 2: Move the following methods from ObjectiveService:
- * - checkCycleLock() (private → public)
- * 
- * TODO Phase 2: Move the following methods from KeyResultService:
- * - checkCycleLockForKR() (private → public)
- * 
- * TODO Phase 2: Extract publish lock logic from:
- * - ObjectiveService.update()
- * - ObjectiveService.delete()
- * - KeyResultService.update()
- * - KeyResultService.delete()
- * - KeyResultService.createCheckIn()
  */
 @Injectable()
 export class OkrGovernanceService {
   constructor(
-    // @ts-expect-error Phase 2: Will be used when implementing lock checks
-    private _prisma: PrismaService,
-    // @ts-expect-error Phase 2: Will be used when implementing lock checks
-    private _rbacService: RBACService,
+    private prisma: PrismaService,
+    private rbacService: RBACService,
   ) {}
 
   /**
    * Check if publish lock prevents editing/deleting an objective.
    * 
-   * TODO Phase 2: Extract from objective.service.ts:update() lines 468-482
-   * TODO Phase 2: Extract from objective.service.ts:delete() lines 598-612
+   * Extracted from objective.service.ts:update() and delete()
    * 
-   * Logic to copy:
+   * Logic:
    * - If objective.isPublished === true:
    *   - Superuser (userOrganizationId === null) => reject (read-only)
    *   - Check RBAC: require TENANT_OWNER or TENANT_ADMIN via rbacService.canPerformAction(userId, 'edit_okr', resourceContext)
    *   - Else throw ForbiddenException
    * - If not published, no lock
    * 
-   * @param objectiveId - The objective ID to check
-   * @param userId - The user ID making the request
+   * @param params - { objective, actingUser, rbacService }
    * @throws ForbiddenException if locked and user cannot bypass
    */
-  async checkPublishLock(_objectiveId: string, _userId: string): Promise<void> {
-    // TODO Phase 2: Copy logic from objective.service.ts:update() lines 468-482
-    // TODO Phase 2: Copy logic from objective.service.ts:delete() lines 598-612
-    // - Load objective with isPublished flag
-    // - If published, check RBAC for admin override using buildResourceContextFromOKR() and rbacService.canPerformAction()
-    // - Use OkrTenantGuard.assertCanMutateTenant() for superuser check
-    return Promise.resolve();
+  async checkPublishLockForObjective(params: {
+    objective: { id: string; isPublished: boolean };
+    actingUser: { id: string; organizationId: string | null };
+    rbacService: RBACService;
+  }): Promise<void> {
+    const { objective, actingUser } = params;
+    
+    // If not published, no lock
+    if (objective.isPublished !== true) {
+      return;
+    }
+
+    // Superuser cannot edit even published OKRs (read-only)
+    if (actingUser.organizationId === null) {
+      throw new ForbiddenException('This OKR is published and can only be modified by admin roles');
+    }
+
+    // Check if user has elevated role (TENANT_OWNER or TENANT_ADMIN)
+    const resourceContext = await buildResourceContextFromOKR(this.prisma, objective.id);
+    const canEdit = await this.rbacService.canPerformAction(actingUser.id, 'edit_okr', resourceContext);
+
+    if (!canEdit) {
+      throw new ForbiddenException('This OKR is published and can only be modified by admin roles');
+    }
+
+    // TODO [propose-change-workflow]: Future version will allow "propose change" workflow instead of hard blocking
+  }
+
+  /**
+   * Check if publish lock prevents editing/deleting/checking-in a key result.
+   * 
+   * Extracted from key-result.service.ts:update(), delete(), and createCheckIn()
+   * 
+   * Logic:
+   * - Checks parent Objective's publish status
+   * - If parentObjective.isPublished === true:
+   *   - Superuser (userOrganizationId === null) => reject (read-only)
+   *   - Check RBAC: require TENANT_OWNER or TENANT_ADMIN via rbacService.canPerformAction(userId, 'edit_okr', resourceContext)
+   *   - Else throw ForbiddenException
+   * - If not published, no lock
+   * 
+   * @param params - { parentObjective, actingUser, rbacService }
+   * @throws ForbiddenException if locked and user cannot bypass
+   */
+  async checkPublishLockForKeyResult(params: {
+    parentObjective: { id: string; isPublished: boolean };
+    actingUser: { id: string; organizationId: string | null };
+    rbacService: RBACService;
+  }): Promise<void> {
+    const { parentObjective, actingUser } = params;
+
+    // If parent objective not published, no lock
+    if (parentObjective.isPublished !== true) {
+      return;
+    }
+
+    // Superuser cannot edit even if parent is published (read-only)
+    if (actingUser.organizationId === null) {
+      throw new ForbiddenException('This Key Result belongs to a published OKR and can only be modified by admin roles');
+    }
+
+    // Check if user has elevated role (TENANT_OWNER or TENANT_ADMIN)
+    const resourceContext = await buildResourceContextFromOKR(this.prisma, parentObjective.id);
+    const canEdit = await this.rbacService.canPerformAction(actingUser.id, 'edit_okr', resourceContext);
+
+    if (!canEdit) {
+      throw new ForbiddenException('This Key Result belongs to a published OKR and can only be modified by admin roles');
+    }
+
+    // TODO [propose-change-workflow]: Future version will allow "propose change" workflow instead of hard blocking
   }
 
   /**
    * Check if cycle lock prevents editing/deleting an objective.
    * 
-   * TODO Phase 2: Move from objective.service.ts:checkCycleLock() lines 188-241 (private → public)
+   * Extracted from objective.service.ts:checkCycleLock() (private → public)
    * 
-   * Logic to copy:
+   * Logic:
    * - If objective.cycle exists AND cycle.status === 'LOCKED' or 'ARCHIVED':
    *   - Superuser (userOrganizationId === null) => reject (read-only)
    *   - Require TENANT_OWNER or TENANT_ADMIN for that org via rbacService.canPerformAction(userId, 'edit_okr', resourceContext)
    *   - Else throw ForbiddenException
    * - DRAFT and ACTIVE cycles allow normal edits
    * 
-   * @param objectiveId - The objective ID to check
+   * @param params - { objective, actingUser }
    * @throws ForbiddenException if locked and user cannot bypass
    */
-  async checkCycleLock(_objectiveId: string): Promise<void> {
-    // TODO Phase 2: Copy implementation from objective.service.ts:checkCycleLock() lines 188-241
-    // - Load objective with cycle include
-    // - Check cycle status (DRAFT/ACTIVE allow edits, LOCKED/ARCHIVED require admin)
-    // - Use OkrTenantGuard.assertCanMutateTenant() for superuser check
-    // - Use rbacService.canPerformAction() for admin override check
-    return Promise.resolve();
+  async checkCycleLockForObjective(params: {
+    objective: { id: string };
+    actingUser: { id: string; organizationId: string | null };
+  }): Promise<void> {
+    const { objective, actingUser } = params;
+
+    // Load objective with cycle
+    const objectiveWithCycle = await this.prisma.objective.findUnique({
+      where: { id: objective.id },
+      include: {
+        cycle: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            organizationId: true,
+          },
+        },
+      },
+    });
+
+    // No cycle assigned, no lock
+    if (!objectiveWithCycle?.cycle) {
+      return;
+    }
+
+    const cycle = objectiveWithCycle.cycle;
+    const cycleStatus = cycle.status;
+
+    // DRAFT and ACTIVE cycles allow normal edits
+    if (cycleStatus === 'DRAFT' || cycleStatus === 'ACTIVE') {
+      return;
+    }
+
+    // LOCKED or ARCHIVED cycles require admin override
+    if (cycleStatus === 'LOCKED' || cycleStatus === 'ARCHIVED') {
+      // Superuser is read-only, cannot bypass cycle lock
+      if (actingUser.organizationId === null) {
+        throw new ForbiddenException(`This cycle (${cycle.name || 'locked'}) is locked and can only be modified by admin roles`);
+      }
+
+      // Check if user has TENANT_OWNER or TENANT_ADMIN role
+      const resourceContext = await buildResourceContextFromOKR(this.prisma, objective.id);
+      const canEdit = await this.rbacService.canPerformAction(actingUser.id, 'edit_okr', resourceContext);
+
+      if (!canEdit) {
+        throw new ForbiddenException(`This cycle (${cycle.name || 'locked'}) is locked and can only be modified by admin roles`);
+      }
+
+      // User has admin role, can bypass cycle lock
+      return;
+    }
+
+    // Unknown status, default to not locked
+    return;
   }
 
   /**
-   * Check if cycle lock prevents editing/deleting a key result.
+   * Check if cycle lock prevents editing/deleting/checking-in a key result.
    * 
-   * TODO Phase 2: Move from key-result.service.ts:checkCycleLockForKR() lines 267-331 (private → public)
+   * Extracted from key-result.service.ts:checkCycleLockForKR() (private → public)
    * 
-   * Logic to copy:
+   * Logic:
    * - Checks cycle status through parent objective
-   * - Same logic as checkCycleLock() but via parent objective
+   * - Same logic as checkCycleLockForObjective() but via parent objective
    * - If parent objective.cycle exists AND cycle.status === 'LOCKED' or 'ARCHIVED':
    *   - Superuser (userOrganizationId === null) => reject (read-only)
    *   - Require TENANT_OWNER or TENANT_ADMIN for that org
    *   - Else throw ForbiddenException
    * - DRAFT and ACTIVE cycles allow normal edits
    * 
-   * @param keyResultId - The key result ID to check
+   * @param params - { parentObjective, actingUser }
    * @throws ForbiddenException if locked and user cannot bypass
    */
-  async checkCycleLockForKR(_keyResultId: string): Promise<void> {
-    // TODO Phase 2: Copy implementation from key-result.service.ts:checkCycleLockForKR() lines 267-331
-    // - Load key result with parent objective and cycle (objectives[0].objective.cycle)
-    // - Check cycle status via parent objective
-    // - Use OkrTenantGuard.assertCanMutateTenant() for superuser check
-    // - Use rbacService.canPerformAction() for admin override check
-    return Promise.resolve();
+  async checkCycleLockForKeyResult(params: {
+    parentObjective: { id: string };
+    actingUser: { id: string; organizationId: string | null };
+  }): Promise<void> {
+    const { parentObjective, actingUser } = params;
+
+    // Load parent objective with cycle
+    const objectiveWithCycle = await this.prisma.objective.findUnique({
+      where: { id: parentObjective.id },
+      include: {
+        cycle: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            organizationId: true,
+          },
+        },
+      },
+    });
+
+    // No cycle assigned, no lock
+    if (!objectiveWithCycle?.cycle) {
+      return;
+    }
+
+    const cycle = objectiveWithCycle.cycle;
+    const cycleStatus = cycle.status;
+
+    // DRAFT and ACTIVE cycles allow normal edits
+    if (cycleStatus === 'DRAFT' || cycleStatus === 'ACTIVE') {
+      return;
+    }
+
+    // LOCKED or ARCHIVED cycles require admin override
+    if (cycleStatus === 'LOCKED' || cycleStatus === 'ARCHIVED') {
+      // Superuser is read-only, cannot bypass cycle lock
+      if (actingUser.organizationId === null) {
+        throw new ForbiddenException(`This cycle (${cycle.name || 'locked'}) is locked and can only be modified by admin roles`);
+      }
+
+      // Check if user has TENANT_OWNER or TENANT_ADMIN role via parent objective
+      const resourceContext = await buildResourceContextFromOKR(this.prisma, parentObjective.id);
+      const canEdit = await this.rbacService.canPerformAction(actingUser.id, 'edit_okr', resourceContext);
+
+      if (!canEdit) {
+        throw new ForbiddenException(`This cycle (${cycle.name || 'locked'}) is locked and can only be modified by admin roles`);
+      }
+
+      // User has admin role, can bypass cycle lock
+      return;
+    }
+
+    // Unknown status, default to not locked
+    return;
+  }
+
+  /**
+   * Check all locks for an objective (cycle lock + publish lock).
+   * 
+   * Convenience method that calls both checkCycleLockForObjective() and checkPublishLockForObjective().
+   * 
+   * @param params - { objective, actingUser, rbacService }
+   * @throws ForbiddenException if any lock prevents the operation
+   */
+  async checkAllLocksForObjective(params: {
+    objective: { id: string; isPublished: boolean };
+    actingUser: { id: string; organizationId: string | null };
+    rbacService: RBACService;
+  }): Promise<void> {
+    // Check cycle lock first
+    await this.checkCycleLockForObjective({
+      objective: { id: params.objective.id },
+      actingUser: params.actingUser,
+    });
+
+    // Then check publish lock
+    await this.checkPublishLockForObjective(params);
+  }
+
+  /**
+   * Check all locks for a key result (cycle lock + publish lock).
+   * 
+   * Convenience method that calls both checkCycleLockForKeyResult() and checkPublishLockForKeyResult().
+   * 
+   * @param params - { parentObjective, actingUser, rbacService }
+   * @throws ForbiddenException if any lock prevents the operation
+   */
+  async checkAllLocksForKeyResult(params: {
+    parentObjective: { id: string; isPublished: boolean };
+    actingUser: { id: string; organizationId: string | null };
+    rbacService: RBACService;
+  }): Promise<void> {
+    // Check cycle lock first
+    await this.checkCycleLockForKeyResult({
+      parentObjective: { id: params.parentObjective.id },
+      actingUser: params.actingUser,
+    });
+
+    // Then check publish lock
+    await this.checkPublishLockForKeyResult(params);
+  }
+
+  /**
+   * Propose a change to a locked OKR (future workflow).
+   * 
+   * TODO [propose-change-workflow]: Implement "propose change" workflow instead of hard blocking
+   * 
+   * @param params - Placeholder for future implementation
+   * @returns Placeholder response
+   */
+  async proposeChange(_params: any): Promise<{ allowed: boolean }> {
+    // TODO [propose-change-workflow]: Future implementation
+    return { allowed: false };
   }
 }
 
