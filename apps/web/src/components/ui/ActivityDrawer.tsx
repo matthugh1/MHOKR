@@ -39,6 +39,35 @@ const formatTimeAgo = (dateString: string) => {
   }
 }
 
+// TODO [phase6-polish]: extract ActivityItemCard once content format is stable
+interface ActivityItemCardProps {
+  actorName: string
+  timestamp: string
+  action: string
+  summary: string
+}
+
+function ActivityItemCard({ actorName, timestamp, action, summary }: ActivityItemCardProps) {
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white p-3 shadow-sm text-sm text-neutral-800">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-sm font-medium text-neutral-900">
+          {actorName}
+        </span>
+        <span className="text-xs text-neutral-500">
+          {formatTimeAgo(timestamp)}
+        </span>
+      </div>
+      <p className="text-sm text-neutral-700 mb-1">
+        {action}
+      </p>
+      <p className="text-xs text-neutral-600">
+        {summary}
+      </p>
+    </div>
+  )
+}
+
 export function ActivityDrawer({
   isOpen,
   onClose,
@@ -47,7 +76,6 @@ export function ActivityDrawer({
   hasMore,
   onLoadMore,
 }: ActivityDrawerProps) {
-  // TODO [phase6-polish]: nicer header (avatar, KR/Objective metadata)
   const headerTitle = entityName || 'Activity'
   const safeItems = Array.isArray(items) ? items : []
 
@@ -80,14 +108,15 @@ export function ActivityDrawer({
           >
             {/* Header */}
             <div className="p-6 border-b border-slate-200 bg-slate-50">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-lg font-semibold text-slate-900 truncate">
-                    Activity Timeline
-                  </h2>
-                  <p className="text-sm text-slate-600 mt-1 truncate">
+                  <div className="text-sm font-medium text-neutral-900">
                     {headerTitle}
-                  </p>
+                  </div>
+                  <div className="text-[11px] text-neutral-500">
+                    Recent updates
+                  </div>
+                  {/* TODO [phase6-polish]: include avatar / icon for objective vs key result */}
                 </div>
                 <Button
                   variant="ghost"
@@ -101,48 +130,23 @@ export function ActivityDrawer({
             </div>
 
             {/* Scrollable body */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto px-4 pb-4">
               {(!safeItems || safeItems.length === 0) ? (
-                <div className="text-sm text-neutral-500">
+                <div className="rounded-lg border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500 shadow-sm">
                   No recent activity.
-                  {/* TODO [phase6-polish]: nicer empty state */}
+                  {/* TODO [phase6-polish]: add subtle illustration */}
                 </div>
               ) : (
-                <div className="relative">
-                  {/* Vertical timeline line */}
-                  <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-slate-200" />
-
-                  {/* Activity items */}
-                  <div className="space-y-6">
-                    {safeItems.map((item, index) => (
-                      <div key={item.id} className="relative flex gap-4">
-                        {/* Timeline bullet */}
-                        <div className="flex-shrink-0 relative z-10">
-                          <div className="w-8 h-8 rounded-full bg-white border-2 border-blue-500 flex items-center justify-center shadow-sm">
-                            <div className="w-2 h-2 rounded-full bg-blue-500" />
-                          </div>
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0 pb-4">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-medium text-slate-900">
-                              {item.actorName}
-                            </span>
-                            <span className="text-xs text-slate-500">
-                              {formatTimeAgo(item.timestamp)}
-                            </span>
-                          </div>
-                          <p className="text-sm text-slate-700 mb-1">
-                            {item.action}
-                          </p>
-                          <p className="text-xs text-slate-600">
-                            {item.summary}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                <div className="space-y-3">
+                  {safeItems.map((item) => (
+                    <ActivityItemCard
+                      key={item.id}
+                      actorName={item.actorName}
+                      timestamp={item.timestamp}
+                      action={item.action}
+                      summary={item.summary}
+                    />
+                  ))}
                 </div>
               )}
               

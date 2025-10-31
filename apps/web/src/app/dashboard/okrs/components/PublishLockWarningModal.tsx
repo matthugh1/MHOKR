@@ -51,7 +51,10 @@ export function PublishLockWarningModal({
         <AlertDialogHeader>
           <AlertDialogTitle>{getTitle()}</AlertDialogTitle>
           <AlertDialogDescription>
-            {getDescription()}
+            <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm text-neutral-800">
+              {getDescription()}
+              {/* TODO [phase6-polish]: add small lock icon */}
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
