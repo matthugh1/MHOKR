@@ -148,42 +148,13 @@ function scanFile(filePath) {
 
       // Skip the script's own internal strings and comments that mention TODO/FIXME/HACK in documentation
       // Also skip workflow files that mention "TODO compliance audit" as step names
-      if (filePath.includes('scripts/todo-audit.js') || 
-          (filePath.includes('.github/workflows/') && line.includes('TODO compliance audit'))) {
-        // Skip JSDoc headers
-        if (line.includes('TODO / FIXME / HACK / NOTE Compliance Audit') || line.includes('Scans the repository')) {
-          return;
-        }
-        // Skip variable declarations and string literals that mention TODO/FIXME/HACK
-        if (line.includes('MATCH_PATTERNS') || line.includes('TODO_AUDIT_REPORT') || 
-            line.includes('Unapproved TODOs') || line.includes('Allowed phase-tag TODOs') ||
-            line.includes('All Allowed Phase TODOs') ||
-            line.includes('Scanning repository for TODO') || line.includes('unapproved TODO/FIXME/HACK') ||
-            line.includes('All TODO comments are compliant') || line.includes('Exit with error code if unapproved TODOs') ||
-            line.includes('# TODO / FIXME / NOTE Audit') || line.includes('TODO / FIXME / NOTE Audit')) {
-          return;
-        }
-        // Skip comment lines that just describe what the script does
-        if (line.trim().startsWith('//') && (line.includes('Exclude') || line.includes('Skip') || line.includes('Check') || 
-            line.includes('scan markdown') || line.includes('may contain') || line.includes('documentation'))) {
-          return;
-        }
-        // Skip code that checks for NOTE: patterns (it's checking for NOTE:, not a TODO)
-        if (line.includes('startsWith(\'NOTE:\')') || line.includes('startsWith("NOTE:")')) {
-          return;
-        }
-        // Skip code that checks for markdown headings with TODO (it's checking for TODO, not a TODO itself)
-        // Match lines like: if (line.includes('includes(\'TODO\')') || line.includes('includes("TODO")'))
-        if ((line.includes('includes(\'TODO\')') || line.includes('includes("TODO")')) && 
-            (line.includes('startsWith') || line.includes('trim()') || line.includes('line.includes'))) {
-          return;
-        }
-        // Skip lines that check for TODO/FIXME/HACK in conditional logic
-        if (line.includes('hasTodoMarker') || line.includes('hasNoteMarker') || 
-            line.includes('includes(\'TODO\')') || line.includes('includes(\'FIXME\')') || 
-            line.includes('includes(\'HACK\')')) {
-          return;
-        }
+      if (filePath.includes('scripts/todo-audit.js')) {
+        // Skip all lines in this file - it's the audit script itself
+        return;
+      }
+      if (filePath.includes('.github/workflows/') && line.includes('TODO compliance audit')) {
+        // Skip workflow step names that mention TODO compliance audit
+        return;
       }
 
       // Check if line contains any of our match patterns

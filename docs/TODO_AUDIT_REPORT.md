@@ -1,25 +1,18 @@
 # TODO / FIXME / NOTE Audit
 
-- Timestamp: 2025-10-31T11:38:08.533Z
-- Git SHA: 7023a95
+- Timestamp: 2025-10-31T11:40:11.007Z
+- Git SHA: 969c7d2
 
 ## Summary
 
-- Total matches: 150
+- Total matches: 143
 - Allowed phase-tag TODOs: 103
 - Notes: 38
-- Unapproved TODOs / FIXMEs / HACKs: 9
+- Unapproved TODOs / FIXMEs / HACKs: 2
 
 ## Unapproved TODOs (BLOCKERS)
 
 ```text
-.github/workflows/premerge-check.yml:36  - name: Run TODO compliance audit
-scripts/todo-audit.js:111  // If it's a NOTE without TODO/FIXME/HACK, classify as note (these are allowed)
-scripts/todo-audit.js:123  // Otherwise it's unapproved (TODO/FIXME/HACK without allowed tag)
-scripts/todo-audit.js:150  // Also skip workflow files that mention "TODO compliance audit" as step names
-scripts/todo-audit.js:152  (filePath.includes('.github/workflows/') && line.includes('TODO compliance audit'))) {
-scripts/todo-audit.js:183  line.includes('includes(\'TODO\')') || line.includes('includes(\'FIXME\')') ||
-scripts/todo-audit.js:184  line.includes('includes(\'HACK\')')) {
 services/core-api/src/modules/okr/okr-reporting.controller.ts:22  * TODO Phase 2: Move the following endpoints from ObjectiveController:
 services/core-api/src/modules/okr/okr-reporting.controller.ts:30  * TODO Phase 2: Move the following endpoints from KeyResultController:
 ```
