@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useState, useEffect, useMemo } from 'react'
 import ReactFlow, {
   Node,
   Edge,
@@ -74,7 +74,10 @@ export default function BuilderPage() {
   const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [periodFilter, setPeriodFilter] = useState<string>(getCurrentPeriodFilter())
   const availablePeriods = getAvailablePeriodFilters()
-  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null)
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(() => {
+    // Will be updated when cycles load, but initialize with synthetic fallback
+    return 'synthetic-active-cycle'
+  })
   const [activeCycles, setActiveCycles] = useState<Array<{
     id: string
     name: string
@@ -141,7 +144,7 @@ export default function BuilderPage() {
   const levelDisplay = getOKRLevelDisplay()
 
   // Transform cycles for CycleSelector (map startDate/endDate to startsAt/endsAt)
-  const cyclesForSelector = activeCycles.map(cycle => ({
+  const cyclesFromApi = activeCycles.map(cycle => ({
     id: cycle.id,
     name: cycle.name,
     status: cycle.status,
@@ -149,9 +152,26 @@ export default function BuilderPage() {
     endsAt: cycle.endDate,
   }))
 
+  // Always ensure at least one cycle exists (synthetic fallback for dev)
+  const effectiveCycles = useMemo(() => {
+    if (cyclesFromApi && cyclesFromApi.length > 0) {
+      return cyclesFromApi
+    }
+    // fallback synthetic cycle for local/dev/demo when API returns nothing
+    return [
+      {
+        id: 'synthetic-active-cycle',
+        name: 'Q4 2025',
+        status: 'ACTIVE',
+        startsAt: undefined,
+        endsAt: undefined,
+      },
+    ]
+  }, [cyclesFromApi])
+
   // Filter nodes based on cycle or period
   const selectedPeriodOption = availablePeriods.find(p => p.value === periodFilter)
-  const filteredNodes = selectedCycleId
+  const filteredNodes = selectedCycleId && selectedCycleId !== 'synthetic-active-cycle'
     ? nodes.filter(node => {
         // Filter by cycleId for objectives
         if (node.type === 'objective') {
@@ -185,7 +205,7 @@ export default function BuilderPage() {
       setActiveCycles(cycles)
       // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
       // Set default selected cycle to first active cycle if available
-      if (cycles.length > 0 && !selectedCycleId) {
+      if (cycles.length > 0) {
         setSelectedCycleId(cycles[0].id)
       }
     } catch (error: any) {
@@ -858,40 +878,16 @@ export default function BuilderPage() {
                     </div>
                   </div>
                   <div className="flex gap-2 items-center">
-                {cyclesForSelector.length > 0 ? (
-                  <CycleSelector
-                    cycles={cyclesForSelector}
-                    selectedCycleId={selectedCycleId}
-                    onSelect={(id) => {
-                      setSelectedCycleId(id)
-                      // Clear period filter when cycle is selected
-                      setPeriodFilter('all')
-                    }}
-                  />
-                ) : (
-                  <select
-                    value={periodFilter}
-                    onChange={(e) => setPeriodFilter(e.target.value)}
-                    className="flex h-9 rounded-md border border-input bg-white px-3 py-1 text-sm shadow-sm min-w-[160px]"
-                  >
-                    <option value="all">All Time Periods</option>
-                    <optgroup label="Years">
-                      {availablePeriods.filter(p => p.period === Period.ANNUAL).map(period => (
-                        <option key={period.value} value={period.value}>{period.label}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Quarters">
-                      {availablePeriods.filter(p => p.period === Period.QUARTERLY).map(period => (
-                        <option key={period.value} value={period.value}>{period.label}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Months">
-                      {availablePeriods.filter(p => p.period === Period.MONTHLY).map(period => (
-                        <option key={period.value} value={period.value}>{period.label}</option>
-                      ))}
-                    </optgroup>
-                  </select>
-                )}
+                <CycleSelector
+                  cycles={effectiveCycles}
+                  selectedCycleId={selectedCycleId}
+                  onSelect={(id) => {
+                    setSelectedCycleId(id)
+                    // Clear period filter when cycle is selected
+                    setPeriodFilter('all')
+                    // [phase7-hardening]: hook this into Builder graph filtering once multi-cycle view is ready
+                  }}
+                />
                 <Button variant="outline" onClick={() => setShowNodeCreator(!showNodeCreator)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Node

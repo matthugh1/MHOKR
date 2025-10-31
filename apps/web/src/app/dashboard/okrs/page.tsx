@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
@@ -60,7 +60,10 @@ export default function OKRsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [selectedPeriod, setSelectedPeriod] = useState<string>(getCurrentPeriodFilter())
   const availablePeriods = getAvailablePeriodFilters()
-  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null)
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(() => {
+    // Will be updated when cycles load, but initialize with synthetic fallback
+    return 'synthetic-active-cycle'
+  })
   
   // Filter states
   const [filterWorkspaceId, setFilterWorkspaceId] = useState<string>('all')
@@ -156,7 +159,7 @@ export default function OKRsPage() {
       setActiveCycles(cycles)
       // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
       // Set default selected cycle to first active cycle if available
-      if (cycles.length > 0 && !selectedCycleId) {
+      if (cycles.length > 0) {
         setSelectedCycleId(cycles[0].id)
       }
     } catch (error: any) {
@@ -212,13 +215,30 @@ export default function OKRsPage() {
   const selectedPeriodOption = availablePeriods.find(p => p.value === selectedPeriod);
   
   // Transform cycles for CycleSelector (map startDate/endDate to startsAt/endsAt)
-  const cyclesForSelector = activeCycles.map(cycle => ({
+  const cyclesFromApi = activeCycles.map(cycle => ({
     id: cycle.id,
     name: cycle.name,
     status: cycle.status,
     startsAt: cycle.startDate,
     endsAt: cycle.endDate,
   }))
+
+  // Always ensure at least one cycle exists (synthetic fallback for dev)
+  const effectiveCycles = useMemo(() => {
+    if (cyclesFromApi && cyclesFromApi.length > 0) {
+      return cyclesFromApi
+    }
+    // fallback synthetic cycle for local/dev/demo when API returns nothing
+    return [
+      {
+        id: 'synthetic-active-cycle',
+        name: 'Q4 2025',
+        status: 'ACTIVE',
+        startsAt: undefined,
+        endsAt: undefined,
+      },
+    ]
+  }, [cyclesFromApi])
   
   // Apply filters and visibility checks with safe defaults
   const safeObjectives = Array.isArray(okrs) ? okrs : []
@@ -228,12 +248,13 @@ export default function OKRsPage() {
       return false
     }
     // Cycle filter (takes precedence over period filter)
-    if (selectedCycleId) {
+    // Skip filtering for synthetic cycle (show all OKRs)
+    if (selectedCycleId && selectedCycleId !== 'synthetic-active-cycle') {
       if (okr.cycleId !== selectedCycleId) {
         return false
       }
     } else {
-      // Period filter (only applies when no cycle is selected)
+      // Period filter (only applies when synthetic cycle is selected or no cycle)
       if (selectedPeriod !== 'all' && selectedPeriodOption) {
         if (okr.startDate && okr.endDate) {
           if (!doesOKRMatchPeriod(okr.startDate, okr.endDate, selectedPeriodOption)) {
@@ -556,40 +577,16 @@ export default function OKRsPage() {
                 </SelectContent>
               </Select>
               
-              {cyclesForSelector.length > 0 ? (
-                <CycleSelector
-                  cycles={cyclesForSelector}
-                  selectedCycleId={selectedCycleId}
-                  onSelect={(id) => {
-                    setSelectedCycleId(id)
-                    // Clear period filter when cycle is selected
-                    setSelectedPeriod('all')
-                  }}
-                />
-              ) : (
-                <select
-                  value={selectedPeriod}
-                  onChange={(e) => setSelectedPeriod(e.target.value)}
-                  className="flex h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm min-w-[160px]"
-                >
-                  <option value="all">All Time Periods</option>
-                  <optgroup label="Years">
-                    {availablePeriods.filter(p => p.period === Period.ANNUAL).map(period => (
-                      <option key={period.value} value={period.value}>{period.label}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Quarters">
-                    {availablePeriods.filter(p => p.period === Period.QUARTERLY).map(period => (
-                      <option key={period.value} value={period.value}>{period.label}</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Months">
-                    {availablePeriods.filter(p => p.period === Period.MONTHLY).map(period => (
-                      <option key={period.value} value={period.value}>{period.label}</option>
-                    ))}
-                  </optgroup>
-                </select>
-              )}
+              <CycleSelector
+                cycles={effectiveCycles}
+                selectedCycleId={selectedCycleId}
+                onSelect={(id) => {
+                  setSelectedCycleId(id)
+                  // Clear period filter when cycle is selected
+                  setSelectedPeriod('all')
+                  // [phase7-hardening]: make sure backend supports historical cycles later
+                }}
+              />
               
               {hasActiveFilters && (
                 <Button variant="outline" size="sm" onClick={clearFilters}>

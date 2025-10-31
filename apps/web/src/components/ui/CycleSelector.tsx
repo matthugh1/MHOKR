@@ -186,8 +186,9 @@ export function CycleSelector({ cycles, selectedCycleId, onSelect }: CycleSelect
 
           {/* Empty State */}
           {currentAndUpcoming.length === 0 && previous.length === 0 && (
-            <div className="text-sm text-neutral-500 px-2 py-2">
-              No cycles available
+            <div className="text-xs text-neutral-500 px-2 py-2">
+              No cycles available yet.
+              {/* [phase6-polish]: replace with CTA to create first planning cycle */}
             </div>
           )}
         </div>
