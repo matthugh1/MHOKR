@@ -34,15 +34,14 @@
  * - key-result.service.ts:getUserOwnedKeyResults() lines 1100-1121
  */
 
-// ForbiddenException will be used in Phase 2
-// import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
 
 /**
  * OKR Tenant Guard class with static helper methods.
  * 
  * Pure class with static helpers for tenant isolation checks, superuser read-only rules, and org match enforcement.
  * 
- * This will replace inline logic in objective.service.ts and key-result.service.ts later, but DON'T call it yet.
+ * Centralizes tenant isolation logic extracted from ObjectiveService and KeyResultService.
  */
 export class OkrTenantGuard {
   /**
@@ -53,18 +52,20 @@ export class OkrTenantGuard {
    * - Normal user (string): filter by that org
    * - No org (undefined/falsy): return null (caller should return [])
    * 
-   * TODO Phase 2: Copy/paste logic from objective.service.ts:findAll() lines 17-32
-   * TODO Phase 2: Copy/paste logic from key-result.service.ts methods that build tenant where clauses
-   * 
    * @param userOrganizationId - null for superuser, string for normal user, undefined for no org
    * @returns Prisma where clause object with organizationId filter, or null if superuser (no filter) or no org (caller returns [])
    */
-  static buildTenantWhereClause(_userOrganizationId: string | null | undefined): { organizationId: string } | null {
-    // TODO Phase 2: Copy logic from objective.service.ts:findAll() lines 17-32
-    // - Superuser (null): return null (no filter)
-    // - Normal user (string): return { organizationId: userOrganizationId }
-    // - No org (undefined/falsy): return null (caller should return [])
-    return null;
+  static buildTenantWhereClause(userOrganizationId: string | null | undefined): { organizationId: string } | null {
+    if (userOrganizationId === null) {
+      // Superuser: no org filter, return all OKRs
+      return null;
+    } else if (userOrganizationId && userOrganizationId !== '') {
+      // Normal user: filter by that org
+      return { organizationId: userOrganizationId };
+    } else {
+      // User has no org or invalid org → return null (caller should return [])
+      return null;
+    }
   }
 
   /**
@@ -74,19 +75,19 @@ export class OkrTenantGuard {
    * - Superuser is read-only (cannot mutate)
    * - User must have an organization
    * 
-   * TODO Phase 2: Copy/paste logic from objective.service.ts:canEdit() lines 148-149
-   * TODO Phase 2: Copy/paste logic from key-result.service.ts:create() lines 346-354
-   * 
-   * Enforce the rule: superuser is read-only
-   * 
    * @param userOrganizationId - User's organization ID (null for superuser, string for normal user, undefined for no org)
    * @throws ForbiddenException if user cannot mutate
    */
-  static assertCanMutateTenant(_userOrganizationId: string | null | undefined): void {
-    // TODO Phase 2: Copy logic from objective.service.ts:canEdit() lines 148-149
-    // - Superuser (null) → throw ForbiddenException (read-only)
-    // - No org (undefined/falsy) → throw ForbiddenException
-    // - Otherwise → allow (basic mutation check passed)
+  static assertCanMutateTenant(userOrganizationId: string | null | undefined): void {
+    // Superuser is read-only auditor (cannot mutate)
+    if (userOrganizationId === null) {
+      throw new ForbiddenException('Superusers are read-only; cannot modify resources.');
+    }
+
+    // Users without an organisation cannot mutate
+    if (!userOrganizationId || userOrganizationId === '') {
+      throw new ForbiddenException('You do not have permission to modify resources without an organization.');
+    }
   }
 
   /**
@@ -94,20 +95,22 @@ export class OkrTenantGuard {
    * 
    * Used for write operations to ensure tenant isolation.
    * 
-   * TODO Phase 2: Copy/paste logic from objective.service.ts:canEdit() lines 157-169
-   * TODO Phase 2: Copy/paste logic from key-result.service.ts:canEdit() lines 154-157
-   * 
-   * Enforce the rule: user can't act across org boundaries
-   * 
    * @param resourceOrgId - Resource's organization ID
    * @param userOrgId - User's organization ID
    * @throws ForbiddenException if orgs don't match
    */
-  static assertSameTenant(_resourceOrgId: string | null | undefined, _userOrgId: string | null | undefined): void {
-    // TODO Phase 2: Copy logic from objective.service.ts:canEdit() lines 157-169
-    // - Resource has no org → throw ForbiddenException (system/global OKRs are immutable)
-    // - Orgs don't match → throw ForbiddenException
-    // - Otherwise → allow (tenant match passed)
+  static assertSameTenant(resourceOrgId: string | null | undefined, userOrgId: string | null | undefined): void {
+    // If the resource has no organizationId, treat it as system/global data.
+    // System/global resources are always read-only. No-one (including superusers) may edit them.
+    // This is intentional. Changing this requires an explicit product decision.
+    if (!resourceOrgId) {
+      throw new ForbiddenException('System/global resources are immutable.');
+    }
+
+    // Verify tenant match: user's org must match resource's org
+    if (resourceOrgId !== userOrgId) {
+      throw new ForbiddenException('You do not have permission to modify resources outside your organization.');
+    }
   }
 }
 

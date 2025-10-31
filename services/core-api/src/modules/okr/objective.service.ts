@@ -4,6 +4,7 @@ import { RBACService } from '../rbac/rbac.service';
 import { buildResourceContextFromOKR } from '../rbac/helpers';
 import { OkrProgressService } from './okr-progress.service';
 import { ActivityService } from '../activity/activity.service';
+import { OkrTenantGuard } from './tenant-guard';
 
 @Injectable()
 export class ObjectiveService {
@@ -17,19 +18,16 @@ export class ObjectiveService {
   async findAll(_userId: string, workspaceId: string | undefined, userOrganizationId: string | null, pillarId?: string) {
     const where: any = {};
 
-    // NOTE on organisation scoping:
-    // - userOrganizationId === null       -> superuser (can READ all organisations; still cannot write anywhere).
-    // - typeof userOrganizationId === 'string' and truthy -> normal user (can READ only that organisation).
-    // - userOrganizationId is undefined or '' -> user with no organisation membership (GET /objectives returns []).
-    // This enforces tenant isolation for reads.
-    if (userOrganizationId === null) {
-      // Superuser: no org filter, return all OKRs
-    } else if (userOrganizationId && userOrganizationId !== '') {
-      where.organizationId = userOrganizationId;
-    } else {
+    // Tenant isolation: use OkrTenantGuard to build where clause
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (orgFilter === null && userOrganizationId !== null) {
       // User has no org or invalid org → return empty array
       return [];
     }
+    if (orgFilter) {
+      where.organizationId = orgFilter.organizationId;
+    }
+    // Superuser (null): no org filter, see all OKRs
 
     // Optional workspace filter for UI convenience (not access control)
     if (workspaceId) {
@@ -145,7 +143,7 @@ export class ObjectiveService {
    * Check if user can edit a specific OKR
    */
   async canEdit(userId: string, objectiveId: string, userOrganizationId: string | null): Promise<boolean> {
-    // Superuser is read-only auditor (cannot edit)
+    // Tenant isolation: superuser is read-only
     if (userOrganizationId === null) {
       return false;
     }
@@ -156,15 +154,10 @@ export class ObjectiveService {
       // Extract OKR's organizationId from resource context
       const okrOrganizationId = resourceContext.okr?.organizationId;
       
-      // If the OKR has no organizationId, treat it as system/global data.
-      // System/global OKRs are always read-only. No-one (including superusers) may edit them.
-      // This is intentional. Changing this requires an explicit product decision.
-      if (!okrOrganizationId) {
-        return false;
-      }
-      
-      // Verify tenant match: user's org must match OKR's org
-      if (okrOrganizationId !== userOrganizationId) {
+      // Tenant isolation: verify org match (throws if mismatch or system/global)
+      try {
+        OkrTenantGuard.assertSameTenant(okrOrganizationId, userOrganizationId);
+      } catch {
         return false;
       }
       
@@ -242,10 +235,9 @@ export class ObjectiveService {
 
   /**
    * Check if user can delete a specific OKR
-   * TODO: Apply the same tenant isolation logic to Key Results write paths (PATCH/DELETE)
    */
   async canDelete(userId: string, objectiveId: string, userOrganizationId: string | null): Promise<boolean> {
-    // Superuser is read-only auditor (cannot delete)
+    // Tenant isolation: superuser is read-only
     if (userOrganizationId === null) {
       return false;
     }
@@ -256,15 +248,10 @@ export class ObjectiveService {
       // Extract OKR's organizationId from resource context
       const okrOrganizationId = resourceContext.okr?.organizationId;
       
-      // If the OKR has no organizationId, treat it as system/global data.
-      // System/global OKRs are always read-only. No-one (including superusers) may edit them.
-      // This is intentional. Changing this requires an explicit product decision.
-      if (!okrOrganizationId) {
-        return false;
-      }
-      
-      // Verify tenant match: user's org must match OKR's org
-      if (okrOrganizationId !== userOrganizationId) {
+      // Tenant isolation: verify org match (throws if mismatch or system/global)
+      try {
+        OkrTenantGuard.assertSameTenant(okrOrganizationId, userOrganizationId);
+      } catch {
         return false;
       }
       
@@ -455,6 +442,7 @@ export class ObjectiveService {
       throw new NotFoundException(`Objective with ID ${id} not found`);
     }
 
+    // TODO [phase3-governance]: integrate OkrGovernanceService.checkCycleLockForObjective() here once migrated
     // CYCLE LOCK: Enforce cycle-level governance (stacks with publish lock)
     const cycleLock = await this.checkCycleLock(id, userId, userOrganizationId);
     if (cycleLock.locked) {
@@ -465,6 +453,7 @@ export class ObjectiveService {
       throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
     }
 
+    // TODO [phase3-governance]: integrate OkrGovernanceService.checkPublishLockForObjective() here once migrated
     // PUBLISH LOCK: Enforce edit restriction for published OKRs
     if (objective.isPublished === true) {
       // Superuser cannot edit even published OKRs (read-only)
@@ -585,6 +574,7 @@ export class ObjectiveService {
         throw new NotFoundException(`Objective with ID ${id} not found`);
       }
 
+      // TODO [phase3-governance]: integrate OkrGovernanceService.checkCycleLockForObjective() here once migrated
       // CYCLE LOCK: Enforce cycle-level governance (stacks with publish lock)
       const cycleLock = await this.checkCycleLock(id, userId, userOrganizationId);
       if (cycleLock.locked) {
@@ -595,6 +585,7 @@ export class ObjectiveService {
         throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
       }
 
+      // TODO [phase3-governance]: integrate OkrGovernanceService.checkPublishLockForObjective() here once migrated
       // PUBLISH LOCK: Enforce delete restriction for published OKRs
       if (objective.isPublished === true) {
         // Superuser cannot delete even published OKRs (read-only)
@@ -655,6 +646,7 @@ export class ObjectiveService {
   /**
    * Get organization-level summary statistics for analytics.
    * 
+   * TODO [phase4-reporting]: This method will move to OkrReportingService in Phase 4.
    * Early reporting endpoint - will likely move under /reports/* in a later iteration.
    * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
@@ -667,12 +659,9 @@ export class ObjectiveService {
   }> {
     const where: any = {};
 
-    // Tenant isolation: same logic as findAll()
-    if (userOrganizationId === null) {
-      // Superuser: aggregate across ALL organisations
-    } else if (userOrganizationId && userOrganizationId !== '') {
-      where.organizationId = userOrganizationId;
-    } else {
+    // Tenant isolation: use OkrTenantGuard to build where clause
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (orgFilter === null && userOrganizationId !== null) {
       // User has no org → return empty summary
       return {
         totalObjectives: 0,
@@ -680,6 +669,10 @@ export class ObjectiveService {
         atRiskRatio: 0,
       };
     }
+    if (orgFilter) {
+      where.organizationId = orgFilter.organizationId;
+    }
+    // Superuser (null): aggregate across ALL organisations
 
     // Get all objectives with their status
     const objectives = await this.prisma.objective.findMany({
@@ -715,6 +708,7 @@ export class ObjectiveService {
   /**
    * Export objectives and key results to CSV format
    * 
+   * TODO [phase4-reporting]: This method will move to OkrReportingService in Phase 4.
    * Early export MVP - exports all objectives visible to the caller with their key results flattened.
    * Each row represents one key result (objectives with multiple KRs appear multiple times).
    * Objectives with no KRs appear once with blank KR columns.
@@ -730,12 +724,9 @@ export class ObjectiveService {
   async exportObjectivesCSV(userOrganizationId: string | null | undefined): Promise<string> {
     const where: any = {};
 
-    // Tenant isolation: same logic as findAll()
-    if (userOrganizationId === null) {
-      // Superuser: no org filter, return all OKRs
-    } else if (userOrganizationId && userOrganizationId !== '') {
-      where.organizationId = userOrganizationId;
-    } else {
+    // Tenant isolation: use OkrTenantGuard to build where clause
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (orgFilter === null && userOrganizationId !== null) {
       // User has no org or invalid org → return empty CSV with headers only
       const headers = [
         'objectiveId',
@@ -759,6 +750,10 @@ export class ObjectiveService {
       ];
       return headers.join(',') + '\n';
     }
+    if (orgFilter) {
+      where.organizationId = orgFilter.organizationId;
+    }
+    // Superuser (null): no org filter, return all OKRs
 
     // Fetch all objectives with their key results
     const objectives = await this.prisma.objective.findMany({
@@ -917,15 +912,16 @@ export class ObjectiveService {
   }>> {
     const where: any = {};
 
-    // Tenant isolation: same logic as findAll()
-    if (userOrganizationId === null) {
-      // Superuser: no org filter, return all pillars across all orgs
-    } else if (userOrganizationId && userOrganizationId !== '') {
-      where.organizationId = userOrganizationId;
-    } else {
+    // Tenant isolation: use OkrTenantGuard to build where clause
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (orgFilter === null && userOrganizationId !== null) {
       // User has no org or invalid org → return empty array
       return [];
     }
+    if (orgFilter) {
+      where.organizationId = orgFilter.organizationId;
+    }
+    // Superuser (null): no org filter, return all pillars across all orgs
 
     const pillars = await this.prisma.strategicPillar.findMany({
       where,
@@ -986,15 +982,16 @@ export class ObjectiveService {
       status: 'ACTIVE',
     };
 
-    // Tenant isolation: same logic as findAll()
-    if (userOrganizationId === null) {
-      // Superuser: no org filter, return all ACTIVE cycles across all orgs
-    } else if (userOrganizationId && userOrganizationId !== '') {
-      where.organizationId = userOrganizationId;
-    } else {
+    // Tenant isolation: use OkrTenantGuard to build where clause
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (orgFilter === null && userOrganizationId !== null) {
       // User has no org or invalid org → return empty array
       return [];
     }
+    if (orgFilter) {
+      where.organizationId = orgFilter.organizationId;
+    }
+    // Superuser (null): no org filter, return all ACTIVE cycles across all orgs
 
     const cycles = await this.prisma.cycle.findMany({
       where,
@@ -1044,9 +1041,9 @@ export class ObjectiveService {
     const cycleWhere: any = {
       status: 'ACTIVE',
     };
-    if (userOrganizationId !== null) {
-      // Normal user: only their org
-      cycleWhere.organizationId = userOrganizationId;
+    const cycleOrgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (cycleOrgFilter) {
+      cycleWhere.organizationId = cycleOrgFilter.organizationId;
     }
     // Superuser (null): no filter, see all orgs
 
@@ -1066,9 +1063,9 @@ export class ObjectiveService {
 
     // Build where clause for pillars (tenant isolation)
     const pillarWhere: any = {};
-    if (userOrganizationId !== null) {
-      // Normal user: only their org
-      pillarWhere.organizationId = userOrganizationId;
+    const pillarOrgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (pillarOrgFilter) {
+      pillarWhere.organizationId = pillarOrgFilter.organizationId;
     }
     // Superuser (null): no filter, see all orgs
 
@@ -1143,10 +1140,10 @@ export class ObjectiveService {
       ownerId: userId,
     };
 
-    // Tenant isolation: filter by org
-    if (userOrganizationId !== null) {
-      // Normal user: only their org
-      where.organizationId = userOrganizationId;
+    // Tenant isolation: use OkrTenantGuard to build where clause
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (orgFilter) {
+      where.organizationId = orgFilter.organizationId;
     }
     // Superuser (null): no org filter, see all orgs
 
