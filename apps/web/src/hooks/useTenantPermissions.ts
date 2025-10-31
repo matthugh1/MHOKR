@@ -58,10 +58,13 @@ interface KeyResult {
 interface LockInfo {
   isLocked: boolean
   reason: 'published' | 'cycle_locked' | null
+  message: string
 }
 
 interface PermissionChecks {
   canViewObjective: (objective: Objective) => boolean
+  canSeeObjective: (objective: any) => boolean
+  canSeeKeyResult: (keyResult: any) => boolean
   canEditObjective: (objective: Objective) => boolean
   canDeleteObjective: (objective: Objective) => boolean
   canEditKeyResult: (keyResult: KeyResult) => boolean
@@ -101,6 +104,22 @@ export function useTenantPermissions(): PermissionChecks {
     return (objective: Objective): boolean => {
       // For now, if it's rendered, you can view it (matches current behavior)
       // TODO [phase7-hardening]: align with backend visibility rules once fully exposed
+      return true
+    }
+  }, [])
+
+  const canSeeObjective = useMemo(() => {
+    return (obj: any): boolean => {
+      // TODO [phase7-hardening]: Backend already enforces visibility via RBAC + tenant isolation.
+      // Frontend callsites should still be explicit so we don't accidentally render leaked data.
+      // In future we will check obj.visibilityLevel against the current user's effective visibility scope.
+      return true
+    }
+  }, [])
+
+  const canSeeKeyResult = useMemo(() => {
+    return (kr: any): boolean => {
+      // TODO [phase7-hardening]: Mirror canSeeObjective() once KR-level visibility is modelled distinctly.
       return true
     }
   }, [])
@@ -222,6 +241,10 @@ export function useTenantPermissions(): PermissionChecks {
 
   const getLockInfoForObjective = useMemo(() => {
     return (objective: Objective): LockInfo => {
+      // TODO [phase7-hardening]: Keep this in sync with OkrGovernanceService logic.
+      // Backend is source of truth for publish lock and cycle lock.
+      // Frontend mirrors that logic only for UX messaging, not for enforcement.
+      
       const isPublished = objective.isPublished === true
       const canOverride = canOverrideLocks(objective.organizationId)
       const cycleStatus = getCycleStatus(objective)
@@ -232,6 +255,7 @@ export function useTenantPermissions(): PermissionChecks {
         return {
           isLocked: true,
           reason: 'published',
+          message: 'This OKR is published and locked. You cannot change targets after publish. Only tenant administrators can edit or delete published OKRs.',
         }
       }
 
@@ -240,24 +264,31 @@ export function useTenantPermissions(): PermissionChecks {
         return {
           isLocked: true,
           reason: 'cycle_locked',
+          message: 'This OKR is locked because its cycle is locked. You cannot change targets during a locked cycle. Only tenant administrators can edit or delete OKRs in locked cycles.',
         }
       }
 
       return {
         isLocked: false,
         reason: null,
+        message: '',
       }
     }
   }, [canOverrideLocks, isCycleLocked, getCycleStatus])
 
   const getLockInfoForKeyResult = useMemo(() => {
     return (keyResult: KeyResult): LockInfo => {
+      // TODO [phase7-hardening]: Keep this in sync with OkrGovernanceService logic.
+      // Backend is source of truth for publish lock and cycle lock.
+      // Frontend mirrors that logic only for UX messaging, not for enforcement.
+      
       const parentObjective = keyResult.parentObjective
       if (!parentObjective) {
         // No parent objective info available
         return {
           isLocked: false,
           reason: null,
+          message: '',
         }
       }
 
@@ -271,6 +302,7 @@ export function useTenantPermissions(): PermissionChecks {
         return {
           isLocked: true,
           reason: 'published',
+          message: 'This Key Result is locked because its parent OKR is published. You cannot change targets after publish. Only tenant administrators can edit or delete published Key Results.',
         }
       }
 
@@ -279,18 +311,22 @@ export function useTenantPermissions(): PermissionChecks {
         return {
           isLocked: true,
           reason: 'cycle_locked',
+          message: 'This Key Result is locked because its parent OKR\'s cycle is locked. You cannot change targets during a locked cycle. Only tenant administrators can edit or delete Key Results in locked cycles.',
         }
       }
 
       return {
         isLocked: false,
         reason: null,
+        message: '',
       }
     }
   }, [canOverrideLocks, isCycleLocked])
 
   return {
     canViewObjective,
+    canSeeObjective,
+    canSeeKeyResult,
     canEditObjective,
     canDeleteObjective,
     canEditKeyResult,
