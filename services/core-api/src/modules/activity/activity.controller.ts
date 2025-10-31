@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards, Req, Param } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Req, Param, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ActivityService } from './activity.service';
 import { ObjectiveService } from '../okr/objective.service';
@@ -16,11 +16,7 @@ import { RBACGuard, RequireAction } from '../rbac';
  * - Get activity for a key result
  * - Future: global activity feed, filtered activity
  * 
- * TODO Phase 3: Move the following endpoints from ObjectiveController:
- * - GET /objectives/:id/activity → GET /activity/objectives/:id
- * 
- * TODO Phase 3: Move the following endpoints from KeyResultController:
- * - GET /key-results/:id/activity → GET /activity/key-results/:id
+ * NOTE: Activity timeline endpoints were moved from ObjectiveController and KeyResultController under /activity/* in Phase 4.
  */
 @ApiTags('Activity')
 @Controller('activity')
@@ -28,54 +24,81 @@ import { RBACGuard, RequireAction } from '../rbac';
 @ApiBearerAuth()
 export class ActivityController {
   constructor(
-    // @ts-expect-error Phase 3: Will be used when implementing activity endpoints
-    private readonly _activityService: ActivityService,
-    // @ts-expect-error Phase 3: Will be used when implementing activity endpoints
-    private readonly _objectiveService: ObjectiveService,
-    // @ts-expect-error Phase 3: Will be used when implementing activity endpoints
-    private readonly _keyResultService: KeyResultService,
+    private readonly activityService: ActivityService,
+    private readonly objectiveService: ObjectiveService,
+    private readonly keyResultService: KeyResultService,
   ) {}
 
   /**
    * Get recent activity for an objective.
    * 
-   * TODO Phase 3: move logic from objective.controller.ts
-   * This route will replace GET /objectives/:id/activity in Phase 3.
+   * Moved from ObjectiveController in Phase 4.
+   * TODO [phase4-reporting]: Frontend - expose this on the Objective detail view timeline.
    */
   @Get('objectives/:id')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get recent activity for an objective' })
   async getObjectiveActivity(
     @Param('id') id: string,
-    @Req() _req: any,
-    @Query('limit') _limit?: string,
-    @Query('offset') _offset?: string,
-    @Query('action') _actionFilter?: string,
-    @Query('userId') _userIdFilter?: string,
+    @Req() req: any,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('action') actionFilter?: string,
+    @Query('userId') userIdFilter?: string,
   ) {
-    // TODO Phase 3: move logic from objective.controller.ts
-    return { todo: true, id };
+    // Verify user can view this objective (same check as getById)
+    const canView = await this.objectiveService.canView(req.user.id, id);
+    if (!canView) {
+      throw new ForbiddenException('You do not have permission to view this OKR');
+    }
+    
+    const limitNum = limit ? parseInt(limit, 10) : 20;
+    const offsetNum = offset ? parseInt(offset, 10) : 0;
+    
+    return this.activityService.getRecentForObjective(
+      id,
+      req.user.organizationId,
+      limitNum,
+      offsetNum,
+      actionFilter,
+      userIdFilter,
+    );
   }
 
   /**
    * Get recent activity for a key result.
    * 
-   * TODO Phase 3: move logic from key-result.controller.ts
-   * This route will replace GET /key-results/:id/activity in Phase 3.
+   * Moved from KeyResultController in Phase 4.
+   * TODO [phase4-reporting]: Frontend - expose this on the Key Result detail view timeline.
    */
   @Get('key-results/:id')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get recent activity for a key result' })
   async getKeyResultActivity(
     @Param('id') id: string,
-    @Req() _req: any,
-    @Query('limit') _limit?: string,
-    @Query('offset') _offset?: string,
-    @Query('action') _actionFilter?: string,
-    @Query('userId') _userIdFilter?: string,
+    @Req() req: any,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+    @Query('action') actionFilter?: string,
+    @Query('userId') userIdFilter?: string,
   ) {
-    // TODO Phase 3: move logic from key-result.controller.ts
-    return { todo: true, id };
+    // Verify user can view this key result (same check as getById)
+    const canView = await this.keyResultService.canView(req.user.id, id);
+    if (!canView) {
+      throw new ForbiddenException('You do not have permission to view this key result');
+    }
+    
+    const limitNum = limit ? parseInt(limit, 10) : 20;
+    const offsetNum = offset ? parseInt(offset, 10) : 0;
+    
+    return this.activityService.getRecentForKeyResult(
+      id,
+      req.user.organizationId,
+      limitNum,
+      offsetNum,
+      actionFilter,
+      userIdFilter,
+    );
   }
 
   /**
