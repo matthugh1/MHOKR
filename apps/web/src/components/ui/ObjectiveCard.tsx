@@ -3,10 +3,9 @@
 import { Badge } from './badge'
 import { Button } from './button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip'
+import { StatusBadge, type ObjectiveStatus } from './StatusBadge'
 import { Edit2, Trash2, History, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-export type ObjectiveStatus = 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'COMPLETED' | 'CANCELLED'
 
 interface ObjectiveCardProps {
   title: string
@@ -23,40 +22,16 @@ interface ObjectiveCardProps {
   canDelete: boolean // after publish lock + RBAC
 }
 
-const getStatusBadgeConfig = (status: ObjectiveStatus) => {
-  switch (status) {
-    case 'ON_TRACK':
-      return {
-        className: 'bg-green-500/20 text-green-300 border-green-500/30',
-        label: 'On Track',
-      }
-    case 'AT_RISK':
-      return {
-        className: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30 animate-pulse',
-        label: 'At Risk',
-      }
-    case 'OFF_TRACK':
-      return {
-        className: 'bg-red-500/20 text-red-300 border-red-500/30',
-        label: 'Off Track',
-      }
-    case 'COMPLETED':
-      return {
-        className: 'bg-green-600/20 text-green-400 border-green-600/30',
-        label: 'Completed',
-      }
-    case 'CANCELLED':
-      return {
-        className: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
-        label: 'Cancelled',
-      }
-    default:
-      return {
-        className: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
-        label: status,
-      }
-  }
-}
+
+/**
+ * @module ObjectiveCard
+ * @see {@link https://github.com/matthugh1/MHOKR/blob/main/docs/architecture/DESIGN_SYSTEM.md Design System Documentation}
+ * 
+ * ObjectiveCard - Full objective card component with progress, status, and actions
+ * 
+ * Displays objective title, owner, status badge, progress bar, and action buttons.
+ * Uses Phase 9 design tokens and integrates with StatusBadge component.
+ */
 
 const formatNextCheckIn = (dateString?: string) => {
   if (!dateString) return null
@@ -90,7 +65,6 @@ export function ObjectiveCard({
   canEdit,
   canDelete,
 }: ObjectiveCardProps) {
-  const statusConfig = getStatusBadgeConfig(status)
   const nextCheckInText = formatNextCheckIn(nextCheckInDue)
   const initials = ownerName
     .split(' ')
@@ -102,7 +76,7 @@ export function ObjectiveCard({
   return (
     <div
       className={cn(
-        'rounded-xl border border-slate-200 p-4',
+        'rounded-xl border border-neutral-200 p-4',
         'bg-white shadow-sm',
         'transition-all duration-200',
         'hover:ring-1 hover:ring-blue-200 hover:shadow-md'
@@ -115,12 +89,7 @@ export function ObjectiveCard({
             {title}
           </h3>
           <div className="flex items-center gap-2 flex-wrap">
-            <Badge
-              variant="outline"
-              className={cn('text-xs rounded-full border', statusConfig.className)}
-            >
-              {statusConfig.label}
-            </Badge>
+            <StatusBadge status={status} />
             {isPublished && (
               <Badge
                 variant="outline"

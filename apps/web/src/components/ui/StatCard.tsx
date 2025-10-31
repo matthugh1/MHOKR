@@ -1,41 +1,38 @@
 'use client'
 
-import { cn } from '@/lib/utils'
+import type { ReactNode } from 'react'
 
-interface StatCardProps {
-  label: string
-  value: string
-  hint?: string
-  tone?: 'default' | 'success' | 'warning' | 'danger'
+export interface StatCardProps {
+  title: string
+  value: string | number | ReactNode
+  subtitle?: string
 }
 
-export function StatCard({ label, value, hint, tone = 'default' }: StatCardProps) {
-  const toneClasses = {
-    default: 'bg-white border-slate-200',
-    success: 'bg-green-50 border-green-200',
-    warning: 'bg-yellow-50 border-yellow-200',
-    danger: 'bg-red-50 border-red-200',
-  }
-
+/**
+ * @module StatCard
+ * @see {@link https://github.com/matthugh1/MHOKR/blob/main/docs/architecture/DESIGN_SYSTEM.md Design System Documentation}
+ * 
+ * StatCard - A consistent metric display card for dashboard KPIs
+ * 
+ * Uses Phase 9 design tokens: rounded-xl, border-neutral-200, bg-white, shadow-sm
+ * 
+ * @example
+ * ```tsx
+ * <StatCard
+ *   title="Total Objectives"
+ *   value={42}
+ *   subtitle="12 on track"
+ * />
+ * ```
+ */
+export function StatCard({ title, value, subtitle }: StatCardProps) {
   return (
-    <div
-      className={cn(
-        'rounded-2xl border p-6',
-        'shadow-sm transition-all duration-200',
-        'hover:translate-y-[-2px] hover:shadow-lg',
-        toneClasses[tone]
+    <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+      <div className="text-xs text-neutral-500">{title}</div>
+      <div className="text-2xl font-semibold text-neutral-900">{value}</div>
+      {subtitle && (
+        <div className="text-[11px] text-neutral-500 mt-1">{subtitle}</div>
       )}
-    >
-      <div className="space-y-2">
-        <div className="text-sm font-medium text-slate-600">{label}</div>
-        <div className="text-3xl font-semibold leading-tight text-slate-900">
-          {value}
-        </div>
-        {hint && (
-          <div className="text-xs text-slate-500 mt-2">{hint}</div>
-        )}
-      </div>
     </div>
   )
 }
-

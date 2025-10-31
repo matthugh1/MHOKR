@@ -1,7 +1,6 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Req, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { KeyResultService } from './key-result.service';
-import { ActivityService } from '../activity/activity.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
 
@@ -12,7 +11,6 @@ import { RBACGuard, RequireAction } from '../rbac';
 export class KeyResultController {
   constructor(
     private readonly keyResultService: KeyResultService,
-    private readonly activityService: ActivityService,
   ) {}
 
   @Get()
@@ -23,13 +21,7 @@ export class KeyResultController {
     return this.keyResultService.findAll(req.user.id, objectiveId);
   }
 
-  @Get('overdue')
-  @RequireAction('view_okr')
-  @ApiOperation({ summary: 'Get overdue check-ins for Key Results' })
-  async getOverdueCheckIns(@Req() req: any) {
-    // TODO: Frontend: show 'Check-ins overdue' widget in analytics.
-    return this.keyResultService.getOverdueCheckIns(req.user.organizationId);
-  }
+  // NOTE: Reporting/analytics endpoints were moved to OkrReportingController under /reports/* in Phase 4.
 
   @Get(':id')
   @RequireAction('view_okr')
@@ -113,33 +105,5 @@ export class KeyResultController {
     return this.keyResultService.createCheckIn(id, data, req.user.organizationId);
   }
 
-  @Get(':id/activity')
-  @RequireAction('view_okr')
-  @ApiOperation({ summary: 'Get recent activity for a key result' })
-  async getKeyResultActivity(
-    @Param('id') id: string,
-    @Req() req: any,
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-    @Query('action') actionFilter?: string,
-    @Query('userId') userIdFilter?: string,
-  ) {
-    // Verify user can view this key result (same check as getById)
-    const canView = await this.keyResultService.canView(req.user.id, id);
-    if (!canView) {
-      throw new ForbiddenException('You do not have permission to view this key result');
-    }
-    
-    const limitNum = limit ? parseInt(limit, 10) : 20;
-    const offsetNum = offset ? parseInt(offset, 10) : 0;
-    
-    return this.activityService.getRecentForKeyResult(
-      id,
-      req.user.organizationId,
-      limitNum,
-      offsetNum,
-      actionFilter,
-      userIdFilter,
-    );
-  }
+  // NOTE: Activity timeline endpoints moved to ActivityController under /activity/* in Phase 4.
 }

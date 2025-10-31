@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import { Button } from './button'
+import { ActivityItemCard } from './ActivityItemCard'
 import { cn } from '@/lib/utils'
 
 export interface ActivityItem {
@@ -18,23 +19,8 @@ interface ActivityDrawerProps {
   onClose: () => void
   items: ActivityItem[]
   entityName: string // Objective/Key Result title for header
-}
-
-const formatTimeAgo = (dateString: string) => {
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-
-  if (diffMins < 60) {
-    return `${diffMins}m ago`
-  } else if (diffHours < 24) {
-    return `${diffHours}h ago`
-  } else {
-    return `${diffDays}d ago`
-  }
+  hasMore?: boolean
+  onLoadMore?: () => void
 }
 
 export function ActivityDrawer({
@@ -42,8 +28,11 @@ export function ActivityDrawer({
   onClose,
   items,
   entityName,
+  hasMore,
+  onLoadMore,
 }: ActivityDrawerProps) {
-  // TODO: pagination/filter later
+  const headerTitle = entityName || 'Activity'
+  const safeItems = Array.isArray(items) ? items : []
 
   return (
     <AnimatePresence>
@@ -74,14 +63,15 @@ export function ActivityDrawer({
           >
             {/* Header */}
             <div className="p-6 border-b border-slate-200 bg-slate-50">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-lg font-semibold text-slate-900 truncate">
-                    Activity Timeline
-                  </h2>
-                  <p className="text-sm text-slate-600 mt-1 truncate">
-                    {entityName}
-                  </p>
+                  <div className="text-sm font-medium text-neutral-900">
+                    {headerTitle}
+                  </div>
+                  <div className="text-[11px] text-neutral-500">
+                    Recent updates
+                  </div>
+                  {/* TODO [phase6-polish]: include avatar / icon for objective vs key result */}
                 </div>
                 <Button
                   variant="ghost"
@@ -95,47 +85,36 @@ export function ActivityDrawer({
             </div>
 
             {/* Scrollable body */}
-            <div className="flex-1 overflow-y-auto p-6">
-              {items.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
-                  No activity recorded yet
+            <div className="flex-1 overflow-y-auto px-4 pb-4">
+              {(!safeItems || safeItems.length === 0) ? (
+                <div className="rounded-lg border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500 shadow-sm">
+                  No recent activity.
+                  {/* TODO [phase6-polish]: add subtle illustration */}
                 </div>
               ) : (
-                <div className="relative">
-                  {/* Vertical timeline line */}
-                  <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-slate-200" />
-
-                  {/* Activity items */}
-                  <div className="space-y-6">
-                    {items.map((item, index) => (
-                      <div key={item.id} className="relative flex gap-4">
-                        {/* Timeline bullet */}
-                        <div className="flex-shrink-0 relative z-10">
-                          <div className="w-8 h-8 rounded-full bg-white border-2 border-blue-500 flex items-center justify-center shadow-sm">
-                            <div className="w-2 h-2 rounded-full bg-blue-500" />
-                          </div>
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0 pb-4">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-medium text-slate-900">
-                              {item.actorName}
-                            </span>
-                            <span className="text-xs text-slate-500">
-                              {formatTimeAgo(item.timestamp)}
-                            </span>
-                          </div>
-                          <p className="text-sm text-slate-700 mb-1">
-                            {item.action}
-                          </p>
-                          <p className="text-xs text-slate-600">
-                            {item.summary}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                <div className="space-y-3">
+                  {safeItems.map((item) => (
+                    <ActivityItemCard
+                      key={item.id}
+                      actorName={item.actorName}
+                      timestamp={item.timestamp}
+                      action={item.action}
+                      summary={item.summary}
+                    />
+                  ))}
+                </div>
+              )}
+              
+              {/* Load more button */}
+              {hasMore && onLoadMore && (
+                <div className="pt-4 border-t border-slate-200">
+                  {/* TODO [phase7-performance]: Wire this to /activity/* with pagination params (limit, cursor) */}
+                  <button
+                    onClick={onLoadMore}
+                    className="text-sm text-blue-600 hover:text-blue-700 underline w-full text-center"
+                  >
+                    Load more…
+                  </button>
                 </div>
               )}
             </div>

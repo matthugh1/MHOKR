@@ -1,10 +1,6 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException, Res } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { Response } from 'express';
 import { ObjectiveService } from './objective.service';
-import { KeyResultService } from './key-result.service';
-import { ActivityService } from '../activity/activity.service';
-import { RBACService } from '../rbac/rbac.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
 
@@ -15,9 +11,6 @@ import { RBACGuard, RequireAction } from '../rbac';
 export class ObjectiveController {
   constructor(
     private readonly objectiveService: ObjectiveService,
-    private readonly keyResultService: KeyResultService,
-    private readonly activityService: ActivityService,
-    private readonly rbacService: RBACService,
   ) {}
 
   @Get()
@@ -36,81 +29,7 @@ export class ObjectiveController {
     );
   }
 
-  /**
-   * Early reporting endpoints - will likely move under /reports/* in a later iteration
-   * Note: These routes must come before @Get(':id') to avoid route conflicts
-   */
-  @Get('pillars')
-  @RequireAction('view_okr')
-  @ApiOperation({ summary: 'Get strategic pillars for the organization' })
-  async getPillars(@Req() req: any) {
-    // TODO: Frontend - use this to populate a 'filter by strategic bet' dropdown in analytics and OKR list
-    return this.objectiveService.getPillarsForOrg(req.user.organizationId);
-  }
-
-  @Get('cycles/active')
-  @RequireAction('view_okr')
-  @ApiOperation({ summary: 'Get active cycles for the organization' })
-  async getActiveCycles(@Req() req: any) {
-    // TODO: Frontend - show active cycle name at the top of the OKR dashboard and mark locked cycles
-    return this.objectiveService.getActiveCycleForOrg(req.user.organizationId);
-  }
-
-  @Get('pillars/coverage')
-  @RequireAction('view_okr')
-  @ApiOperation({ summary: 'Get strategic pillar coverage for active cycle' })
-  async getPillarCoverage(@Req() req: any) {
-    // TODO: Frontend: highlight rows where objectiveCountInActiveCycle === 0 as strategic gaps.
-    return this.objectiveService.getPillarCoverageForActiveCycle(req.user.organizationId);
-  }
-
-  @Get('analytics/summary')
-  @RequireAction('view_okr')
-  @ApiOperation({ summary: 'Get organization summary statistics' })
-  async getAnalyticsSummary(@Req() req: any) {
-    return this.objectiveService.getOrgSummary(req.user.organizationId);
-  }
-
-  @Get('analytics/feed')
-  @RequireAction('view_okr')
-  @ApiOperation({ summary: 'Get recent check-in activity feed' })
-  async getAnalyticsFeed(@Req() req: any) {
-    return this.keyResultService.getRecentCheckInFeed(req.user.organizationId);
-  }
-
-  @Get('export/csv')
-  @RequireAction('export_data')
-  @ApiOperation({ summary: 'Export objectives and key results as CSV' })
-  async exportCSV(@Req() req: any, @Res() res: Response) {
-    const userOrganizationId = req.user.organizationId; // null for superuser, string for normal user
-
-    // Authorize using RBAC: check export_data permission
-    const resourceContext = {
-      tenantId: userOrganizationId || null, // null for superuser
-      workspaceId: null,
-      teamId: null,
-    };
-
-    const canExport = await this.rbacService.canPerformAction(
-      req.user.id,
-      'export_data',
-      resourceContext,
-    );
-
-    if (!canExport) {
-      throw new ForbiddenException('You do not have permission to export data');
-    }
-
-    // Generate CSV
-    const csv = await this.objectiveService.exportObjectivesCSV(userOrganizationId);
-
-    // Set response headers for CSV download
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="okr-export-${new Date().toISOString().split('T')[0]}.csv"`);
-    
-    // TODO: Frontend - add Export CSV button in analytics dashboard for TENANT_OWNER / TENANT_ADMIN
-    return res.send(csv);
-  }
+  // NOTE: Reporting/analytics endpoints were moved to OkrReportingController under /reports/* in Phase 4.
 
   @Get(':id')
   @RequireAction('view_okr')
@@ -180,33 +99,5 @@ export class ObjectiveController {
     return this.objectiveService.delete(id, req.user.id, req.user.organizationId);
   }
 
-  @Get(':id/activity')
-  @RequireAction('view_okr')
-  @ApiOperation({ summary: 'Get recent activity for an objective' })
-  async getObjectiveActivity(
-    @Param('id') id: string,
-    @Req() req: any,
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-    @Query('action') actionFilter?: string,
-    @Query('userId') userIdFilter?: string,
-  ) {
-    // Verify user can view this objective (same check as getById)
-    const canView = await this.objectiveService.canView(req.user.id, id);
-    if (!canView) {
-      throw new ForbiddenException('You do not have permission to view this OKR');
-    }
-    
-    const limitNum = limit ? parseInt(limit, 10) : 20;
-    const offsetNum = offset ? parseInt(offset, 10) : 0;
-    
-    return this.activityService.getRecentForObjective(
-      id,
-      req.user.organizationId,
-      limitNum,
-      offsetNum,
-      actionFilter,
-      userIdFilter,
-    );
-  }
+  // NOTE: Activity timeline endpoints moved to ActivityController under /activity/* in Phase 4.
 }

@@ -5,13 +5,11 @@ import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { StatCard } from '@/components/ui/StatCard'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { TrendingUp, AlertTriangle, CheckCircle2, Download } from 'lucide-react'
+import { SectionHeader } from '@/components/ui/SectionHeader'
+import { Download } from 'lucide-react'
 import api from '@/lib/api'
 import { useWorkspace } from '@/contexts/workspace.context'
-import { useTenantAdmin } from '@/hooks/useTenantAdmin'
+import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 
 interface AnalyticsSummary {
   totalObjectives: number
@@ -51,7 +49,7 @@ interface PillarCoverageItem {
 
 export default function AnalyticsPage() {
   const { currentOrganization } = useWorkspace()
-  const { isTenantAdmin } = useTenantAdmin()
+  const { canExportData } = useTenantPermissions()
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null)
   const [feed, setFeed] = useState<CheckInFeedItem[]>([])
   const [overdue, setOverdue] = useState<OverdueCheckInItem[]>([])
@@ -66,6 +64,7 @@ export default function AnalyticsPage() {
   }>>([])
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchAnalytics = async () => {
@@ -76,22 +75,44 @@ export default function AnalyticsPage() {
 
       try {
         setLoading(true)
-        const [summaryRes, feedRes, overdueRes, coverageRes, cyclesRes] = await Promise.all([
-          api.get('/objectives/analytics/summary'),
-          api.get('/objectives/analytics/feed'),
-          api.get('/key-results/overdue'),
-          api.get('/objectives/pillars/coverage'),
-          api.get('/objectives/cycles/active'),
+        // TODO [phase6-polish]: replace with proper skeleton loaders
+        const [summaryRes, feedRes, overdueRes, coverageRes, cyclesRes] = await Promise.allSettled([
+          api.get('/reports/analytics/summary').catch(() => ({ data: { totalObjectives: 0, byStatus: {}, atRiskRatio: 0 } })),
+          api.get('/reports/analytics/feed').catch(() => ({ data: [] })),
+          api.get('/reports/check-ins/overdue').catch(() => ({ data: [] })),
+          api.get('/reports/pillars/coverage').catch(() => ({ data: [] })),
+          api.get('/reports/cycles/active').catch(() => ({ data: [] })),
         ])
 
-        setSummary(summaryRes.data)
-        setFeed(feedRes.data || [])
-        setOverdue(overdueRes.data || [])
-        setPillarCoverage(coverageRes.data || [])
-        setActiveCycles(cyclesRes.data || [])
+        // Extract data safely, fallback to empty defaults
+        setSummary(
+          summaryRes.status === 'fulfilled' && summaryRes.value?.data
+            ? summaryRes.value.data
+            : { totalObjectives: 0, byStatus: {}, atRiskRatio: 0 }
+        )
+        setFeed(
+          feedRes.status === 'fulfilled' && Array.isArray(feedRes.value?.data)
+            ? feedRes.value.data
+            : []
+        )
+        setOverdue(
+          overdueRes.status === 'fulfilled' && Array.isArray(overdueRes.value?.data)
+            ? overdueRes.value.data
+            : []
+        )
+        setPillarCoverage(
+          coverageRes.status === 'fulfilled' && Array.isArray(coverageRes.value?.data)
+            ? coverageRes.value.data
+            : []
+        )
+        setActiveCycles(
+          cyclesRes.status === 'fulfilled' && Array.isArray(cyclesRes.value?.data)
+            ? cyclesRes.value.data
+            : []
+        )
       } catch (error) {
         console.error('Failed to fetch analytics:', error)
-        // Set empty state on error
+        // Set empty state on error - page should still render
         setSummary({
           totalObjectives: 0,
           byStatus: {},
@@ -109,12 +130,19 @@ export default function AnalyticsPage() {
     fetchAnalytics()
   }, [currentOrganization?.id])
 
-  const onTrackCount = summary?.byStatus['ON_TRACK'] || 0
-  const atRiskCount = summary?.byStatus['AT_RISK'] || 0
-  const offTrackCount = summary?.byStatus['OFF_TRACK'] || 0
-  const completedCount = summary?.byStatus['COMPLETED'] || 0
+  // TODO [phase7-performance]: lift this into a shared util if we reuse it
+  function safePercent(numerator: number, denominator: number): number {
+    if (!denominator || denominator <= 0) return 0
+    if (!numerator || numerator < 0) return 0
+    return Math.round((numerator / denominator) * 100)
+  }
+
+  const onTrackCount = summary?.byStatus?.['ON_TRACK'] || 0
+  const atRiskCount = summary?.byStatus?.['AT_RISK'] || 0
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const offTrackCount = summary?.byStatus?.['OFF_TRACK'] || 0
+  const completedCount = summary?.byStatus?.['COMPLETED'] || 0
   const totalObjectives = summary?.totalObjectives || 0
-  const atRiskPercentage = summary ? Math.round(summary.atRiskRatio * 100) : 0
 
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString)
@@ -135,10 +163,11 @@ export default function AnalyticsPage() {
 
   const handleExportCSV = async () => {
     // This endpoint is tenant-scoped and already RBAC-protected server-side
-    // must match backend RBAC canExportData() for CSV export
+    // TODO [phase7-hardening]: align this with backend export permissions dynamically per-tenant, not just role check.
     try {
       setExporting(true)
-      const response = await api.get('/objectives/export/csv', {
+      setExportError(null)
+      const response = await api.get('/reports/export/csv', {
         responseType: 'blob',
       })
       
@@ -152,10 +181,19 @@ export default function AnalyticsPage() {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to export CSV:', error)
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to export CSV'
-      alert(`Failed to export: ${errorMessage}`)
+      let errorMessage = 'Failed to export CSV'
+      if (error instanceof Error) {
+        errorMessage = error.message
+      } else if (typeof error === 'object' && error !== null && 'response' in error) {
+        const response = (error as { response?: { data?: { message?: string } } }).response
+        if (response?.data?.message) {
+          errorMessage = response.data.message
+        }
+      }
+      setExportError(errorMessage)
+      // TODO [phase6-polish]: turn this into toast
     } finally {
       setExporting(false)
     }
@@ -197,20 +235,31 @@ export default function AnalyticsPage() {
                   ]}
                 />
               </div>
-              {/* must match backend canExportData() logic - only show for tenant admins */}
-              {isTenantAdmin && (
-                <Button
-                  onClick={handleExportCSV}
-                  disabled={exporting || loading}
-                  variant="outline"
-                  className="shrink-0"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  {exporting ? 'Exporting...' : 'Export CSV'}
-                </Button>
-              )}
             </div>
           </div>
+
+          {/* CSV Export Button */}
+          {/* TODO [phase7-hardening]: canExportData() must stay aligned with backend RBACService.canExportData() */}
+          {canExportData() && (
+            <div className="flex justify-end mb-4">
+              <div className="flex flex-col items-end">
+                <button
+                  onClick={handleExportCSV}
+                  disabled={exporting || loading}
+                  className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-800 shadow-sm hover:bg-neutral-50 active:scale-[0.99] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Download className="h-3 w-3 inline mr-1.5" />
+                  {exporting ? 'Exporting...' : 'Export CSV'}
+                </button>
+                {exportError && (
+                  <div className="text-[11px] text-red-500 mt-1">
+                    {exportError}
+                    {/* TODO [phase6-polish]: turn into toast */}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div className="text-center py-12">
@@ -219,160 +268,152 @@ export default function AnalyticsPage() {
           ) : (
             <>
               {/* Key Metrics */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
                 <StatCard
-                  label="Total Objectives"
-                  value={totalObjectives.toString()}
-                  hint={`${onTrackCount} on track`}
+                  title="Total Objectives"
+                  value={totalObjectives > 0 ? totalObjectives : '—'}
+                  subtitle={totalObjectives > 0 ? `${onTrackCount} on track` : undefined}
                 />
                 <StatCard
-                  label="Completion Rate"
-                  value={`${totalObjectives > 0 ? Math.round((completedCount / totalObjectives) * 100) : 0}%`}
-                  hint={`${completedCount} of ${totalObjectives} completed`}
-                  tone={completedCount > 0 ? 'success' : 'default'}
+                  title="% On Track"
+                  value={`${safePercent(onTrackCount, totalObjectives)}%`}
+                  subtitle={totalObjectives > 0 ? `${onTrackCount} of ${totalObjectives}` : undefined}
                 />
                 <StatCard
-                  label="At Risk OKRs"
-                  value={atRiskCount.toString()}
-                  hint={`${atRiskPercentage}% of active OKRs`}
-                  tone={atRiskCount > 0 ? 'warning' : 'default'}
+                  title="% At Risk"
+                  value={`${safePercent(atRiskCount, totalObjectives)}%`}
+                  subtitle={totalObjectives > 0 ? `${atRiskCount} objective${atRiskCount !== 1 ? 's' : ''}` : undefined}
                 />
                 <StatCard
-                  label="Status Breakdown"
-                  value={`${onTrackCount} / ${atRiskCount} / ${offTrackCount}`}
-                  hint="On Track / At Risk / Off Track"
+                  title="Overdue Check-ins"
+                  value={overdue.length > 0 ? overdue.length : '—'}
+                  subtitle={overdue.length > 0 ? `${overdue.length} key result${overdue.length !== 1 ? 's' : ''} overdue` : undefined}
                 />
               </div>
 
               {/* Strategic Coverage */}
-              <div className="grid grid-cols-1 gap-6 mb-8">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Strategic Coverage</CardTitle>
-                    <CardDescription>Pillar coverage in active cycle</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {pillarCoverage.length === 0 ? (
-                      <div className="text-center py-8 text-slate-500">
-                        No strategic pillars defined or no active cycle
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {pillarCoverage.map((pillar) => (
-                          <div
-                            key={pillar.pillarId}
-                            className="flex items-center justify-between pb-3 border-b last:border-0"
-                          >
-                            <div className="flex-1">
-                              <p className="text-sm font-medium text-slate-900">
-                                {pillar.pillarName}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {pillar.objectiveCountInActiveCycle === 0 ? (
-                                <span className="text-xs font-medium text-red-600">
-                                  No active OKRs this cycle
-                                </span>
-                              ) : (
-                                <span className="text-sm text-slate-600">
-                                  {pillar.objectiveCountInActiveCycle} OKR{pillar.objectiveCountInActiveCycle !== 1 ? 's' : ''}
-                                </span>
+              <div className="mb-8">
+                <SectionHeader
+                  title="Strategic Coverage"
+                  subtitle="Pillar coverage in active cycle"
+                />
+                <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                  {pillarCoverage.length === 0 ? (
+                    <div className="text-sm text-neutral-500 text-center py-6">
+                      No strategic pillars defined or no active cycle
+                      {/* TODO [phase6-polish]: add subtle icon/illustration */}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {pillarCoverage.map((pillar) => (
+                        <div
+                          key={pillar.pillarId}
+                          className="flex items-center justify-between pb-3 border-b border-neutral-100 last:border-0"
+                        >
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-neutral-900">
+                              {pillar.pillarName}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {pillar.objectiveCountInActiveCycle === 0 ? (
+                              <span className="text-xs font-medium text-red-600">
+                                No active OKRs this cycle
+                              </span>
+                            ) : (
+                              <span className="text-sm text-neutral-600">
+                                {pillar.objectiveCountInActiveCycle} OKR{pillar.objectiveCountInActiveCycle !== 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Execution Risk */}
+              <div className="mb-8">
+                <SectionHeader
+                  title="Execution Risk"
+                  subtitle="Key Results overdue for check-in"
+                />
+                <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                  {overdue.length === 0 ? (
+                    <div className="text-sm text-neutral-500 text-center py-6">
+                      No overdue check-ins
+                      {/* TODO [phase6-polish]: add subtle icon/illustration */}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {overdue.slice(0, 5).map((item) => (
+                        <div key={item.krId} className="flex items-start gap-4 pb-4 border-b border-neutral-100 last:border-0">
+                          <div className="w-2 h-2 rounded-full mt-2 bg-red-500" />
+                          <div className="flex-1">
+                            <p className="text-sm text-neutral-900">
+                              <span className="font-medium">{item.krTitle}</span>
+                            </p>
+                            <div className="mt-1 flex items-center gap-3 text-xs text-neutral-500">
+                              <span>Owner: {item.ownerName || item.ownerEmail}</span>
+                              <span>•</span>
+                              <span className="text-red-600 font-medium">{item.daysLate}d late</span>
+                              {item.lastCheckInAt && (
+                                <>
+                                  <span>•</span>
+                                  <span>Last check-in: {formatTimeAgo(item.lastCheckInAt)}</span>
+                                </>
                               )}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Overdue Check-ins */}
-              <div className="grid grid-cols-1 gap-6 mb-8">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Overdue Check-ins</CardTitle>
-                    <CardDescription>Key Results overdue for check-in</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {overdue.length === 0 ? (
-                      <div className="text-center py-8 text-slate-500">
-                        All KRs are up to date ✅
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="text-sm font-medium text-slate-700 mb-2">
-                          {overdue.length} Key Result{overdue.length !== 1 ? 's' : ''} overdue
                         </div>
-                        {overdue.slice(0, 5).map((item) => (
-                          <div key={item.krId} className="flex items-start gap-4 pb-4 border-b last:border-0">
-                            <div className="w-2 h-2 rounded-full mt-2 bg-red-500" />
-                            <div className="flex-1">
-                              <p className="text-sm">
-                                <span className="font-medium">{item.krTitle}</span>
-                              </p>
-                              <div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
-                                <span>Owner: {item.ownerName || item.ownerEmail}</span>
-                                <span>•</span>
-                                <span className="text-red-600 font-medium">{item.daysLate}d late</span>
-                                {item.lastCheckInAt && (
-                                  <>
-                                    <span>•</span>
-                                    <span>Last check-in: {formatTimeAgo(item.lastCheckInAt)}</span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                        {overdue.length > 5 && (
-                          <div className="text-xs text-slate-500 text-center pt-2">
-                            And {overdue.length - 5} more...
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                      ))}
+                      {overdue.length > 5 && (
+                        <div className="text-xs text-neutral-500 text-center pt-2">
+                          And {overdue.length - 5} more...
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Recent Activity Feed */}
-              <div className="grid grid-cols-1 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Recent Activity</CardTitle>
-                    <CardDescription>Latest check-ins across all Key Results</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {feed.length === 0 ? (
-                      <div className="text-center py-8 text-slate-500">
-                        No recent check-ins
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {feed.map((item) => (
-                          <div key={item.id} className="flex items-start gap-4 pb-4 border-b last:border-0">
-                            <div className="w-2 h-2 rounded-full mt-2 bg-blue-500" />
-                            <div className="flex-1">
-                              <p className="text-sm">
-                                <span className="font-medium">{item.userName || 'Unknown User'}</span>{' '}
-                                <span className="text-slate-600">checked in</span>{' '}
-                                <span className="font-medium">{item.krTitle}</span>
-                              </p>
-                              <div className="mt-1 flex items-center gap-3 text-xs text-slate-500">
-                                <span>Value: {item.value}</span>
-                                <span>•</span>
-                                <span>Confidence: {item.confidence}%</span>
-                                <span>•</span>
-                                <span>{formatTimeAgo(item.createdAt)}</span>
-                              </div>
+              <div className="mb-8">
+                <SectionHeader
+                  title="Recent Activity"
+                  subtitle="Last 10 check-ins"
+                />
+                <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                  {feed.length === 0 ? (
+                    <div className="text-sm text-neutral-500 text-center py-6">
+                      No recent activity.
+                      {/* TODO [phase6-polish]: add subtle icon/illustration */}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {feed.map((item) => (
+                        <div key={item.id} className="flex items-start gap-4 pb-4 border-b border-neutral-100 last:border-0">
+                          <div className="w-2 h-2 rounded-full mt-2 bg-blue-500" />
+                          <div className="flex-1">
+                            <p className="text-sm text-neutral-900">
+                              <span className="font-medium">{item.userName || 'Unknown User'}</span>{' '}
+                              <span className="text-neutral-600">checked in</span>{' '}
+                              <span className="font-medium">{item.krTitle}</span>
+                            </p>
+                            <div className="mt-1 flex items-center gap-3 text-xs text-neutral-500">
+                              <span>Value: {item.value}</span>
+                              <span>•</span>
+                              <span>Confidence: {item.confidence}%</span>
+                              <span>•</span>
+                              <span>{formatTimeAgo(item.createdAt)}</span>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           )}

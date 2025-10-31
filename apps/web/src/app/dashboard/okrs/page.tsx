@@ -45,10 +45,12 @@ import {
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
 import { usePermissions } from '@/hooks/usePermissions'
+import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import { useToast } from '@/hooks/use-toast'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ObjectiveCard } from '@/components/ui/ObjectiveCard'
 import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
+import { PublishLockWarningModal } from './components/PublishLockWarningModal'
 import api from '@/lib/api'
 import { logTokenInfo } from '@/lib/jwt-debug'
 
@@ -67,6 +69,7 @@ export default function OKRsPage() {
   const { workspaces, teams, currentOrganization } = useWorkspace()
   const { user } = useAuth()
   const permissions = usePermissions()
+  const { canSeeObjective, canSeeKeyResult, ...tenantPermissions } = useTenantPermissions()
   const { toast } = useToast()
   const [availableUsers, setAvailableUsers] = useState<any[]>([])
   const [okrs, setOkrs] = useState<any[]>([])
@@ -76,6 +79,7 @@ export default function OKRsPage() {
   const [activityItems, setActivityItems] = useState<ActivityItem[]>([])
   const [activityEntityName, setActivityEntityName] = useState('')
   const [publishLockDialogOpen, setPublishLockDialogOpen] = useState(false)
+  const [selectedObjectiveForLock, setSelectedObjectiveForLock] = useState<any | null>(null)
   const [pendingDeleteOkr, setPendingDeleteOkr] = useState<{ id: string; title: string } | null>(null)
   const [activeCycles, setActiveCycles] = useState<Array<{
     id: string
@@ -199,8 +203,13 @@ export default function OKRsPage() {
 
   const selectedPeriodOption = availablePeriods.find(p => p.value === selectedPeriod);
   
-  // Apply filters
-  const filteredOKRs = okrs.filter(okr => {
+  // Apply filters and visibility checks with safe defaults
+  const safeObjectives = Array.isArray(okrs) ? okrs : []
+  const filteredOKRs = safeObjectives.filter(okr => {
+    // Apply visibility check
+    if (!canSeeObjective(okr)) {
+      return false
+    }
     // Period filter
     if (selectedPeriod !== 'all' && selectedPeriodOption) {
       if (okr.startDate && okr.endDate) {
@@ -251,12 +260,28 @@ export default function OKRsPage() {
   const hasActiveFilters = filterWorkspaceId !== 'all' || filterTeamId !== 'all' || filterOwnerId !== 'all' || searchQuery.length > 0;
 
   const handleEditOKR = (okr: any) => {
-    const isPublished = okr.isPublished === true
-    const canAdminTenant = permissions.isTenantAdminOrOwner(okr.organizationId || undefined)
+    // Map okr to Objective interface expected by hook
+    // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
+    const objectiveForHook = {
+      id: okr.id,
+      ownerId: okr.ownerId,
+      organizationId: okr.organizationId,
+      workspaceId: okr.workspaceId,
+      teamId: okr.teamId,
+      isPublished: okr.isPublished,
+      cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+        ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
+        : null,
+      cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+        ? activeCycles.find(c => c.id === okr.cycleId)!.status
+        : null,
+    }
     
-    // must match backend publish lock rules in objective.service.ts and key-result.service.ts
-    // If published and user is NOT tenant admin/owner, show warning and prevent edit
-    if (isPublished && !canAdminTenant) {
+    const canEdit = tenantPermissions.canEditObjective(objectiveForHook)
+    
+    if (!canEdit) {
+      const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
+      setSelectedObjectiveForLock(okr)
       setPublishLockDialogOpen(true)
       return
     }
@@ -265,12 +290,28 @@ export default function OKRsPage() {
   }
 
   const handleDeleteOKR = async (okr: any) => {
-    const isPublished = okr.isPublished === true
-    const canAdminTenant = permissions.isTenantAdminOrOwner(okr.organizationId || undefined)
+    // Map okr to Objective interface expected by hook
+    // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
+    const objectiveForHook = {
+      id: okr.id,
+      ownerId: okr.ownerId,
+      organizationId: okr.organizationId,
+      workspaceId: okr.workspaceId,
+      teamId: okr.teamId,
+      isPublished: okr.isPublished,
+      cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+        ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
+        : null,
+      cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+        ? activeCycles.find(c => c.id === okr.cycleId)!.status
+        : null,
+    }
     
-    // must match backend publish lock rules in objective.service.ts and key-result.service.ts
-    // If published and user is NOT tenant admin/owner, show warning and prevent delete
-    if (isPublished && !canAdminTenant) {
+    const canDelete = tenantPermissions.canDeleteObjective(objectiveForHook)
+    
+    if (!canDelete) {
+      const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
+      setSelectedObjectiveForLock(okr)
       setPublishLockDialogOpen(true)
       return
     }
@@ -304,8 +345,8 @@ export default function OKRsPage() {
   const handleOpenActivityDrawer = async (entityType: 'OBJECTIVE' | 'KEY_RESULT', entityId: string, entityTitle?: string) => {
     try {
       const endpoint = entityType === 'OBJECTIVE' 
-        ? `/objectives/${entityId}/activity`
-        : `/key-results/${entityId}/activity`
+        ? `/activity/objectives/${entityId}`
+        : `/activity/key-results/${entityId}`
       
       const response = await api.get(endpoint)
       const activities = response.data || []
@@ -432,7 +473,7 @@ export default function OKRsPage() {
                       </div>
                     </div>
                   </div>
-                  {/* TODO: Later we'll surface a CTA for admins to open next cycle / lock current cycle. */}
+                  {/* TODO [phase6-polish]: Later we'll surface a CTA for admins to open next cycle / lock current cycle. */}
                 </div>
               ))}
             </div>
@@ -575,33 +616,47 @@ export default function OKRsPage() {
             </div>
           ) : filteredOKRs.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-slate-500 mb-4">No OKRs found</p>
-              {hasActiveFilters && (
-                <Button variant="outline" onClick={clearFilters}>
-                  Clear filters to see all OKRs
-                </Button>
+              {safeObjectives.filter(canSeeObjective).length === 0 ? (
+                <div className="rounded-xl border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500 shadow-sm">
+                  No objectives are visible in this workspace.
+                  {/* TODO [phase6-polish]: add illustration + CTA when we allow creation */}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500 shadow-sm">
+                  <p className="mb-4">No OKRs found</p>
+                  {hasActiveFilters && (
+                    <Button variant="outline" onClick={clearFilters}>
+                      Clear filters to see all OKRs
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredOKRs.map((okr) => {
                 const owner = availableUsers.find(u => u.id === okr.ownerId)
-                const canEdit = permissions.canEditOKR({
+                
+                // Map okr to Objective interface expected by hook
+                // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
+                const objectiveForHook = {
+                  id: okr.id,
                   ownerId: okr.ownerId,
                   organizationId: okr.organizationId,
                   workspaceId: okr.workspaceId,
                   teamId: okr.teamId,
-                })
-                const canDelete = permissions.canDeleteOKR({
-                  ownerId: okr.ownerId,
-                  organizationId: okr.organizationId,
-                  workspaceId: okr.workspaceId,
-                  teamId: okr.teamId,
-                })
+                  isPublished: okr.isPublished,
+                  cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+                    ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
+                    : null,
+                  cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+                    ? activeCycles.find(c => c.id === okr.cycleId)!.status
+                    : null,
+                }
+                
+                const canEdit = tenantPermissions.canEditObjective(objectiveForHook)
+                const canDelete = tenantPermissions.canDeleteObjective(objectiveForHook)
                 const isPublished = okr.isPublished === true
-                const canAdminTenant = permissions.isTenantAdminOrOwner(okr.organizationId || undefined)
-                const canEditPublished = isPublished ? canAdminTenant : canEdit
-                const canDeletePublished = isPublished ? canAdminTenant : canDelete
                 
                 // Find next check-in due date from key results
                 const nextCheckInDue = okr.keyResults?.find((kr: any) => kr.keyResult?.checkInCadence)?.keyResult?.lastCheckInAt
@@ -619,8 +674,8 @@ export default function OKRsPage() {
                     onOpenHistory={() => handleOpenActivityDrawer('OBJECTIVE', okr.id, okr.title)}
                     onEdit={() => handleEditOKR(okr)}
                     onDelete={() => handleDeleteOKR(okr)}
-                    canEdit={canEditPublished}
-                    canDelete={canDeletePublished}
+                    canEdit={canEdit}
+                    canDelete={canDelete}
                   />
                 )
               })}
@@ -629,22 +684,27 @@ export default function OKRsPage() {
             <div className="space-y-4">
               {filteredOKRs.map((okr) => {
                 const owner = availableUsers.find(u => u.id === okr.ownerId)
-                const canEdit = permissions.canEditOKR({
+                
+                // Map okr to Objective interface expected by hook
+                // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
+                const objectiveForHook = {
+                  id: okr.id,
                   ownerId: okr.ownerId,
                   organizationId: okr.organizationId,
                   workspaceId: okr.workspaceId,
                   teamId: okr.teamId,
-                })
-                const canDelete = permissions.canDeleteOKR({
-                  ownerId: okr.ownerId,
-                  organizationId: okr.organizationId,
-                  workspaceId: okr.workspaceId,
-                  teamId: okr.teamId,
-                })
+                  isPublished: okr.isPublished,
+                  cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+                    ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
+                    : null,
+                  cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+                    ? activeCycles.find(c => c.id === okr.cycleId)!.status
+                    : null,
+                }
+                
+                const canEdit = tenantPermissions.canEditObjective(objectiveForHook)
+                const canDelete = tenantPermissions.canDeleteObjective(objectiveForHook)
                 const isPublished = okr.isPublished === true
-                const canAdminTenant = permissions.isTenantAdminOrOwner(okr.organizationId || undefined)
-                const canEditPublished = isPublished ? canAdminTenant : canEdit
-                const canDeletePublished = isPublished ? canAdminTenant : canDelete
                 
                 // Find next check-in due date from key results
                 const nextCheckInDue = okr.keyResults?.find((kr: any) => kr.keyResult?.checkInCadence)?.keyResult?.lastCheckInAt
@@ -662,8 +722,8 @@ export default function OKRsPage() {
                     onOpenHistory={() => handleOpenActivityDrawer('OBJECTIVE', okr.id, okr.title)}
                     onEdit={() => handleEditOKR(okr)}
                     onDelete={() => handleDeleteOKR(okr)}
-                    canEdit={canEditPublished}
-                    canDelete={canDeletePublished}
+                    canEdit={canEdit}
+                    canDelete={canDelete}
                   />
                 )
               })}
@@ -671,28 +731,48 @@ export default function OKRsPage() {
           )}
 
           {/* Activity Timeline Drawer */}
+          {/* TODO [phase7-performance]: pass pagination cursor + load handler once backend supports it. */}
           <ActivityDrawer
             isOpen={activityDrawerOpen}
             onClose={handleCloseActivityDrawer}
-            items={activityItems}
-            entityName={activityEntityName}
+            items={Array.isArray(activityItems) ? activityItems : []}
+            entityName={activityEntityName || 'Activity'}
+            hasMore={false}
           />
 
           {/* Publish Lock Warning Dialog */}
-          <AlertDialog open={publishLockDialogOpen} onOpenChange={setPublishLockDialogOpen}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>OKR is Published and Locked</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This OKR is published and locked. You cannot change targets after publish.
-                  Only tenant administrators can edit or delete published OKRs.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Close</AlertDialogCancel>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          {selectedObjectiveForLock && (() => {
+            const objectiveForHook = {
+              id: selectedObjectiveForLock.id,
+              ownerId: selectedObjectiveForLock.ownerId,
+              organizationId: selectedObjectiveForLock.organizationId,
+              workspaceId: selectedObjectiveForLock.workspaceId,
+              teamId: selectedObjectiveForLock.teamId,
+              isPublished: selectedObjectiveForLock.isPublished,
+              cycle: selectedObjectiveForLock.cycleId && activeCycles.find(c => c.id === selectedObjectiveForLock.cycleId)
+                ? { id: selectedObjectiveForLock.cycleId, status: activeCycles.find(c => c.id === selectedObjectiveForLock.cycleId)!.status }
+                : null,
+              cycleStatus: selectedObjectiveForLock.cycleId && activeCycles.find(c => c.id === selectedObjectiveForLock.cycleId)
+                ? activeCycles.find(c => c.id === selectedObjectiveForLock.cycleId)!.status
+                : null,
+            }
+            const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
+            // TODO [phase6-polish]: improve copy for lock reasons
+            const lockMessage = lockInfo.message || 'This item is locked and cannot be changed in the current cycle.'
+            
+            return (
+              <PublishLockWarningModal
+                open={publishLockDialogOpen}
+                onClose={() => {
+                  setPublishLockDialogOpen(false)
+                  setSelectedObjectiveForLock(null)
+                }}
+                lockReason={lockInfo.reason}
+                lockMessage={lockMessage}
+                entityName={selectedObjectiveForLock.title}
+              />
+            )
+          })()}
 
           {/* Delete Confirmation Dialog */}
           <AlertDialog open={!!pendingDeleteOkr} onOpenChange={(open) => !open && setPendingDeleteOkr(null)}>

@@ -5,7 +5,15 @@ import { buildResourceContextFromOKR } from '../rbac/helpers';
 import { calculateProgress } from '@okr-nexus/utils';
 import { OkrProgressService } from './okr-progress.service';
 import { ActivityService } from '../activity/activity.service';
+import { OkrTenantGuard } from './tenant-guard';
+import { OkrGovernanceService } from './okr-governance.service';
 
+/**
+ * Key Result Service
+ * 
+ * NOTE: Reporting / analytics / check-in feed logic was moved to OkrReportingService in Phase 4.
+ * This service now focuses on CRUD operations and orchestration only.
+ */
 @Injectable()
 export class KeyResultService {
   constructor(
@@ -13,6 +21,7 @@ export class KeyResultService {
     private rbacService: RBACService,
     private okrProgressService: OkrProgressService,
     private activityService: ActivityService,
+    private okrGovernanceService: OkrGovernanceService,
   ) {}
 
   async findAll(_userId: string, objectiveId?: string) {
@@ -117,13 +126,12 @@ export class KeyResultService {
    * The write methods (create/update/delete/createCheckIn) enforce the same tenant isolation rules.
    */
   async canEdit(userId: string, keyResultId: string, userOrganizationId: string | null | undefined): Promise<boolean> {
-    // TENANT ISOLATION CHECK:
-    // Superusers are read-only auditors
+    // Tenant isolation: superuser is read-only
     if (userOrganizationId === null) {
       return false;
     }
 
-    // Users without an organisation cannot mutate
+    // Tenant isolation: users without an organisation cannot mutate
     if (!userOrganizationId) {
       return false;
     }
@@ -146,13 +154,10 @@ export class KeyResultService {
     // Determine the objective's organizationId (use first parent objective)
     const objectiveOrgId = keyResult.objectives[0]?.objective?.organizationId;
 
-    // If objective has no organizationId, cannot edit
-    if (!objectiveOrgId) {
-      return false;
-    }
-
-    // Caller org must match parent Objective's organisationId
-    if (objectiveOrgId !== userOrganizationId) {
+    // Tenant isolation: verify org match (throws if mismatch or system/global)
+    try {
+      OkrTenantGuard.assertSameTenant(objectiveOrgId, userOrganizationId);
+    } catch {
       return false;
     }
 
@@ -191,13 +196,12 @@ export class KeyResultService {
    * The write methods (create/update/delete/createCheckIn) enforce the same tenant isolation rules.
    */
   async canDelete(userId: string, keyResultId: string, userOrganizationId: string | null | undefined): Promise<boolean> {
-    // TENANT ISOLATION CHECK:
-    // Superusers are read-only auditors
+    // Tenant isolation: superuser is read-only
     if (userOrganizationId === null) {
       return false;
     }
 
-    // Users without an organisation cannot mutate
+    // Tenant isolation: users without an organisation cannot mutate
     if (!userOrganizationId) {
       return false;
     }
@@ -220,13 +224,10 @@ export class KeyResultService {
     // Determine the objective's organizationId (use first parent objective)
     const objectiveOrgId = keyResult.objectives[0]?.objective?.organizationId;
 
-    // If objective has no organizationId, cannot delete
-    if (!objectiveOrgId) {
-      return false;
-    }
-
-    // Caller org must match parent Objective's organisationId
-    if (objectiveOrgId !== userOrganizationId) {
+    // Tenant isolation: verify org match (throws if mismatch or system/global)
+    try {
+      OkrTenantGuard.assertSameTenant(objectiveOrgId, userOrganizationId);
+    } catch {
       return false;
     }
 
@@ -252,83 +253,7 @@ export class KeyResultService {
     return false;
   }
 
-  /**
-   * Check if cycle lock prevents editing/deleting a key result.
-   * Checks the cycle status through the parent objective.
-   * Returns true if locked and user cannot bypass, false otherwise.
-   * 
-   * Cycle lock enforcement:
-   * - If parent objective.cycle exists AND cycle.status === 'LOCKED' or 'ARCHIVED':
-   *   - Superuser (userOrganizationId === null) => reject (read-only)
-   *   - Require TENANT_OWNER or TENANT_ADMIN for that org
-   *   - Else return true (locked)
-   * - DRAFT and ACTIVE cycles allow normal edits
-   */
-  private async checkCycleLockForKR(
-    keyResultId: string,
-    userId: string,
-    userOrganizationId: string | null,
-  ): Promise<{ locked: boolean; cycleName?: string }> {
-    // Get the key result with its parent objective(s)
-    const keyResult = await this.prisma.keyResult.findUnique({
-      where: { id: keyResultId },
-      select: {
-        objectives: {
-          select: {
-            objective: {
-              include: {
-                cycle: {
-                  select: {
-                    id: true,
-                    name: true,
-                    status: true,
-                    organizationId: true,
-                  },
-                },
-              },
-            },
-          },
-          take: 1, // Use first parent objective
-        },
-      },
-    });
-
-    // No parent objective or no cycle assigned, no lock
-    const objective = keyResult?.objectives[0]?.objective;
-    if (!objective?.cycle) {
-      return { locked: false };
-    }
-
-    const cycle = objective.cycle;
-    const cycleStatus = cycle.status;
-
-    // DRAFT and ACTIVE cycles allow normal edits
-    if (cycleStatus === 'DRAFT' || cycleStatus === 'ACTIVE') {
-      return { locked: false };
-    }
-
-    // LOCKED or ARCHIVED cycles require admin override
-    if (cycleStatus === 'LOCKED' || cycleStatus === 'ARCHIVED') {
-      // Superuser is read-only, cannot bypass cycle lock
-      if (userOrganizationId === null) {
-        return { locked: true, cycleName: cycle.name };
-      }
-
-      // Check if user has TENANT_OWNER or TENANT_ADMIN role via parent objective
-      const resourceContext = await buildResourceContextFromOKR(this.prisma, objective.id);
-      const canEdit = await this.rbacService.canPerformAction(userId, 'edit_okr', resourceContext);
-      
-      if (!canEdit) {
-        return { locked: true, cycleName: cycle.name };
-      }
-
-      // User has admin role, can bypass cycle lock
-      return { locked: false };
-    }
-
-    // Unknown status, default to not locked
-    return { locked: false };
-  }
+  // Governance moved to OkrGovernanceService (Phase 3)
 
   /**
    * Check if user can edit the parent objective
@@ -343,15 +268,8 @@ export class KeyResultService {
   }
 
   async create(data: any, _userId: string, userOrganizationId: string | null | undefined) {
-    // TENANT ISOLATION CHECK (P1 placeholder):
-    // Temporary guard until full KR RBAC is implemented.
-    // - Superusers (userOrganizationId === null) are READ-ONLY auditors.
-    // - Users with no organisation (undefined/falsy) cannot mutate.
-    // - Caller org must match parent Objective's organisationId.
-    // TODO [tenant-isolation-P1-KR]: replace with formal canEditKeyResult/canDeleteKeyResult.
-    if (userOrganizationId === null) {
-      throw new ForbiddenException('Superusers are read-only; cannot modify Key Results.');
-    }
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
 
     // Extract objectiveId before validation (Prisma will reject it from keyResult.create)
     const objectiveId = data.objectiveId;
@@ -363,16 +281,15 @@ export class KeyResultService {
         select: { organizationId: true },
       });
 
-      if (
-        !userOrganizationId ||
-        !objective ||
-        !objective.organizationId ||
-        objective.organizationId !== userOrganizationId
-      ) {
-        throw new ForbiddenException('You do not have permission to modify this Key Result.');
+      if (!objective) {
+        throw new NotFoundException(`Objective with ID ${objectiveId} not found`);
       }
+
+      // Tenant isolation: verify org match
+      OkrTenantGuard.assertSameTenant(objective.organizationId, userOrganizationId);
     } else {
       // If no objectiveId provided, reject (for now - may need to allow standalone KRs later)
+      // Tenant isolation already checked above, but need explicit org for standalone KRs
       if (!userOrganizationId) {
         throw new ForbiddenException('You do not have permission to create Key Results without an organization.');
       }
@@ -457,15 +374,8 @@ export class KeyResultService {
   }
 
   async update(id: string, data: any, userId: string, userOrganizationId: string | null | undefined) {
-    // TENANT ISOLATION CHECK (P1 placeholder):
-    // Temporary guard until full KR RBAC is implemented.
-    // - Superusers (userOrganizationId === null) are READ-ONLY auditors.
-    // - Users with no organisation (undefined/falsy) cannot mutate.
-    // - Caller org must match parent Objective's organisationId.
-    // TODO [tenant-isolation-P1-KR]: replace with formal canEditKeyResult/canDeleteKeyResult.
-    if (userOrganizationId === null) {
-      throw new ForbiddenException('Superusers are read-only; cannot modify Key Results.');
-    }
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
 
     const krWithParent = await this.prisma.keyResult.findUnique({
       where: { id },
@@ -485,44 +395,32 @@ export class KeyResultService {
       },
     });
 
-    const objective = krWithParent?.objectives[0]?.objective;
+    if (!krWithParent) {
+      throw new NotFoundException(`Key Result with ID ${id} not found`);
+    }
+
+    const objective = krWithParent.objectives[0]?.objective;
     const objectiveOrgId = objective?.organizationId;
 
-    if (
-      !userOrganizationId ||
-      !krWithParent ||
-      !objectiveOrgId ||
-      objectiveOrgId !== userOrganizationId
-    ) {
-      throw new ForbiddenException('You do not have permission to modify this Key Result.');
-    }
+    // Tenant isolation: verify org match
+    OkrTenantGuard.assertSameTenant(objectiveOrgId, userOrganizationId);
 
-    // CYCLE LOCK: Enforce cycle-level governance (stacks with publish lock)
-    const cycleLock = await this.checkCycleLockForKR(id, userId, userOrganizationId);
-    if (cycleLock.locked) {
-      // Superuser cannot bypass cycle lock (read-only)
-      if (userOrganizationId === null) {
-        throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
-      }
-      throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
+    // Governance: Check all locks (cycle lock + publish lock) via OkrGovernanceService
+    if (objective) {
+      await this.okrGovernanceService.checkAllLocksForKeyResult({
+        parentObjective: {
+          id: objective.id,
+          isPublished: objective.isPublished,
+        },
+        actingUser: {
+          id: userId,
+          organizationId: userOrganizationId ?? null,
+        },
+        rbacService: this.rbacService,
+      });
     }
-
-    // PUBLISH LOCK: Enforce edit restriction if parent objective is published
-    if (objective && objective.isPublished === true) {
-      // Superuser cannot edit even if parent is published (read-only)
-      if (userOrganizationId === null) {
-        throw new ForbiddenException('This Key Result belongs to a published OKR and can only be modified by admin roles');
-      }
-      
-      // Check if user has elevated role (TENANT_OWNER or TENANT_ADMIN)
-      const resourceContext = await buildResourceContextFromOKR(this.prisma, objective.id);
-      const canEdit = await this.rbacService.canPerformAction(userId, 'edit_okr', resourceContext);
-      
-      if (!canEdit) {
-        throw new ForbiddenException('This Key Result belongs to a published OKR and can only be modified by admin roles');
-      }
-    }
-    // TODO: Future version will allow "propose change" workflow instead of hard blocking
+    // TODO [phase3-governance]: Governance logic moved to OkrGovernanceService
+    // TODO [propose-change-workflow]: Future version will allow "propose change" workflow instead of hard blocking
 
     // Recalculate progress if values changed
     if (data.currentValue !== undefined) {
@@ -581,15 +479,8 @@ export class KeyResultService {
   }
 
   async delete(id: string, userId: string, userOrganizationId: string | null | undefined) {
-    // TENANT ISOLATION CHECK (P1 placeholder):
-    // Temporary guard until full KR RBAC is implemented.
-    // - Superusers (userOrganizationId === null) are READ-ONLY auditors.
-    // - Users with no organisation (undefined/falsy) cannot mutate.
-    // - Caller org must match parent Objective's organisationId.
-    // TODO [tenant-isolation-P1-KR]: replace with formal canEditKeyResult/canDeleteKeyResult.
-    if (userOrganizationId === null) {
-      throw new ForbiddenException('Superusers are read-only; cannot modify Key Results.');
-    }
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
 
     const krWithParent = await this.prisma.keyResult.findUnique({
       where: { id },
@@ -609,44 +500,32 @@ export class KeyResultService {
       },
     });
 
-    const objective = krWithParent?.objectives[0]?.objective;
+    if (!krWithParent) {
+      throw new NotFoundException(`Key Result with ID ${id} not found`);
+    }
+
+    const objective = krWithParent.objectives[0]?.objective;
     const objectiveOrgId = objective?.organizationId;
 
-    if (
-      !userOrganizationId ||
-      !krWithParent ||
-      !objectiveOrgId ||
-      objectiveOrgId !== userOrganizationId
-    ) {
-      throw new ForbiddenException('You do not have permission to modify this Key Result.');
-    }
+    // Tenant isolation: verify org match
+    OkrTenantGuard.assertSameTenant(objectiveOrgId, userOrganizationId);
 
-    // CYCLE LOCK: Enforce cycle-level governance (stacks with publish lock)
-    const cycleLock = await this.checkCycleLockForKR(id, userId, userOrganizationId);
-    if (cycleLock.locked) {
-      // Superuser cannot bypass cycle lock (read-only)
-      if (userOrganizationId === null) {
-        throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
-      }
-      throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
+    // Governance: Check all locks (cycle lock + publish lock) via OkrGovernanceService
+    if (objective) {
+      await this.okrGovernanceService.checkAllLocksForKeyResult({
+        parentObjective: {
+          id: objective.id,
+          isPublished: objective.isPublished,
+        },
+        actingUser: {
+          id: userId,
+          organizationId: userOrganizationId ?? null,
+        },
+        rbacService: this.rbacService,
+      });
     }
-
-    // PUBLISH LOCK: Enforce delete restriction if parent objective is published
-    if (objective && objective.isPublished === true) {
-      // Superuser cannot delete even if parent is published (read-only)
-      if (userOrganizationId === null) {
-        throw new ForbiddenException('This Key Result belongs to a published OKR and can only be modified by admin roles');
-      }
-      
-      // Check if user has elevated role (TENANT_OWNER or TENANT_ADMIN)
-      const resourceContext = await buildResourceContextFromOKR(this.prisma, objective.id);
-      const canDelete = await this.rbacService.canPerformAction(userId, 'delete_okr', resourceContext);
-      
-      if (!canDelete) {
-        throw new ForbiddenException('This Key Result belongs to a published OKR and can only be modified by admin roles');
-      }
-    }
-    // TODO: Future version will allow "propose change" workflow instead of hard blocking
+    // TODO [phase3-governance]: Governance logic moved to OkrGovernanceService
+    // TODO [propose-change-workflow]: Future version will allow "propose change" workflow instead of hard blocking
 
     try {
       // Check if key result exists
@@ -702,15 +581,8 @@ export class KeyResultService {
   }
 
   async createCheckIn(keyResultId: string, data: { userId: string; value: number; confidence: number; note?: string; blockers?: string }, userOrganizationId: string | null | undefined) {
-    // TENANT ISOLATION CHECK (P1 placeholder):
-    // Temporary guard until full KR RBAC is implemented.
-    // - Superusers (userOrganizationId === null) are READ-ONLY auditors.
-    // - Users with no organisation (undefined/falsy) cannot mutate.
-    // - Caller org must match parent Objective's organisationId.
-    // TODO [tenant-isolation-P1-KR]: replace with formal canEditKeyResult/canDeleteKeyResult.
-    if (userOrganizationId === null) {
-      throw new ForbiddenException('Superusers are read-only; cannot modify Key Results.');
-    }
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
 
     const krWithParent = await this.prisma.keyResult.findUnique({
       where: { id: keyResultId },
@@ -730,46 +602,34 @@ export class KeyResultService {
       },
     });
 
-    const objective = krWithParent?.objectives[0]?.objective;
+    if (!krWithParent) {
+      throw new NotFoundException(`Key Result with ID ${keyResultId} not found`);
+    }
+
+    const objective = krWithParent.objectives[0]?.objective;
     const objectiveOrgId = objective?.organizationId;
 
-    if (
-      !userOrganizationId ||
-      !krWithParent ||
-      !objectiveOrgId ||
-      objectiveOrgId !== userOrganizationId
-    ) {
-      throw new ForbiddenException('You do not have permission to modify this Key Result.');
-    }
+    // Tenant isolation: verify org match
+    OkrTenantGuard.assertSameTenant(objectiveOrgId, userOrganizationId);
 
-    // CYCLE LOCK: Enforce cycle-level governance (stacks with publish lock)
-    const cycleLock = await this.checkCycleLockForKR(keyResultId, data.userId, userOrganizationId);
-    if (cycleLock.locked) {
-      // Superuser cannot bypass cycle lock (read-only)
-      if (userOrganizationId === null) {
-        throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
-      }
-      throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
-    }
-
-    // PUBLISH LOCK: Enforce check-in restriction if parent objective is published
+    // Governance: Check all locks (cycle lock + publish lock) via OkrGovernanceService
     // Rationale: after publish, individual contributors shouldn't be able to quietly change targets
     // or massage the numbers without admin-level visibility
-    if (objective && objective.isPublished === true) {
-      // Superuser cannot create check-ins even if parent is published (read-only)
-      if (userOrganizationId === null) {
-        throw new ForbiddenException('This Key Result belongs to a published OKR and can only be modified by admin roles');
-      }
-      
-      // Check if user has elevated role (TENANT_OWNER or TENANT_ADMIN)
-      const resourceContext = await buildResourceContextFromOKR(this.prisma, objective.id);
-      const canEdit = await this.rbacService.canPerformAction(data.userId, 'edit_okr', resourceContext);
-      
-      if (!canEdit) {
-        throw new ForbiddenException('This Key Result belongs to a published OKR and can only be modified by admin roles');
-      }
+    if (objective) {
+      await this.okrGovernanceService.checkAllLocksForKeyResult({
+        parentObjective: {
+          id: objective.id,
+          isPublished: objective.isPublished,
+        },
+        actingUser: {
+          id: data.userId,
+          organizationId: userOrganizationId ?? null,
+        },
+        rbacService: this.rbacService,
+      });
     }
-    // TODO: Future version will allow "propose change" workflow instead of hard blocking
+    // TODO [phase3-governance]: Governance logic moved to OkrGovernanceService
+    // TODO [propose-change-workflow]: Future version will allow "propose change" workflow instead of hard blocking
 
     // Create check-in
     const checkIn = await this.prisma.checkIn.create({
@@ -826,349 +686,6 @@ export class KeyResultService {
     return checkIn;
   }
 
-  /**
-   * Get recent check-in feed for analytics.
-   * 
-   * Early reporting endpoint - will likely move under /reports/* in a later iteration.
-   * 
-   * Returns last ~10 check-ins across all Key Results in the user's organization.
-   * Tenant isolation MUST apply - only includes check-ins for KRs whose parent objectives
-   * are in the user's organization (or all orgs if superuser).
-   * 
-   * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
-   * @returns Array of recent check-ins with KR title, user info, value, confidence, timestamp
-   */
-  async getRecentCheckInFeed(userOrganizationId: string | null | undefined): Promise<Array<{
-    id: string;
-    krId: string;
-    krTitle: string;
-    userId: string;
-    userName: string | null;
-    value: number;
-    confidence: number;
-    createdAt: Date;
-  }>> {
-    // Tenant isolation: if user has no org, return empty
-    if (userOrganizationId === undefined || userOrganizationId === '') {
-      return [];
-    }
-
-    // Build where clause for objectives (tenant isolation)
-    const objectiveWhere: any = {};
-    if (userOrganizationId !== null) {
-      // Normal user: only their org
-      objectiveWhere.organizationId = userOrganizationId;
-    }
-    // Superuser (null): no filter, see all orgs
-
-    // Find Key Results that belong to Objectives in the user's org
-    // We need to join: CheckIn -> KeyResult -> ObjectiveKeyResult -> Objective
-    const checkIns = await this.prisma.checkIn.findMany({
-      where: {
-        keyResult: {
-          objectives: {
-            some: {
-              objective: objectiveWhere,
-            },
-          },
-        },
-      },
-      include: {
-        keyResult: {
-          select: {
-            id: true,
-            title: true,
-          },
-        },
-        // Join to User table to get user name
-        // Note: Prisma doesn't support direct relation on CheckIn.userId, so we'll fetch separately
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      take: 10,
-    });
-
-    // Fetch user names for all unique user IDs
-    const userIds = [...new Set(checkIns.map(ci => ci.userId))];
-    const users = await this.prisma.user.findMany({
-      where: {
-        id: { in: userIds },
-      },
-      select: {
-        id: true,
-        name: true,
-      },
-    });
-
-    const userMap = new Map(users.map(u => [u.id, u.name]));
-
-    // Transform to response format
-    return checkIns.map(checkIn => ({
-      id: checkIn.id,
-      krId: checkIn.keyResult.id,
-      krTitle: checkIn.keyResult.title,
-      userId: checkIn.userId,
-      userName: userMap.get(checkIn.userId) || null,
-      value: checkIn.value,
-      confidence: checkIn.confidence,
-      createdAt: checkIn.createdAt,
-    }));
-  }
-
-  /**
-   * Get overdue check-ins for Key Results.
-   * 
-   * Returns Key Results that haven't been checked in within their expected cadence period.
-   * Tenant isolation applies: null (superuser) sees all orgs, string sees that org only, undefined returns [].
-   * 
-   * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
-   * @returns Array of overdue Key Results with KR details, owner info, last check-in, and days late
-   */
-  async getOverdueCheckIns(userOrganizationId: string | null | undefined): Promise<Array<{
-    krId: string;
-    krTitle: string;
-    objectiveId: string;
-    objectiveTitle: string;
-    ownerId: string;
-    ownerName: string | null;
-    ownerEmail: string;
-    lastCheckInAt: Date | null;
-    daysLate: number;
-    cadence: string | null;
-  }>> {
-    // Tenant isolation: if user has no org, return empty
-    if (userOrganizationId === undefined || userOrganizationId === '') {
-      return [];
-    }
-
-    // Build where clause for objectives (tenant isolation)
-    const objectiveWhere: any = {};
-    if (userOrganizationId !== null) {
-      // Normal user: only their org
-      objectiveWhere.organizationId = userOrganizationId;
-    }
-    // Superuser (null): no filter, see all orgs
-
-    // TODO: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
-    // Future optimization: use SQL window functions or subqueries to calculate overdue in database.
-
-    // Fetch all Key Results in scope with their objectives and latest check-in
-    const keyResults = await this.prisma.keyResult.findMany({
-      where: {
-        objectives: {
-          some: {
-            objective: objectiveWhere,
-          },
-        },
-        // Only include KRs with a cadence set (or filter out NONE)
-        checkInCadence: {
-          not: null,
-        },
-      },
-      include: {
-        objectives: {
-          include: {
-            objective: {
-              select: {
-                id: true,
-                title: true,
-              },
-            },
-          },
-          take: 1, // Use first parent objective for context
-        },
-        checkIns: {
-          orderBy: {
-            createdAt: 'desc',
-          },
-          take: 1, // Get latest check-in only
-        },
-      },
-    });
-
-    // Fetch owners for all unique owner IDs
-    const ownerIds = [...new Set(keyResults.map(kr => kr.ownerId))];
-    const owners = await this.prisma.user.findMany({
-      where: {
-        id: { in: ownerIds },
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
-    });
-    const ownerMap = new Map(owners.map(u => [u.id, u]));
-
-    const now = new Date();
-    const overdueResults: Array<{
-      krId: string;
-      krTitle: string;
-      objectiveId: string;
-      objectiveTitle: string;
-      ownerId: string;
-      ownerName: string | null;
-      ownerEmail: string;
-      lastCheckInAt: Date | null;
-      daysLate: number;
-      cadence: string | null;
-    }> = [];
-
-    for (const kr of keyResults) {
-      // Skip if cadence is NONE or null
-      if (!kr.checkInCadence || kr.checkInCadence === 'NONE') {
-        continue;
-      }
-
-      // Determine max age based on cadence
-      let maxAgeDays: number;
-      switch (kr.checkInCadence) {
-        case 'WEEKLY':
-          maxAgeDays = 7;
-          break;
-        case 'BIWEEKLY':
-          maxAgeDays = 14;
-          break;
-        case 'MONTHLY':
-          maxAgeDays = 31;
-          break;
-        default:
-          continue; // Skip unknown cadence
-      }
-
-      // Get latest check-in timestamp
-      const lastCheckIn = kr.checkIns[0];
-      const lastCheckInAt = lastCheckIn?.createdAt || null;
-
-      // If no check-in exists, consider it overdue (use KR creation date as baseline)
-      let daysSinceLastCheckIn: number;
-      if (!lastCheckInAt) {
-        // No check-in ever - use KR creation date
-        const daysSinceCreation = Math.floor((now.getTime() - kr.createdAt.getTime()) / (1000 * 60 * 60 * 24));
-        daysSinceLastCheckIn = daysSinceCreation;
-      } else {
-        // Calculate days since last check-in
-        daysSinceLastCheckIn = Math.floor((now.getTime() - lastCheckInAt.getTime()) / (1000 * 60 * 60 * 24));
-      }
-
-      // Check if overdue
-      if (daysSinceLastCheckIn > maxAgeDays) {
-        const objective = kr.objectives[0]?.objective;
-        if (!objective) {
-          continue; // Skip KRs without parent objective
-        }
-
-        const owner = ownerMap.get(kr.ownerId);
-        if (!owner) {
-          continue; // Skip if owner not found
-        }
-
-        overdueResults.push({
-          krId: kr.id,
-          krTitle: kr.title,
-          objectiveId: objective.id,
-          objectiveTitle: objective.title,
-          ownerId: kr.ownerId,
-          ownerName: owner.name,
-          ownerEmail: owner.email,
-          lastCheckInAt,
-          daysLate: daysSinceLastCheckIn - maxAgeDays,
-          cadence: kr.checkInCadence,
-        });
-      }
-    }
-
-    // Sort by days late (most overdue first)
-    overdueResults.sort((a, b) => b.daysLate - a.daysLate);
-
-    return overdueResults;
-  }
-
-  /**
-   * Get Key Results owned by a specific user.
-   * 
-   * Tenant isolation:
-   * - If userOrganizationId === null (superuser): returns all KRs owned by userId across all orgs
-   * - Else if userOrganizationId is a non-empty string: return only KRs owned by userId in that org
-   * - Else (undefined/falsy): return []
-   * 
-   * @param userId - The user ID to filter by (ownerId)
-   * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
-   * @returns Array of Key Results with id, title, status, progress, checkInCadence, most recent check-in timestamp, parent objective id/title
-   */
-  async getUserOwnedKeyResults(userId: string, userOrganizationId: string | null | undefined): Promise<Array<{
-    id: string;
-    title: string;
-    status: string;
-    progress: number;
-    checkInCadence: string | null;
-    lastCheckInAt: Date | null;
-    objectiveId: string | null;
-    objectiveTitle: string | null;
-  }>> {
-    // Tenant isolation: if user has no org, return empty
-    if (userOrganizationId === undefined || userOrganizationId === '') {
-      return [];
-    }
-
-    // Build where clause for objectives (tenant isolation)
-    const objectiveWhere: any = {};
-    if (userOrganizationId !== null) {
-      // Normal user: only their org
-      objectiveWhere.organizationId = userOrganizationId;
-    }
-    // Superuser (null): no filter, see all orgs
-
-    // Find Key Results owned by user that belong to Objectives in scope
-    const keyResults = await this.prisma.keyResult.findMany({
-      where: {
-        ownerId: userId,
-        objectives: {
-          some: {
-            objective: objectiveWhere,
-          },
-        },
-      },
-      include: {
-        objectives: {
-          include: {
-            objective: {
-              select: {
-                id: true,
-                title: true,
-              },
-            },
-          },
-          take: 1, // Use first parent objective for context
-        },
-        checkIns: {
-          orderBy: {
-            createdAt: 'desc',
-          },
-          take: 1, // Get latest check-in only
-        },
-      },
-      orderBy: {
-        updatedAt: 'desc',
-      },
-    });
-
-    // Transform to match return type
-    return keyResults.map((kr) => {
-      const objective = kr.objectives[0]?.objective;
-      const lastCheckIn = kr.checkIns[0];
-
-      return {
-        id: kr.id,
-        title: kr.title,
-        status: kr.status,
-        progress: kr.progress,
-        checkInCadence: kr.checkInCadence,
-        lastCheckInAt: lastCheckIn?.createdAt || null,
-        objectiveId: objective?.id || null,
-        objectiveTitle: objective?.title || null,
-      };
-    });
-  }
+  // NOTE: Reporting / analytics / check-in feed methods moved to OkrReportingService in Phase 4
+  // Removed methods: getRecentCheckInFeed, getOverdueCheckIns, getUserOwnedKeyResults
 }
