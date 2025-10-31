@@ -5,6 +5,7 @@ import { buildResourceContextFromOKR } from '../rbac/helpers';
 import { OkrProgressService } from './okr-progress.service';
 import { ActivityService } from '../activity/activity.service';
 import { OkrTenantGuard } from './tenant-guard';
+import { OkrGovernanceService } from './okr-governance.service';
 
 @Injectable()
 export class ObjectiveService {
@@ -13,6 +14,7 @@ export class ObjectiveService {
     private rbacService: RBACService,
     private okrProgressService: OkrProgressService,
     private activityService: ActivityService,
+    private okrGovernanceService: OkrGovernanceService,
   ) {}
 
   async findAll(_userId: string, workspaceId: string | undefined, userOrganizationId: string | null, pillarId?: string) {
@@ -167,71 +169,7 @@ export class ObjectiveService {
     }
   }
 
-  /**
-   * Check if cycle lock prevents editing/deleting an objective.
-   * Returns true if locked and user cannot bypass, false otherwise.
-   * 
-   * Cycle lock enforcement:
-   * - If objective.cycle exists AND cycle.status === 'LOCKED' or 'ARCHIVED':
-   *   - Superuser (userOrganizationId === null) => reject (read-only)
-   *   - Require TENANT_OWNER or TENANT_ADMIN for that org
-   *   - Else return true (locked)
-   * - DRAFT and ACTIVE cycles allow normal edits
-   */
-  private async checkCycleLock(
-    objectiveId: string,
-    userId: string,
-    userOrganizationId: string | null,
-  ): Promise<{ locked: boolean; cycleName?: string }> {
-    const objective = await this.prisma.objective.findUnique({
-      where: { id: objectiveId },
-      include: {
-        cycle: {
-          select: {
-            id: true,
-            name: true,
-            status: true,
-            organizationId: true,
-          },
-        },
-      },
-    });
-
-    // No cycle assigned, no lock
-    if (!objective?.cycle) {
-      return { locked: false };
-    }
-
-    const cycle = objective.cycle;
-    const cycleStatus = cycle.status;
-
-    // DRAFT and ACTIVE cycles allow normal edits
-    if (cycleStatus === 'DRAFT' || cycleStatus === 'ACTIVE') {
-      return { locked: false };
-    }
-
-    // LOCKED or ARCHIVED cycles require admin override
-    if (cycleStatus === 'LOCKED' || cycleStatus === 'ARCHIVED') {
-      // Superuser is read-only, cannot bypass cycle lock
-      if (userOrganizationId === null) {
-        return { locked: true, cycleName: cycle.name };
-      }
-
-      // Check if user has TENANT_OWNER or TENANT_ADMIN role
-      const resourceContext = await buildResourceContextFromOKR(this.prisma, objectiveId);
-      const canEdit = await this.rbacService.canPerformAction(userId, 'edit_okr', resourceContext);
-      
-      if (!canEdit) {
-        return { locked: true, cycleName: cycle.name };
-      }
-
-      // User has admin role, can bypass cycle lock
-      return { locked: false };
-    }
-
-    // Unknown status, default to not locked
-    return { locked: false };
-  }
+  // Governance moved to OkrGovernanceService (Phase 3)
 
   /**
    * Check if user can delete a specific OKR
@@ -442,34 +380,20 @@ export class ObjectiveService {
       throw new NotFoundException(`Objective with ID ${id} not found`);
     }
 
-    // TODO [phase3-governance]: integrate OkrGovernanceService.checkCycleLockForObjective() here once migrated
-    // CYCLE LOCK: Enforce cycle-level governance (stacks with publish lock)
-    const cycleLock = await this.checkCycleLock(id, userId, userOrganizationId);
-    if (cycleLock.locked) {
-      // Superuser cannot bypass cycle lock (read-only)
-      if (userOrganizationId === null) {
-        throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
-      }
-      throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
-    }
-
-    // TODO [phase3-governance]: integrate OkrGovernanceService.checkPublishLockForObjective() here once migrated
-    // PUBLISH LOCK: Enforce edit restriction for published OKRs
-    if (objective.isPublished === true) {
-      // Superuser cannot edit even published OKRs (read-only)
-      if (userOrganizationId === null) {
-        throw new ForbiddenException('This OKR is published and can only be modified by admin roles');
-      }
-      
-      // Check if user has elevated role (TENANT_OWNER or TENANT_ADMIN)
-      const resourceContext = await buildResourceContextFromOKR(this.prisma, id);
-      const canEdit = await this.rbacService.canPerformAction(userId, 'edit_okr', resourceContext);
-      
-      if (!canEdit) {
-        throw new ForbiddenException('This OKR is published and can only be modified by admin roles');
-      }
-    }
-    // TODO: Future version will allow "propose change" workflow instead of hard blocking
+    // Governance: Check all locks (cycle lock + publish lock) via OkrGovernanceService
+    await this.okrGovernanceService.checkAllLocksForObjective({
+      objective: {
+        id: objective.id,
+        isPublished: objective.isPublished,
+      },
+      actingUser: {
+        id: userId,
+        organizationId: userOrganizationId,
+      },
+      rbacService: this.rbacService,
+    });
+    // TODO [phase3-governance]: Governance logic moved to OkrGovernanceService
+    // TODO [propose-change-workflow]: Future version will allow "propose change" workflow instead of hard blocking
 
     // Additional validation: prevent changing ownership without permission
     if (data.ownerId && data.ownerId !== objective.ownerId) {
@@ -574,34 +498,20 @@ export class ObjectiveService {
         throw new NotFoundException(`Objective with ID ${id} not found`);
       }
 
-      // TODO [phase3-governance]: integrate OkrGovernanceService.checkCycleLockForObjective() here once migrated
-      // CYCLE LOCK: Enforce cycle-level governance (stacks with publish lock)
-      const cycleLock = await this.checkCycleLock(id, userId, userOrganizationId);
-      if (cycleLock.locked) {
-        // Superuser cannot bypass cycle lock (read-only)
-        if (userOrganizationId === null) {
-          throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
-        }
-        throw new ForbiddenException(`This cycle (${cycleLock.cycleName || 'locked'}) is locked and can only be modified by admin roles`);
-      }
-
-      // TODO [phase3-governance]: integrate OkrGovernanceService.checkPublishLockForObjective() here once migrated
-      // PUBLISH LOCK: Enforce delete restriction for published OKRs
-      if (objective.isPublished === true) {
-        // Superuser cannot delete even published OKRs (read-only)
-        if (userOrganizationId === null) {
-          throw new ForbiddenException('This OKR is published and can only be modified by admin roles');
-        }
-        
-        // Check if user has elevated role (TENANT_OWNER or TENANT_ADMIN)
-        const resourceContext = await buildResourceContextFromOKR(this.prisma, id);
-        const canDelete = await this.rbacService.canPerformAction(userId, 'delete_okr', resourceContext);
-        
-        if (!canDelete) {
-          throw new ForbiddenException('This OKR is published and can only be modified by admin roles');
-        }
-      }
-      // TODO: Future version will allow "propose change" workflow instead of hard blocking
+      // Governance: Check all locks (cycle lock + publish lock) via OkrGovernanceService
+      await this.okrGovernanceService.checkAllLocksForObjective({
+        objective: {
+          id: objective.id,
+          isPublished: objective.isPublished,
+        },
+        actingUser: {
+          id: userId,
+          organizationId: userOrganizationId,
+        },
+        rbacService: this.rbacService,
+      });
+      // TODO [phase3-governance]: Governance logic moved to OkrGovernanceService
+      // TODO [propose-change-workflow]: Future version will allow "propose change" workflow instead of hard blocking
 
       // Get parent ID before deletion (for progress roll-up)
       const parentId = objective.parentId;
