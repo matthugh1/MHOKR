@@ -124,6 +124,11 @@ export function ActivityDrawer({
                 <BuildStamp variant="footer" />
               </div>
             </div>
+
+            {/* Footer with BuildStamp */}
+            <div className="border-t border-slate-200">
+              <BuildStamp variant="footer" />
+            </div>
           </motion.div>
         </>
       )}

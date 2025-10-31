@@ -1,41 +1,45 @@
-/**
- * @module BuildStamp
- * 
- * Displays build metadata (version, environment, git SHA) in the UI.
- * Used to identify which build is currently running during demos and debugging.
- * 
- * See DESIGN_SYSTEM.md for design token references.
- */
+'use client'
 
-import { APP_VERSION, GIT_SHA, DEPLOY_ENV } from '@/version'
+import { BUILD_VERSION, BUILD_ENV, BUILD_GIT_SHA } from '@/version'
 
-interface BuildStampProps {
-  variant: 'inline' | 'footer'
+export interface BuildStampProps {
+  variant?: 'inline' | 'footer'
+  className?: string
 }
 
 /**
- * BuildStamp component displays version, environment, and git SHA information.
+ * @module BuildStamp
+ * @see {@link file:///docs/BUILD_INFO.md Build Information Documentation}
  * 
- * Variants:
- * - "inline": Compact badge-style display for headers
- * - "footer": Subtle footer text for drawers/modals
+ * BuildStamp - Displays build provenance (version, env, git sha)
+ * 
+ * Mandatory on any page we demo live. Must appear on:
+ * - Analytics header
+ * - OKRs header
+ * - Builder header
+ * - AI dashboard header
+ * - ActivityDrawer footer
+ * 
+ * @example
+ * ```tsx
+ * <BuildStamp variant="inline" />
+ * ```
  */
-export function BuildStamp({ variant }: BuildStampProps) {
-  if (variant === 'inline') {
+export function BuildStamp({ variant = 'inline', className = '' }: BuildStampProps) {
+  const shortSha = BUILD_GIT_SHA.substring(0, 7)
+  const displayText = `${BUILD_VERSION} • ${BUILD_ENV} • ${shortSha}`
+
+  if (variant === 'footer') {
     return (
-      <div className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-[10px] text-neutral-600 shadow-sm">
-        {APP_VERSION} • {DEPLOY_ENV} • <span className="font-mono">{GIT_SHA}</span>
+      <div className={`text-[10px] text-neutral-400 text-center py-2 ${className}`}>
+        {displayText}
       </div>
     )
   }
 
-  // footer variant
   return (
-    <div className="mt-4 text-[10px] text-neutral-400">
-      Build {APP_VERSION} ({GIT_SHA} · {DEPLOY_ENV})
+    <div className={`text-[10px] text-neutral-500 font-mono ${className}`}>
+      {displayText}
     </div>
   )
 }
-
-// TODO [phase7-hardening]: theme this with tokens if design system evolves
-

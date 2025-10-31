@@ -50,6 +50,7 @@ import { useToast } from '@/hooks/use-toast'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ObjectiveCard } from '@/components/ui/ObjectiveCard'
 import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
+import { BuildStamp } from '@/components/ui/BuildStamp'
 import { PublishLockWarningModal } from './components/PublishLockWarningModal'
 import api from '@/lib/api'
 import { logTokenInfo } from '@/lib/jwt-debug'
@@ -416,35 +417,34 @@ export default function OKRsPage() {
       <DashboardLayout>
         <div className="p-8">
           <div className="mb-8">
-            <div className="flex items-start justify-between flex-wrap gap-4">
-              <div className="flex-1">
-                <PageHeader
-                  title="Objectives & Key Results"
-                  subtitle="Aligned execution, live progress"
-                  badges={[
-                    ...(activeCycles.length > 0
-                      ? [
-                          {
-                            label: `Active Cycle: ${activeCycles[0].name}`,
-                            tone: 'neutral' as const,
-                          },
-                        ]
-                      : []),
-                    ...(activeCycles.some((c) => c.status === 'LOCKED')
-                      ? [{ label: 'Locked', tone: 'warning' as const }]
-                      : []),
-                    ...(okrs.filter((o) => o.status === 'AT_RISK').length > 0
-                      ? [
-                          {
-                            label: `${okrs.filter((o) => o.status === 'AT_RISK').length} At Risk`,
-                            tone: 'warning' as const,
-                          },
-                        ]
-                      : []),
+            <div className="flex items-start justify-between gap-4">
+              <PageHeader
+                title="Objectives & Key Results"
+                subtitle="Aligned execution, live progress"
+                badges={[
+                  ...(activeCycles.length > 0
+                    ? [
+                        {
+                          label: `Active Cycle: ${activeCycles[0].name}`,
+                          tone: 'neutral' as const,
+                        },
+                      ]
+                    : []),
+                  ...(activeCycles.some((c) => c.status === 'LOCKED')
+                    ? [{ label: 'Locked', tone: 'warning' as const }]
+                    : []),
+                  ...(okrs.filter((o) => o.status === 'AT_RISK').length > 0
+                    ? [
+                        {
+                          label: `${okrs.filter((o) => o.status === 'AT_RISK').length} At Risk`,
+                          tone: 'warning' as const,
+                        },
+                      ]
+                    : []),
                   ]}
-                />
-              </div>
+              />
               <div className="flex items-center gap-4">
+                <BuildStamp variant="inline" />
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
                   New OKR

@@ -53,6 +53,8 @@ import {
   doesOKRMatchPeriod,
   type PeriodFilterOption
 } from '@/lib/date-utils'
+import { SectionHeader } from '@/components/ui/SectionHeader'
+import { BuildStamp } from '@/components/ui/BuildStamp'
 
 // Node components are now imported from EnhancedNodes.tsx
 
@@ -94,6 +96,7 @@ export default function BuilderPage() {
     loading: workspaceLoading 
   } = useWorkspace()
   const { user } = useAuth()
+  const tenantPermissions = useTenantPermissions()
 
   const getOKRLevelDisplay = () => {
     switch (currentOKRLevel) {
@@ -782,33 +785,34 @@ export default function BuilderPage() {
       <DashboardLayout>
         <div className="h-full flex flex-col">
           <div className="p-6 border-b bg-white">
-            {/* TODO[phase6-polish]: align header spacing with analytics/okrs headers if design tweaks */}
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex flex-col">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Visual OKR Builder</h1>
-                    <div className="flex items-center gap-3 mt-2">
-                      <p className="text-slate-600 text-sm">
-                        Drag from the circles on nodes to connect them
-                      </p>
-                      {!workspaceLoading && currentWorkspace && currentOrganization && 
-                       currentWorkspace.organizationId === currentOrganization.id && (
-                        <div className="flex items-center gap-2 text-xs bg-slate-100 px-3 py-1 rounded-full">
-                          <Building2 className="h-3 w-3 text-slate-600" />
-                          <span className="text-slate-700">{currentWorkspace.name}</span>
-                          {currentTeam && currentTeam.workspaceId === currentWorkspace.id && (
-                            <>
-                              <span className="text-slate-400">•</span>
-                              <Users className="h-3 w-3 text-slate-600" />
-                              <span className="text-slate-700">{currentTeam.name}</span>
-                            </>
-                          )}
-                        </div>
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <SectionHeader title="Builder" subtitle="Plan or adjust your strategic map" />
+              <BuildStamp variant="inline" />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">Visual OKR Builder</h1>
+                <div className="flex items-center gap-3 mt-2">
+                  <p className="text-slate-600 text-sm">
+                    Drag from the circles on nodes to connect them
+                  </p>
+                  {!workspaceLoading && currentWorkspace && currentOrganization && 
+                   currentWorkspace.organizationId === currentOrganization.id && (
+                    <div className="flex items-center gap-2 text-xs bg-slate-100 px-3 py-1 rounded-full">
+                      <Building2 className="h-3 w-3 text-slate-600" />
+                      <span className="text-slate-700">{currentWorkspace.name}</span>
+                      {currentTeam && currentTeam.workspaceId === currentWorkspace.id && (
+                        <>
+                          <span className="text-slate-400">•</span>
+                          <Users className="h-3 w-3 text-slate-600" />
+                          <span className="text-slate-700">{currentTeam.name}</span>
+                        </>
                       )}
                     </div>
-                  </div>
-                  <div className="flex gap-2 items-center">
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2 items-center">
                 <select
                   value={periodFilter}
                   onChange={(e) => setPeriodFilter(e.target.value)}
@@ -847,8 +851,6 @@ export default function BuilderPage() {
                     Saved
                   </div>
                 )}
-                  </div>
-                </div>
               </div>
             </div>
           </div>
