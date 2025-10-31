@@ -36,7 +36,6 @@ import { EditPanel } from './components/EditPanel'
 import { EditFormTabs } from './components/EditFormTabs'
 import { ObjectiveNode, KeyResultNode, InitiativeNode } from './components/EnhancedNodes'
 import { useAutoSave } from './hooks/useAutoSave'
-import { BuildStamp } from '@/components/ui/BuildStamp'
 import { 
   calculateEndDate, 
   formatDateForInput, 
@@ -850,9 +849,6 @@ export default function BuilderPage() {
                 )}
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2 text-right">
-                <BuildStamp variant="inline" />
               </div>
             </div>
           </div>

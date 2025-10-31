@@ -7,6 +7,7 @@ import { useWorkspace } from '@/contexts/workspace.context'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { WorkspaceSelector } from '@/components/workspace-selector'
+import { BuildStamp } from '@/components/ui/BuildStamp'
 import { cn } from '@/lib/utils'
 import { 
   LayoutDashboard, 
@@ -140,6 +141,11 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
             <LogOut className="h-4 w-4 mr-2" />
             Logout
           </Button>
+        </div>
+        
+        {/* TODO[phase6-polish]: unify BuildStamp footer placement across all dashboard layouts */}
+        <div className="mt-auto p-3 border-t border-neutral-100">
+          <BuildStamp variant="footer" />
         </div>
       </aside>
 

@@ -6,7 +6,6 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { StatCard } from '@/components/ui/StatCard'
 import { ActivityItemCard } from '@/components/ui/ActivityItemCard'
-import { BuildStamp } from '@/components/ui/BuildStamp'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default function AIAssistantPage() {
@@ -54,7 +53,6 @@ export default function AIAssistantPage() {
                   ]}
                 />
               </div>
-              <BuildStamp variant="inline" />
             </div>
           </div>
 

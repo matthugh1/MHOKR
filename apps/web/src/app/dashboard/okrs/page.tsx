@@ -50,7 +50,6 @@ import { useToast } from '@/hooks/use-toast'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { ObjectiveCard } from '@/components/ui/ObjectiveCard'
 import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
-import { BuildStamp } from '@/components/ui/BuildStamp'
 import { PublishLockWarningModal } from './components/PublishLockWarningModal'
 import api from '@/lib/api'
 import { logTokenInfo } from '@/lib/jwt-debug'
@@ -446,7 +445,6 @@ export default function OKRsPage() {
                 />
               </div>
               <div className="flex items-center gap-4">
-                <BuildStamp variant="inline" />
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
                   New OKR
