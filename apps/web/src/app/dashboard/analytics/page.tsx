@@ -139,6 +139,7 @@ export default function AnalyticsPage() {
 
   const onTrackCount = summary?.byStatus?.['ON_TRACK'] || 0
   const atRiskCount = summary?.byStatus?.['AT_RISK'] || 0
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const offTrackCount = summary?.byStatus?.['OFF_TRACK'] || 0
   const completedCount = summary?.byStatus?.['COMPLETED'] || 0
   const totalObjectives = summary?.totalObjectives || 0

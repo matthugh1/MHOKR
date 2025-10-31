@@ -70,6 +70,7 @@ For questions or issues, refer to:
 ## Pre-merge validation (Phase 13)
 
 - [ ] Run `node scripts/pre-merge-audit.js`
+- [ ] Ensure GitHub Action 'premerge-check' passes green on PR release/main-merge-prep → main
 - [ ] Confirm analytics dashboard (`/dashboard/analytics`) loads with:
   - KPI StatCards
   - SectionHeader blocks
