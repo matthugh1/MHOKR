@@ -13,6 +13,13 @@ module.exports = {
     node: true,
     es2022: true,
   },
+  ignorePatterns: [
+    '**/dist/**',
+    '**/build/**',
+    '**/.next/**',
+    '**/node_modules/**',
+    '**/*.d.ts',
+  ],
   rules: {
     '@typescript-eslint/no-explicit-any': 'warn',
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
