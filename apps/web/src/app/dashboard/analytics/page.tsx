@@ -204,7 +204,7 @@ export default function AnalyticsPage() {
       <DashboardLayout>
         <div className="p-8">
           <div className="mb-8">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start justify-between flex-wrap gap-4">
               <div className="flex-1">
                 <PageHeader
                   title={

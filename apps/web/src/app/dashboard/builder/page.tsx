@@ -22,6 +22,7 @@ import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
+import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -64,8 +65,9 @@ const nodeTypes = {
 export default function BuilderPage() {
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChangeBase] = useEdgesState([])
-  const [editingNode, setEditingNode] = useState<{ id: string; data: any } | null>(null)
-  const [editingFormData, setEditingFormData] = useState<any>(null)
+  // TODO [phase7-hardening]: tighten typing - replace Record<string, unknown> with proper node types
+  const [editingNode, setEditingNode] = useState<{ id: string; data: Record<string, unknown> } | null>(null)
+  const [editingFormData, setEditingFormData] = useState<Record<string, unknown> | null>(null)
   const [showNodeCreator, setShowNodeCreator] = useState(false)
   const [loading, setLoading] = useState(false)
   const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved'>('idle')
@@ -780,30 +782,33 @@ export default function BuilderPage() {
       <DashboardLayout>
         <div className="h-full flex flex-col">
           <div className="p-6 border-b bg-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-slate-900">Visual OKR Builder</h1>
-                <div className="flex items-center gap-3 mt-2">
-                  <p className="text-slate-600 text-sm">
-                    Drag from the circles on nodes to connect them
-                  </p>
-                  {!workspaceLoading && currentWorkspace && currentOrganization && 
-                   currentWorkspace.organizationId === currentOrganization.id && (
-                    <div className="flex items-center gap-2 text-xs bg-slate-100 px-3 py-1 rounded-full">
-                      <Building2 className="h-3 w-3 text-slate-600" />
-                      <span className="text-slate-700">{currentWorkspace.name}</span>
-                      {currentTeam && currentTeam.workspaceId === currentWorkspace.id && (
-                        <>
-                          <span className="text-slate-400">•</span>
-                          <Users className="h-3 w-3 text-slate-600" />
-                          <span className="text-slate-700">{currentTeam.name}</span>
-                        </>
+            {/* TODO[phase6-polish]: align header spacing with analytics/okrs headers if design tweaks */}
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-2xl font-bold text-slate-900">Visual OKR Builder</h1>
+                    <div className="flex items-center gap-3 mt-2">
+                      <p className="text-slate-600 text-sm">
+                        Drag from the circles on nodes to connect them
+                      </p>
+                      {!workspaceLoading && currentWorkspace && currentOrganization && 
+                       currentWorkspace.organizationId === currentOrganization.id && (
+                        <div className="flex items-center gap-2 text-xs bg-slate-100 px-3 py-1 rounded-full">
+                          <Building2 className="h-3 w-3 text-slate-600" />
+                          <span className="text-slate-700">{currentWorkspace.name}</span>
+                          {currentTeam && currentTeam.workspaceId === currentWorkspace.id && (
+                            <>
+                              <span className="text-slate-400">•</span>
+                              <Users className="h-3 w-3 text-slate-600" />
+                              <span className="text-slate-700">{currentTeam.name}</span>
+                            </>
+                          )}
+                        </div>
                       )}
                     </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-2 items-center">
+                  </div>
+                  <div className="flex gap-2 items-center">
                 <select
                   value={periodFilter}
                   onChange={(e) => setPeriodFilter(e.target.value)}
@@ -842,6 +847,8 @@ export default function BuilderPage() {
                     Saved
                   </div>
                 )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -981,6 +988,86 @@ export default function BuilderPage() {
           onDelete={handleDeleteNode}
           formData={editingFormData}
           setFormData={setEditingFormData}
+          canEdit={editingNode && editingFormData ? (() => {
+            const nodeType = editingNode.id.startsWith('obj') ? 'obj' : editingNode.id.startsWith('kr') ? 'kr' : 'init'
+            if (nodeType === 'obj') {
+              return tenantPermissions.canEditObjective({
+                id: editingFormData.okrId as string || '',
+                ownerId: editingFormData.ownerId as string || '',
+                organizationId: editingFormData.organizationId as string | null || null,
+                workspaceId: editingFormData.workspaceId as string | null || null,
+                teamId: editingFormData.teamId as string | null || null,
+                isPublished: editingFormData.isPublished as boolean || false,
+                cycle: editingFormData.cycle as { id: string; status: string } | null || null,
+                cycleStatus: editingFormData.cycleStatus as string | null || null,
+              })
+            } else if (nodeType === 'kr') {
+              return tenantPermissions.canEditKeyResult({
+                id: editingFormData.okrId as string || '',
+                ownerId: editingFormData.ownerId as string || '',
+                organizationId: editingFormData.organizationId as string | null || null,
+                workspaceId: editingFormData.workspaceId as string | null || null,
+                teamId: editingFormData.teamId as string | null || null,
+                parentObjective: editingFormData.parentObjective as Record<string, unknown> || null,
+              })
+            }
+            return true // Initiatives don't have lock logic yet
+          })() : true}
+          canDelete={editingNode && editingFormData ? (() => {
+            const nodeType = editingNode.id.startsWith('obj') ? 'obj' : editingNode.id.startsWith('kr') ? 'kr' : 'init'
+            if (nodeType === 'obj') {
+              return tenantPermissions.canDeleteObjective({
+                id: editingFormData.okrId as string || '',
+                ownerId: editingFormData.ownerId as string || '',
+                organizationId: editingFormData.organizationId as string | null || null,
+                workspaceId: editingFormData.workspaceId as string | null || null,
+                teamId: editingFormData.teamId as string | null || null,
+                isPublished: editingFormData.isPublished as boolean || false,
+                cycle: editingFormData.cycle as { id: string; status: string } | null || null,
+                cycleStatus: editingFormData.cycleStatus as string | null || null,
+              })
+            } else if (nodeType === 'kr') {
+              // Key results inherit delete permission from parent objective
+              return tenantPermissions.canDeleteObjective({
+                id: (editingFormData.parentObjective as Record<string, unknown>)?.id as string || '',
+                ownerId: editingFormData.ownerId as string || '',
+                organizationId: editingFormData.organizationId as string | null || null,
+                workspaceId: editingFormData.workspaceId as string | null || null,
+                teamId: editingFormData.teamId as string | null || null,
+                isPublished: (editingFormData.parentObjective as Record<string, unknown>)?.isPublished as boolean || false,
+                cycle: (editingFormData.parentObjective as Record<string, unknown>)?.cycle as { id: string; status: string } | null || null,
+                cycleStatus: (editingFormData.parentObjective as Record<string, unknown>)?.cycleStatus as string | null || null,
+              })
+            }
+            return true // Initiatives don't have lock logic yet
+          })() : true}
+          lockMessage={editingNode && editingFormData ? (() => {
+            const nodeType = editingNode.id.startsWith('obj') ? 'obj' : editingNode.id.startsWith('kr') ? 'kr' : 'init'
+            if (nodeType === 'obj') {
+              const lockInfo = tenantPermissions.getLockInfoForObjective({
+                id: editingFormData.okrId as string || '',
+                ownerId: editingFormData.ownerId as string || '',
+                organizationId: editingFormData.organizationId as string | null || null,
+                workspaceId: editingFormData.workspaceId as string | null || null,
+                teamId: editingFormData.teamId as string | null || null,
+                isPublished: editingFormData.isPublished as boolean || false,
+                cycle: editingFormData.cycle as { id: string; status: string } | null || null,
+                cycleStatus: editingFormData.cycleStatus as string | null || null,
+              })
+              return lockInfo.isLocked ? lockInfo.message : undefined
+            } else if (nodeType === 'kr') {
+              const lockInfo = tenantPermissions.getLockInfoForKeyResult({
+                id: editingFormData.okrId as string || '',
+                ownerId: editingFormData.ownerId as string || '',
+                organizationId: editingFormData.organizationId as string | null || null,
+                workspaceId: editingFormData.workspaceId as string | null || null,
+                teamId: editingFormData.teamId as string | null || null,
+                parentObjective: editingFormData.parentObjective as Record<string, unknown> || null,
+              })
+              return lockInfo.isLocked ? lockInfo.message : undefined
+            }
+            return undefined
+          })() : undefined}
         >
           {editingFormData && editingNode && (
             <EditFormTabs

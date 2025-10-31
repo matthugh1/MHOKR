@@ -54,7 +54,14 @@ apps/web/src/
 4. **Builder (`/dashboard/builder`)**
    - Visual builder for creating/editing OKRs
    - ReactFlow-based graph visualization
-   - Form-based editing
+   - Form-based editing via slide-out EditPanel
+   - **Governed surface:** Consumes `useTenantPermissions()` just like OKRs page
+   - Respects publish lock and cycle lock (form fields disabled, lock messaging shown inline)
+   - Visually standardized with design system tokens:
+     - Main edit panel uses `rounded-xl border border-neutral-200 bg-white p-4 shadow-sm`
+     - SectionHeader components for form sections
+     - Inline lock callout with neutral styling (`rounded-lg border border-neutral-100 bg-neutral-50 p-3 text-sm text-neutral-600 shadow-sm`)
+   - Part of the 'governed surfaces' group alongside Analytics and OKRs
 
 5. **Activity Drawer** (overlay)
    - Shows activity timeline for selected objective/key result
@@ -212,6 +219,37 @@ All components use Phase 9 design tokens (see `DESIGN_SYSTEM.md`).
 - **React Context:** Auth and workspace state
 - **React Query:** (Optional) For API caching (not currently used extensively)
 - **Local State:** Component-level state via `useState`/`useEffect`
+
+## Build Provenance
+
+BuildStamp is mandatory on any page we demo live. It displays build version, environment, and git SHA to ensure stakeholders always know which build they're looking at.
+
+### Where BuildStamp MUST Appear
+
+BuildStamp must be rendered on the following demo surfaces:
+
+1. **Analytics header** (`apps/web/src/app/dashboard/analytics/page.tsx`) - Inline variant, top-right
+2. **OKRs header** (`apps/web/src/app/dashboard/okrs/page.tsx`) - Inline variant, top-right
+3. **Builder header** (`apps/web/src/app/dashboard/builder/page.tsx`) - Inline variant, top-right with SectionHeader
+4. **AI dashboard header** (`apps/web/src/app/dashboard/ai/page.tsx`) - Inline variant, top-right
+5. **ActivityDrawer footer** (`apps/web/src/components/ui/ActivityDrawer.tsx`) - Footer variant, centered at bottom
+
+### Usage
+
+```tsx
+import { BuildStamp } from '@/components/ui/BuildStamp'
+
+// Inline variant (for headers)
+<div className="flex items-start justify-between gap-4">
+  <SectionHeader title="Page Title" subtitle="Description" />
+  <BuildStamp variant="inline" />
+</div>
+
+// Footer variant (for ActivityDrawer)
+<BuildStamp variant="footer" />
+```
+
+**Do not remove BuildStamp or hide it on demo branches unless explicitly approved.** See `docs/BUILD_INFO.md` for details on updating version/env/SHA.
 
 ## TODO: Future Improvements
 

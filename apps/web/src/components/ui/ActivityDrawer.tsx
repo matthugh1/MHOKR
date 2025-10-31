@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import { Button } from './button'
 import { ActivityItemCard } from './ActivityItemCard'
+import { BuildStamp } from './BuildStamp'
 import { cn } from '@/lib/utils'
 
 export interface ActivityItem {
@@ -117,6 +118,11 @@ export function ActivityDrawer({
                   </button>
                 </div>
               )}
+              
+              {/* Build stamp footer */}
+              <div className="pt-4 border-t border-neutral-200">
+                <BuildStamp variant="footer" />
+              </div>
             </div>
           </motion.div>
         </>

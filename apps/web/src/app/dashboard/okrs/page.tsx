@@ -416,36 +416,40 @@ export default function OKRsPage() {
       <DashboardLayout>
         <div className="p-8">
           <div className="mb-8">
-            <div className="flex items-center justify-between">
-              <PageHeader
-                title="Objectives & Key Results"
-                subtitle="Aligned execution, live progress"
-                badges={[
-                  ...(activeCycles.length > 0
-                    ? [
-                        {
-                          label: `Active Cycle: ${activeCycles[0].name}`,
-                          tone: 'neutral' as const,
-                        },
-                      ]
-                    : []),
-                  ...(activeCycles.some((c) => c.status === 'LOCKED')
-                    ? [{ label: 'Locked', tone: 'warning' as const }]
-                    : []),
-                  ...(okrs.filter((o) => o.status === 'AT_RISK').length > 0
-                    ? [
-                        {
-                          label: `${okrs.filter((o) => o.status === 'AT_RISK').length} At Risk`,
-                          tone: 'warning' as const,
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-              <Button className="ml-4">
-                <Plus className="h-4 w-4 mr-2" />
-                New OKR
-              </Button>
+            <div className="flex items-start justify-between flex-wrap gap-4">
+              <div className="flex-1">
+                <PageHeader
+                  title="Objectives & Key Results"
+                  subtitle="Aligned execution, live progress"
+                  badges={[
+                    ...(activeCycles.length > 0
+                      ? [
+                          {
+                            label: `Active Cycle: ${activeCycles[0].name}`,
+                            tone: 'neutral' as const,
+                          },
+                        ]
+                      : []),
+                    ...(activeCycles.some((c) => c.status === 'LOCKED')
+                      ? [{ label: 'Locked', tone: 'warning' as const }]
+                      : []),
+                    ...(okrs.filter((o) => o.status === 'AT_RISK').length > 0
+                      ? [
+                          {
+                            label: `${okrs.filter((o) => o.status === 'AT_RISK').length} At Risk`,
+                            tone: 'warning' as const,
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New OKR
+                </Button>
+              </div>
             </div>
           </div>
 
