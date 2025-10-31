@@ -23,6 +23,16 @@ interface ObjectiveCardProps {
 }
 
 
+/**
+ * @module ObjectiveCard
+ * @see {@link https://github.com/matthugh1/MHOKR/blob/main/docs/architecture/DESIGN_SYSTEM.md Design System Documentation}
+ * 
+ * ObjectiveCard - Full objective card component with progress, status, and actions
+ * 
+ * Displays objective title, owner, status badge, progress bar, and action buttons.
+ * Uses Phase 9 design tokens and integrates with StatusBadge component.
+ */
+
 const formatNextCheckIn = (dateString?: string) => {
   if (!dateString) return null
   const date = new Date(dateString)

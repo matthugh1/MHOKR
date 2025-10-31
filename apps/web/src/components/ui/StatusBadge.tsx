@@ -46,6 +46,9 @@ const getStatusBadgeConfig = (status: ObjectiveStatus) => {
 }
 
 /**
+ * @module StatusBadge
+ * @see {@link https://github.com/matthugh1/MHOKR/blob/main/docs/architecture/DESIGN_SYSTEM.md Design System Documentation}
+ * 
  * StatusBadge - Standardized status indicator for objectives and key results
  * 
  * Displays status with appropriate color coding and animation (for AT_RISK).

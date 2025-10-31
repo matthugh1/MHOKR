@@ -9,6 +9,9 @@ export interface StatCardProps {
 }
 
 /**
+ * @module StatCard
+ * @see {@link https://github.com/matthugh1/MHOKR/blob/main/docs/architecture/DESIGN_SYSTEM.md Design System Documentation}
+ * 
  * StatCard - A consistent metric display card for dashboard KPIs
  * 
  * Uses Phase 9 design tokens: rounded-xl, border-neutral-200, bg-white, shadow-sm
