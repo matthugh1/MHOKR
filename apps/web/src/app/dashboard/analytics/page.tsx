@@ -6,7 +6,6 @@ import { DashboardLayout } from '@/components/dashboard-layout'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { StatCard } from '@/components/ui/StatCard'
 import { SectionHeader } from '@/components/ui/SectionHeader'
-import { BuildStamp } from '@/components/ui/BuildStamp'
 import { Download } from 'lucide-react'
 import api from '@/lib/api'
 import { useWorkspace } from '@/contexts/workspace.context'
@@ -76,7 +75,7 @@ export default function AnalyticsPage() {
 
       try {
         setLoading(true)
-        // TODO [phase6-polish]: replace with proper skeleton loaders
+        // TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
         const [summaryRes, feedRes, overdueRes, coverageRes, cyclesRes] = await Promise.allSettled([
           api.get('/reports/analytics/summary').catch(() => ({ data: { totalObjectives: 0, byStatus: {}, atRiskRatio: 0 } })),
           api.get('/reports/analytics/feed').catch(() => ({ data: [] })),
@@ -165,6 +164,7 @@ export default function AnalyticsPage() {
   const handleExportCSV = async () => {
     // This endpoint is tenant-scoped and already RBAC-protected server-side
     // TODO [phase7-hardening]: align this with backend export permissions dynamically per-tenant, not just role check.
+    // NOTE: This surface is admin-only and is not exposed to external design partners.
     try {
       setExporting(true)
       setExportError(null)
@@ -194,7 +194,7 @@ export default function AnalyticsPage() {
         }
       }
       setExportError(errorMessage)
-      // TODO [phase6-polish]: turn this into toast
+      // TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
     } finally {
       setExporting(false)
     }
@@ -236,12 +236,12 @@ export default function AnalyticsPage() {
                   ]}
                 />
               </div>
-              <BuildStamp variant="inline" />
             </div>
           </div>
 
           {/* CSV Export Button */}
           {/* TODO [phase7-hardening]: canExportData() must stay aligned with backend RBACService.canExportData() */}
+          {/* NOTE: This surface is admin-only and is not exposed to external design partners. */}
           {canExportData() && (
             <div className="flex justify-end mb-4">
               <div className="flex flex-col items-end">
@@ -256,7 +256,7 @@ export default function AnalyticsPage() {
                 {exportError && (
                   <div className="text-[11px] text-red-500 mt-1">
                     {exportError}
-                    {/* TODO [phase6-polish]: turn into toast */}
+                    {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
                   </div>
                 )}
               </div>
@@ -303,7 +303,7 @@ export default function AnalyticsPage() {
                   {pillarCoverage.length === 0 ? (
                     <div className="text-sm text-neutral-500 text-center py-6">
                       No strategic pillars defined or no active cycle
-                      {/* TODO [phase6-polish]: add subtle icon/illustration */}
+                      {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -345,7 +345,7 @@ export default function AnalyticsPage() {
                   {overdue.length === 0 ? (
                     <div className="text-sm text-neutral-500 text-center py-6">
                       No overdue check-ins
-                      {/* TODO [phase6-polish]: add subtle icon/illustration */}
+                      {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -390,7 +390,7 @@ export default function AnalyticsPage() {
                   {feed.length === 0 ? (
                     <div className="text-sm text-neutral-500 text-center py-6">
                       No recent activity.
-                      {/* TODO [phase6-polish]: add subtle icon/illustration */}
+                      {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
                     </div>
                   ) : (
                     <div className="space-y-4">

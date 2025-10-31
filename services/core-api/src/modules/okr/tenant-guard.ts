@@ -12,26 +12,6 @@
  * - userOrganizationId === null       → superuser (can READ all organisations; cannot write)
  * - userOrganizationId === string     → normal user (can read/write only within that organisation)
  * - userOrganizationId === undefined  → user with no organisation (cannot read or write tenant data)
- * 
- * TODO [phase7-hardening]: Extract tenant isolation logic from:
- * - objective.service.ts:findAll() lines 17-32
- * - objective.service.ts:canEdit() lines 147-175
- * - objective.service.ts:canDelete() lines 247-275
- * - objective.service.ts:getOrgSummary() lines 663-682
- * - objective.service.ts:exportObjectivesCSV() lines 730-761
- * - objective.service.ts:getPillarsForOrg() lines 911-928
- * - objective.service.ts:getActiveCycleForOrg() lines 977-997
- * - objective.service.ts:getPillarCoverageForActiveCycle() lines 1033-1041
- * - objective.service.ts:getUserOwnedObjectives() lines 1126-1140
- * - key-result.service.ts:canEdit() lines 119-179
- * - key-result.service.ts:canDelete() lines 193-253
- * - key-result.service.ts:create() lines 345-379
- * - key-result.service.ts:update() lines 459-498
- * - key-result.service.ts:delete() lines 583-622
- * - key-result.service.ts:createCheckIn() lines 704-743
- * - key-result.service.ts:getRecentCheckInFeed() lines 841-854
- * - key-result.service.ts:getOverdueCheckIns() lines 928-951
- * - key-result.service.ts:getUserOwnedKeyResults() lines 1100-1121
  */
 
 import { ForbiddenException } from '@nestjs/common';

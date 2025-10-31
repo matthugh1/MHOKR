@@ -103,9 +103,13 @@ function shouldIncludeDirectory(dirPath) {
 }
 
 function classifyMatch(lineText) {
-  // Check if it's a NOTE
+  // Check if it's a NOTE-only comment (without TODO/FIXME/HACK)
   const trimmed = lineText.trim();
-  if (trimmed.startsWith('NOTE:') || trimmed.startsWith('// NOTE:') || trimmed.startsWith('/* NOTE:') || trimmed.startsWith('* NOTE:')) {
+  const hasNoteMarker = trimmed.startsWith('NOTE:') || trimmed.startsWith('// NOTE:') || trimmed.startsWith('/* NOTE:') || trimmed.startsWith('* NOTE:') || trimmed.includes('{/* NOTE:');
+  const hasTodoMarker = lineText.includes('TODO') || lineText.includes('FIXME') || lineText.includes('HACK');
+  
+  // If it's a NOTE without TODO/FIXME/HACK, classify as note (these are allowed)
+  if (hasNoteMarker && !hasTodoMarker) {
     return 'note';
   }
 
@@ -116,7 +120,7 @@ function classifyMatch(lineText) {
     }
   }
 
-  // Otherwise it's unapproved
+  // Otherwise it's unapproved (TODO/FIXME/HACK without allowed tag)
   return 'unapproved';
 }
 
@@ -335,6 +339,19 @@ const markdownReport = generateMarkdownReport();
 fs.writeFileSync(reportPath, markdownReport, 'utf8');
 
 console.error(`\n📄 Report written to: ${reportPath}`);
+
+// Print summary table by tag
+const phase6PolishCount = matches.allowedPhaseTag.filter(m => m.lineText.includes('[phase6-polish]')).length;
+const phase7HardeningCount = matches.allowedPhaseTag.filter(m => m.lineText.includes('[phase7-hardening]')).length;
+const phase7PerformanceCount = matches.allowedPhaseTag.filter(m => m.lineText.includes('[phase7-performance]')).length;
+
+console.error(`\n📊 Summary by Tag:`);
+console.error(`   [phase6-polish]:      ${phase6PolishCount}`);
+console.error(`   [phase7-hardening]:   ${phase7HardeningCount}`);
+console.error(`   [phase7-performance]: ${phase7PerformanceCount}`);
+console.error(`   NOTE comments:        ${matches.note.length}`);
+console.error(`   ─────────────────────────`);
+console.error(`   Total:                ${totalFound}`);
 
 // Exit with error code if unapproved TODOs found
 if (summary.unapprovedCount > 0) {

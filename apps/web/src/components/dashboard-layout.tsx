@@ -143,7 +143,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           </Button>
         </div>
         
-        {/* TODO[phase6-polish]: unify BuildStamp footer placement across all dashboard layouts */}
+        {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
         <div className="mt-auto p-3 border-t border-neutral-100">
           <BuildStamp variant="footer" />
         </div>

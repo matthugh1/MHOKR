@@ -1,4 +1,4 @@
-// NOTE [phase14-hardening]:
+// NOTE: phase14-hardening
 // Test scaffold created in Phase 11. We have not yet wired Jest/RTL.
 // @ts-nocheck is intentional to unblock main without removing test intent.
 

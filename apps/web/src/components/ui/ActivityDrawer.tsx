@@ -72,7 +72,7 @@ export function ActivityDrawer({
                   <div className="text-[11px] text-neutral-500">
                     Recent updates
                   </div>
-                  {/* TODO [phase6-polish]: include avatar / icon for objective vs key result */}
+                  {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
                 </div>
                 <Button
                   variant="ghost"
@@ -90,7 +90,7 @@ export function ActivityDrawer({
               {(!safeItems || safeItems.length === 0) ? (
                 <div className="rounded-lg border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500 shadow-sm">
                   No recent activity.
-                  {/* TODO [phase6-polish]: add subtle illustration */}
+                  {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -123,11 +123,6 @@ export function ActivityDrawer({
               <div className="pt-4 border-t border-neutral-200">
                 <BuildStamp variant="footer" />
               </div>
-            </div>
-
-            {/* Footer with BuildStamp */}
-            <div className="border-t border-slate-200">
-              <BuildStamp variant="footer" />
             </div>
           </motion.div>
         </>

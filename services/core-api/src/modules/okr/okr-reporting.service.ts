@@ -507,7 +507,7 @@ export class OkrReportingService {
    * - Else (undefined/falsy): return []
    * 
    * TODO [phase7-hardening]: Later we should handle multiple active cycles, but for now assume at most one active cycle per org.
-   * TODO [phase6-polish]: Frontend - highlight strategic gaps (pillars with zero objectives).
+   * TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
    * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
    * @returns Array of pillars with id, name, and objectiveCountInActiveCycle
