@@ -100,7 +100,7 @@ export function useTenantPermissions(): PermissionChecks {
   const canViewObjective = useMemo(() => {
     return (objective: Objective): boolean => {
       // For now, if it's rendered, you can view it (matches current behavior)
-      // TODO [phase6-frontend-hardening]: align with backend visibility rules once fully exposed
+      // TODO [phase7-hardening]: align with backend visibility rules once fully exposed
       return true
     }
   }, [])
@@ -182,7 +182,7 @@ export function useTenantPermissions(): PermissionChecks {
       // Check publish/cycle lock from parent objective
       const parentObjective = keyResult.parentObjective
       if (!parentObjective) {
-        // TODO [phase6-frontend-hardening]: parent objective should always be available
+        // TODO [phase7-hardening]: parent objective should always be available
         // For now, allow if RBAC passes
         return true
       }
@@ -206,7 +206,7 @@ export function useTenantPermissions(): PermissionChecks {
   const canCheckInOnKeyResult = useMemo(() => {
     return (keyResult: KeyResult): boolean => {
       // Check-in uses same logic as edit for now
-      // TODO [phase6-frontend-hardening]: align with backend logic - check-ins may be slightly looser
+      // TODO [phase7-hardening]: align with backend logic - check-ins may be slightly looser
       return canEditKeyResult(keyResult)
     }
   }, [canEditKeyResult])

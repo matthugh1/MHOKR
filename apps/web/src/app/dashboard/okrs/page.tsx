@@ -256,7 +256,7 @@ export default function OKRsPage() {
 
   const handleEditOKR = (okr: any) => {
     // Map okr to Objective interface expected by hook
-    // TODO [phase6-frontend-hardening]: align with backend once cycle status is fully exposed in API responses
+    // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
     const objectiveForHook = {
       id: okr.id,
       ownerId: okr.ownerId,
@@ -286,7 +286,7 @@ export default function OKRsPage() {
 
   const handleDeleteOKR = async (okr: any) => {
     // Map okr to Objective interface expected by hook
-    // TODO [phase6-frontend-hardening]: align with backend once cycle status is fully exposed in API responses
+    // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
     const objectiveForHook = {
       id: okr.id,
       ownerId: okr.ownerId,
@@ -340,8 +340,8 @@ export default function OKRsPage() {
   const handleOpenActivityDrawer = async (entityType: 'OBJECTIVE' | 'KEY_RESULT', entityId: string, entityTitle?: string) => {
     try {
       const endpoint = entityType === 'OBJECTIVE' 
-        ? `/objectives/${entityId}/activity`
-        : `/key-results/${entityId}/activity`
+        ? `/activity/objectives/${entityId}`
+        : `/activity/key-results/${entityId}`
       
       const response = await api.get(endpoint)
       const activities = response.data || []
@@ -468,7 +468,7 @@ export default function OKRsPage() {
                       </div>
                     </div>
                   </div>
-                  {/* TODO: Later we'll surface a CTA for admins to open next cycle / lock current cycle. */}
+                  {/* TODO [phase6-polish]: Later we'll surface a CTA for admins to open next cycle / lock current cycle. */}
                 </div>
               ))}
             </div>
