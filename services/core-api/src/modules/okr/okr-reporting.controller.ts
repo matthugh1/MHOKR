@@ -47,6 +47,7 @@ export class OkrReportingController {
    * 
    * Moved from ObjectiveController in Phase 4.
    * TODO [phase7-hardening]: Frontend - add this feed to analytics dashboard.
+   * NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
    */
   @Get('analytics/feed')
   @RequireAction('view_okr')
@@ -127,6 +128,7 @@ export class OkrReportingController {
     return this.reportingService.getPillarsForOrg(userOrganizationId);
   }
 
+   * NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
   /**
    * Get strategic pillar coverage for active cycle.
    * 

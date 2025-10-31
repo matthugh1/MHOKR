@@ -754,7 +754,6 @@ export default function OKRsPage() {
                 
                 // Map okr to Objective interface expected by hook
                 // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
-                // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
                 const objectiveForHook = {
                   id: okr.id,
                   ownerId: okr.ownerId,
@@ -803,7 +802,6 @@ export default function OKRsPage() {
                 
                 // Map okr to Objective interface expected by hook
                 // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
-                // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
                 const objectiveForHook = {
                   id: okr.id,
                   ownerId: okr.ownerId,

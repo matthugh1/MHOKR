@@ -99,3 +99,15 @@ For questions or issues, refer to:
 - Always read out loud the BuildStamp line at the start of the call, so everyone knows which build we're looking at.
 - Capture screenshots with the BuildStamp visible to avoid confusion later.
 
+## Open Risk Budget (Post-Phase 22)
+
+| Tag | Count | Description | Owner / Resolution |
+|------|--------|-----------------------------|-----------------------------|
+| [phase7-hardening] | 70 | Security, RBAC, audit, tenant isolation | Security / Governance backlog |
+| [phase7-performance] | 9 | Query optimisation, batching, SSE, pagination | Scale & Performance backlog |
+| [phase6-polish] | 24 | UI/UX tidy-ups, empty states, visual refinements | Design / Product polish backlog |
+| NOTE comments | 36 | Internal clarifications and admin-only notes | N/A (documentation only) |
+
+**Policy:** Only `[phase6-polish]`, `[phase7-hardening]`, and `[phase7-performance]` TODOs are permitted on master.  
+All others will fail CI.
+
