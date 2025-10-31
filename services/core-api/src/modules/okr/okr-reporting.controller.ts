@@ -36,102 +36,133 @@ import { RBACGuard, RequireAction } from '../rbac';
 @ApiBearerAuth()
 export class OkrReportingController {
   constructor(
-    // @ts-expect-error Phase 2: Will be used when implementing endpoints
-    private readonly _reportingService: OkrReportingService,
-    // @ts-expect-error Phase 2: Will be used when implementing export endpoint
-    private readonly _rbacService: RBACService,
+    private readonly reportingService: OkrReportingService,
+    private readonly rbacService: RBACService,
   ) {}
 
   /**
    * Get organization-level summary statistics for analytics.
    * 
-   * TODO Phase 2: move logic from objective.controller.ts
+   * Moved from ObjectiveController in Phase 4.
    */
   @Get('analytics/summary')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get organization summary statistics' })
-  async getAnalyticsSummary(@Req() _req: any) {
-    // TODO Phase 2: move logic from objective.controller.ts
-    return { todo: true };
+  async getAnalyticsSummary(@Req() req: any) {
+    const userOrganizationId = req.user?.organizationId ?? null;
+    return this.reportingService.getOrgSummary(userOrganizationId);
   }
 
   /**
    * Get recent check-in activity feed.
    * 
-   * TODO Phase 2: move logic from objective.controller.ts
+   * Moved from ObjectiveController in Phase 4.
+   * TODO [phase4-reporting]: Frontend - add this feed to analytics dashboard.
    */
   @Get('analytics/feed')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get recent check-in activity feed' })
-  async getAnalyticsFeed(@Req() _req: any) {
-    // TODO Phase 2: move logic from objective.controller.ts
-    return { todo: true };
+  async getAnalyticsFeed(@Req() req: any) {
+    const userOrganizationId = req.user?.organizationId ?? null;
+    return this.reportingService.getRecentCheckInFeed(userOrganizationId);
   }
 
   /**
    * Export objectives and key results as CSV.
    * 
-   * TODO Phase 2: move logic from objective.controller.ts
-   * TODO Phase 2: IMPORTANT - Enforce RBAC export_data check (currently in objective.controller.ts lines 87-102)
+   * Moved from ObjectiveController in Phase 4.
+   * Enforces RBAC export_data permission check.
+   * 
+   * TODO [phase4-reporting]: Frontend - add Export CSV button in analytics dashboard for TENANT_OWNER / TENANT_ADMIN.
    */
   @Get('export/csv')
   @RequireAction('export_data')
   @ApiOperation({ summary: 'Export objectives and key results as CSV' })
-  async exportCSV(@Req() _req: any, @Res() _res: Response) {
-    // TODO Phase 2: move logic from objective.controller.ts
-    return { todo: true };
+  async exportCSV(@Req() req: any, @Res() res: Response) {
+    const userId = req.user?.id;
+    const userOrganizationId = req.user?.organizationId ?? null;
+
+    // Authorize using RBAC: check export_data permission
+    const resourceContext = {
+      tenantId: userOrganizationId || '',
+      workspaceId: null,
+      teamId: null,
+    };
+
+    const canExport = await this.rbacService.canPerformAction(
+      userId,
+      'export_data',
+      resourceContext,
+    );
+
+    if (!canExport) {
+      throw new ForbiddenException('You do not have permission to export data');
+    }
+
+    // Generate CSV
+    const csv = await this.reportingService.exportObjectivesCSV(userOrganizationId);
+
+    // Set response headers for CSV download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="okr-export-${new Date().toISOString().split('T')[0]}.csv"`);
+
+    return res.send(csv);
   }
 
   /**
    * Get active cycles for the organization.
    * 
-   * TODO Phase 2: move logic from objective.controller.ts
+   * Moved from ObjectiveController in Phase 4.
+   * TODO [phase4-reporting]: Frontend - show active cycle name at the top of the OKR dashboard and mark locked cycles.
    */
   @Get('cycles/active')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get active cycles for the organization' })
-  async getActiveCycles(@Req() _req: any) {
-    // TODO Phase 2: move logic from objective.controller.ts
-    return { todo: true };
+  async getActiveCycles(@Req() req: any) {
+    const userOrganizationId = req.user?.organizationId ?? null;
+    return this.reportingService.getActiveCycleForOrg(userOrganizationId);
   }
 
   /**
    * Get strategic pillars for the organization.
    * 
-   * TODO Phase 2: move logic from objective.controller.ts
+   * Moved from ObjectiveController in Phase 4.
+   * TODO [phase4-reporting]: Frontend - use this to populate a 'filter by strategic bet' dropdown in analytics and OKR list.
    */
   @Get('pillars')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get strategic pillars for the organization' })
-  async getPillars(@Req() _req: any) {
-    // TODO Phase 2: move logic from objective.controller.ts
-    return { todo: true };
+  async getPillars(@Req() req: any) {
+    const userOrganizationId = req.user?.organizationId ?? null;
+    return this.reportingService.getPillarsForOrg(userOrganizationId);
   }
 
   /**
    * Get strategic pillar coverage for active cycle.
    * 
-   * TODO Phase 2: move logic from objective.controller.ts
+   * Moved from ObjectiveController in Phase 4.
+   * TODO [phase4-reporting]: Frontend - highlight strategic gaps (pillars with zero objectives).
    */
   @Get('pillars/coverage')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get strategic pillar coverage for active cycle' })
-  async getPillarCoverage(@Req() _req: any) {
-    // TODO Phase 2: move logic from objective.controller.ts
-    return { todo: true };
+  async getPillarCoverage(@Req() req: any) {
+    const userOrganizationId = req.user?.organizationId ?? null;
+    return this.reportingService.getPillarCoverageForActiveCycle(userOrganizationId);
   }
 
   /**
    * Get overdue check-ins for Key Results.
    * 
-   * TODO Phase 2: move logic from key-result.controller.ts
+   * Moved from KeyResultController in Phase 4.
+   * TODO [phase4-reporting]: Frontend - show 'Check-ins overdue' widget in analytics.
    */
   @Get('check-ins/overdue')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get overdue check-ins for Key Results' })
-  async getOverdueCheckIns(@Req() _req: any) {
-    // TODO Phase 2: move logic from key-result.controller.ts
-    return { todo: true };
+  async getOverdueCheckIns(@Req() req: any) {
+    const userOrganizationId = req.user?.organizationId ?? null;
+    return this.reportingService.getOverdueCheckIns(userOrganizationId);
   }
 }
 
