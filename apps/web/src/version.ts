@@ -8,4 +8,4 @@
 
 export const APP_VERSION = 'v1.0.0-refactor-baseline'
 export const DEPLOY_ENV = process.env.NEXT_PUBLIC_ENV || 'local-dev'
-export const GIT_SHA = process.env.NEXT_PUBLIC_GIT_SHA || '51190ad'
+export const GIT_SHA = process.env.NEXT_PUBLIC_GIT_SHA || '0944d06'
