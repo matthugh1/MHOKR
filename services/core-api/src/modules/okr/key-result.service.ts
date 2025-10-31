@@ -122,7 +122,7 @@ export class KeyResultService {
    * - You can only mutate KRs in your own organisation (objective's organizationId must match userOrganizationId) → return false if mismatch
    * - Owner shortcut applies only inside same org (after tenant check passes)
    * 
-   * TODO [tenant-isolation-P1-KR]: This is a placeholder until formal KR RBAC is implemented.
+   * TODO [phase7-hardening]: This is a placeholder until formal KR RBAC is implemented.
    * The write methods (create/update/delete/createCheckIn) enforce the same tenant isolation rules.
    */
   async canEdit(userId: string, keyResultId: string, userOrganizationId: string | null | undefined): Promise<boolean> {
@@ -192,7 +192,7 @@ export class KeyResultService {
    * - You can only mutate KRs in your own organisation (objective's organizationId must match userOrganizationId) → return false if mismatch
    * - Owner shortcut applies only inside same org (after tenant check passes)
    * 
-   * TODO [tenant-isolation-P1-KR]: This is a placeholder until formal KR RBAC is implemented.
+   * TODO [phase7-hardening]: This is a placeholder until formal KR RBAC is implemented.
    * The write methods (create/update/delete/createCheckIn) enforce the same tenant isolation rules.
    */
   async canDelete(userId: string, keyResultId: string, userOrganizationId: string | null | undefined): Promise<boolean> {
@@ -419,8 +419,8 @@ export class KeyResultService {
         rbacService: this.rbacService,
       });
     }
-    // TODO [phase3-governance]: Governance logic moved to OkrGovernanceService
-    // TODO [propose-change-workflow]: Future version will allow "propose change" workflow instead of hard blocking
+    // TODO [phase7-hardening]: Governance logic moved to OkrGovernanceService
+    // TODO [phase7-hardening]: Future version will allow "propose change" workflow instead of hard blocking
 
     // Recalculate progress if values changed
     if (data.currentValue !== undefined) {
@@ -524,8 +524,8 @@ export class KeyResultService {
         rbacService: this.rbacService,
       });
     }
-    // TODO [phase3-governance]: Governance logic moved to OkrGovernanceService
-    // TODO [propose-change-workflow]: Future version will allow "propose change" workflow instead of hard blocking
+    // TODO [phase7-hardening]: Governance logic moved to OkrGovernanceService
+    // TODO [phase7-hardening]: Future version will allow "propose change" workflow instead of hard blocking
 
     try {
       // Check if key result exists
@@ -628,8 +628,8 @@ export class KeyResultService {
         rbacService: this.rbacService,
       });
     }
-    // TODO [phase3-governance]: Governance logic moved to OkrGovernanceService
-    // TODO [propose-change-workflow]: Future version will allow "propose change" workflow instead of hard blocking
+    // TODO [phase7-hardening]: Governance logic moved to OkrGovernanceService
+    // TODO [phase7-hardening]: Future version will allow "propose change" workflow instead of hard blocking
 
     // Create check-in
     const checkIn = await this.prisma.checkIn.create({

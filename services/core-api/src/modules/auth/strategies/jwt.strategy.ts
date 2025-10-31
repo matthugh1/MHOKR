@@ -104,7 +104,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     }
     
     // Get user's primary organization (first org they belong to)
-    // TODO: Support multi-org users (currently using first org membership only)
+    // TODO [phase7-hardening]: Support multi-org users (current logic only uses first org membership)
     const orgMember = await this.prisma.organizationMember.findFirst({
       where: { userId: user.id },
       select: { organizationId: true },

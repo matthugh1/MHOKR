@@ -1,8 +1,3 @@
-export const APP_VERSION = "v1.1.0-phase17";
-
-export const GIT_SHA = "375cd34";
-
-export const DEPLOY_ENV = "design-partner";
-
-// TODO [phase7-hardening]: replace hardcoded values with CI-injected build metadata
-
+export const APP_VERSION = "v1.0.0-refactor-baseline";
+export const DEPLOY_ENV = "local-dev";
+export const GIT_SHA = "790422b";

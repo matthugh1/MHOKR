@@ -7,10 +7,9 @@ import { PrismaService } from '../../common/prisma/prisma.service';
  * Centralized service for calculating and rolling up Objective progress from Key Results.
  * This service exists to avoid circular dependencies between ObjectiveService and KeyResultService.
  * 
- * TODO: Future enhancements:
- * - Add weighting support on ObjectiveKeyResult junction table (e.g., KR1 = 40%, KR2 = 60%)
- * - Add performance optimization with batch recalculation
- * - Add transaction support for atomic updates
+ * TODO [phase7-hardening]: Add weighting support on ObjectiveKeyResult junction table (e.g., KR1 = 40%, KR2 = 60%)
+ * TODO [phase7-performance]: Add performance optimization with batch recalculation
+ * TODO [phase7-hardening]: Add transaction support for atomic updates
  */
 @Injectable()
 export class OkrProgressService {

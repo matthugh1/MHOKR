@@ -12,7 +12,7 @@ import { RoleService } from './role.service';
  * This logic is now enforced directly in:
  * - objective.service.findAll (read isolation)
  * - objective.service.canEdit / canDelete (write isolation)
- * TODO: Cleanup/removal of legacy membership tables and TenantIsolationGuard after all controllers migrated
+ * TODO [phase7-hardening]: Cleanup/removal of legacy membership tables and TenantIsolationGuard after all controllers migrated
  * 
  * Tenant Isolation Guard
  * 

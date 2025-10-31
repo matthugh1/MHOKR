@@ -24,9 +24,17 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Redirect to login
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login'
+      // Don't redirect if we're already on the login page or making a login request
+      const isLoginRequest = error.config?.url?.includes('/auth/login')
+      const isRegisterRequest = error.config?.url?.includes('/auth/register')
+      const isOnLoginPage = typeof window !== 'undefined' && window.location.pathname === '/login'
+      
+      // Only redirect if it's not a login/register request and we're not already on login page
+      if (!isLoginRequest && !isRegisterRequest && !isOnLoginPage) {
+        // Redirect to login
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login'
+        }
       }
     }
     return Promise.reject(error)

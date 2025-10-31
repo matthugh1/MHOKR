@@ -62,7 +62,7 @@ export class OkrGovernanceService {
       throw new ForbiddenException('This OKR is published and can only be modified by admin roles');
     }
 
-    // TODO [propose-change-workflow]: Future version will allow "propose change" workflow instead of hard blocking
+    // TODO [phase7-hardening]: Future version will allow "propose change" workflow instead of hard blocking
   }
 
   /**
@@ -106,7 +106,7 @@ export class OkrGovernanceService {
       throw new ForbiddenException('This Key Result belongs to a published OKR and can only be modified by admin roles');
     }
 
-    // TODO [propose-change-workflow]: Future version will allow "propose change" workflow instead of hard blocking
+    // TODO [phase7-hardening]: Future version will allow "propose change" workflow instead of hard blocking
   }
 
   /**
@@ -304,13 +304,13 @@ export class OkrGovernanceService {
   /**
    * Propose a change to a locked OKR (future workflow).
    * 
-   * TODO [propose-change-workflow]: Implement "propose change" workflow instead of hard blocking
+   * TODO [phase7-hardening]: Implement "propose change" workflow instead of hard blocking
    * 
    * @param params - Placeholder for future implementation
    * @returns Placeholder response
    */
   async proposeChange(_params: any): Promise<{ allowed: boolean }> {
-    // TODO [propose-change-workflow]: Future implementation
+    // TODO [phase7-hardening]: Future implementation
     return { allowed: false };
   }
 }

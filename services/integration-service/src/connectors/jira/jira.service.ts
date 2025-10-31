@@ -10,13 +10,13 @@ export class JiraService {
   ) {}
 
   async syncIssue(keyResultId: string, jiraIssueId: string) {
-    // TODO: Implement Jira issue sync
+    // TODO [phase7-hardening]: Implement Jira issue sync for integration with Jira
     console.log(`Syncing Jira issue ${jiraIssueId} with KR ${keyResultId}`);
     return { success: true, message: 'Sync initiated' };
   }
 
   async getIssue(_issueId: string) {
-    // TODO: Implement Jira API call
+    // TODO [phase7-hardening]: Implement Jira API call for integration with Jira
     return {};
   }
 }

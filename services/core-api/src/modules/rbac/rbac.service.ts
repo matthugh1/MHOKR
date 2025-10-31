@@ -320,7 +320,7 @@ export class RBACService {
     // Invalidate cache for this user
     this.invalidateUserContextCache(userId);
 
-    // TODO: Record audit log
+    // TODO [phase7-hardening]: Record audit log for RBAC changes for audit/compliance visibility
     // await this.auditService.recordRoleChange(...)
 
     return this.mapPrismaToRoleAssignment(assignment);
@@ -348,7 +348,7 @@ export class RBACService {
     // Invalidate cache for this user
     this.invalidateUserContextCache(userId);
 
-    // TODO: Record audit log
+    // TODO [phase7-hardening]: Record audit log for RBAC changes for audit/compliance visibility
   }
 
   /**

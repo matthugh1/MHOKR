@@ -34,7 +34,7 @@ export class PersonaController {
     @Param('persona') _persona: string,
     @Body() _body: { message: string; conversationId?: string; context?: any },
   ): Observable<MessageEvent> {
-    // TODO: Implement SSE streaming
+    // TODO [phase7-performance]: Implement SSE streaming for real-time persona responses
     throw new Error('Not implemented');
   }
 

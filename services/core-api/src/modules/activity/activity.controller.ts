@@ -33,7 +33,7 @@ export class ActivityController {
    * Get recent activity for an objective.
    * 
    * Moved from ObjectiveController in Phase 4.
-   * TODO [phase4-reporting]: Frontend - expose this on the Objective detail view timeline.
+   * TODO [phase7-hardening]: Frontend - expose this on the Objective detail view timeline.
    */
   @Get('objectives/:id')
   @RequireAction('view_okr')
@@ -69,7 +69,7 @@ export class ActivityController {
    * Get recent activity for a key result.
    * 
    * Moved from KeyResultController in Phase 4.
-   * TODO [phase4-reporting]: Frontend - expose this on the Key Result detail view timeline.
+   * TODO [phase7-hardening]: Frontend - expose this on the Key Result detail view timeline.
    */
   @Get('key-results/:id')
   @RequireAction('view_okr')
@@ -104,7 +104,7 @@ export class ActivityController {
   /**
    * Future: Get global activity feed for user's scope.
    * 
-   * TODO: Future enhancement - show all activity across user's OKRs/KRs
+   * TODO [phase7-hardening]: Future enhancement - show all activity across user's OKRs/KRs
    * - Use activityService.getRecentActivityForUserScope()
    * - Support filtering by entity type, action, date range
    */
@@ -116,7 +116,7 @@ export class ActivityController {
     @Query('limit') _limit?: string,
     @Query('offset') _offset?: string,
   ) {
-    // TODO: Future implementation
+    // TODO [phase7-hardening]: Future implementation
     // - Call activityService.getRecentActivityForUserScope()
     // - Return global activity feed
     return { todo: true };

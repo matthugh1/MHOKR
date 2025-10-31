@@ -13,7 +13,7 @@
  * - userOrganizationId === string     → normal user (can read/write only within that organisation)
  * - userOrganizationId === undefined  → user with no organisation (cannot read or write tenant data)
  * 
- * TODO: Extract tenant isolation logic from:
+ * TODO [phase7-hardening]: Extract tenant isolation logic from:
  * - objective.service.ts:findAll() lines 17-32
  * - objective.service.ts:canEdit() lines 147-175
  * - objective.service.ts:canDelete() lines 247-275
