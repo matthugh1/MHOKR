@@ -2,634 +2,1249 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Hash for password "password123" (generated with bcrypt hash 10 rounds)
-const PASSWORD_HASH = '$2b$10$G8uy5oB216ldG4Z7WHayLOrAG1t7Epxew1zM4N970PD9X0c1TSV3O';
+// Authoritative IDs - these entities already exist in the DB
+const PUZZEL_CX_ORG_ID = 'cmhesnyvx00004xhjjxs272gs';
+const WORKSPACE_CX_ID = 'cmhesnyxl00024xhjlkpwnhzr'; // Customer Experience & AI
+const WORKSPACE_REVOPS_ID = 'cmhesnyxo00044xhjhqw8ycib'; // Revenue Operations
+const USER_FOUNDER_ID = 'cmhesnyxo00054xhjb6h2qm1v'; // founder@puzzelcx.local
+const USER_AGENT_ID = 'cmhesnyxt00064xhjwh8jy6g7'; // agent@puzzelcx.local
+const CYCLE_Q3_2025_ID = 'cmhesnyzo00104xhjwqnemyfe'; // Q3 2025 - ARCHIVED
+const CYCLE_Q4_2025_ID = 'cmhesnyzr00124xhjtmx1ak82'; // Q4 2025 - ACTIVE
+const CYCLE_Q1_2026_ID = 'cmhesnyzs00144xhjd8gqpyti'; // Q1 2026 - DRAFT
 
 async function main() {
-  console.log('🌱 Starting comprehensive RBAC test data seed...');
+  console.log('🌱 Starting demo-ready seed data generation for Puzzel CX...');
 
-  // Clear existing data (optional - comment out if you want to keep existing data)
-  console.log('🧹 Clearing existing data...');
-  await prisma.roleAssignment.deleteMany({});
-  await prisma.initiative.deleteMany({});
-  await prisma.objectiveKeyResult.deleteMany({});
-  await prisma.keyResult.deleteMany({});
-  await prisma.objective.deleteMany({});
-  await prisma.teamMember.deleteMany({});
-  await prisma.workspaceMember.deleteMany({});
-  await prisma.organizationMember.deleteMany({});
-  await prisma.team.deleteMany({});
-  await prisma.workspace.deleteMany({});
-  await prisma.organization.deleteMany({});
-  await prisma.user.deleteMany({});
-  console.log('✅ Cleared existing data');
+  // ==========================================
+  // 1. Verify authoritative entities exist
+  // ==========================================
+  const org = await prisma.organization.findUnique({
+    where: { id: PUZZEL_CX_ORG_ID },
+  });
+  if (!org) {
+    throw new Error(`Organization ${PUZZEL_CX_ORG_ID} (Puzzel CX) not found`);
+  }
 
-  // Create Superuser
-  const superuser = await prisma.user.create({
-    data: {
-      email: 'admin@test.com',
-      name: 'Superuser Admin',
-      passwordHash: PASSWORD_HASH,
-      isSuperuser: true,
-    },
+  const workspaceCx = await prisma.workspace.findUnique({
+    where: { id: WORKSPACE_CX_ID },
   });
-  console.log('✅ Created superuser:', superuser.email);
+  if (!workspaceCx) {
+    throw new Error(`Workspace ${WORKSPACE_CX_ID} (Customer Experience & AI) not found`);
+  }
 
-  // Create Organization 1
-  const org1 = await prisma.organization.create({
-    data: {
-      name: 'Test Organization 1',
-      slug: 'org1',
-    },
+  const workspaceRevOps = await prisma.workspace.findUnique({
+    where: { id: WORKSPACE_REVOPS_ID },
   });
-  console.log('✅ Created organization:', org1.name);
+  if (!workspaceRevOps) {
+    throw new Error(`Workspace ${WORKSPACE_REVOPS_ID} (Revenue Operations) not found`);
+  }
 
-  // Create Organization 2 (for testing multi-tenant scenarios)
-  const org2 = await prisma.organization.create({
-    data: {
-      name: 'Test Organization 2',
-      slug: 'org2',
-    },
+  const orgOwner = await prisma.user.findUnique({
+    where: { id: USER_FOUNDER_ID },
   });
-  console.log('✅ Created organization:', org2.name);
+  if (!orgOwner) {
+    throw new Error(`User ${USER_FOUNDER_ID} (founder@puzzelcx.local) not found`);
+  }
 
-  // Create Workspaces for Org1
-  const workspace1 = await prisma.workspace.create({
-    data: {
-      name: 'Product Development',
-      organizationId: org1.id,
-    },
+  const member = await prisma.user.findUnique({
+    where: { id: USER_AGENT_ID },
   });
+  if (!member) {
+    throw new Error(`User ${USER_AGENT_ID} (agent@puzzelcx.local) not found`);
+  }
 
-  const workspace2 = await prisma.workspace.create({
-    data: {
-      name: 'Marketing',
-      organizationId: org1.id,
-    },
+  const cycleQ3 = await prisma.cycle.findUnique({
+    where: { id: CYCLE_Q3_2025_ID },
   });
-  console.log('✅ Created workspaces for Org1');
+  if (!cycleQ3) {
+    throw new Error(`Cycle ${CYCLE_Q3_2025_ID} (Q3 2025) not found`);
+  }
 
-  // Create Workspace for Org2
-  await prisma.workspace.create({
-    data: {
-      name: 'Engineering',
-      organizationId: org2.id,
-    },
+  const cycleQ4 = await prisma.cycle.findUnique({
+    where: { id: CYCLE_Q4_2025_ID },
   });
-  console.log('✅ Created workspace for Org2');
+  if (!cycleQ4) {
+    throw new Error(`Cycle ${CYCLE_Q4_2025_ID} (Q4 2025) not found`);
+  }
 
-  // Create Teams
-  const engineeringTeam = await prisma.team.create({
-    data: {
-      name: 'Engineering',
-      workspaceId: workspace1.id,
-    },
+  const cycleQ1 = await prisma.cycle.findUnique({
+    where: { id: CYCLE_Q1_2026_ID },
   });
+  if (!cycleQ1) {
+    throw new Error(`Cycle ${CYCLE_Q1_2026_ID} (Q1 2026) not found`);
+  }
 
-  const productTeam = await prisma.team.create({
-    data: {
-      name: 'Product',
-      workspaceId: workspace1.id,
-    },
-  });
+  console.log('✅ Verified authoritative entities exist');
 
-  await prisma.team.create({
-    data: {
-      name: 'Design',
-      workspaceId: workspace2.id,
+  // ==========================================
+  // 2. Strategic Pillars (for reporting)
+  // ==========================================
+  let pillarAgentProductivity = await prisma.strategicPillar.findFirst({
+    where: {
+      name: 'Agent Productivity',
+      organizationId: PUZZEL_CX_ORG_ID,
     },
   });
-  console.log('✅ Created teams');
+  if (!pillarAgentProductivity) {
+    pillarAgentProductivity = await prisma.strategicPillar.create({
+      data: {
+        organizationId: PUZZEL_CX_ORG_ID,
+        name: 'Agent Productivity',
+        description: 'Initiatives focused on improving agent efficiency and reducing handling time',
+        color: '#3B82F6',
+      },
+    });
+  }
 
-  // Create all test users from test plan
-  const tenantOwner = await prisma.user.create({
-    data: {
-      email: 'owner@test.com',
-      name: 'Tenant Owner',
-      passwordHash: PASSWORD_HASH,
+  let pillarCxQuality = await prisma.strategicPillar.findFirst({
+    where: {
+      name: 'Customer Experience Quality',
+      organizationId: PUZZEL_CX_ORG_ID,
     },
   });
+  if (!pillarCxQuality) {
+    pillarCxQuality = await prisma.strategicPillar.create({
+      data: {
+        organizationId: PUZZEL_CX_ORG_ID,
+        name: 'Customer Experience Quality',
+        description: 'Measures and improvements to first contact resolution and customer satisfaction',
+        color: '#10B981',
+      },
+    });
+  }
+  console.log('✅ Strategic pillars ready');
 
-  const tenantAdmin = await prisma.user.create({
-    data: {
-      email: 'admin@org1.com',
-      name: 'Tenant Admin',
-      passwordHash: PASSWORD_HASH,
-    },
-  });
+  // ==========================================
+  // 3. Objectives
+  // ==========================================
 
-  const workspaceOwner = await prisma.user.create({
-    data: {
-      email: 'workspace@org1.com',
-      name: 'Workspace Owner',
-      passwordHash: PASSWORD_HASH,
+  // PAST CYCLE (Q3 2025) - ARCHIVED, completed objectives (isPublished = true, status = COMPLETED)
+  let objPast1 = await prisma.objective.findFirst({
+    where: {
+      title: 'Improve First Contact Resolution in Priority Channels',
+      cycleId: CYCLE_Q3_2025_ID,
+      organizationId: PUZZEL_CX_ORG_ID,
     },
   });
+  if (!objPast1) {
+    objPast1 = await prisma.objective.create({
+      data: {
+        title: 'Improve First Contact Resolution in Priority Channels',
+        description: 'Increase first contact resolution rate across email and chat channels to reduce repeat contacts and improve customer satisfaction',
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_CX_ID,
+        cycleId: CYCLE_Q3_2025_ID,
+        pillarId: pillarCxQuality.id,
+        ownerId: USER_FOUNDER_ID,
+        period: 'QUARTERLY',
+        startDate: new Date('2025-07-01'),
+        endDate: new Date('2025-09-30'),
+        status: 'COMPLETED',
+        progress: 95,
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: true,
+      },
+    });
+  } else {
+    objPast1 = await prisma.objective.update({
+      where: { id: objPast1.id },
+      data: {
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_CX_ID,
+        cycleId: CYCLE_Q3_2025_ID,
+        pillarId: pillarCxQuality.id,
+        ownerId: USER_FOUNDER_ID,
+        status: 'COMPLETED',
+        isPublished: true,
+      },
+    });
+  }
 
-  const teamLead = await prisma.user.create({
-    data: {
-      email: 'teamlead@org1.com',
-      name: 'Team Lead',
-      passwordHash: PASSWORD_HASH,
+  let objPast2 = await prisma.objective.findFirst({
+    where: {
+      title: 'Increase Automation Rate on Tier 1 Requests',
+      cycleId: CYCLE_Q3_2025_ID,
+      organizationId: PUZZEL_CX_ORG_ID,
     },
   });
+  if (!objPast2) {
+    objPast2 = await prisma.objective.create({
+      data: {
+        title: 'Increase Automation Rate on Tier 1 Requests',
+        description: 'Deploy AI-assisted resolution for common billing and account management queries',
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_CX_ID,
+        cycleId: CYCLE_Q3_2025_ID,
+        pillarId: pillarAgentProductivity.id,
+        ownerId: USER_AGENT_ID,
+        period: 'QUARTERLY',
+        startDate: new Date('2025-07-01'),
+        endDate: new Date('2025-09-30'),
+        status: 'COMPLETED',
+        progress: 88,
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: true,
+      },
+    });
+  } else {
+    objPast2 = await prisma.objective.update({
+      where: { id: objPast2.id },
+      data: {
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_CX_ID,
+        cycleId: CYCLE_Q3_2025_ID,
+        pillarId: pillarAgentProductivity.id,
+        ownerId: USER_AGENT_ID,
+        status: 'COMPLETED',
+        isPublished: true,
+      },
+    });
+  }
 
-  const member = await prisma.user.create({
-    data: {
-      email: 'member@org1.com',
-      name: 'Member User',
-      passwordHash: PASSWORD_HASH,
+  // CURRENT CYCLE (Q4 2025) - ACTIVE
+  // Mix: one ON_TRACK published, one AT_RISK published, one ON_TRACK NOT published
+  let objCurrent1 = await prisma.objective.findFirst({
+    where: {
+      title: 'Improve First Contact Resolution in Priority Channels',
+      cycleId: CYCLE_Q4_2025_ID,
+      organizationId: PUZZEL_CX_ORG_ID,
     },
   });
+  if (!objCurrent1) {
+    objCurrent1 = await prisma.objective.create({
+      data: {
+        title: 'Improve First Contact Resolution in Priority Channels',
+        description: 'Target 75% FCR in email and chat channels, focusing on billing-related repeat contacts',
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_CX_ID,
+        cycleId: CYCLE_Q4_2025_ID,
+        pillarId: pillarCxQuality.id,
+        ownerId: USER_FOUNDER_ID,
+        period: 'QUARTERLY',
+        startDate: new Date('2025-10-01'),
+        endDate: new Date('2025-12-31'),
+        status: 'AT_RISK',
+        progress: 42,
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: true,
+      },
+    });
+  } else {
+    objCurrent1 = await prisma.objective.update({
+      where: { id: objCurrent1.id },
+      data: {
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_CX_ID,
+        cycleId: CYCLE_Q4_2025_ID,
+        pillarId: pillarCxQuality.id,
+        ownerId: USER_FOUNDER_ID,
+        status: 'AT_RISK',
+        isPublished: true,
+      },
+    });
+  }
 
-  const viewer = await prisma.user.create({
-    data: {
-      email: 'viewer@org1.com',
-      name: 'Viewer User',
-      passwordHash: PASSWORD_HASH,
+  let objCurrent2 = await prisma.objective.findFirst({
+    where: {
+      title: 'Reduce Agent Attrition in Core Support Teams',
+      cycleId: CYCLE_Q4_2025_ID,
+      organizationId: PUZZEL_CX_ORG_ID,
     },
   });
+  if (!objCurrent2) {
+    objCurrent2 = await prisma.objective.create({
+      data: {
+        title: 'Reduce Agent Attrition in Core Support Teams',
+        description: 'Lower voluntary attrition rate in primary support shifts through improved coaching and career development',
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_CX_ID,
+        cycleId: CYCLE_Q4_2025_ID,
+        pillarId: pillarAgentProductivity.id,
+        ownerId: USER_AGENT_ID,
+        period: 'QUARTERLY',
+        startDate: new Date('2025-10-01'),
+        endDate: new Date('2025-12-31'),
+        status: 'ON_TRACK',
+        progress: 58,
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: true,
+      },
+    });
+  } else {
+    objCurrent2 = await prisma.objective.update({
+      where: { id: objCurrent2.id },
+      data: {
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_CX_ID,
+        cycleId: CYCLE_Q4_2025_ID,
+        pillarId: pillarAgentProductivity.id,
+        ownerId: USER_AGENT_ID,
+        status: 'ON_TRACK',
+        isPublished: true,
+      },
+    });
+  }
 
-  // Additional users for testing
-  const member2 = await prisma.user.create({
-    data: {
-      email: 'member2@org1.com',
-      name: 'Member 2',
-      passwordHash: PASSWORD_HASH,
+  let objCurrent3 = await prisma.objective.findFirst({
+    where: {
+      title: 'Stabilise Cost to Serve for Voice Contact',
+      cycleId: CYCLE_Q4_2025_ID,
+      organizationId: PUZZEL_CX_ORG_ID,
     },
   });
+  if (!objCurrent3) {
+    objCurrent3 = await prisma.objective.create({
+      data: {
+        title: 'Stabilise Cost to Serve for Voice Contact',
+        description: 'Maintain cost per contact within target range while improving quality metrics',
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_REVOPS_ID,
+        cycleId: CYCLE_Q4_2025_ID,
+        ownerId: USER_FOUNDER_ID,
+        period: 'QUARTERLY',
+        startDate: new Date('2025-10-01'),
+        endDate: new Date('2025-12-31'),
+        status: 'ON_TRACK',
+        progress: 65,
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: false,
+      },
+    });
+  } else {
+    objCurrent3 = await prisma.objective.update({
+      where: { id: objCurrent3.id },
+      data: {
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_REVOPS_ID,
+        cycleId: CYCLE_Q4_2025_ID,
+        ownerId: USER_FOUNDER_ID,
+        status: 'ON_TRACK',
+        isPublished: false,
+      },
+    });
+  }
 
-  const owner2 = await prisma.user.create({
-    data: {
-      email: 'owner2@org2.com',
-      name: 'Org2 Owner',
-      passwordHash: PASSWORD_HASH,
+  // FUTURE CYCLE (Q1 2026) - DRAFT (all isPublished = false)
+  let objFuture1 = await prisma.objective.findFirst({
+    where: {
+      title: 'Accelerate AI-led Resolution for Tier 1 Billing Queries',
+      cycleId: CYCLE_Q1_2026_ID,
+      organizationId: PUZZEL_CX_ORG_ID,
     },
   });
-  console.log('✅ Created all test users');
+  if (!objFuture1) {
+    objFuture1 = await prisma.objective.create({
+      data: {
+        title: 'Accelerate AI-led Resolution for Tier 1 Billing Queries',
+        description: 'Expand AI containment to 40% of billing inquiries through enhanced knowledge base and intent recognition',
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_CX_ID,
+        cycleId: CYCLE_Q1_2026_ID,
+        pillarId: pillarAgentProductivity.id,
+        ownerId: USER_FOUNDER_ID,
+        period: 'QUARTERLY',
+        startDate: new Date('2026-01-01'),
+        endDate: new Date('2026-03-31'),
+        status: 'ON_TRACK',
+        progress: 0,
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: false,
+      },
+    });
+  } else {
+    objFuture1 = await prisma.objective.update({
+      where: { id: objFuture1.id },
+      data: {
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_CX_ID,
+        cycleId: CYCLE_Q1_2026_ID,
+        pillarId: pillarAgentProductivity.id,
+        ownerId: USER_FOUNDER_ID,
+        isPublished: false,
+      },
+    });
+  }
 
-  // Assign roles using NEW RBAC system (RoleAssignment)
-  // Tenant Owner - TENANT_OWNER in org1
-  await prisma.roleAssignment.create({
-    data: {
-      userId: tenantOwner.id,
-      role: 'TENANT_OWNER',
-      scopeType: 'TENANT',
-      scopeId: org1.id,
+  let objFuture2 = await prisma.objective.findFirst({
+    where: {
+      title: 'Improve Knowledge Retrieval Time for Agents',
+      cycleId: CYCLE_Q1_2026_ID,
+      organizationId: PUZZEL_CX_ORG_ID,
     },
   });
+  if (!objFuture2) {
+    objFuture2 = await prisma.objective.create({
+      data: {
+        title: 'Improve Knowledge Retrieval Time for Agents',
+        description: 'Reduce average time to locate relevant knowledge articles from 2.5 minutes to 1.5 minutes',
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_CX_ID,
+        cycleId: CYCLE_Q1_2026_ID,
+        pillarId: pillarAgentProductivity.id,
+        ownerId: USER_AGENT_ID,
+        period: 'QUARTERLY',
+        startDate: new Date('2026-01-01'),
+        endDate: new Date('2026-03-31'),
+        status: 'ON_TRACK',
+        progress: 0,
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: false,
+      },
+    });
+  } else {
+    objFuture2 = await prisma.objective.update({
+      where: { id: objFuture2.id },
+      data: {
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_CX_ID,
+        cycleId: CYCLE_Q1_2026_ID,
+        pillarId: pillarAgentProductivity.id,
+        ownerId: USER_AGENT_ID,
+        isPublished: false,
+      },
+    });
+  }
 
-  // Tenant Admin - TENANT_ADMIN in org1
-  await prisma.roleAssignment.create({
-    data: {
-      userId: tenantAdmin.id,
-      role: 'TENANT_ADMIN',
-      scopeType: 'TENANT',
-      scopeId: org1.id,
+  let objFuture3 = await prisma.objective.findFirst({
+    where: {
+      title: 'Optimise Revenue Operations Workflow Efficiency',
+      cycleId: CYCLE_Q1_2026_ID,
+      organizationId: PUZZEL_CX_ORG_ID,
     },
   });
+  if (!objFuture3) {
+    objFuture3 = await prisma.objective.create({
+      data: {
+        title: 'Optimise Revenue Operations Workflow Efficiency',
+        description: 'Streamline quote-to-cash processes to reduce cycle time',
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_REVOPS_ID,
+        cycleId: CYCLE_Q1_2026_ID,
+        ownerId: USER_FOUNDER_ID,
+        period: 'QUARTERLY',
+        startDate: new Date('2026-01-01'),
+        endDate: new Date('2026-03-31'),
+        status: 'ON_TRACK',
+        progress: 0,
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: false,
+      },
+    });
+  } else {
+    objFuture3 = await prisma.objective.update({
+      where: { id: objFuture3.id },
+      data: {
+        organizationId: PUZZEL_CX_ORG_ID,
+        workspaceId: WORKSPACE_REVOPS_ID,
+        cycleId: CYCLE_Q1_2026_ID,
+        ownerId: USER_FOUNDER_ID,
+        isPublished: false,
+      },
+    });
+  }
+  console.log('✅ Objectives created');
 
-  // Workspace Owner - WORKSPACE_LEAD in workspace1
-  await prisma.roleAssignment.create({
-    data: {
-      userId: workspaceOwner.id,
-      role: 'WORKSPACE_LEAD',
-      scopeType: 'WORKSPACE',
-      scopeId: workspace1.id,
-    },
-  });
-  // Also give them workspace member role at tenant level
-  await prisma.roleAssignment.create({
-    data: {
-      userId: workspaceOwner.id,
-      role: 'WORKSPACE_MEMBER',
-      scopeType: 'TENANT',
-      scopeId: org1.id,
-    },
-  });
+  // ==========================================
+  // 4. Key Results
+  // ==========================================
 
-  // Team Lead - TEAM_LEAD in engineeringTeam
-  await prisma.roleAssignment.create({
-    data: {
-      userId: teamLead.id,
-      role: 'TEAM_LEAD',
-      scopeType: 'TEAM',
-      scopeId: engineeringTeam.id,
+  // Past cycle KRs
+  let krPast1 = await prisma.keyResult.findFirst({
+    where: {
+      title: 'Raise First Contact Resolution from 62% to 75%',
+      ownerId: USER_FOUNDER_ID,
+      startDate: new Date('2025-07-01'),
     },
   });
-  // Also give them workspace member role
-  await prisma.roleAssignment.create({
-    data: {
-      userId: teamLead.id,
-      role: 'WORKSPACE_MEMBER',
-      scopeType: 'WORKSPACE',
-      scopeId: workspace1.id,
-    },
-  });
-  await prisma.roleAssignment.create({
-    data: {
-      userId: teamLead.id,
-      role: 'WORKSPACE_MEMBER',
-      scopeType: 'TENANT',
-      scopeId: org1.id,
-    },
-  });
+  if (!krPast1) {
+    krPast1 = await prisma.keyResult.create({
+      data: {
+        title: 'Raise First Contact Resolution from 62% to 75%',
+        description: 'Target FCR improvement in email and chat channels',
+        ownerId: USER_FOUNDER_ID,
+        metricType: 'INCREASE',
+        startValue: 62,
+        targetValue: 75,
+        currentValue: 73,
+        unit: 'percentage',
+        status: 'COMPLETED',
+        progress: 85,
+        period: 'QUARTERLY',
+        startDate: new Date('2025-07-01'),
+        endDate: new Date('2025-09-30'),
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: true,
+        checkInCadence: 'WEEKLY',
+      },
+    });
+  } else {
+    krPast1 = await prisma.keyResult.update({
+      where: { id: krPast1.id },
+      data: {
+        ownerId: USER_FOUNDER_ID,
+        status: 'COMPLETED',
+        isPublished: true,
+      },
+    });
+  }
 
-  // Member - WORKSPACE_MEMBER in workspace1
-  await prisma.roleAssignment.create({
-    data: {
-      userId: member.id,
-      role: 'WORKSPACE_MEMBER',
-      scopeType: 'WORKSPACE',
-      scopeId: workspace1.id,
+  await prisma.objectiveKeyResult.upsert({
+    where: {
+      objectiveId_keyResultId: {
+        objectiveId: objPast1.id,
+        keyResultId: krPast1.id,
+      },
     },
-  });
-  // Member also needs TENANT_VIEWER role at tenant level to access tenant resources
-  await prisma.roleAssignment.create({
-    data: {
-      userId: member.id,
-      role: 'TENANT_VIEWER',
-      scopeType: 'TENANT',
-      scopeId: org1.id,
-    },
-  });
-  await prisma.roleAssignment.create({
-    data: {
-      userId: member.id,
-      role: 'TEAM_CONTRIBUTOR',
-      scopeType: 'TEAM',
-      scopeId: engineeringTeam.id,
-    },
-  });
-
-  // Member 2 - WORKSPACE_MEMBER in workspace2
-  await prisma.roleAssignment.create({
-    data: {
-      userId: member2.id,
-      role: 'WORKSPACE_MEMBER',
-      scopeType: 'WORKSPACE',
-      scopeId: workspace2.id,
-    },
-  });
-  // Member 2 also needs TENANT_VIEWER role at tenant level to access tenant resources
-  await prisma.roleAssignment.create({
-    data: {
-      userId: member2.id,
-      role: 'TENANT_VIEWER',
-      scopeType: 'TENANT',
-      scopeId: org1.id,
-    },
-  });
-
-  // Viewer - TENANT_VIEWER in org1
-  await prisma.roleAssignment.create({
-    data: {
-      userId: viewer.id,
-      role: 'TENANT_VIEWER',
-      scopeType: 'TENANT',
-      scopeId: org1.id,
-    },
-  });
-  await prisma.roleAssignment.create({
-    data: {
-      userId: viewer.id,
-      role: 'WORKSPACE_MEMBER',
-      scopeType: 'WORKSPACE',
-      scopeId: workspace1.id,
-    },
-  });
-
-  // Org2 Owner - TENANT_OWNER in org2
-  await prisma.roleAssignment.create({
-    data: {
-      userId: owner2.id,
-      role: 'TENANT_OWNER',
-      scopeType: 'TENANT',
-      scopeId: org2.id,
-    },
-  });
-  console.log('✅ Created RBAC role assignments');
-
-  // Also create old-style memberships for backward compatibility
-  // Tenant Owner - ORG_ADMIN in org1
-  await prisma.organizationMember.create({
-    data: {
-      userId: tenantOwner.id,
-      organizationId: org1.id,
-      role: 'ORG_ADMIN',
-    },
-  });
-
-  await prisma.organizationMember.create({
-    data: {
-      userId: tenantAdmin.id,
-      organizationId: org1.id,
-      role: 'ORG_ADMIN',
-    },
-  });
-
-  await prisma.organizationMember.create({
-    data: {
-      userId: workspaceOwner.id,
-      organizationId: org1.id,
-      role: 'MEMBER',
-    },
-  });
-
-  await prisma.organizationMember.create({
-    data: {
-      userId: teamLead.id,
-      organizationId: org1.id,
-      role: 'MEMBER',
-    },
-  });
-
-  await prisma.organizationMember.create({
-    data: {
-      userId: member.id,
-      organizationId: org1.id,
-      role: 'MEMBER',
-    },
-  });
-
-  await prisma.organizationMember.create({
-    data: {
-      userId: member2.id,
-      organizationId: org1.id,
-      role: 'MEMBER',
-    },
-  });
-
-  await prisma.organizationMember.create({
-    data: {
-      userId: viewer.id,
-      organizationId: org1.id,
-      role: 'VIEWER',
-    },
-  });
-
-  await prisma.organizationMember.create({
-    data: {
-      userId: owner2.id,
-      organizationId: org2.id,
-      role: 'ORG_ADMIN',
-    },
-  });
-
-  // Workspace memberships
-  await prisma.workspaceMember.create({
-    data: {
-      userId: workspaceOwner.id,
-      workspaceId: workspace1.id,
-      role: 'WORKSPACE_OWNER',
-    },
-  });
-
-  await prisma.workspaceMember.create({
-    data: {
-      userId: teamLead.id,
-      workspaceId: workspace1.id,
-      role: 'MEMBER',
-    },
-  });
-
-  await prisma.workspaceMember.create({
-    data: {
-      userId: member.id,
-      workspaceId: workspace1.id,
-      role: 'MEMBER',
-    },
-  });
-
-  await prisma.workspaceMember.create({
-    data: {
-      userId: viewer.id,
-      workspaceId: workspace1.id,
-      role: 'VIEWER',
-    },
-  });
-
-  await prisma.workspaceMember.create({
-    data: {
-      userId: member2.id,
-      workspaceId: workspace2.id,
-      role: 'MEMBER',
-    },
-  });
-
-  // Team memberships
-  await prisma.teamMember.create({
-    data: {
-      userId: teamLead.id,
-      teamId: engineeringTeam.id,
-      role: 'TEAM_LEAD',
-    },
-  });
-
-  await prisma.teamMember.create({
-    data: {
-      userId: member.id,
-      teamId: engineeringTeam.id,
-      role: 'MEMBER',
-    },
-  });
-
-  await prisma.teamMember.create({
-    data: {
-      userId: member2.id,
-      teamId: productTeam.id,
-      role: 'MEMBER',
-    },
-  });
-  console.log('✅ Created old-style memberships');
-
-  // Create sample OKRs for testing visibility
-  // Objective owned by member in workspace1
-  const objective1 = await prisma.objective.create({
-    data: {
-      title: 'Launch MVP by Q2 2025',
-      description: 'Build and launch the minimum viable product to market',
-      workspaceId: workspace1.id,
-      teamId: engineeringTeam.id,
-      ownerId: member.id,
-      period: 'QUARTERLY',
-      startDate: new Date('2025-04-01'),
-      endDate: new Date('2025-06-30'),
-      status: 'ON_TRACK',
-      progress: 35,
-      visibilityLevel: 'TEAM_ONLY',
-    },
-  });
-
-  // Objective owned by workspaceOwner
-  const objective2 = await prisma.objective.create({
-    data: {
-      title: 'Improve Product Performance',
-      description: 'Optimize application performance and user experience',
-      workspaceId: workspace1.id,
-      ownerId: workspaceOwner.id,
-      period: 'QUARTERLY',
-      startDate: new Date('2025-04-01'),
-      endDate: new Date('2025-06-30'),
-      status: 'ON_TRACK',
-      progress: 50,
-      visibilityLevel: 'WORKSPACE_ONLY',
-    },
-  });
-
-  // Objective owned by tenantOwner (tenant-wide visibility)
-  const objective3 = await prisma.objective.create({
-    data: {
-      title: 'Increase Customer Satisfaction',
-      description: 'Achieve 90% customer satisfaction score',
-      workspaceId: workspace1.id,
-      ownerId: tenantOwner.id,
-      period: 'QUARTERLY',
-      startDate: new Date('2025-04-01'),
-      endDate: new Date('2025-06-30'),
-      status: 'ON_TRACK',
-      progress: 65,
-      visibilityLevel: 'PUBLIC_TENANT',
-    },
-  });
-
-  // Objective in workspace2 (different workspace)
-  await prisma.objective.create({
-    data: {
-      title: 'Expand Marketing Reach',
-      description: 'Increase brand awareness and market presence',
-      workspaceId: workspace2.id,
-      ownerId: member2.id,
-      period: 'QUARTERLY',
-      startDate: new Date('2025-04-01'),
-      endDate: new Date('2025-06-30'),
-      status: 'ON_TRACK',
-      progress: 40,
-      visibilityLevel: 'WORKSPACE_ONLY',
-    },
-  });
-  console.log('✅ Created sample objectives');
-
-  // Create Key Results
-  const keyResult1 = await prisma.keyResult.create({
-    data: {
-      title: 'Achieve 1000 active users',
-      description: 'Grow user base to 100.root active monthly users',
-      ownerId: member.id,
-      metricType: 'REACH',
-      startValue: 0,
-      targetValue: 1000,
-      currentValue: 350,
-      unit: 'users',
-      progress: 35,
-      period: 'QUARTERLY',
-      startDate: new Date('2025-04-01'),
-      endDate: new Date('2025-06-30'),
-      visibilityLevel: 'TEAM_ONLY',
+    update: {},
+    create: {
+      objectiveId: objPast1.id,
+      keyResultId: krPast1.id,
     },
   });
 
-  await prisma.objectiveKeyResult.create({
-    data: {
-      objectiveId: objective1.id,
-      keyResultId: keyResult1.id,
+  // Current cycle KRs
+  let krCurrent1 = await prisma.keyResult.findFirst({
+    where: {
+      title: 'Raise First Contact Resolution from 62% to 75%',
+      ownerId: USER_FOUNDER_ID,
+      startDate: new Date('2025-10-01'),
+    },
+  });
+  if (!krCurrent1) {
+    krCurrent1 = await prisma.keyResult.create({
+      data: {
+        title: 'Raise First Contact Resolution from 62% to 75%',
+        description: 'Focus on billing queue to reduce repeat contacts',
+        ownerId: USER_FOUNDER_ID,
+        metricType: 'INCREASE',
+        startValue: 62,
+        targetValue: 75,
+        currentValue: 63,
+        unit: 'percentage',
+        status: 'AT_RISK',
+        progress: 8,
+        period: 'QUARTERLY',
+        startDate: new Date('2025-10-01'),
+        endDate: new Date('2025-12-31'),
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: true,
+        checkInCadence: 'WEEKLY',
+      },
+    });
+  } else {
+    krCurrent1 = await prisma.keyResult.update({
+      where: { id: krCurrent1.id },
+      data: {
+        ownerId: USER_FOUNDER_ID,
+        status: 'AT_RISK',
+        isPublished: true,
+      },
+    });
+  }
+
+  await prisma.objectiveKeyResult.upsert({
+    where: {
+      objectiveId_keyResultId: {
+        objectiveId: objCurrent1.id,
+        keyResultId: krCurrent1.id,
+      },
+    },
+    update: {},
+    create: {
+      objectiveId: objCurrent1.id,
+      keyResultId: krCurrent1.id,
     },
   });
 
-  const keyResult2 = await prisma.keyResult.create({
-    data: {
-      title: 'Reduce page load time to under 2 seconds',
-      description: 'Optimize application performance',
-      ownerId: workspaceOwner.id,
-      metricType: 'DECREASE',
-      startValue: 5.2,
-      targetValue: 2.0,
-      currentValue: 3.8,
-      unit: 'seconds',
-      progress: 43.75,
-      period: 'QUARTERLY',
-      startDate: new Date('2025-04-01'),
-      endDate: new Date('2025-06-30'),
-      visibilityLevel: 'WORKSPACE_ONLY',
+  let krCurrent2 = await prisma.keyResult.findFirst({
+    where: {
+      title: 'Cut average handling time from 6m20s to 5m00s',
+      ownerId: USER_FOUNDER_ID,
+      startDate: new Date('2025-10-01'),
+    },
+  });
+  if (!krCurrent2) {
+    krCurrent2 = await prisma.keyResult.create({
+      data: {
+        title: 'Cut average handling time from 6m20s to 5m00s',
+        description: 'Reduce time per contact through improved workflows and agent tools',
+        ownerId: USER_FOUNDER_ID,
+        metricType: 'DECREASE',
+        startValue: 380,
+        targetValue: 300,
+        currentValue: 340,
+        unit: 'seconds',
+        status: 'ON_TRACK',
+        progress: 50,
+        period: 'QUARTERLY',
+        startDate: new Date('2025-10-01'),
+        endDate: new Date('2025-12-31'),
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: true,
+        checkInCadence: 'WEEKLY',
+      },
+    });
+  } else {
+    krCurrent2 = await prisma.keyResult.update({
+      where: { id: krCurrent2.id },
+      data: {
+        ownerId: USER_FOUNDER_ID,
+        status: 'ON_TRACK',
+        isPublished: true,
+      },
+    });
+  }
+
+  await prisma.objectiveKeyResult.upsert({
+    where: {
+      objectiveId_keyResultId: {
+        objectiveId: objCurrent1.id,
+        keyResultId: krCurrent2.id,
+      },
+    },
+    update: {},
+    create: {
+      objectiveId: objCurrent1.id,
+      keyResultId: krCurrent2.id,
     },
   });
 
-  await prisma.objectiveKeyResult.create({
-    data: {
-      objectiveId: objective2.id,
-      keyResultId: keyResult2.id,
+  let krCurrent3 = await prisma.keyResult.findFirst({
+    where: {
+      title: 'Lower voluntary attrition from 32% to 24%',
+      ownerId: USER_AGENT_ID,
+      startDate: new Date('2025-10-01'),
+    },
+  });
+  if (!krCurrent3) {
+    krCurrent3 = await prisma.keyResult.create({
+      data: {
+        title: 'Lower voluntary attrition from 32% to 24%',
+        description: 'Reduce turnover in core support teams through retention initiatives',
+        ownerId: USER_AGENT_ID,
+        metricType: 'DECREASE',
+        startValue: 32,
+        targetValue: 24,
+        currentValue: 28,
+        unit: 'percentage',
+        status: 'ON_TRACK',
+        progress: 50,
+        period: 'QUARTERLY',
+        startDate: new Date('2025-10-01'),
+        endDate: new Date('2025-12-31'),
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: true,
+        checkInCadence: 'BIWEEKLY',
+      },
+    });
+  } else {
+    krCurrent3 = await prisma.keyResult.update({
+      where: { id: krCurrent3.id },
+      data: {
+        ownerId: USER_AGENT_ID,
+        status: 'ON_TRACK',
+        isPublished: true,
+      },
+    });
+  }
+
+  await prisma.objectiveKeyResult.upsert({
+    where: {
+      objectiveId_keyResultId: {
+        objectiveId: objCurrent2.id,
+        keyResultId: krCurrent3.id,
+      },
+    },
+    update: {},
+    create: {
+      objectiveId: objCurrent2.id,
+      keyResultId: krCurrent3.id,
     },
   });
 
-  const keyResult3 = await prisma.keyResult.create({
-    data: {
-      title: 'Achieve 90% customer satisfaction',
-      description: 'Measure and improve customer satisfaction',
-      ownerId: tenantOwner.id,
-      metricType: 'REACH',
-      startValue: 75,
-      targetValue: 90,
-      currentValue: 82,
-      unit: 'percentage',
-      progress: 58.33,
-      period: 'QUARTERLY',
-      startDate: new Date('2025-04-01'),
-      endDate: new Date('2025-06-30'),
-      visibilityLevel: 'PUBLIC_TENANT',
+  // KR with overdue check-in (WEEKLY cadence, last check-in 14 days ago)
+  let krCurrent4 = await prisma.keyResult.findFirst({
+    where: {
+      title: 'Maintain cost per contact under £8.50',
+      ownerId: USER_FOUNDER_ID,
+      startDate: new Date('2025-10-01'),
+    },
+  });
+  if (!krCurrent4) {
+    krCurrent4 = await prisma.keyResult.create({
+      data: {
+        title: 'Maintain cost per contact under £8.50',
+        description: 'Control operational costs while maintaining quality',
+        ownerId: USER_FOUNDER_ID,
+        metricType: 'MAINTAIN',
+        startValue: 8.2,
+        targetValue: 8.5,
+        currentValue: 8.4,
+        unit: 'GBP',
+        status: 'ON_TRACK',
+        progress: 67,
+        period: 'QUARTERLY',
+        startDate: new Date('2025-10-01'),
+        endDate: new Date('2025-12-31'),
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: false,
+        checkInCadence: 'WEEKLY',
+      },
+    });
+  } else {
+    krCurrent4 = await prisma.keyResult.update({
+      where: { id: krCurrent4.id },
+      data: {
+        ownerId: USER_FOUNDER_ID,
+        status: 'ON_TRACK',
+        isPublished: false,
+        checkInCadence: 'WEEKLY',
+      },
+    });
+  }
+
+  await prisma.objectiveKeyResult.upsert({
+    where: {
+      objectiveId_keyResultId: {
+        objectiveId: objCurrent3.id,
+        keyResultId: krCurrent4.id,
+      },
+    },
+    update: {},
+    create: {
+      objectiveId: objCurrent3.id,
+      keyResultId: krCurrent4.id,
     },
   });
 
-  await prisma.objectiveKeyResult.create({
-    data: {
-      objectiveId: objective3.id,
-      keyResultId: keyResult3.id,
+  // Future cycle KRs
+  let krFuture1 = await prisma.keyResult.findFirst({
+    where: {
+      title: 'Achieve 40% AI containment for billing queries',
+      ownerId: USER_FOUNDER_ID,
+      startDate: new Date('2026-01-01'),
     },
   });
-  console.log('✅ Created sample key results');
+  if (!krFuture1) {
+    krFuture1 = await prisma.keyResult.create({
+      data: {
+        title: 'Achieve 40% AI containment for billing queries',
+        description: 'Expand AI-assisted resolution through improved intent recognition',
+        ownerId: USER_FOUNDER_ID,
+        metricType: 'INCREASE',
+        startValue: 25,
+        targetValue: 40,
+        currentValue: 25,
+        unit: 'percentage',
+        status: 'ON_TRACK',
+        progress: 0,
+        period: 'QUARTERLY',
+        startDate: new Date('2026-01-01'),
+        endDate: new Date('2026-03-31'),
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: false,
+        checkInCadence: 'MONTHLY',
+      },
+    });
+  } else {
+    krFuture1 = await prisma.keyResult.update({
+      where: { id: krFuture1.id },
+      data: {
+        ownerId: USER_FOUNDER_ID,
+        isPublished: false,
+      },
+    });
+  }
 
-  // Create Initiatives
-  await prisma.initiative.create({
-    data: {
-      title: 'Implement caching layer',
-      description: 'Add Redis caching to improve performance',
-      objectiveId: objective1.id,
-      ownerId: member.id,
-      status: 'IN_PROGRESS',
-      period: 'MONTHLY',
-      startDate: new Date('2025-04-01'),
-      endDate: new Date('2025-04-30'),
-      dueDate: new Date('2025-04-15'),
+  await prisma.objectiveKeyResult.upsert({
+    where: {
+      objectiveId_keyResultId: {
+        objectiveId: objFuture1.id,
+        keyResultId: krFuture1.id,
+      },
+    },
+    update: {},
+    create: {
+      objectiveId: objFuture1.id,
+      keyResultId: krFuture1.id,
     },
   });
 
-  await prisma.initiative.create({
-    data: {
-      title: 'Database optimization',
-      description: 'Optimize database queries and indexing',
-      objectiveId: objective2.id,
-      ownerId: workspaceOwner.id,
-      status: 'IN_PROGRESS',
-      period: 'MONTHLY',
-      startDate: new Date('2025-04-01'),
-      endDate: new Date('2025-04-30'),
-      dueDate: new Date('2025-04-20'),
+  let krFuture2 = await prisma.keyResult.findFirst({
+    where: {
+      title: 'Reduce knowledge retrieval time from 2.5m to 1.5m',
+      ownerId: USER_AGENT_ID,
+      startDate: new Date('2026-01-01'),
     },
   });
-  console.log('✅ Created sample initiatives');
+  if (!krFuture2) {
+    krFuture2 = await prisma.keyResult.create({
+      data: {
+        title: 'Reduce knowledge retrieval time from 2.5m to 1.5m',
+        description: 'Improve search and navigation in knowledge base',
+        ownerId: USER_AGENT_ID,
+        metricType: 'DECREASE',
+        startValue: 150,
+        targetValue: 90,
+        currentValue: 150,
+        unit: 'seconds',
+        status: 'ON_TRACK',
+        progress: 0,
+        period: 'QUARTERLY',
+        startDate: new Date('2026-01-01'),
+        endDate: new Date('2026-03-31'),
+        visibilityLevel: 'PUBLIC_TENANT',
+        isPublished: false,
+        checkInCadence: 'MONTHLY',
+      },
+    });
+  } else {
+    krFuture2 = await prisma.keyResult.update({
+      where: { id: krFuture2.id },
+      data: {
+        ownerId: USER_AGENT_ID,
+        isPublished: false,
+      },
+    });
+  }
 
-  console.log('\n🎉 Comprehensive RBAC test data seed completed successfully!');
-  console.log('\n📋 Test Users Created:');
-  console.log('  Superuser: admin@test.com / password123');
-  console.log('  Tenant Owner: owner@test.com / password123');
-  console.log('  Tenant Admin: admin@org1.com / password123');
-  console.log('  Workspace Owner: workspace@org1.com / password123');
-  console.log('  Team Lead: teamlead@org1.com / password123');
-  console.log('  Member: member@org1.com / password123');
-  console.log('  Viewer: viewer@org1.com / password123');
-  console.log('  Member 2: member2@org1.com / password123');
-  console.log('  Org2 Owner: owner2@org2.com / password123');
-  console.log('\n✅ All users have both RBAC role assignments and old-style memberships');
-  console.log('✅ Sample OKRs created with different visibility levels');
+  await prisma.objectiveKeyResult.upsert({
+    where: {
+      objectiveId_keyResultId: {
+        objectiveId: objFuture2.id,
+        keyResultId: krFuture2.id,
+      },
+    },
+    update: {},
+    create: {
+      objectiveId: objFuture2.id,
+      keyResultId: krFuture2.id,
+    },
+  });
+  console.log('✅ Key Results created');
+
+  // ==========================================
+  // 5. Check-ins (recent for Q4 2025 KRs, overdue for one)
+  // ==========================================
+
+  const now = new Date();
+  const oneDayAgo = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000);
+  const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+  const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+  // Delete existing check-ins for seeded KRs to ensure idempotency
+  await prisma.checkIn.deleteMany({
+    where: {
+      keyResultId: {
+        in: [krCurrent1.id, krCurrent2.id, krCurrent3.id, krCurrent4.id],
+      },
+    },
+  });
+
+  // Recent check-ins (within last 5 days for Q4 2025 cycle KRs)
+  await prisma.checkIn.create({
+    data: {
+      keyResultId: krCurrent1.id,
+      userId: USER_FOUNDER_ID,
+      value: 63,
+      confidence: 2, // 1-5 scale (low confidence = 2)
+      note: 'Billing queue continues to create repeat contacts, knowledge gap not closed. Need additional training resources.',
+      blockers: 'Knowledge base missing critical billing scenarios, training needed',
+      createdAt: threeDaysAgo,
+    },
+  });
+
+  await prisma.checkIn.create({
+    data: {
+      keyResultId: krCurrent2.id,
+      userId: USER_FOUNDER_ID,
+      value: 340,
+      confidence: 4, // 1-5 scale (high confidence = 4)
+      note: 'Pilot rollout of Agent Assist in UK support team increased containment by ~8pp. Positive feedback from agents.',
+      blockers: null,
+      createdAt: fiveDaysAgo,
+    },
+  });
+
+  await prisma.checkIn.create({
+    data: {
+      keyResultId: krCurrent3.id,
+      userId: USER_AGENT_ID,
+      value: 28,
+      confidence: 3, // 1-5 scale (medium confidence = 3)
+      note: 'Attrition risk remains high in evening shift; coaching sessions scheduled. Early signs of improvement.',
+      blockers: 'Evening shift coverage gaps creating burnout risk',
+      createdAt: oneDayAgo,
+    },
+  });
+
+  // Overdue check-in: WEEKLY cadence KR with last check-in 14 days ago
+  await prisma.checkIn.create({
+    data: {
+      keyResultId: krCurrent4.id,
+      userId: USER_FOUNDER_ID,
+      value: 8.4,
+      confidence: 3,
+      note: 'Costs stable but monitoring volume increases. Need to reassess Q4 projections.',
+      blockers: null,
+      createdAt: twoWeeksAgo, // Makes it overdue for WEEKLY cadence
+    },
+  });
+  console.log('✅ Check-ins created');
+
+  // ==========================================
+  // 6. Initiatives (linked to objectives)
+  // ==========================================
+
+  // One initiative per current-cycle objective (Q4 2025), plus one future initiative
+  let initiative1 = await prisma.initiative.findFirst({
+    where: {
+      title: 'Agent Assist Rollout',
+      objectiveId: objCurrent1.id,
+    },
+  });
+  if (!initiative1) {
+    initiative1 = await prisma.initiative.create({
+      data: {
+        title: 'Agent Assist Rollout',
+        description: 'Deploy AI-powered agent assistance tool across UK and EU support teams',
+        objectiveId: objCurrent1.id,
+        ownerId: USER_FOUNDER_ID,
+        status: 'IN_PROGRESS',
+        period: 'QUARTERLY',
+        startDate: new Date('2025-10-01'),
+        endDate: new Date('2025-12-31'),
+        positionX: 100,
+        positionY: 100,
+      },
+    });
+  } else {
+    initiative1 = await prisma.initiative.update({
+      where: { id: initiative1.id },
+      data: {
+        objectiveId: objCurrent1.id,
+        ownerId: USER_FOUNDER_ID,
+        status: 'IN_PROGRESS',
+      },
+    });
+  }
+
+  let initiative2 = await prisma.initiative.findFirst({
+    where: {
+      title: 'Unified Knowledge Base Programme',
+      objectiveId: objCurrent1.id,
+    },
+  });
+  if (!initiative2) {
+    initiative2 = await prisma.initiative.create({
+      data: {
+        title: 'Unified Knowledge Base Programme',
+        description: 'Consolidate and enhance knowledge base with billing scenarios and improved search',
+        objectiveId: objCurrent1.id,
+        ownerId: USER_AGENT_ID,
+        status: 'IN_PROGRESS',
+        period: 'QUARTERLY',
+        startDate: new Date('2025-10-15'),
+        endDate: new Date('2025-12-31'),
+        positionX: 300,
+        positionY: 100,
+      },
+    });
+  } else {
+    initiative2 = await prisma.initiative.update({
+      where: { id: initiative2.id },
+      data: {
+        objectiveId: objCurrent1.id,
+        ownerId: USER_AGENT_ID,
+        status: 'IN_PROGRESS',
+      },
+    });
+  }
+
+  let initiative3 = await prisma.initiative.findFirst({
+    where: {
+      title: 'Self-Service Deflection Pilot',
+      objectiveId: objCurrent2.id,
+    },
+  });
+  if (!initiative3) {
+    initiative3 = await prisma.initiative.create({
+      data: {
+        title: 'Self-Service Deflection Pilot',
+        description: 'Launch self-service portal for common billing inquiries to reduce contact volume',
+        objectiveId: objCurrent2.id,
+        ownerId: USER_FOUNDER_ID,
+        status: 'IN_PROGRESS',
+        period: 'QUARTERLY',
+        startDate: new Date('2025-10-20'),
+        endDate: new Date('2025-12-31'),
+        positionX: 200,
+        positionY: 200,
+      },
+    });
+  } else {
+    initiative3 = await prisma.initiative.update({
+      where: { id: initiative3.id },
+      data: {
+        objectiveId: objCurrent2.id,
+        ownerId: USER_FOUNDER_ID,
+        status: 'IN_PROGRESS',
+      },
+    });
+  }
+
+  // Future cycle initiative (Q1 2026)
+  let initiative4 = await prisma.initiative.findFirst({
+    where: {
+      title: 'AI Intent Recognition Enhancement',
+      objectiveId: objFuture1.id,
+    },
+  });
+  if (!initiative4) {
+    initiative4 = await prisma.initiative.create({
+      data: {
+        title: 'AI Intent Recognition Enhancement',
+        description: 'Upgrade AI models to improve intent classification for billing queries',
+        objectiveId: objFuture1.id,
+        ownerId: USER_FOUNDER_ID,
+        status: 'NOT_STARTED',
+        period: 'QUARTERLY',
+        startDate: new Date('2026-01-01'),
+        endDate: new Date('2026-03-31'),
+        positionX: 150,
+        positionY: 150,
+      },
+    });
+  } else {
+    initiative4 = await prisma.initiative.update({
+      where: { id: initiative4.id },
+      data: {
+        objectiveId: objFuture1.id,
+        ownerId: USER_FOUNDER_ID,
+        status: 'NOT_STARTED',
+      },
+    });
+  }
+  console.log('✅ Initiatives created');
+
+  // ==========================================
+  // 7. Activities (for /reports/analytics/feed)
+  // ==========================================
+
+  // Delete existing activities for seeded entities to ensure idempotency
+  await prisma.activity.deleteMany({
+    where: {
+      OR: [
+        { entityId: objCurrent1.id, entityType: 'OBJECTIVE' },
+        { entityId: objCurrent2.id, entityType: 'OBJECTIVE' },
+        { entityId: objCurrent3.id, entityType: 'OBJECTIVE' },
+        { entityId: krCurrent1.id, entityType: 'KEY_RESULT' },
+        { entityId: krCurrent2.id, entityType: 'KEY_RESULT' },
+        { entityId: krCurrent3.id, entityType: 'KEY_RESULT' },
+        { entityId: krCurrent4.id, entityType: 'KEY_RESULT' },
+        { entityId: initiative1.id, entityType: 'INITIATIVE' },
+        { entityId: initiative2.id, entityType: 'INITIATIVE' },
+      ],
+    },
+  });
+
+  const activities = [
+    // Recent activities (within last 3 days)
+    {
+      entityType: 'OBJECTIVE' as const,
+      entityId: objCurrent1.id,
+      userId: USER_FOUNDER_ID,
+      action: 'UPDATED' as const,
+      metadata: {
+        before: { status: 'ON_TRACK', progress: 50 },
+        after: { status: 'AT_RISK', progress: 42 },
+        message: "Status updated: 'Improve First Contact Resolution in Priority Channels' marked as At Risk due to billing queue challenges",
+      },
+      createdAt: threeDaysAgo,
+    },
+    {
+      entityType: 'KEY_RESULT' as const,
+      entityId: krCurrent1.id,
+      userId: USER_FOUNDER_ID,
+      action: 'UPDATED' as const,
+      metadata: {
+        before: { confidence: 70 },
+        after: { confidence: 40 },
+        message: "Confidence updated: FCR confidence dropped from 70% to 40% due to billing-related repeat contacts",
+      },
+      createdAt: threeDaysAgo,
+    },
+    {
+      entityType: 'CHECK_IN' as const,
+      entityId: krCurrent1.id,
+      userId: USER_FOUNDER_ID,
+      action: 'CREATED' as const,
+      metadata: {
+        message: 'Check-in recorded: FCR at 63%, confidence 2/5. Knowledge gap identified in billing scenarios.',
+      },
+      createdAt: threeDaysAgo,
+    },
+    {
+      entityType: 'OBJECTIVE' as const,
+      entityId: objCurrent2.id,
+      userId: USER_AGENT_ID,
+      action: 'UPDATED' as const,
+      metadata: {
+        message: 'Progress update: Attrition reduction initiatives showing positive early results. Coaching sessions well-received.',
+      },
+      createdAt: oneDayAgo,
+    },
+    {
+      entityType: 'KEY_RESULT' as const,
+      entityId: krCurrent2.id,
+      userId: USER_FOUNDER_ID,
+      action: 'UPDATED' as const,
+      metadata: {
+        message: "Weekly check-in posted to KR 'Cut average handling time from 6m20s to 5m00s'. Agent Assist pilot showing promise.",
+      },
+      createdAt: fiveDaysAgo,
+    },
+    {
+      entityType: 'INITIATIVE' as const,
+      entityId: initiative1.id,
+      userId: USER_FOUNDER_ID,
+      action: 'UPDATED' as const,
+      metadata: {
+        message: 'Agent Assist rollout expanded to 3 additional teams. Positive feedback from agents on productivity gains.',
+      },
+      createdAt: fiveDaysAgo,
+    },
+    {
+      entityType: 'INITIATIVE' as const,
+      entityId: initiative2.id,
+      userId: USER_AGENT_ID,
+      action: 'UPDATED' as const,
+      metadata: {
+        message: 'Knowledge base programme: Added 15 new billing scenario articles. Search functionality improvements in progress.',
+      },
+      createdAt: oneDayAgo,
+    },
+    {
+      entityType: 'CHECK_IN' as const,
+      entityId: krCurrent3.id,
+      userId: USER_AGENT_ID,
+      action: 'CREATED' as const,
+      metadata: {
+        message: 'Check-in recorded: Attrition at 28%, confidence 3/5. Evening shift concerns addressed with scheduling adjustments.',
+      },
+      createdAt: oneDayAgo,
+    },
+  ];
+
+  await prisma.activity.createMany({
+    data: activities,
+  });
+  console.log('✅ Activities created');
+
+  // ==========================================
+  // 8. Summary (count actual records)
+  // ==========================================
+  const totalObjectives = await prisma.objective.count({
+    where: { organizationId: PUZZEL_CX_ORG_ID },
+  });
+
+  const totalKeyResults = await prisma.keyResult.count({
+    where: {
+      objectives: {
+        some: {
+          objective: {
+            organizationId: PUZZEL_CX_ORG_ID,
+          },
+        },
+      },
+    },
+  });
+
+  const totalCheckIns = await prisma.checkIn.count({
+    where: {
+      keyResult: {
+        objectives: {
+          some: {
+            objective: {
+              organizationId: PUZZEL_CX_ORG_ID,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Get all entity IDs for activity count
+  const objectiveIds = await prisma.objective
+    .findMany({
+      where: { organizationId: PUZZEL_CX_ORG_ID },
+      select: { id: true },
+    })
+    .then((objs) => objs.map((o) => o.id));
+
+  const keyResultIds = await prisma.keyResult
+    .findMany({
+      where: {
+        objectives: {
+          some: {
+            objective: {
+              organizationId: PUZZEL_CX_ORG_ID,
+            },
+          },
+        },
+      },
+      select: { id: true },
+    })
+    .then((krs) => krs.map((kr) => kr.id));
+
+  const initiativeIds = await prisma.initiative
+    .findMany({
+      where: {
+        objective: {
+          organizationId: PUZZEL_CX_ORG_ID,
+        },
+      },
+      select: { id: true },
+    })
+    .then((inits) => inits.map((i) => i.id));
+
+  const checkInIds = await prisma.checkIn
+    .findMany({
+      where: {
+        keyResult: {
+          objectives: {
+            some: {
+              objective: {
+                organizationId: PUZZEL_CX_ORG_ID,
+              },
+            },
+          },
+        },
+      },
+      select: { id: true },
+    })
+    .then((cis) => cis.map((ci) => ci.id));
+
+  const totalActivities = await prisma.activity.count({
+    where: {
+      OR: [
+        { entityType: 'OBJECTIVE', entityId: { in: objectiveIds } },
+        { entityType: 'KEY_RESULT', entityId: { in: keyResultIds } },
+        { entityType: 'INITIATIVE', entityId: { in: initiativeIds } },
+        { entityType: 'CHECK_IN', entityId: { in: checkInIds } },
+      ],
+    },
+  });
+
+  console.log('\n🎉 Demo-ready seed data generation completed successfully!');
+  console.log('\n📊 Puzzel CX Seed Data Summary:');
+  console.log(`  - Organization: ${org.name} (${PUZZEL_CX_ORG_ID})`);
+  console.log(`  - Total Objectives: ${totalObjectives}`);
+  console.log(`  - Total Key Results: ${totalKeyResults}`);
+  console.log(`  - Total Check-ins: ${totalCheckIns}`);
+  console.log(`  - Total Activities: ${totalActivities}`);
+  console.log('\n✅ All demo data belongs to Puzzel CX organization');
 }
 
 main()

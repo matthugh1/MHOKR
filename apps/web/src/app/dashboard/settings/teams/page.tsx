@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -312,11 +311,11 @@ function TeamsSettings() {
                 <CardContent>
                   <div className="space-y-3">
                     <div className="text-sm text-slate-600">
-                      {team.members?.length || 0} members
+                      {(team as any).members?.length || 0} members
                     </div>
-                    {team.members && team.members.length > 0 && (
+                    {(team as any).members && (team as any).members.length > 0 && (
                       <div className="space-y-2">
-                        {team.members.map((member: any) => (
+                        {(team as any).members.map((member: any) => (
                           <div key={member.id} className="flex items-center justify-between p-2 bg-slate-50 rounded">
                             <div className="flex items-center gap-2">
                               <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium">

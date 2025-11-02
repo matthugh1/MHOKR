@@ -87,7 +87,7 @@ export function ObjectiveNode({ data, id }: NodeProps) {
 
   return (
     <div 
-      onClick={(e) => {
+      onClick={(_e) => {
         // Single click - open edit panel
         if (!isEditingTitle) {
           data.onEdit?.(id, data)
@@ -176,7 +176,7 @@ export function KeyResultNode({ data, id }: NodeProps) {
 
   return (
     <div 
-      onClick={(e) => {
+      onClick={(_e) => {
         if (!isEditingTitle) {
           data.onEdit?.(id, data)
         }
@@ -259,7 +259,7 @@ export function InitiativeNode({ data, id }: NodeProps) {
 
   return (
     <div 
-      onClick={(e) => {
+      onClick={(_e) => {
         if (!isEditingTitle) {
           data.onEdit?.(id, data)
         }

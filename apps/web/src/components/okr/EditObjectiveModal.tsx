@@ -54,7 +54,7 @@ export interface EditObjectiveModalProps {
 
 export function EditObjectiveModal({
   isOpen,
-  objectiveId,
+  objectiveId: _objectiveId,
   objectiveData,
   onClose,
   onSubmit,

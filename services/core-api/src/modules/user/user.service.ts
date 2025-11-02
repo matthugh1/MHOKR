@@ -34,8 +34,10 @@ export class UserService {
   }
 
   async findByEmail(email: string) {
+    // Normalize email to lowercase for case-insensitive lookup
+    const normalizedEmail = email.toLowerCase().trim();
     return this.prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
     });
   }
 

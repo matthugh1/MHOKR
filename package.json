@@ -27,8 +27,12 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "lint": "eslint \"**/*.{ts,tsx,js,jsx}\" --fix",
     "typecheck": "tsc --noEmit",
+    "typecheck:web": "tsc -p apps/web/tsconfig.json --noEmit",
+    "typecheck:all": "tsc --build --force --noEmit",
     "premerge:audit": "node scripts/pre-merge-audit.js",
-    "todo:audit": "node scripts/todo-audit.js"
+    "todo:audit": "node scripts/todo-audit.js",
+    "check-phase-commit": "ts-node scripts/check-phase-commit.ts",
+    "check-commit-message": "ts-node scripts/check-commit-message.ts"
   },
   "workspaces": [
     "apps/*",
@@ -38,9 +42,11 @@
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
+    "@types/node": "^20.0.0",
     "concurrently": "^8.2.2",
     "eslint": "^8.57.0",
     "prettier": "^3.2.5",
+    "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   },
   "engines": {

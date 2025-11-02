@@ -19,6 +19,16 @@ import { RBACGuard, RequireAction } from '../rbac';
  * - Active cycle queries
  * - Overdue check-ins
  * 
+ * TODO Phase 2: Move the following endpoints from ObjectiveController:
+ * - GET /objectives/analytics/summary → GET /reports/analytics/summary
+ * - GET /objectives/analytics/feed → GET /reports/analytics/feed
+ * - GET /objectives/export/csv → GET /reports/export/csv
+ * - GET /objectives/pillars → GET /reports/pillars
+ * - GET /objectives/cycles/active → GET /reports/cycles/active
+ * - GET /objectives/pillars/coverage → GET /reports/pillars/coverage
+ * 
+ * TODO Phase 2: Move the following endpoints from KeyResultController:
+ * - GET /key-results/overdue → GET /reports/check-ins/overdue
  */
 @ApiTags('Reports')
 @Controller('reports')

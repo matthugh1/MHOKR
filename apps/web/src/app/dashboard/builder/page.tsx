@@ -13,9 +13,6 @@ import ReactFlow, {
   Controls,
   MiniMap,
   Panel,
-  NodeProps,
-  Handle,
-  Position,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { ProtectedRoute } from '@/components/protected-route'
@@ -26,33 +23,25 @@ import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Plus, Save, Target, CheckCircle, Lightbulb, X, Trash2, Building2, Users, User, Search, ChevronDown, Briefcase, Calendar } from 'lucide-react'
+import { Plus, Target, CheckCircle, Lightbulb, X, Trash2, Building2, Users, User, Search, ChevronDown, Calendar } from 'lucide-react'
 import api from '@/lib/api'
 import { Period } from '@okr-nexus/types'
 import { createHierarchicalLayout, getDefaultNodePosition } from '@/lib/auto-layout'
 import { EditPanel } from './components/EditPanel'
-import { EditFormTabs } from './components/EditFormTabs'
+import { EditFormTabs, EditFormState } from './components/EditFormTabs'
 import { ObjectiveNode, KeyResultNode, InitiativeNode } from './components/EnhancedNodes'
 import { useAutoSave } from './hooks/useAutoSave'
 import { CycleSelector } from '@/components/ui/CycleSelector'
 import { 
   calculateEndDate, 
   formatDateForInput, 
-  getPeriodLabel, 
   formatPeriod, 
   getQuarterFromDate, 
   getQuarterDates, 
   getMonthDates, 
   getYearDates,
-  getCurrentYear,
   getAvailableYears,
   getMonthName,
-  getAvailablePeriodFilters,
-  getCurrentPeriodFilter,
-  doesOKRMatchPeriod,
-  type PeriodFilterOption
 } from '@/lib/date-utils'
 
 // Node components are now imported from EnhancedNodes.tsx
@@ -68,12 +57,10 @@ export default function BuilderPage() {
   const [edges, setEdges, onEdgesChangeBase] = useEdgesState([])
   // TODO [phase7-hardening]: tighten typing - replace Record<string, unknown> with proper node types
   const [editingNode, setEditingNode] = useState<{ id: string; data: Record<string, unknown> } | null>(null)
-  const [editingFormData, setEditingFormData] = useState<Record<string, unknown> | null>(null)
+  const [editingFormData, setEditingFormData] = useState<EditFormState | null>(null)
   const [showNodeCreator, setShowNodeCreator] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [_loading, setLoading] = useState(false)
   const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved'>('idle')
-  const [periodFilter, setPeriodFilter] = useState<string>(getCurrentPeriodFilter())
-  const availablePeriods = getAvailablePeriodFilters()
   const [activeCycles, setActiveCycles] = useState<Array<{
     id: string
     name: string
@@ -103,6 +90,7 @@ export default function BuilderPage() {
     loading: workspaceLoading 
   } = useWorkspace()
   const { user } = useAuth()
+  const tenantPermissions = useTenantPermissions()
 
   const getOKRLevelDisplay = () => {
     switch (currentOKRLevel) {
@@ -285,7 +273,7 @@ export default function BuilderPage() {
 
   const loadActiveCycles = async () => {
     try {
-      const response = await api.get('/objectives/cycles/active')
+      const response = await api.get('/reports/cycles/active')
       const cycles = response.data || []
       setActiveCycles(cycles)
       // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
@@ -488,12 +476,17 @@ export default function BuilderPage() {
     const initStartDate = data.startDate ? new Date(data.startDate) : new Date()
     const initPeriod = data.period || Period.QUARTERLY
     
+    const fallbackOwnerName =
+      (user?.firstName && user?.lastName)
+        ? `${user.firstName} ${user.lastName}`
+        : user?.email || ''
+    
     setEditingFormData({
       label: data.label || '',
       description: data.description || '',
       okrId: data.okrId || '',
       ownerId: data.ownerId || user?.id || '',
-      ownerName: data.ownerName || user?.name || '',
+      ownerName: data.ownerName || fallbackOwnerName,
       organizationId: data.organizationId || defaultOKRContext.organizationId || '',
       workspaceId: data.workspaceId || defaultOKRContext.workspaceId || '',
       teamId: data.teamId || defaultOKRContext.teamId || '',
@@ -903,7 +896,7 @@ export default function BuilderPage() {
     [edges, nodes, onEdgesChangeBase]
   )
 
-  const handleSaveLayout = async () => {
+  const _handleSaveLayout = async () => {
     setLoading(true)
     try {
       // Collect all node positions for batch save
@@ -1159,6 +1152,7 @@ export default function BuilderPage() {
                 organizationId: editingFormData.organizationId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
+                // @ts-expect-error TODO [phase7-hardening]: tighten typing - parentObjective needs proper interface
                 parentObjective: editingFormData.parentObjective as Record<string, unknown> || null,
               })
             }
@@ -1213,6 +1207,7 @@ export default function BuilderPage() {
                 organizationId: editingFormData.organizationId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
+                // @ts-expect-error TODO [phase7-hardening]: tighten typing - parentObjective needs proper interface
                 parentObjective: editingFormData.parentObjective as Record<string, unknown> || null,
               })
               return lockInfo.isLocked ? lockInfo.message : undefined
@@ -1236,7 +1231,7 @@ export default function BuilderPage() {
   )
 }
 
-function EditNodeForm({
+function _EditNodeForm({
   nodeId,
   data,
   onSave,
@@ -1253,7 +1248,8 @@ function EditNodeForm({
     organizations,
     workspaces, 
     teams,
-    defaultOKRContext 
+    defaultOKRContext,
+    currentOrganization
   } = useWorkspace()
   const { user } = useAuth()
   
@@ -1261,12 +1257,17 @@ function EditNodeForm({
   const initStartDate = data.startDate ? new Date(data.startDate) : new Date()
   const initPeriod = data.period || Period.QUARTERLY
   
+  const fallbackOwnerName =
+    (user?.firstName && user?.lastName)
+      ? `${user.firstName} ${user.lastName}`
+      : user?.email || ''
+  
   const [formData, setFormData] = useState({
     label: data.label || '',
     description: data.description || '',
     okrId: data.okrId || '', // CRITICAL: Must preserve okrId to distinguish update vs create
     ownerId: data.ownerId || user?.id || '',
-    ownerName: data.ownerName || user?.name || '',
+    ownerName: data.ownerName || fallbackOwnerName,
     organizationId: data.organizationId || defaultOKRContext.organizationId || '',
     workspaceId: data.workspaceId || defaultOKRContext.workspaceId || '',
     teamId: data.teamId || defaultOKRContext.teamId || '',
@@ -1357,7 +1358,10 @@ function EditNodeForm({
 
   const getOwnerDisplay = () => {
     if (formData.ownerId === user?.id) {
-      return `👤 ${user?.name || 'You'}`
+      const userName = user?.firstName && user?.lastName 
+        ? `${user.firstName} ${user.lastName}` 
+        : user?.email || 'You'
+      return `👤 ${userName}`
     }
     const selectedUser = availableUsers.find(u => u.id === formData.ownerId)
     return selectedUser ? `👤 ${selectedUser.name}` : 'Select owner...'
@@ -1427,13 +1431,18 @@ function EditNodeForm({
                     {/* Current user option */}
                     <button
                       onClick={() => {
-                        setFormData({ ...formData, ownerId: user?.id || '', ownerName: user?.name || '' })
+                        const userName = user?.firstName && user?.lastName 
+                          ? `${user.firstName} ${user.lastName}` 
+                          : user?.email || ''
+                        setFormData({ ...formData, ownerId: user?.id || '', ownerName: userName })
                         setShowOwnerDropdown(false)
                       }}
                       className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
                     >
                       <User className="h-4 w-4" />
-                      {user?.name || 'You'} (You)
+                      {user?.firstName && user?.lastName 
+                        ? `${user.firstName} ${user.lastName}` 
+                        : user?.email || 'You'} (You)
                     </button>
                     {/* Other users */}
                     {availableUsers
@@ -1893,13 +1902,18 @@ function EditNodeForm({
                     {/* Current user option */}
                     <button
                       onClick={() => {
-                        setFormData({ ...formData, ownerId: user?.id || '', ownerName: user?.name || '' })
+                        const userName = user?.firstName && user?.lastName 
+                          ? `${user.firstName} ${user.lastName}` 
+                          : user?.email || ''
+                        setFormData({ ...formData, ownerId: user?.id || '', ownerName: userName })
                         setShowOwnerDropdown(false)
                       }}
                       className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
                     >
                       <User className="h-4 w-4" />
-                      {user?.name || 'You'} (You)
+                      {user?.firstName && user?.lastName 
+                        ? `${user.firstName} ${user.lastName}` 
+                        : user?.email || 'You'} (You)
                     </button>
                     {/* Other users */}
                     {availableUsers
@@ -2142,13 +2156,18 @@ function EditNodeForm({
                     {/* Current user option */}
                     <button
                       onClick={() => {
-                        setFormData({ ...formData, ownerId: user?.id || '', ownerName: user?.name || '' })
+                        const userName = user?.firstName && user?.lastName 
+                          ? `${user.firstName} ${user.lastName}` 
+                          : user?.email || ''
+                        setFormData({ ...formData, ownerId: user?.id || '', ownerName: userName })
                         setShowOwnerDropdown(false)
                       }}
                       className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
                     >
                       <User className="h-4 w-4" />
-                      {user?.name || 'You'} (You)
+                      {user?.firstName && user?.lastName 
+                        ? `${user.firstName} ${user.lastName}` 
+                        : user?.email || 'You'} (You)
                     </button>
                     {/* Other users */}
                     {availableUsers

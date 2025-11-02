@@ -4,18 +4,18 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Target, CheckCircle, Lightbulb, Trash2 } from 'lucide-react'
-import { SectionHeader } from '@/components/ui/SectionHeader'
 import { cn } from '@/lib/utils'
+import { EditFormState } from './EditFormTabs'
 
 interface EditPanelProps {
   isOpen: boolean
   onClose: () => void
   nodeId: string | null
   nodeData: Record<string, unknown> | null
-  onSave: (nodeId: string, data: Record<string, unknown>) => Promise<void>
+  onSave: (nodeId: string, data: EditFormState) => Promise<void>
   onDelete: (nodeId: string) => Promise<void>
-  formData: Record<string, unknown> | null
-  setFormData: (data: Record<string, unknown>) => void
+  formData: EditFormState | null
+  setFormData: (data: EditFormState) => void
   children: React.ReactNode
   canEdit?: boolean
   canDelete?: boolean

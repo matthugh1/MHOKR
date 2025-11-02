@@ -28,10 +28,7 @@ import {
   Briefcase, 
   Users, 
   UserPlus, 
-  Shield, 
   Trash2,
-  CheckCircle2,
-  XCircle
 } from 'lucide-react'
 import api from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
@@ -55,8 +52,7 @@ interface RoleAssignment {
 }
 
 export function RoleManagement() {
-  const { currentOrganization, currentWorkspace, workspaces, teams, isSuperuser } = useWorkspace()
-  const { user } = useAuth()
+  const { currentOrganization, currentWorkspace, workspaces, teams } = useWorkspace()
   const { toast } = useToast()
   
   const [roleAssignments, setRoleAssignments] = useState<RoleAssignment[]>([])

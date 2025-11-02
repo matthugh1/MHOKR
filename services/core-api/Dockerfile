@@ -35,6 +35,9 @@ RUN npm run build
 # Production stage
 FROM node:20-alpine
 
+# Install OpenSSL and other required libraries for Prisma
+RUN apk add --no-cache openssl openssl-dev
+
 WORKDIR /app
 
 # Copy root package.json and tsconfig.json for workspace support
@@ -53,13 +56,15 @@ RUN npm install --omit=dev --workspace=services/core-api && npm cache clean --fo
 
 WORKDIR /app/services/core-api
 
+# Copy Prisma schema and generate client in production stage
+COPY --from=builder /app/services/core-api/prisma ./prisma
+RUN npx prisma generate
+
 # Copy built application
 COPY --from=builder /app/services/core-api/dist ./dist
-COPY --from=builder /app/services/core-api/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/services/core-api/prisma ./prisma
 
 # Expose port
 EXPOSE 3001
 
 # Start application
-CMD ["node", "dist/main"]
+CMD ["node", "dist/services/core-api/src/main"]

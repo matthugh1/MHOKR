@@ -40,7 +40,7 @@ export default function WorkspacesPage() {
 }
 
 function WorkspacesSettings() {
-  const { organization, workspaces: contextWorkspaces, refreshContext } = useWorkspace()
+  const { currentOrganization: organization, workspaces: contextWorkspaces, refreshContext } = useWorkspace()
   const [workspaces, setWorkspaces] = useState<any[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [newWorkspaceName, setNewWorkspaceName] = useState('')

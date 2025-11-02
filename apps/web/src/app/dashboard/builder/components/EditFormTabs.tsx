@@ -10,12 +10,10 @@ import { Period } from '@okr-nexus/types'
 
 import { 
   formatDateForInput, 
-  getQuarterFromDate, 
   getQuarterDates, 
   getMonthDates, 
   getYearDates,
   getAvailableYears,
-  getMonthName,
   formatPeriod,
 } from '@/lib/date-utils'
 import { useWorkspace } from '@/contexts/workspace.context'
@@ -24,14 +22,54 @@ import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import api from '@/lib/api'
 
 type UnknownObjective = Record<string, unknown> // TODO [phase7-hardening]: tighten typing
-type UnknownKeyResult = Record<string, unknown> // TODO [phase7-hardening]: tighten typing
+
+export interface EditFormState {
+  okrId?: string
+  ownerId?: string
+  ownerName?: string
+  organizationId?: string | null
+  workspaceId?: string | null
+  teamId?: string | null
+
+  isPublished?: boolean
+  cycle?: { id: string; status: string } | null
+  cycleStatus?: string | null
+
+  label?: string
+  description?: string
+
+  // Key Result fields
+  current?: number
+  target?: number
+  unit?: string
+  metricType?: 'INCREASE' | 'DECREASE' | 'REACH' | 'MAINTAIN'
+
+  // Shared progress fields
+  progress?: number
+
+  // Time frame fields
+  period?: Period
+  quarter?: number
+  month?: number
+  year?: number
+  startDate?: string
+  endDate?: string
+
+  // Initiative fields
+  status?: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'BLOCKED'
+
+  // Hierarchy / visibility
+  parentId?: string
+  parentObjective?: Record<string, unknown> | null
+  visibilityLevel?: string
+}
 
 interface EditFormTabsProps {
   nodeId: string
   nodeType: 'obj' | 'kr' | 'init'
   data: Record<string, unknown>
-  formData: Record<string, unknown>
-  setFormData: (data: Record<string, unknown>) => void
+  formData: EditFormState
+  setFormData: (data: EditFormState) => void
   onSave: () => void
 }
 
@@ -46,6 +84,9 @@ export function EditFormTabs({
   const { organizations, workspaces, teams, currentOrganization } = useWorkspace()
   const { user } = useAuth()
   const tenantPermissions = useTenantPermissions()
+  
+  const period = formData.period
+  
   const [showOwnerDropdown, setShowOwnerDropdown] = useState(false)
   const [showContextDropdown, setShowContextDropdown] = useState(false)
   const [showParentDropdown, setShowParentDropdown] = useState(false)
@@ -197,7 +238,7 @@ export function EditFormTabs({
             </Label>
             <Input
               id="label"
-              value={(formData.label as string) || ''}
+              value={formData.label || ''}
               onChange={(e) => setFormData({ ...formData, label: e.target.value })}
               placeholder="Enter title..."
               className="mt-1"
@@ -212,7 +253,7 @@ export function EditFormTabs({
             <textarea
               id="description"
               className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-              value={(formData.description as string) || ''}
+              value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="What do you want to achieve?"
               readOnly={!canEdit}
@@ -229,7 +270,7 @@ export function EditFormTabs({
                 <Input
                   id="current"
                   type="number"
-                  value={(formData.current as number) || 0}
+                  value={formData.current ?? 0}
                   onChange={(e) => setFormData({ ...formData, current: parseFloat(e.target.value) || 0 })}
                   className="mt-1"
                   readOnly={!canEdit}
@@ -241,7 +282,7 @@ export function EditFormTabs({
                 <Input
                   id="target"
                   type="number"
-                  value={(formData.target as number) || 100}
+                  value={formData.target ?? 100}
                   onChange={(e) => setFormData({ ...formData, target: parseFloat(e.target.value) || 100 })}
                   className="mt-1"
                   readOnly={!canEdit}
@@ -253,7 +294,7 @@ export function EditFormTabs({
               <Label htmlFor="unit">Unit</Label>
               <Input
                 id="unit"
-                value={(formData.unit as string) || ''}
+                value={formData.unit || ''}
                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                 placeholder="e.g., users, %, items, $"
                 className="mt-1"
@@ -268,12 +309,12 @@ export function EditFormTabs({
                   <div 
                     className="bg-green-500 h-2 rounded-full transition-all"
                     style={{ 
-                      width: `${Math.min(100, (((formData.current as number) || 0) / ((formData.target as number) || 1)) * 100)}%` 
+                      width: `${Math.min(100, ((formData.current ?? 0) / (formData.target ?? 1)) * 100)}%` 
                     }}
                   />
                 </div>
                 <span className="text-sm font-medium">
-                  {Math.round((((formData.current as number) || 0) / ((formData.target as number) || 1)) * 100)}%
+                  {Math.round(((formData.current ?? 0) / (formData.target ?? 1)) * 100)}%
                 </span>
               </div>
             </div>
@@ -286,8 +327,8 @@ export function EditFormTabs({
             <select
               id="status"
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-              value={(formData.status as string) || 'NOT_STARTED'}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              value={formData.status || 'NOT_STARTED'}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value as 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'BLOCKED' })}
             >
               <option value="NOT_STARTED">Not Started</option>
               <option value="IN_PROGRESS">In Progress</option>
@@ -305,7 +346,7 @@ export function EditFormTabs({
               type="number"
               min="0"
               max="100"
-              value={(formData.progress as number) || 0}
+              value={formData.progress ?? 0}
               onChange={(e) => setFormData({ ...formData, progress: parseInt(e.target.value) || 0 })}
               placeholder="0"
               className="mt-1"
@@ -328,36 +369,36 @@ export function EditFormTabs({
           <select
             id="period"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-            value={(formData.period as Period) || Period.QUARTERLY}
+            value={period || Period.QUARTERLY}
             disabled={!canEdit}
             onChange={(e) => {
               const newPeriod = e.target.value as Period
               let dates = { startDate: formData.startDate, endDate: formData.endDate }
-              
+
               if (newPeriod === Period.QUARTERLY) {
-                const quarterDates = getQuarterDates((formData.quarter as number) || 1, (formData.year as number) || new Date().getFullYear())
+                const quarterDates = getQuarterDates(formData.quarter || 1, formData.year || new Date().getFullYear())
                 dates = {
                   startDate: formatDateForInput(quarterDates.startDate),
-                  endDate: formatDateForInput(quarterDates.endDate)
+                  endDate: formatDateForInput(quarterDates.endDate),
                 }
               } else if (newPeriod === Period.MONTHLY) {
-                const monthDates = getMonthDates((formData.month as number) || 0, (formData.year as number) || new Date().getFullYear())
+                const monthDates = getMonthDates(formData.month || 0, formData.year || new Date().getFullYear())
                 dates = {
                   startDate: formatDateForInput(monthDates.startDate),
-                  endDate: formatDateForInput(monthDates.endDate)
+                  endDate: formatDateForInput(monthDates.endDate),
                 }
               } else if (newPeriod === Period.ANNUAL) {
-                const yearDates = getYearDates((formData.year as number) || new Date().getFullYear())
+                const yearDates = getYearDates(formData.year || new Date().getFullYear())
                 dates = {
                   startDate: formatDateForInput(yearDates.startDate),
-                  endDate: formatDateForInput(yearDates.endDate)
+                  endDate: formatDateForInput(yearDates.endDate),
                 }
               }
-              
-              setFormData({ 
-                ...formData, 
+
+              setFormData({
+                ...formData,
                 period: newPeriod,
-                ...dates
+                ...dates,
               })
             }}
           >
@@ -369,17 +410,17 @@ export function EditFormTabs({
         </div>
 
         {/* Period-specific selectors */}
-        {formData.period === Period.QUARTERLY && (
+        {period === Period.QUARTERLY && (
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="quarter">Quarter</Label>
               <select
                 id="quarter"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm mt-1"
-                value={(formData.quarter as number) || 1}
+                value={formData.quarter ?? 1}
                 onChange={(e) => {
                   const newQuarter = parseInt(e.target.value)
-                  const dates = getQuarterDates(newQuarter, (formData.year as number) || new Date().getFullYear())
+                  const dates = getQuarterDates(newQuarter, formData.year ?? new Date().getFullYear())
                   setFormData({
                     ...formData,
                     quarter: newQuarter,
@@ -399,10 +440,10 @@ export function EditFormTabs({
               <select
                 id="year"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm mt-1"
-                value={(formData.year as number) || new Date().getFullYear()}
+                value={formData.year ?? new Date().getFullYear()}
                 onChange={(e) => {
                   const newYear = parseInt(e.target.value)
-                  const dates = getQuarterDates((formData.quarter as number) || 1, newYear)
+                  const dates = getQuarterDates(formData.quarter ?? 1, newYear)
                   setFormData({
                     ...formData,
                     year: newYear,
@@ -419,14 +460,14 @@ export function EditFormTabs({
           </div>
         )}
 
-        {(formData.period as Period) === Period.CUSTOM && (
+        {period === Period.CUSTOM && (
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="startDate">Start Date</Label>
               <Input
                 id="startDate"
                 type="date"
-                value={(formData.startDate as string) || ''}
+                value={formData.startDate || ''}
                 onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                 className="mt-1"
                 readOnly={!canEdit}
@@ -438,7 +479,7 @@ export function EditFormTabs({
               <Input
                 id="endDate"
                 type="date"
-                value={(formData.endDate as string) || ''}
+                value={formData.endDate || ''}
                 onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                 className="mt-1"
                 readOnly={!canEdit}
@@ -451,9 +492,9 @@ export function EditFormTabs({
         {formData.startDate && formData.endDate && (
           <div className="bg-slate-50 p-3 rounded-md">
             <div className="text-xs text-slate-600">
-              <strong>Duration:</strong> {formatPeriod((formData.period as Period) || Period.QUARTERLY, (formData.startDate as string) || '')}
+              <strong>Duration:</strong> {formatPeriod(period || Period.QUARTERLY, formData.startDate || '')}
               {' • '}
-              {Math.ceil((new Date((formData.endDate as string) || '').getTime() - new Date((formData.startDate as string) || '').getTime()) / (1000 * 60 * 60 * 24))} days
+              {Math.ceil((new Date(formData.endDate || '').getTime() - new Date(formData.startDate || '').getTime()) / (1000 * 60 * 60 * 24))} days
             </div>
           </div>
         )}
@@ -469,7 +510,7 @@ export function EditFormTabs({
               <select
                 id="visibilityLevel"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-                value={(formData.visibilityLevel as string) || 'PUBLIC_TENANT'}
+                value={formData.visibilityLevel || 'PUBLIC_TENANT'}
                 disabled={!canEdit}
                 onChange={(e) => setFormData({ ...formData, visibilityLevel: e.target.value })}
               >
@@ -669,7 +710,7 @@ export function EditFormTabs({
                       </button>
                       {availableObjectives
                         .filter(obj => 
-                          obj.id !== data.okrId && 
+                          obj.id !== formData.okrId && 
                           obj.title.toLowerCase().includes(parentSearch.toLowerCase())
                         )
                         .map((objective) => (
@@ -699,8 +740,8 @@ export function EditFormTabs({
             <select
               id="metricType"
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-              value={(formData.metricType as string) || 'INCREASE'}
-              onChange={(e) => setFormData({ ...formData, metricType: e.target.value })}
+              value={formData.metricType || 'INCREASE'}
+              onChange={(e) => setFormData({ ...formData, metricType: e.target.value as 'INCREASE' | 'DECREASE' | 'REACH' | 'MAINTAIN' })}
             >
               <option value="INCREASE">Increase</option>
               <option value="DECREASE">Decrease</option>

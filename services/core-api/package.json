@@ -22,6 +22,7 @@
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
     "prisma:reset": "prisma migrate reset",
+    "bootstrap": "ts-node prisma/bootstrapOrg.ts",
     "create-superuser": "ts-node scripts/create-superuser.ts",
     "reset-superuser-password": "ts-node scripts/reset-superuser-password.ts"
   },

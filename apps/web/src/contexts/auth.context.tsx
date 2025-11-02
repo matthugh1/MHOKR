@@ -136,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!impData) return
     
     try {
-      const { originalUser: orig, originalToken } = JSON.parse(impData)
+      const { originalToken } = JSON.parse(impData)
       
       // Restore original token
       if (originalToken) {

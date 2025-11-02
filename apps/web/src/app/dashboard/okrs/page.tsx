@@ -24,15 +24,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Search, X, Trash2, Lock, History, LockKeyhole } from 'lucide-react'
-import { Period } from '@okr-nexus/types'
+import { Plus, Search, X, Lock, LockKeyhole } from 'lucide-react'
 import { 
-  formatPeriod, 
-  getPeriodLabel, 
   getAvailablePeriodFilters, 
   getCurrentPeriodFilter,
-  doesOKRMatchPeriod,
-  type PeriodFilterOption
 } from '@/lib/date-utils'
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
@@ -58,10 +53,10 @@ import { cn } from '@/lib/utils'
 // Visual Builder becomes an optional planning surface, not the source of truth.
 export default function OKRsPage() {
   const router = useRouter()
-  // TODO [phase6-polish]: reintroduce compact view with grid/list toggle
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
-  const [selectedPeriod, setSelectedPeriod] = useState<string>(getCurrentPeriodFilter())
-  const availablePeriods = getAvailablePeriodFilters()
+  // [phase6-polish] Reintroduce compact multi-column grid view for exec scanning.
+  const [_viewMode, _setViewMode] = useState<'grid' | 'list'>('list')
+  const [selectedPeriod, _setSelectedPeriod] = useState<string>(getCurrentPeriodFilter())
+  const _availablePeriods = getAvailablePeriodFilters()
   
   // Filter states
   const [filterWorkspaceId, setFilterWorkspaceId] = useState<string>('all')
@@ -72,7 +67,7 @@ export default function OKRsPage() {
   const { workspaces, teams, currentOrganization } = useWorkspace()
   const { user } = useAuth()
   const permissions = usePermissions()
-  const { canSeeObjective, canSeeKeyResult, ...tenantPermissions } = useTenantPermissions()
+  const { canSeeObjective, ...tenantPermissions } = useTenantPermissions()
   const { toast } = useToast()
   const [availableUsers, setAvailableUsers] = useState<any[]>([])
   const [okrs, setOkrs] = useState<any[]>([])
@@ -218,32 +213,13 @@ export default function OKRsPage() {
         params.set('status', selectedStatus)
       }
       
-      // Use fetch to access response headers
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/okr/overview?${params.toString()}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: 'include',
-      })
+      // Use api client to ensure requests go to API gateway (port 3000), not Next.js dev server
+      const response = await api.get(`/okr/overview?${params.toString()}`)
       
-      if (!res.ok) {
-        console.error('[OKR PAGE] Failed to load OKRs', res.status, res.statusText)
-        if (res.status === 403) {
-          setPermissionError('You do not have permission to view OKRs. Please contact your administrator.')
-        } else {
-          setPermissionError('Failed to load OKRs. Please try again later.')
-        }
-        setOkrs([])
-        return
-      }
-      
-      // Parse pagination headers
-      const totalHeader = res.headers.get('X-Total-Count')
-      const pageHeader = res.headers.get('X-Page')
-      const limitHeader = res.headers.get('X-Limit')
+      // Parse pagination headers from response
+      const totalHeader = response.headers['x-total-count']
+      const pageHeader = response.headers['x-page']
+      const limitHeader = response.headers['x-limit']
       
       if (totalHeader) setTotalCount(Number(totalHeader))
       // Only update page/limit from headers if they differ (prevents unnecessary re-renders)
@@ -256,17 +232,23 @@ export default function OKRsPage() {
         if (serverLimit !== limit) setLimit(serverLimit)
       }
       
-      const data = await res.json()
+      const data = response.data || []
       
       // Map data using existing mapObjectiveData function
-      const mapped = data.map((obj: any) => 
+      const mapped = Array.isArray(data) ? data.map((obj: any) => 
         mapObjectiveData(obj, availableUsers, activeCycles, overdueCheckIns)
-      )
+      ) : []
       
       setOkrs(mapped)
     } catch (error: any) {
-      console.error('[OKR PAGE] Exception while loading OKRs', error)
-      setPermissionError('Failed to load OKRs. Please try again later.')
+      console.error('[OKR PAGE] Failed to load OKRs', error)
+      if (error.response?.status === 403) {
+        setPermissionError('You do not have permission to view OKRs. Please contact your administrator.')
+      } else if (error.response?.status === 404) {
+        setPermissionError('OKR service not found. Please check that the API gateway is running.')
+      } else {
+        setPermissionError('Failed to load OKRs. Please try again later.')
+      }
       setOkrs([])
     } finally {
       setLoading(false)
@@ -289,7 +271,7 @@ export default function OKRsPage() {
 
   const loadActiveCycles = async () => {
     try {
-      const response = await api.get('/objectives/cycles/active')
+      const response = await api.get('/reports/cycles/active')
       const cycles = response.data || []
       setActiveCycles(cycles)
       // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
@@ -368,7 +350,7 @@ export default function OKRsPage() {
     }
   }
 
-  const selectedPeriodOption = availablePeriods.find(p => p.value === selectedPeriod);
+  const _selectedPeriodOption = _availablePeriods.find(p => p.value === selectedPeriod);
   
   // Transform cycles for CycleSelector (map startDate/endDate to startsAt/endsAt)
   const cyclesFromApi = activeCycles.map(cycle => ({
@@ -422,7 +404,7 @@ export default function OKRsPage() {
   })
   
   // Legacy selectedId for backwards compatibility during transition
-  const selectedId = selectedTimeframeKey
+  const _selectedId = selectedTimeframeKey
   
   // Map all objectives to view models with timeframeKey
   const objectivesViewModel = useMemo(() => {
@@ -507,7 +489,7 @@ export default function OKRsPage() {
     const canEdit = tenantPermissions.canEditObjective(objectiveForHook)
     
     if (!canEdit) {
-      const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
+      tenantPermissions.getLockInfoForObjective(objectiveForHook)
       setSelectedObjectiveForLock(okr)
       setPublishLockDialogOpen(true)
       return
@@ -552,17 +534,15 @@ export default function OKRsPage() {
   }
 
   // Section Header Component for health bands
-  const SectionHeader = ({ tone, label }: { tone: 'bad' | 'good' | 'neutral' | 'warn'; label: string }) => (
-    <div className="flex items-center gap-2 mb-2 text-sm font-medium text-neutral-700">
+  const SectionHeader = ({ tone, label }: { tone: 'bad' | 'good' | 'neutral'; label: string }) => (
+    <div className="text-[13px] font-semibold text-neutral-700 flex items-center gap-2 uppercase tracking-wide border-t border-neutral-200 pt-4 mt-8">
       <span
-        className={`h-2.5 w-2.5 rounded-full ${
+        className={`h-2 w-2 rounded-full ${
           tone === 'bad'
             ? 'bg-rose-500'
             : tone === 'good'
             ? 'bg-emerald-500'
-            : tone === 'neutral'
-            ? 'bg-neutral-400'
-            : 'bg-amber-500'
+            : 'bg-neutral-400'
         }`}
       />
       <span>{label}</span>
@@ -618,8 +598,8 @@ export default function OKRsPage() {
         onToggle={handleToggleObjective}
         onAddKeyResult={handleAddKrClick}
         onAddInitiative={handleAddInitiativeToObjectiveClick}
-        onEdit={(objectiveId) => handleEditOKR(okr)}
-        onDelete={(objectiveId) => handleDeleteOKR(okr)}
+        onEdit={(_objectiveId) => handleEditOKR(okr)}
+        onDelete={(_objectiveId) => handleDeleteOKR(okr)}
         onOpenHistory={() => handleOpenActivityDrawer('OBJECTIVE', normalised.id, normalised.title)}
         onAddInitiativeToKr={(krId) => {
           const kr = normalised.keyResults.find((k: any) => k.id === krId)
@@ -636,23 +616,47 @@ export default function OKRsPage() {
   // Group objectives by health status
   // TODO [phase7-hardening]: Virtualise ObjectiveRows when >50 items using react-window or similar.
   const groupedObjectives = useMemo(() => {
-    const needsAttention: typeof filteredOKRs = []
-    const active: typeof filteredOKRs = []
-    const completed: typeof filteredOKRs = []
+    const needsAttentionObjectives: typeof filteredOKRs = []
+    const activeObjectives: typeof filteredOKRs = []
+    const completedObjectives: typeof filteredOKRs = []
 
     filteredOKRs.forEach((okr) => {
-      const status = okr.status || 'ON_TRACK'
-      if (status === 'AT_RISK' || status === 'BLOCKED' || status === 'OFF_TRACK') {
-        needsAttention.push(okr)
-      } else if (status === 'COMPLETED' || status === 'CANCELLED') {
-        completed.push(okr)
-      } else {
-        active.push(okr)
+      const normalised = mapObjectiveData(okr, availableUsers, activeCycles, overdueCheckIns)
+      const status = normalised.status || 'ON_TRACK'
+      const cycleStatus = normalised.cycleStatus || 'ACTIVE'
+      const overdueCheckInsCount = normalised.overdueCountForObjective || 0
+
+      // Needs attention: AT_RISK or BLOCKED OR overdueCheckInsCount > 0
+      if (status === 'AT_RISK' || status === 'BLOCKED' || overdueCheckInsCount > 0) {
+        needsAttentionObjectives.push(okr)
+      }
+      // Active: ON_TRACK AND cycleStatus is ACTIVE
+      else if (status === 'ON_TRACK' && cycleStatus === 'ACTIVE') {
+        activeObjectives.push(okr)
+      }
+      // Completed: COMPLETED or CANCELLED OR cycleStatus is ARCHIVED
+      else if (status === 'COMPLETED' || status === 'CANCELLED' || cycleStatus === 'ARCHIVED') {
+        completedObjectives.push(okr)
+      }
+      // Fallback: anything else goes to active
+      else {
+        activeObjectives.push(okr)
       }
     })
 
-    return { needsAttention, active, completed }
-  }, [filteredOKRs])
+    return { needsAttentionObjectives, activeObjectives, completedObjectives }
+  }, [filteredOKRs, availableUsers, activeCycles, overdueCheckIns])
+
+  // Auto-expand first objective in "needs attention" if expandedObjectiveId is null
+  useEffect(() => {
+    if (expandedObjectiveId === null && groupedObjectives.needsAttentionObjectives.length > 0) {
+      const firstNeedsAttention = groupedObjectives.needsAttentionObjectives[0]
+      const normalised = mapObjectiveData(firstNeedsAttention, availableUsers, activeCycles, overdueCheckIns)
+      setExpandedObjectiveId(normalised.id)
+    }
+    // Only run when we have needs attention objectives and no expanded objective yet
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupedObjectives.needsAttentionObjectives.length, expandedObjectiveId])
   
   const handleAddCheckIn = (krId: string) => {
     // [phase5-core:done] implemented NewCheckInModal and wired POST /api/check-ins
@@ -682,7 +686,7 @@ export default function OKRsPage() {
     const canDelete = tenantPermissions.canDeleteObjective(objectiveForHook)
     
     if (!canDelete) {
-      const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
+      tenantPermissions.getLockInfoForObjective(objectiveForHook)
       setSelectedObjectiveForLock(okr)
       setPublishLockDialogOpen(true)
       return
@@ -1215,25 +1219,7 @@ export default function OKRsPage() {
                 )}
               </div>
             )}
-            {/* TODO [phase6-polish]: reintroduce compact view with grid/list toggle */}
-            {/* <div className="flex border rounded-lg">
-              <Button
-                variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setViewMode('grid')}
-                className="rounded-r-none"
-              >
-                <Grid3x3 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={viewMode === 'list' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setViewMode('list')}
-                className="rounded-l-none"
-              >
-                <List className="h-4 w-4" />
-              </Button>
-            </div> */}
+            {/* [phase6-polish] Reintroduce compact multi-column grid view for exec scanning. */}
           </div>
 
           {/* OKRs Grid/List */}
@@ -1288,11 +1274,11 @@ export default function OKRsPage() {
           ) : (
             <div className="space-y-4 md:space-y-6">
               {/* Needs attention group */}
-              {groupedObjectives.needsAttention.length > 0 && (
+              {groupedObjectives.needsAttentionObjectives.length > 0 && (
                 <div>
                   <SectionHeader tone="bad" label="Needs attention" />
                   <div className="space-y-4 md:space-y-6">
-                    {groupedObjectives.needsAttention.map((okr) => {
+                    {groupedObjectives.needsAttentionObjectives.map((okr) => {
                       return renderObjectiveRow(okr)
                     })}
                   </div>
@@ -1300,12 +1286,11 @@ export default function OKRsPage() {
               )}
 
               {/* Active Objectives group */}
-              {groupedObjectives.active.length > 0 && (
+              {groupedObjectives.activeObjectives.length > 0 && (
                 <div>
-                  {groupedObjectives.needsAttention.length > 0 && <div className="mb-4 md:mb-6" />}
-                  <SectionHeader tone="good" label="Active Objectives" />
+                  <SectionHeader tone="good" label="Active objectives" />
                   <div className="space-y-4 md:space-y-6">
-                    {groupedObjectives.active.map((okr) => {
+                    {groupedObjectives.activeObjectives.map((okr) => {
                       return renderObjectiveRow(okr)
                     })}
                   </div>
@@ -1313,14 +1298,11 @@ export default function OKRsPage() {
               )}
 
               {/* Completed / Archived group */}
-              {groupedObjectives.completed.length > 0 && (
+              {groupedObjectives.completedObjectives.length > 0 && (
                 <div>
-                  {(groupedObjectives.needsAttention.length > 0 || groupedObjectives.active.length > 0) && (
-                    <div className="mb-4 md:mb-6" />
-                  )}
-                  <SectionHeader tone="neutral" label="Completed / Archived" />
+                  <SectionHeader tone="neutral" label="Completed / archived" />
                   <div className="space-y-4 md:space-y-6">
-                    {groupedObjectives.completed.map((okr) => {
+                    {groupedObjectives.completedObjectives.map((okr) => {
                       return renderObjectiveRow(okr)
                     })}
                   </div>
@@ -1527,7 +1509,7 @@ export default function OKRsPage() {
               try {
                 // API: create check-in
                 const res = await api.post(`/key-results/${activeCheckInKrId}/check-in`, formData)
-                const createdCheckIn = res.data
+                const _createdCheckIn = res.data
                 
                 // Optimistically update KR in local state
                 setOkrs((prev) =>

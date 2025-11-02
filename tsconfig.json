@@ -25,6 +25,9 @@
       "@okr-nexus/utils": ["packages/utils/src"]
     }
   },
+  "include": [
+    "scripts/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist", "build", ".next"]
 }
 

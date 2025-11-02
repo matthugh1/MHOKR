@@ -38,13 +38,14 @@ export function getDefaultDatesForPeriod(period: Period): { startDate: Date; end
     case Period.MONTHLY:
       startDate.setDate(1)
       break
-    case Period.QUARTERLY:
+    case Period.QUARTERLY: {
       // Start of current quarter
       const currentMonth = startDate.getMonth()
       const quarterStartMonth = Math.floor(currentMonth / 3) * 3
       startDate.setMonth(quarterStartMonth)
       startDate.setDate(1)
       break
+    }
     case Period.ANNUAL:
       // Start of current year
       startDate.setMonth(0)
@@ -89,9 +90,10 @@ export function formatPeriod(period: Period, startDate: Date | string): string {
   switch (period) {
     case Period.MONTHLY:
       return start.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-    case Period.QUARTERLY:
+    case Period.QUARTERLY: {
       const quarter = Math.floor(start.getMonth() / 3) + 1
       return `Q${quarter} ${year}`
+    }
     case Period.ANNUAL:
       return `${year}`
     case Period.CUSTOM:
@@ -302,7 +304,7 @@ export function getAvailablePeriodFilters(): PeriodFilterOption[] {
   const options: PeriodFilterOption[] = []
   const currentYear = getCurrentYear()
   const currentMonth = new Date().getMonth()
-  const currentQuarter = getQuarterFromDate(new Date())
+  const _currentQuarter = getQuarterFromDate(new Date())
   
   // Add years (past, current, next)
   for (let year = currentYear - 1; year <= currentYear + 1; year++) {

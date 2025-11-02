@@ -75,7 +75,6 @@ interface PermissionChecks {
 }
 
 export function useTenantPermissions(): PermissionChecks {
-  const { user } = useAuth()
   const { currentOrganization } = useWorkspace()
   const permissions = usePermissions()
 
@@ -101,7 +100,7 @@ export function useTenantPermissions(): PermissionChecks {
   }, [])
 
   const canViewObjective = useMemo(() => {
-    return (objective: Objective): boolean => {
+    return (_objective: Objective): boolean => {
       // For now, if it's rendered, you can view it (matches current behavior)
       // TODO [phase7-hardening]: align with backend visibility rules once fully exposed
       // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
@@ -110,7 +109,7 @@ export function useTenantPermissions(): PermissionChecks {
   }, [])
 
   const canSeeObjective = useMemo(() => {
-    return (obj: any): boolean => {
+    return (_obj: any): boolean => {
       // TODO [phase7-hardening]: Backend already enforces visibility via RBAC + tenant isolation.
       // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
       // Frontend callsites should still be explicit so we don't accidentally render leaked data.
@@ -120,7 +119,7 @@ export function useTenantPermissions(): PermissionChecks {
   }, [])
 
   const canSeeKeyResult = useMemo(() => {
-    return (kr: any): boolean => {
+    return (_kr: any): boolean => {
       // TODO [phase7-hardening]: Mirror canSeeObjective() once KR-level visibility is modelled distinctly.
       // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
       return true

@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
-import { Building2, Users, Briefcase, Edit2, Shield, Plus, Lock } from 'lucide-react'
+import { Building2, Users, Briefcase, Edit2, Shield, Plus } from 'lucide-react'
 import api from '@/lib/api'
 
 export default function OrganizationSettingsPage() {
@@ -68,8 +68,9 @@ function OrganizationSettings() {
   useEffect(() => {
     if (organization) {
       // Load private whitelist from organization metadata
-      const metadata = organization.metadata as any
-      const whitelist = organization.privateWhitelist || metadata?.privateWhitelist || organization.execOnlyWhitelist || metadata?.execOnlyWhitelist || []
+      const org = organization as any
+      const metadata = org.metadata
+      const whitelist = org.privateWhitelist || metadata?.privateWhitelist || org.execOnlyWhitelist || metadata?.execOnlyWhitelist || []
       setPrivateWhitelist(Array.isArray(whitelist) ? whitelist : [])
     }
   }, [organization])
@@ -88,9 +89,10 @@ function OrganizationSettings() {
     try {
       setSavingWhitelist(true)
       // Update organization with privateWhitelist in metadata
+      const org = organization as any
       await api.patch(`/organizations/${organization.id}`, {
         metadata: {
-          ...(organization.metadata || {}),
+          ...(org.metadata || {}),
           privateWhitelist: privateWhitelist,
         },
         // Also update execOnlyWhitelist for backward compatibility
@@ -544,6 +546,7 @@ function OrganizationSettings() {
         </div>
 
         {/* Organization Overview */}
+        {organization && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -574,6 +577,7 @@ function OrganizationSettings() {
             </div>
           </CardContent>
         </Card>
+        )}
 
         {/* Edit Organization Dialog */}
         <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>

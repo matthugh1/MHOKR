@@ -44,9 +44,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useWorkspace } from '@/contexts/workspace.context'
-import { UserCog, UserPlus, X, Plus, Edit2, Key, Building2, Briefcase, Users, Shield, UserCheck, Search, Info } from 'lucide-react'
+import { UserCog, X, Plus, Edit2, Key, Building2, Briefcase, Users, UserCheck, Search, Info } from 'lucide-react'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/auth.context'
 import { useToast } from '@/hooks/use-toast'
@@ -71,7 +71,7 @@ function PeopleSettings() {
     refreshContext 
   } = useWorkspace()
   
-  const { impersonate, impersonating, originalUser, user: currentUser } = useAuth()
+  const { impersonate, impersonating, user: currentUser } = useAuth()
   const { toast } = useToast()
   
   const [people, setPeople] = useState<any[]>([])
@@ -688,7 +688,7 @@ function PeopleSettings() {
                             <Info className="h-4 w-4 text-slate-400 cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p className="max-w-xs">{roleDescriptions[newUserData.role] || 'Select a role to see description'}</p>
+                            <p className="max-w-xs">{roleDescriptions[newUserData.role as keyof typeof roleDescriptions] || 'Select a role to see description'}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -716,7 +716,7 @@ function PeopleSettings() {
                             <Info className="h-4 w-4 text-slate-400 cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p className="max-w-xs">{roleDescriptions[newUserData.workspaceRole] || 'Select a role to see description'}</p>
+                            <p className="max-w-xs">{roleDescriptions[newUserData.workspaceRole as keyof typeof roleDescriptions] || 'Select a role to see description'}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -797,7 +797,7 @@ function PeopleSettings() {
                                 </Badge>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p className="max-w-xs">{roleDescriptions[person.orgRole] || person.orgRole}</p>
+                                <p className="max-w-xs">{roleDescriptions[person.orgRole as keyof typeof roleDescriptions] || person.orgRole}</p>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
@@ -813,7 +813,7 @@ function PeopleSettings() {
                                 </Badge>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p className="max-w-xs">{roleDescriptions[person.workspaceRole] || person.workspaceRole}</p>
+                                <p className="max-w-xs">{roleDescriptions[person.workspaceRole as keyof typeof roleDescriptions] || person.workspaceRole}</p>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
@@ -1104,7 +1104,7 @@ function PeopleSettings() {
                         <Info className="h-4 w-4 text-slate-400 cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="max-w-xs">{roleDescriptions[selectedRole] || 'Select a role to see description'}</p>
+                        <p className="max-w-xs">{roleDescriptions[selectedRole as keyof typeof roleDescriptions] || 'Select a role to see description'}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -1168,7 +1168,7 @@ function PeopleSettings() {
                         <Info className="h-4 w-4 text-slate-400 cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="max-w-xs">{roleDescriptions[selectedRole] || 'Select a role to see description'}</p>
+                        <p className="max-w-xs">{roleDescriptions[selectedRole as keyof typeof roleDescriptions] || 'Select a role to see description'}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>

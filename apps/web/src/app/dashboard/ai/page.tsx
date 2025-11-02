@@ -11,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 export default function AIAssistantPage() {
   // Placeholder data for insights feed
   // TODO [phase7-hardening]: Replace with live data from /reports/* endpoints once backend integration is ready
-  // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
   const placeholderInsights = [
     {
       id: '1',
@@ -100,7 +99,6 @@ export default function AIAssistantPage() {
               />
             </div>
             {/* TODO [phase7-hardening]: Replace placeholder StatCards with live data from /reports/* endpoints */}
-            {/* NOTE: This surface is internal-tenant-only and is not exposed to external design partners. */}
           </div>
 
           {/* Executive Summary Draft */}

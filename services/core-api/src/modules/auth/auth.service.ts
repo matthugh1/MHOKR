@@ -18,9 +18,12 @@ export class AuthService {
     organizationId: string; // REQUIRED - all users must belong to an organization
     workspaceId: string; // REQUIRED - all users must belong to a workspace
   }) {
+    // Normalize email to lowercase for case-insensitive storage
+    const normalizedEmail = data.email.toLowerCase().trim();
+    
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
-      where: { email: data.email },
+      where: { email: normalizedEmail },
     });
 
     if (existingUser) {
@@ -57,7 +60,7 @@ export class AuthService {
       // Create user
       const newUser = await tx.user.create({
         data: {
-          email: data.email,
+          email: normalizedEmail,
           name: `${data.firstName} ${data.lastName}`,
           passwordHash: hashedPassword,
         },
@@ -107,9 +110,12 @@ export class AuthService {
   }
 
   async login(email: string, password: string) {
+    // Normalize email to lowercase for case-insensitive login
+    const normalizedEmail = email.toLowerCase().trim();
+    
     // Find user
     const user = await this.prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
     });
 
     if (!user || !user.passwordHash) {
@@ -167,15 +173,18 @@ export class AuthService {
       if (decoded.header.alg === 'HS256') {
         const payload = this.jwtService.verify(token) as any;
         
+        // Normalize email to lowercase for case-insensitive storage
+        const normalizedEmail = payload.email?.toLowerCase().trim();
+        
         // Sync or create user in our database
         const user = await this.prisma.user.upsert({
           where: { id: payload.sub },
           update: {
-            email: payload.email,
+            email: normalizedEmail,
             name: payload.name || payload.preferred_username,
           },
           create: {
-            email: payload.email,
+            email: normalizedEmail,
             name: payload.name || payload.preferred_username,
           },
         });

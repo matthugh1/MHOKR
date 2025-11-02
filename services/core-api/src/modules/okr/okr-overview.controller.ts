@@ -118,7 +118,6 @@ export class OkrOverviewController {
 
     // Fetch all initiatives for these objectives' Key Results
     // Since Initiative.keyResultId references KeyResult, we need to fetch separately
-    const objectiveIds = objectives.map(o => o.id);
     const keyResultIds = objectives.flatMap(o => 
       o.keyResults.map(okr => okr.keyResult.id)
     );

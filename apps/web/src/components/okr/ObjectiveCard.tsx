@@ -130,7 +130,7 @@ const isDueSoon = (dateString?: string) => {
 export function ObjectiveCard({
   title,
   ownerName,
-  ownerAvatarUrl,
+  ownerAvatarUrl: _ownerAvatarUrl,
   status,
   progressPct,
   isPublished,

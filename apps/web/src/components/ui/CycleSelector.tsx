@@ -102,7 +102,7 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
   })
 
   // All cycles (sorted by status priority, then by date)
-  const allCycles = [...cycles].sort((a, b) => {
+  const _allCycles = [...cycles].sort((a, b) => {
     const statusOrder = { ACTIVE: 0, UPCOMING: 1, DRAFT: 2, LOCKED: 3, ARCHIVED: 4 }
     const aOrder = statusOrder[a.status as keyof typeof statusOrder] ?? 99
     const bOrder = statusOrder[b.status as keyof typeof statusOrder] ?? 99
@@ -153,7 +153,6 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
                     <span className="font-medium text-neutral-800">{cycle.name}</span>
                     <span className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-0.5 text-[10px] font-medium text-neutral-700">
                       {/* TODO [phase7-hardening]: drive statuses from backend cycle.status */}
-                      {/* NOTE: This surface is internal-tenant-only and is not exposed to external design partners. */}
                       {getStatusLabel(cycle.status)}
                     </span>
                   </div>
@@ -186,7 +185,6 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
                     <span className="font-medium text-neutral-800">{cycle.name}</span>
                     <span className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-0.5 text-[10px] font-medium text-neutral-700">
                       {/* TODO [phase7-hardening]: drive statuses from backend cycle.status */}
-                      {/* NOTE: This surface is internal-tenant-only and is not exposed to external design partners. */}
                       {getStatusLabel(cycle.status)}
                     </span>
                   </div>

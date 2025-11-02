@@ -26,6 +26,7 @@ model Organization {
   objectives                     Objective[] // Organization-level OKRs
   strategicPillars               StrategicPillar[] // Strategic pillars/themes for this organization
   cycles                         Cycle[] // OKR cycles/quarters for this organization
+  checkInRequests                CheckInRequest[] // Async check-in requests for this organization
   createdAt                      DateTime             @default(now())
   updatedAt                      DateTime             @updatedAt
 
@@ -86,6 +87,9 @@ model User {
   permissionAuditsPerformed PermissionAudit[]    @relation("PermissionAuditPerformedBy")
   auditLogsActor            AuditLog[]           @relation("AuditLogActor")
   auditLogsImpersonated     AuditLog[]           @relation("AuditLogImpersonated")
+  checkInRequestsAsRequester CheckInRequest[]    @relation("CheckInRequestRequester")
+  checkInRequestsAsTarget    CheckInRequest[]     @relation("CheckInRequestTarget")
+  checkInResponses          CheckInResponse[]     @relation("CheckInResponseUser")
   createdAt                 DateTime             @default(now())
   updatedAt                 DateTime             @updatedAt
 
@@ -495,6 +499,57 @@ model CheckIn {
   @@index([keyResultId])
   @@index([userId])
   @@map("check_ins")
+}
+
+// ==========================================
+// Async Check-in Request/Response Models (Milestone 1)
+// ==========================================
+
+model CheckInRequest {
+  id             String              @id @default(cuid())
+  requesterUserId String // Manager who requested the update
+  requester       User                @relation("CheckInRequestRequester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+  targetUserId    String // User who needs to submit the update
+  targetUser      User                @relation("CheckInRequestTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  organizationId  String // Tenant scoping: request belongs to one organization
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  dueAt           DateTime // When the update is due
+  status          CheckInRequestStatus @default(OPEN)
+  response        CheckInResponse?    // Optional: one response per request
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([requesterUserId])
+  @@index([targetUserId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([dueAt])
+  @@map("check_in_requests")
+}
+
+enum CheckInRequestStatus {
+  OPEN       // Request is open, awaiting response
+  SUBMITTED  // User has submitted their response
+  LATE       // Due date has passed without submission
+  CANCELLED  // Request was cancelled by requester
+}
+
+model CheckInResponse {
+  id                String          @id @default(cuid())
+  requestId         String          @unique
+  request           CheckInRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  targetUserId      String // User who submitted (should match request.targetUserId)
+  targetUser        User            @relation("CheckInResponseUser", fields: [targetUserId], references: [id], onDelete: Cascade)
+  summaryWhatMoved  String?         @db.Text // "What moved?"
+  summaryBlocked    String?         @db.Text // "What's blocked?"
+  summaryNeedHelp   String?         @db.Text // "What do you need?"
+  submittedAt       DateTime        @default(now())
+  createdAt         DateTime        @default(now())
+
+  @@index([requestId])
+  @@index([targetUserId])
+  @@index([submittedAt])
+  @@map("check_in_responses")
 }
 
 model Activity {
