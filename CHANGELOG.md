@@ -33,3 +33,15 @@
 - Tenant admins continue to see full strategic context.
 - This prevents leakage of strategic and performance-sensitive objectives to unauthorised users.
 
+## [Performance & Scale] W3.M1 Complete
+
+- The OKR list page has been refactored into a container (OKRPageContainer) and a virtualised list (OKRListVirtualised).
+- The route file (page.tsx) is no longer a 1,700+ line monolith; rendering logic, permissions logic, and paging logic are now separated.
+- Client-side pagination (20 objectives per page) has been introduced, with Next/Previous navigation and page reset on filter changes.
+- Virtualised rendering now ensures that only the currently visible rows (plus buffer) mount in the DOM, keeping the UI responsive even with 200+ objectives / 600+ key results.
+- All existing governance rules remain enforced in the UI:
+  - Publish / cycle lock rules from W2.M1
+  - Visibility rules (PRIVATE, exec-only, whitelist) from W2.M2
+  - SUPERUSER remains read-only for destructive actions
+- A validation plan (docs/audit/W3M1_VALIDATION_PLAN.md) defines performance, pagination, role-based visibility, and regression checks.
+

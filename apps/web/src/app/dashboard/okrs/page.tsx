@@ -35,7 +35,7 @@ import { usePermissions } from '@/hooks/usePermissions'
 import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import { useToast } from '@/hooks/use-toast'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { ObjectiveRow } from '@/components/okr/ObjectiveRow'
+import { OKRPageContainer } from './OKRPageContainer'
 import Link from 'next/link'
 import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
 import { PublishLockWarningModal } from './components/PublishLockWarningModal'
@@ -70,18 +70,9 @@ export default function OKRsPage() {
   const { canSeeObjective, ...tenantPermissions } = useTenantPermissions()
   const { toast } = useToast()
   const [availableUsers, setAvailableUsers] = useState<any[]>([])
-  const [okrs, setOkrs] = useState<any[]>([])
   const [overdueCheckIns, setOverdueCheckIns] = useState<Array<{ krId: string; objectiveId: string }>>([])
-  // TODO [phase7-hardening]: move to SWR/react-query once we introduce caching & invalidation.
-  const [loading, setLoading] = useState(true)
-  const [permissionError, setPermissionError] = useState<string | null>(null)
-  
-  // Pagination and filter state
-  const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(10)
   const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null)
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null)
-  const [totalCount, setTotalCount] = useState<number>(0)
   const [activityDrawerOpen, setActivityDrawerOpen] = useState(false)
   const [activityItems, setActivityItems] = useState<ActivityItem[]>([])
   const [activityEntityName, setActivityEntityName] = useState('')
@@ -185,75 +176,6 @@ export default function OKRsPage() {
     loadOverdueCheckIns()
   }, [currentOrganization?.id, user])
   
-  // Reload OKRs when pagination or filters change
-  useEffect(() => {
-    if (currentOrganization?.id) {
-      loadOKRs()
-    }
-  }, [page, limit, selectedCycleId, selectedStatus, currentOrganization?.id])
-  
-  const loadOKRs = async () => {
-    if (!currentOrganization?.id) return
-    try {
-      setLoading(true)
-      setPermissionError(null)
-      
-      // Build query parameters
-      const params = new URLSearchParams({
-        organizationId: currentOrganization.id,
-        page: String(page),
-        limit: String(limit),
-      })
-      
-      if (selectedCycleId) {
-        params.set('cycleId', selectedCycleId)
-      }
-      
-      if (selectedStatus) {
-        params.set('status', selectedStatus)
-      }
-      
-      // Use api client to ensure requests go to API gateway (port 3000), not Next.js dev server
-      const response = await api.get(`/okr/overview?${params.toString()}`)
-      
-      // Parse pagination headers from response
-      const totalHeader = response.headers['x-total-count']
-      const pageHeader = response.headers['x-page']
-      const limitHeader = response.headers['x-limit']
-      
-      if (totalHeader) setTotalCount(Number(totalHeader))
-      // Only update page/limit from headers if they differ (prevents unnecessary re-renders)
-      if (pageHeader) {
-        const serverPage = Number(pageHeader)
-        if (serverPage !== page) setPage(serverPage)
-      }
-      if (limitHeader) {
-        const serverLimit = Number(limitHeader)
-        if (serverLimit !== limit) setLimit(serverLimit)
-      }
-      
-      const data = response.data || []
-      
-      // Map data using existing mapObjectiveData function
-      const mapped = Array.isArray(data) ? data.map((obj: any) => 
-        mapObjectiveData(obj, availableUsers, activeCycles, overdueCheckIns)
-      ) : []
-      
-      setOkrs(mapped)
-    } catch (error: any) {
-      console.error('[OKR PAGE] Failed to load OKRs', error)
-      if (error.response?.status === 403) {
-        setPermissionError('You do not have permission to view OKRs. Please contact your administrator.')
-      } else if (error.response?.status === 404) {
-        setPermissionError('OKR service not found. Please check that the API gateway is running.')
-      } else {
-        setPermissionError('Failed to load OKRs. Please try again later.')
-      }
-      setOkrs([])
-    } finally {
-      setLoading(false)
-    }
-  }
   
   const loadUsers = async () => {
     try {
@@ -406,72 +328,6 @@ export default function OKRsPage() {
   // Legacy selectedId for backwards compatibility during transition
   const _selectedId = selectedTimeframeKey
   
-  // Map all objectives to view models with timeframeKey
-  const objectivesViewModel = useMemo(() => {
-    const safeObjectives = Array.isArray(okrs) ? okrs : []
-    return safeObjectives.map(mapObjectiveToViewModel)
-  }, [okrs])
-  
-  // Apply filters and visibility checks with safe defaults
-  const filteredOKRs = objectivesViewModel.filter(okr => {
-    // Apply visibility check - must include visibilityLevel
-    const objectiveForVisibility = {
-      id: okr.id,
-      ownerId: okr.ownerId,
-      organizationId: okr.organizationId,
-      workspaceId: okr.workspaceId,
-      teamId: okr.teamId,
-      isPublished: okr.isPublished,
-      visibilityLevel: okr.visibilityLevel,
-      cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-        ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
-        : null,
-      cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-        ? activeCycles.find(c => c.id === okr.cycleId)!.status
-        : null,
-    }
-    if (!canSeeObjective(objectiveForVisibility)) {
-      return false
-    }
-    
-    // Strict filtering by timeframeKey
-    if (!selectedTimeframeKey || selectedTimeframeKey === 'all') {
-      // Show all when 'all' is selected or no selection
-    } else {
-      // Strict match: only include if timeframeKey matches
-      if (okr.timeframeKey !== selectedTimeframeKey) {
-        return false
-      }
-    }
-    
-    // Workspace filter
-    if (filterWorkspaceId !== 'all' && okr.workspaceId !== filterWorkspaceId) {
-      return false
-    }
-    
-    // Team filter
-    if (filterTeamId !== 'all' && okr.teamId !== filterTeamId) {
-      return false
-    }
-    
-    // Owner filter
-    if (filterOwnerId !== 'all' && okr.ownerId !== filterOwnerId) {
-      return false
-    }
-    
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      const matchesTitle = okr.title?.toLowerCase().includes(query)
-      const matchesDescription = okr.description?.toLowerCase().includes(query)
-      const matchesOwner = okr.owner?.name?.toLowerCase().includes(query)
-      if (!matchesTitle && !matchesDescription && !matchesOwner) {
-        return false
-      }
-    }
-    
-    return true
-  })
   
   const clearFilters = () => {
     setFilterWorkspaceId('all')
@@ -483,10 +339,7 @@ export default function OKRsPage() {
   const hasActiveFilters = filterWorkspaceId !== 'all' || filterTeamId !== 'all' || filterOwnerId !== 'all' || searchQuery.length > 0;
 
   const handleEditOKR = (okr: any) => {
-    // Map okr to Objective interface expected by hook
-    // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
-    // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
-    const objectiveForHook = {
+    const objectiveForHook = okr.objectiveForHook || {
       id: okr.id,
       ownerId: okr.ownerId,
       organizationId: okr.organizationId,
@@ -511,7 +364,6 @@ export default function OKRsPage() {
       return
     }
     
-    // [phase5-core:done] replaced Visual Builder redirect with inline EditObjectiveModal for objective CRUD.
     setEditObjectiveId(okr.id)
     setEditObjectiveData({
       title: okr.title,
@@ -549,179 +401,6 @@ export default function OKRsPage() {
     setExpandedObjectiveId(prev => (prev === id ? null : id))
   }
 
-  // Section Header Component for health bands
-  const SectionHeader = ({ tone, label }: { tone: 'bad' | 'good' | 'neutral'; label: string }) => (
-    <div className="text-[13px] font-semibold text-neutral-700 flex items-center gap-2 uppercase tracking-wide border-t border-neutral-200 pt-4 mt-8">
-      <span
-        className={`h-2 w-2 rounded-full ${
-          tone === 'bad'
-            ? 'bg-rose-500'
-            : tone === 'good'
-            ? 'bg-emerald-500'
-            : 'bg-neutral-400'
-        }`}
-      />
-      <span>{label}</span>
-    </div>
-  )
-
-  // Helper function to render objective row
-  const renderObjectiveRow = (okr: any) => {
-    // Map okr to Objective interface expected by hook for permissions
-    // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
-    const objectiveForHook = {
-      id: okr.id,
-      ownerId: okr.ownerId,
-      organizationId: okr.organizationId,
-      workspaceId: okr.workspaceId,
-      teamId: okr.teamId,
-      isPublished: okr.isPublished,
-      visibilityLevel: okr.visibilityLevel,
-      cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-        ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
-        : null,
-      cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-        ? activeCycles.find(c => c.id === okr.cycleId)!.status
-        : null,
-    }
-    
-    const canEdit = tenantPermissions.canEditObjective(objectiveForHook)
-    const canDelete = tenantPermissions.canDeleteObjective(objectiveForHook)
-    
-    // Normalise objective data for ObjectiveRow
-    const normalised = mapObjectiveData(okr, availableUsers, activeCycles, overdueCheckIns)
-    
-    // Filter Key Results by visibility - only include ones the user can view
-    const visibleKeyResults = normalised.keyResults.filter((kr: any) => {
-      return tenantPermissions.canSeeKeyResult(kr, {
-        id: okr.id,
-        ownerId: okr.ownerId,
-        organizationId: okr.organizationId,
-        workspaceId: okr.workspaceId,
-        teamId: okr.teamId,
-        isPublished: okr.isPublished,
-        visibilityLevel: okr.visibilityLevel,
-        cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-          ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
-          : null,
-        cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-          ? activeCycles.find(c => c.id === okr.cycleId)!.status
-          : null,
-      })
-    })
-    
-    // Permission check functions for Key Results
-    const canEditKeyResult = (krId: string): boolean => {
-      const kr = visibleKeyResults.find((k: any) => k.id === krId)
-      if (!kr) return false
-      
-      return tenantPermissions.canEditKeyResult({
-        id: kr.id,
-        ownerId: kr.ownerId || okr.ownerId,
-        organizationId: okr.organizationId,
-        workspaceId: okr.workspaceId,
-        teamId: okr.teamId,
-        parentObjective: objectiveForHook,
-      })
-    }
-    
-    const canCheckInOnKeyResult = (krId: string): boolean => {
-      const kr = visibleKeyResults.find((k: any) => k.id === krId)
-      if (!kr) return false
-      
-      return tenantPermissions.canCheckInOnKeyResult({
-        id: kr.id,
-        ownerId: kr.ownerId || okr.ownerId,
-        organizationId: okr.organizationId,
-        workspaceId: okr.workspaceId,
-        teamId: okr.teamId,
-        parentObjective: objectiveForHook,
-      })
-    }
-    
-    return (
-      <ObjectiveRow
-        key={normalised.id}
-        objective={{
-          id: normalised.id,
-          title: normalised.title,
-          status: normalised.status as 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED',
-          progress: Math.round(normalised.progress),
-          isPublished: normalised.isPublished,
-          cycleName: normalised.cycleName,
-          cycleLabel: normalised.cycleLabel,
-          cycleStatus: normalised.cycleStatus,
-          visibilityLevel: normalised.visibilityLevel,
-          owner: normalised.owner,
-          overdueCountForObjective: normalised.overdueCountForObjective,
-          lowestConfidence: normalised.lowestConfidence,
-          keyResults: visibleKeyResults,
-          initiatives: normalised.initiatives,
-        }}
-        isExpanded={expandedObjectiveId === normalised.id}
-        onToggle={handleToggleObjective}
-        onAddKeyResult={handleAddKrClick}
-        onAddInitiative={handleAddInitiativeToObjectiveClick}
-        onEdit={(_objectiveId) => handleEditOKR(okr)}
-        onDelete={(_objectiveId) => handleDeleteOKR(okr)}
-        onOpenHistory={() => handleOpenActivityDrawer('OBJECTIVE', normalised.id, normalised.title)}
-        onAddInitiativeToKr={(krId) => {
-          const kr = normalised.keyResults.find((k: any) => k.id === krId)
-          if (kr) handleAddInitiativeToKrClick(krId, kr.title)
-        }}
-        onAddCheckIn={handleAddCheckIn}
-        canEdit={canEdit}
-        canDelete={canDelete}
-        canEditKeyResult={canEditKeyResult}
-        canCheckInOnKeyResult={canCheckInOnKeyResult}
-        availableUsers={availableUsers}
-      />
-    )
-  }
-
-  // Group objectives by health status
-  const groupedObjectives = useMemo(() => {
-    const needsAttentionObjectives: typeof filteredOKRs = []
-    const activeObjectives: typeof filteredOKRs = []
-    const completedObjectives: typeof filteredOKRs = []
-
-    filteredOKRs.forEach((okr) => {
-      const normalised = mapObjectiveData(okr, availableUsers, activeCycles, overdueCheckIns)
-      const status = normalised.status || 'ON_TRACK'
-      const cycleStatus = normalised.cycleStatus || 'ACTIVE'
-      const overdueCheckInsCount = normalised.overdueCountForObjective || 0
-
-      // Needs attention: AT_RISK or BLOCKED OR overdueCheckInsCount > 0
-      if (status === 'AT_RISK' || status === 'BLOCKED' || overdueCheckInsCount > 0) {
-        needsAttentionObjectives.push(okr)
-      }
-      // Active: ON_TRACK AND cycleStatus is ACTIVE
-      else if (status === 'ON_TRACK' && cycleStatus === 'ACTIVE') {
-        activeObjectives.push(okr)
-      }
-      // Completed: COMPLETED or CANCELLED OR cycleStatus is ARCHIVED
-      else if (status === 'COMPLETED' || status === 'CANCELLED' || cycleStatus === 'ARCHIVED') {
-        completedObjectives.push(okr)
-      }
-      // Fallback: anything else goes to active
-      else {
-        activeObjectives.push(okr)
-      }
-    })
-
-    return { needsAttentionObjectives, activeObjectives, completedObjectives }
-  }, [filteredOKRs, availableUsers, activeCycles, overdueCheckIns])
-
-  // Auto-expand first objective in "needs attention" if expandedObjectiveId is null
-  useEffect(() => {
-    if (expandedObjectiveId === null && groupedObjectives.needsAttentionObjectives.length > 0) {
-      const firstNeedsAttention = groupedObjectives.needsAttentionObjectives[0]
-      const normalised = mapObjectiveData(firstNeedsAttention, availableUsers, activeCycles, overdueCheckIns)
-      setExpandedObjectiveId(normalised.id)
-    }
-    // Only run when we have needs attention objectives and no expanded objective yet
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupedObjectives.needsAttentionObjectives.length, expandedObjectiveId])
   
   const handleAddCheckIn = (krId: string) => {
     // [phase5-core:done] implemented NewCheckInModal and wired POST /api/check-ins
@@ -730,10 +409,7 @@ export default function OKRsPage() {
   }
 
   const handleDeleteOKR = async (okr: any) => {
-    // Map okr to Objective interface expected by hook
-    // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
-    // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
-    const objectiveForHook = {
+    const objectiveForHook = okr.objectiveForHook || {
       id: okr.id,
       ownerId: okr.ownerId,
       organizationId: okr.organizationId,
@@ -758,7 +434,6 @@ export default function OKRsPage() {
       return
     }
     
-    // Store pending delete info for confirmation dialog
     setPendingDeleteOkr({ id: okr.id, title: okr.title })
   }
 
@@ -767,12 +442,13 @@ export default function OKRsPage() {
     
     try {
       await api.delete(`/objectives/${pendingDeleteOkr.id}`)
-      await loadOKRs() // Reload the list
+      const title = pendingDeleteOkr.title
       setPendingDeleteOkr(null)
       toast({
         title: 'OKR deleted',
-        description: `"${pendingDeleteOkr.title}" has been deleted.`,
+        description: `"${title}" has been deleted.`,
       })
+      handleReloadOKRs()
     } catch (error: any) {
       console.error('Failed to delete OKR:', error)
       const errorMessage = error.response?.data?.message || error.message || 'Failed to delete OKR'
@@ -782,6 +458,10 @@ export default function OKRsPage() {
         variant: 'destructive',
       })
     }
+  }
+  
+  const handleReloadOKRs = () => {
+    window.location.reload()
   }
 
   const handleOpenActivityDrawer = async (entityType: 'OBJECTIVE' | 'KEY_RESULT', entityId: string, entityTitle?: string) => {
@@ -973,14 +653,6 @@ export default function OKRsPage() {
                     ...(activeCycles.some((c) => c.status === 'LOCKED')
                       ? [{ label: 'Locked', tone: 'warning' as const }]
                       : []),
-                    ...(okrs.filter((o) => o.status === 'AT_RISK').length > 0
-                      ? [
-                          {
-                            label: `${okrs.filter((o) => o.status === 'AT_RISK').length} At Risk`,
-                            tone: 'warning' as const,
-                          },
-                        ]
-                      : []),
                   ]}
                 />
               </div>
@@ -1052,7 +724,6 @@ export default function OKRsPage() {
                 )}
                 onClick={() => {
                   setSelectedStatus(null)
-                  setPage(1)
                 }}
               >
                 All statuses
@@ -1066,7 +737,6 @@ export default function OKRsPage() {
                 )}
                 onClick={() => {
                   setSelectedStatus('ON_TRACK')
-                  setPage(1)
                 }}
               >
                 On track
@@ -1080,7 +750,6 @@ export default function OKRsPage() {
                 )}
                 onClick={() => {
                   setSelectedStatus('AT_RISK')
-                  setPage(1)
                 }}
               >
                 At risk
@@ -1094,7 +763,6 @@ export default function OKRsPage() {
                 )}
                 onClick={() => {
                   setSelectedStatus('BLOCKED')
-                  setPage(1)
                 }}
               >
                 Blocked
@@ -1108,7 +776,6 @@ export default function OKRsPage() {
                 )}
                 onClick={() => {
                   setSelectedStatus('COMPLETED')
-                  setPage(1)
                 }}
               >
                 Completed
@@ -1122,7 +789,6 @@ export default function OKRsPage() {
                 )}
                 onClick={() => {
                   setSelectedStatus('CANCELLED')
-                  setPage(1)
                 }}
               >
                 Cancelled
@@ -1137,7 +803,6 @@ export default function OKRsPage() {
                   value={selectedCycleId ?? ''}
                   onChange={(e) => {
                     setSelectedCycleId(e.target.value || null)
-                    setPage(1)
                   }}
                 >
                   <option value="">All cycles</option>
@@ -1149,51 +814,6 @@ export default function OKRsPage() {
                 </select>
               </div>
 
-              {/* Top Pagination Controls */}
-              {totalCount > 0 && (
-                <div className="flex items-center gap-4 text-sm text-neutral-700">
-                  <div className="flex items-center gap-2">
-                    <span className="text-neutral-600">Rows per page:</span>
-                    <select
-                      className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                      value={limit}
-                      onChange={(e) => {
-                        const newLimit = Number(e.target.value)
-                        setLimit(newLimit)
-                        setPage(1)
-                      }}
-                    >
-                      {[5, 10, 25, 50].map(opt => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <button
-                      className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                      disabled={page <= 1}
-                      onClick={() => {
-                        setPage(p => Math.max(1, p - 1))
-                      }}
-                    >
-                      ‹ Prev
-                    </button>
-                    <div className="tabular-nums text-neutral-600">
-                      Page {page} of {Math.ceil(totalCount / limit) || 1}
-                    </div>
-                    <button
-                      className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                      disabled={page >= Math.ceil(totalCount / limit)}
-                      onClick={() => {
-                        const totalPages = Math.ceil(totalCount / limit)
-                        setPage(p => (p < totalPages ? p + 1 : p))
-                      }}
-                    >
-                      Next ›
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
@@ -1287,140 +907,30 @@ export default function OKRsPage() {
             {/* [phase6-polish] Reintroduce compact multi-column grid view for exec scanning. */}
           </div>
 
-          {/* OKRs Grid/List */}
-          {loading ? (
-            <div className="text-center py-12 text-slate-500">Loading OKRs...</div>
-          ) : permissionError ? (
-            <div className="text-center py-12">
-              <div className="max-w-md mx-auto">
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-yellow-900 mb-2">Access Restricted</h3>
-                  <p className="text-yellow-800 mb-4">{permissionError}</p>
-                  <p className="text-sm text-yellow-700">
-                    If you believe you should have access, please contact your administrator.
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : filteredOKRs.length === 0 ? (
-            <div className="text-center py-12">
-              {objectivesViewModel.filter(canSeeObjective).length === 0 ? (
-                <div className="border border-dashed border-neutral-300 rounded-xl bg-white/50 text-center p-8">
-                  <p className="font-medium text-neutral-700 mb-1">No Objectives yet</p>
-                  <p className="text-sm text-neutral-500 mb-3">Start by defining your first Objective.</p>
-                  <button
-                    className="text-violet-700 hover:text-violet-900 underline underline-offset-2 font-medium text-sm"
-                    onClick={() => setShowNewObjective(true)}
-                  >
-                    + New Objective
-                  </button>
-                  {/* TODO [phase6-polish]: Fade-in animation when first Objective appears. */}
-                </div>
-              ) : (
-                <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm text-neutral-600">
-                  {selectedTimeframeKey === 'unassigned' ? (
-                    <p>No objectives are currently unassigned to a planning cycle.</p>
-                  ) : selectedTimeframeKey && selectedTimeframeKey !== 'all' ? (
-                    <p>No objectives defined for {selectedTimeframeLabel} yet.</p>
-                  ) : (
-                    <>
-                      <p className="mb-4">No OKRs found</p>
-                      {hasActiveFilters && (
-                        <Button variant="outline" onClick={clearFilters}>
-                          Clear filters to see all OKRs
-                        </Button>
-                      )}
-                    </>
-                  )}
-                  {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4 md:space-y-6">
-              {/* Needs attention group */}
-              {groupedObjectives.needsAttentionObjectives.length > 0 && (
-                <div>
-                  <SectionHeader tone="bad" label="Needs attention" />
-                  <div className="space-y-4 md:space-y-6">
-                    {groupedObjectives.needsAttentionObjectives.map((okr) => {
-                      return renderObjectiveRow(okr)
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Active Objectives group */}
-              {groupedObjectives.activeObjectives.length > 0 && (
-                <div>
-                  <SectionHeader tone="good" label="Active objectives" />
-                  <div className="space-y-4 md:space-y-6">
-                    {groupedObjectives.activeObjectives.map((okr) => {
-                      return renderObjectiveRow(okr)
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Completed / Archived group */}
-              {groupedObjectives.completedObjectives.length > 0 && (
-                <div>
-                  <SectionHeader tone="neutral" label="Completed / archived" />
-                  <div className="space-y-4 md:space-y-6">
-                    {groupedObjectives.completedObjectives.map((okr) => {
-                      return renderObjectiveRow(okr)
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Pagination Controls */}
-          {totalCount > 0 && (
-            <div className="mt-6 flex flex-col items-start justify-between gap-4 border-t border-neutral-200 pt-4 text-sm text-neutral-700 md:flex-row md:items-center">
-              <div className="flex items-center gap-2">
-                <span className="text-neutral-600">Rows per page:</span>
-                <select
-                  className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  value={limit}
-                  onChange={(e) => {
-                    const newLimit = Number(e.target.value)
-                    setLimit(newLimit)
-                    setPage(1)
-                  }}
-                >
-                  {[5, 10, 25, 50].map(opt => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-4">
-                <button
-                  className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  disabled={page <= 1}
-                  onClick={() => {
-                    setPage(p => Math.max(1, p - 1))
-                  }}
-                >
-                  ‹ Prev
-                </button>
-                <div className="tabular-nums text-neutral-600">
-                  Page {page} of {Math.ceil(totalCount / limit) || 1}
-                </div>
-                <button
-                  className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  disabled={page >= Math.ceil(totalCount / limit)}
-                  onClick={() => {
-                    const totalPages = Math.ceil(totalCount / limit)
-                    setPage(p => (p < totalPages ? p + 1 : p))
-                  }}
-                >
-                  Next ›
-                </button>
-              </div>
-            </div>
-          )}
+          {/* OKRs List with Pagination */}
+          <OKRPageContainer
+            availableUsers={availableUsers}
+            activeCycles={activeCycles}
+            overdueCheckIns={overdueCheckIns}
+            filterWorkspaceId={filterWorkspaceId}
+            filterTeamId={filterTeamId}
+            filterOwnerId={filterOwnerId}
+            searchQuery={searchQuery}
+            selectedTimeframeKey={selectedTimeframeKey}
+            selectedStatus={selectedStatus}
+            selectedCycleId={selectedCycleId}
+            onAction={{
+              onEdit: handleEditOKR,
+              onDelete: handleDeleteOKR,
+              onAddKeyResult: handleAddKrClick,
+              onAddInitiativeToObjective: handleAddInitiativeToObjectiveClick,
+              onAddInitiativeToKr: handleAddInitiativeToKrClick,
+              onAddCheckIn: handleAddCheckIn,
+              onOpenHistory: handleOpenActivityDrawer,
+            }}
+            expandedObjectiveId={expandedObjectiveId}
+            onToggleObjective={handleToggleObjective}
+          />
 
           {/* Activity Timeline Drawer */}
           {/* TODO [phase7-performance]: pass pagination cursor + load handler once backend supports it. */}
@@ -1495,12 +1005,12 @@ export default function OKRsPage() {
                 const res = await api.post('/objectives', formData)
                 const created = res.data
                 
-                // Map to view model and optimistic merge (prepend newest)
-                const createdViewModel = mapObjectiveToViewModel(created)
-                setOkrs((prev) => [createdViewModel, ...prev])
-                
-                // TODO [phase6-polish]: toast "Objective created"
+                toast({
+                  title: 'Objective created',
+                  description: `"${created.title}" has been created.`,
+                })
                 setShowNewObjective(false)
+                handleReloadOKRs()
               } catch (err) {
                 // TODO [phase7-hardening]: map backend validation errors to field-level messages.
                 console.error('Failed to create objective', err)
@@ -1530,26 +1040,14 @@ export default function OKRsPage() {
                 const res = await api.patch(`/objectives/${editObjectiveId}`, formData)
                 const updated = res.data
                 
-                // Optimistically update objective in local state
-                setOkrs((prev) =>
-                  prev.map((obj) => {
-                    if (obj.id !== editObjectiveId) return obj
-                    return {
-                      ...obj,
-                      title: updated.title || obj.title,
-                      ownerId: updated.ownerId || obj.ownerId,
-                      workspaceId: updated.workspaceId || obj.workspaceId,
-                      cycleId: updated.cycleId || obj.cycleId,
-                      status: updated.status || obj.status,
-                      visibilityLevel: updated.visibilityLevel || obj.visibilityLevel,
-                      pillarId: updated.pillarId || obj.pillarId,
-                    }
-                  })
-                )
-                
+                toast({
+                  title: 'Objective updated',
+                  description: `"${updated.title}" has been updated.`,
+                })
                 setShowEditObjective(false)
                 setEditObjectiveId(null)
                 setEditObjectiveData(null)
+                handleReloadOKRs()
               } catch (err) {
                 // TODO [phase7-hardening]: map backend validation errors to field-level messages.
                 console.error('Failed to update objective', err)
@@ -1577,45 +1075,13 @@ export default function OKRsPage() {
                 const res = await api.post(`/key-results/${activeCheckInKrId}/check-in`, formData)
                 const _createdCheckIn = res.data
                 
-                // Optimistically update KR in local state
-                setOkrs((prev) =>
-                  prev.map((obj) => {
-                    const updatedKeyResults = (obj.keyResults || []).map((kr: any) => {
-                      const krId = kr.keyResult?.id || kr.id
-                      if (krId !== activeCheckInKrId) return kr
-                      
-                      // Update currentValue and progress
-                      const updatedKr = kr.keyResult
-                        ? {
-                            ...kr,
-                            keyResult: {
-                              ...kr.keyResult,
-                              currentValue: formData.value,
-                              progress: kr.keyResult.targetValue > 0
-                                ? Math.min(100, Math.round((formData.value / kr.keyResult.targetValue) * 100))
-                                : kr.keyResult.progress,
-                            },
-                          }
-                        : {
-                            ...kr,
-                            currentValue: formData.value,
-                            progress: kr.targetValue > 0
-                              ? Math.min(100, Math.round((formData.value / kr.targetValue) * 100))
-                              : kr.progress,
-                          }
-                      
-                      return updatedKr
-                    })
-                    
-                    return {
-                      ...obj,
-                      keyResults: updatedKeyResults,
-                    }
-                  })
-                )
-                
+                toast({
+                  title: 'Check-in recorded',
+                  description: 'Check-in has been recorded successfully.',
+                })
                 setShowNewCheckIn(false)
                 setActiveCheckInKrId(null)
+                handleReloadOKRs()
               } catch (err) {
                 // TODO [phase7-hardening]: map backend validation errors to field-level messages.
                 console.error('Failed to create check-in', err)
@@ -1640,28 +1106,14 @@ export default function OKRsPage() {
                 const res = await api.post('/key-results', payload)
                 const createdKr = res.data
                 
-                // Merge KR into that objective in local state (optimistic update)
-                setOkrs((prev) =>
-                  prev.map((obj) => {
-                    if (obj.id !== formData.objectiveId) return obj
-                    
-                    // Handle nested keyResults structure (keyResults is array of { keyResult: {...} })
-                    const existingKeyResults = obj.keyResults || []
-                    const newKeyResultEntry = Array.isArray(existingKeyResults) && existingKeyResults.length > 0 && existingKeyResults[0]?.keyResult
-                      ? { keyResult: createdKr }
-                      : createdKr
-                    
-                    return {
-                      ...obj,
-                      keyResults: [...existingKeyResults, newKeyResultEntry],
-                    }
-                  })
-                )
-                
+                toast({
+                  title: 'Key Result added',
+                  description: `"${createdKr.title}" has been added.`,
+                })
                 setShowNewKeyResult(false)
                 setKrParentObjectiveId(null)
                 setKrParentObjectiveName(null)
-                // TODO [phase6-polish]: toast "Key Result added"
+                handleReloadOKRs()
               } catch (err) {
                 // TODO [phase7-hardening]: map backend validation errors to field-level messages.
                 console.error('Failed to create key result', err)
@@ -1693,46 +1145,15 @@ export default function OKRsPage() {
                 const res = await api.post('/initiatives', payload)
                 const createdInit = res.data
                 
-                // Optimistic merge:
-                // If this initiative is under a KR, put it under that KR.
-                // Else attach it at objective level.
-                setOkrs((prev) =>
-                  prev.map((obj) => {
-                    // If it's under objective:
-                    if (initiativeParentObjectiveId && obj.id === initiativeParentObjectiveId) {
-                      return {
-                        ...obj,
-                        initiatives: [...(obj.initiatives || []), createdInit],
-                      }
-                    }
-                    
-                    // If it's under a KR inside the objective:
-                    if (initiativeParentKeyResultId) {
-                      return {
-                        ...obj,
-                        keyResults: (obj.keyResults || []).map((kr: any) => {
-                          // Handle nested structure: kr.keyResult.id or kr.id
-                          const krId = kr.keyResult?.id || kr.id
-                          if (krId !== initiativeParentKeyResultId) return kr
-                          
-                          const updatedKr = kr.keyResult 
-                            ? { ...kr, keyResult: { ...kr.keyResult, initiatives: [...(kr.keyResult.initiatives || []), createdInit] } }
-                            : { ...kr, initiatives: [...(kr.initiatives || []), createdInit] }
-                          
-                          return updatedKr
-                        }),
-                      }
-                    }
-                    
-                    return obj
-                  })
-                )
-                
+                toast({
+                  title: 'Initiative added',
+                  description: `"${createdInit.title}" has been added.`,
+                })
                 setShowNewInitiative(false)
                 setInitiativeParentObjectiveId(null)
                 setInitiativeParentKeyResultId(null)
                 setInitiativeParentName(null)
-                // TODO [phase6-polish]: toast "Initiative added"
+                handleReloadOKRs()
               } catch (err) {
                 // TODO [phase7-hardening]: map backend validation errors to field-level messages.
                 console.error('Failed to create initiative', err)
