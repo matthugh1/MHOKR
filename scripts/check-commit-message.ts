@@ -12,7 +12,7 @@
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
-const CONVENTIONAL_COMMIT_REGEX = /^(feat|fix|refactor|chore|docs|test)[^)]+: .+/;
+const CONVENTIONAL_COMMIT_REGEX = /^(feat|fix|refactor|chore|docs|test)(\([^)]+\))?: .+/;
 const WIP_REGEX = /WIP/i;
 const PHASE_TAG_IN_MESSAGE_REGEX = /\[(phase[0-9]+-[a-zA-Z0-9_-]+)(:done)?\]/g;
 
@@ -124,4 +124,5 @@ function main() {
 }
 
 main();
+
 
