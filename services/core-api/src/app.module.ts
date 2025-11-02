@@ -13,6 +13,7 @@ import { LayoutModule } from './modules/layout/layout.module';
 import { RBACModule } from './modules/rbac/rbac.module';
 import { SuperuserModule } from './modules/superuser/superuser.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { SystemModule } from './modules/system/system.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AuditModule } from './modules/audit/audit.module';
     ActivityModule,
     LayoutModule,
     SuperuserModule,
+    SystemModule,
   ],
 })
 export class AppModule {}

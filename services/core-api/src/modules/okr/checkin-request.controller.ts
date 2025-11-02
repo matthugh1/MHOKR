@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiBody } from '@nestjs
 import { CheckInRequestService } from './checkin-request.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
+import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 
 /**
  * CheckInRequest Controller
@@ -19,6 +20,7 @@ export class CheckInRequestController {
   constructor(private readonly checkInRequestService: CheckInRequestService) {}
 
   @Post('checkin-requests')
+  @UseGuards(RateLimitGuard)
   @RequireAction('request_checkin')
   @ApiOperation({ summary: 'Create async check-in requests for one or more team members' })
   @ApiBody({

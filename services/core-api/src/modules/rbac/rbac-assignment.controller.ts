@@ -25,6 +25,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard } from './rbac.guard';
 import { RequireAction } from './rbac.decorator';
 import { Role, ScopeType } from './types';
+import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 
 interface AssignRoleDto {
   userEmail: string;
@@ -214,6 +215,7 @@ export class RBACAssignmentController {
   }
 
   @Post('assign')
+  @UseGuards(RateLimitGuard)
   @RequireAction('manage_users')
   @ApiOperation({ summary: 'Assign a role to a user' })
   async assignRole(@Body() dto: AssignRoleDto, @Request() req: any) {
@@ -242,6 +244,7 @@ export class RBACAssignmentController {
   }
 
   @Delete(':assignmentId')
+  @UseGuards(RateLimitGuard)
   @RequireAction('manage_users')
   @ApiOperation({ summary: 'Revoke a role assignment' })
   async revokeRole(
@@ -286,6 +289,7 @@ export class ExecWhitelistController {
   }
 
   @Post(':tenantId/add')
+  @UseGuards(RateLimitGuard)
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Add user to EXEC_ONLY whitelist' })
   async addToWhitelist(
@@ -307,6 +311,7 @@ export class ExecWhitelistController {
   }
 
   @Post(':tenantId/remove')
+  @UseGuards(RateLimitGuard)
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Remove user from EXEC_ONLY whitelist' })
   async removeFromWhitelist(
@@ -328,6 +333,7 @@ export class ExecWhitelistController {
   }
 
   @Post(':tenantId/set')
+  @UseGuards(RateLimitGuard)
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Set entire EXEC_ONLY whitelist' })
   async setWhitelist(
@@ -349,6 +355,7 @@ export class ExecWhitelistController {
   }
 
   @Delete(':tenantId')
+  @UseGuards(RateLimitGuard)
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Clear EXEC_ONLY whitelist' })
   async clearWhitelist(@Param('tenantId') tenantId: string, @Request() req: any) {

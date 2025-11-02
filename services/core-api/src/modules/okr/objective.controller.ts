@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ObjectiveService } from './objective.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
+import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 
 @ApiTags('Objectives')
 @Controller('objectives')
@@ -44,6 +45,7 @@ export class ObjectiveController {
   }
 
   @Post()
+  @UseGuards(RateLimitGuard)
   @RequireAction('create_okr')
   @ApiOperation({ summary: 'Create objective' })
   async create(@Body() data: any, @Req() req: any) {
@@ -68,6 +70,7 @@ export class ObjectiveController {
   }
 
   @Patch(':id')
+  @UseGuards(RateLimitGuard)
   @RequireAction('edit_okr')
   @ApiOperation({ summary: 'Update objective' })
   async update(@Param('id') id: string, @Body() data: any, @Req() req: any) {
@@ -84,6 +87,7 @@ export class ObjectiveController {
   }
 
   @Delete(':id')
+  @UseGuards(RateLimitGuard)
   @RequireAction('delete_okr')
   @ApiOperation({ summary: 'Delete objective' })
   async delete(@Param('id') id: string, @Req() req: any) {

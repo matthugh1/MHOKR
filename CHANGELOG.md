@@ -54,4 +54,12 @@
 - Analytics endpoints now exclude PRIVATE / exec-only OKRs and their Key Results for unauthorised users. Tenant admins still see full rollups; contributors and workspace leads only see numbers they are allowed to see.
 - A validation plan (docs/audit/W3M2_VALIDATION_PLAN.md) defines pagination, visibility, governance, SUPERUSER and analytics checks.
 
+## [Operational Safeguards & Policy Enforcement] W3.M3 Complete
 
+- Introduced `/system/status` endpoint for operational visibility.
+- Added in-memory rate limiting guard to critical mutation endpoints (check-in requests, RBAC assignments, whitelist, OKRs).
+- Implemented automated smoke test suite validating tenant isolation, visibility enforcement, pagination, and SUPERUSER read-only policy.
+- Wired CI script `smoke:test` to enforce policy regressions before deployment.
+- Added enforcement documentation at `docs/audit/W3M3_ENFORCEMENT_NOTES.md`.
+- No TODO/FIXME/HACK comments; all changes follow existing NestJS patterns.
+- This milestone ensures that all access control, governance, and visibility behaviours from W1–W3 are locked in and automatically tested.

@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { KeyResultService } from './key-result.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
+import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 
 @ApiTags('Key Results')
 @Controller('key-results')
@@ -36,6 +37,7 @@ export class KeyResultController {
   }
 
   @Post()
+  @UseGuards(RateLimitGuard)
   @RequireAction('create_okr')
   @ApiOperation({ summary: 'Create key result' })
   async create(@Body() data: any, @Req() req: any) {
@@ -58,6 +60,7 @@ export class KeyResultController {
   }
 
   @Patch(':id')
+  @UseGuards(RateLimitGuard)
   @RequireAction('edit_okr')
   @ApiOperation({ summary: 'Update key result' })
   async update(@Param('id') id: string, @Body() data: any, @Req() req: any) {
@@ -70,6 +73,7 @@ export class KeyResultController {
   }
 
   @Delete(':id')
+  @UseGuards(RateLimitGuard)
   @RequireAction('delete_okr')
   @ApiOperation({ summary: 'Delete key result' })
   async delete(@Param('id') id: string, @Req() req: any) {
