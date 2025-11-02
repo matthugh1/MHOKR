@@ -140,3 +140,4 @@ docker exec okr-nexus-postgres psql -U okr_user -d okr_nexus -c "SELECT o.title,
 - The seed script added demo OKRs to the Puzzel CX organization
 - The Docker database is now fully populated and ready for use!
 
+

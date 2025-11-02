@@ -626,7 +626,11 @@ function canManageWorkspaces(
     return true;
   }
 
-  // TENANT_ADMIN cannot delete workspaces (but can create/edit?)
+  // TENANT_ADMIN can create/edit workspaces (but cannot delete)
+  if (hasTenantAdminRole(userContext, tenantId)) {
+    return true;
+  }
+
   // WORKSPACE_LEAD can create/manage teams within workspace
 
   return false;

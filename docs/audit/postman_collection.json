@@ -1,0 +1,338 @@
+{
+  "info": {
+    "name": "OKR Nexus - Core API Validation",
+    "_postman_id": "6b6e4e5c-9f1a-4a31-9a6a-okr-nexus-validation",
+    "description": "Post-dealignment functional validation for core-api.\nCovers auth, status, OKR overview pagination/visibility, analytics exposure, privileged mutations, RBAC assignment, and rate limiting.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Auth / Login",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "login"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@test.com\",\n  \"password\": \"admin123\"\n}"
+        },
+        "description": "Login to retrieve JWT.\nUpdate email/password for whichever test user you want to simulate: TENANT_ADMIN / WORKSPACE_LEAD / CONTRIBUTOR / SUPERUSER.\n\nAvailable test users:\n- admin@test.com / admin123 (SUPERUSER)\n- founder@puzzelcx.local / test123 (TENANT_ADMIN)\n- agent@puzzelcx.local / test123 (MEMBER)"
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Expect body: { token: \"<JWT>\", user: {...} }",
+              "let json = {};",
+              "try { json = pm.response.json(); } catch(e) {}",
+              "if (json && json.token) {",
+              "    pm.environment.set(\"authToken\", json.token);",
+              "}",
+              "pm.test(\"JWT token was returned\", function () {",
+              "    pm.expect(json.token, 'token').to.be.a('string');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 System / Status",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/system/status",
+          "host": ["{{baseUrl}}"],
+          "path": ["system", "status"]
+        },
+        "description": "Public heartbeat.\nValidates service up, build tag, enforcement flags. No auth required."
+      },
+      "response": []
+    },
+    {
+      "name": "03 OKR / Overview (Paginated)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{authToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/okr/overview?page={{page}}&pageSize={{pageSize}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["okr", "overview"],
+          "query": [
+            { "key": "page", "value": "{{page}}" },
+            { "key": "pageSize", "value": "{{pageSize}}" }
+          ]
+        },
+        "description": "Returns only objectives the caller is allowed to see.\nServer-enforced tenant isolation, visibility rules, governance flags.\nResponse shape:\n{\n  \"page\": 1,\n  \"pageSize\": 20,\n  \"totalCount\": 37,\n  \"objectives\": [\n    {\n      \"objectiveId\": \"...\",\n      \"title\": \"...\",\n      \"status\": \"AT_RISK|ON_TRACK|...\",\n      \"visibilityLevel\": \"PUBLIC_TENANT|PRIVATE|EXEC_ONLY\",\n      \"cycleStatus\": \"ACTIVE|LOCKED|ARCHIVED\",\n      \"isPublished\": true,\n      \"canEdit\": false,\n      \"canDelete\": false,\n      \"keyResults\": [\n        {\n          \"keyResultId\": \"...\",\n          \"title\": \"...\",\n          \"status\": \"...\",\n          \"canCheckIn\": true\n        }\n      ]\n    }\n  ]\n}"
+      },
+      "response": []
+    },
+    {
+      "name": "04 Analytics / Summary",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{authToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/reports/analytics/summary",
+          "host": ["{{baseUrl}}"],
+          "path": ["reports", "analytics", "summary"]
+        },
+        "description": "Visibility-hardened analytics.\nFor non-admins, PRIVATE / exec-only / out-of-scope objectives should NOT contribute to totals.\nFor TENANT_ADMIN, full rollup should appear."
+      },
+      "response": []
+    },
+    {
+      "name": "05 Check-in Requests / Create (Privileged, Rate Limited)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{authToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/okr/checkin-requests",
+          "host": ["{{baseUrl}}"],
+          "path": ["okr", "checkin-requests"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"targetUserId\": \"{{targetUserId}}\",\n  \"keyResultIds\": [\"{{keyResultId1}}\", \"{{keyResultId2}}\"],\n  \"message\": \"Please submit your weekly check-in\"\n}"
+        },
+        "description": "Creates check-in requests for one or more Key Results.\n- Enforces manager/role authorisation.\n- SUPERUSER should be blocked from creating.\n- Protected by rate limiter (30/min/user)."
+      },
+      "response": []
+    },
+    {
+      "name": "06 RBAC / Assign Role (Privileged, Rate Limited)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{authToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/rbac/assignments/assign",
+          "host": ["{{baseUrl}}"],
+          "path": ["rbac", "assignments", "assign"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"{{userIdToElevate}}\",\n  \"role\": \"TENANT_ADMIN\",\n  \"scopeType\": \"TENANT\",\n  \"scopeId\": \"{{tenantId}}\"\n}"
+        },
+        "description": "Grants a role to a user.\n- Requires `manage_users` (or equivalent) action.\n- Rate limited.\n- Should return 403 if caller not allowed.\n\nNote: After successful assignment, update assignmentId in environment with the returned assignment ID."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Extract assignment ID from response if successful",
+              "if (pm.response.code === 200 || pm.response.code === 201) {",
+              "    try {",
+              "        const json = pm.response.json();",
+              "        if (json.id) {",
+              "            pm.environment.set(\"assignmentId\", json.id);",
+              "        }",
+              "    } catch(e) {}",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 RBAC / Revoke Role (Privileged, Rate Limited)",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{authToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/rbac/assignments/{{assignmentId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["rbac", "assignments", "{{assignmentId}}"]
+        },
+        "description": "Revokes an RBAC assignment.\n- Also rate limited.\n- Use a real assignmentId from your environment (populated after step 06)."
+      },
+      "response": []
+    },
+    {
+      "name": "08 Whitelist / Update Exec Whitelist (Privileged, Rate Limited)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{authToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/rbac/whitelist/{{tenantId}}/set",
+          "host": ["{{baseUrl}}"],
+          "path": ["rbac", "whitelist", "{{tenantId}}", "set"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userIds\": [\"{{execUserId1}}\", \"{{execUserId2}}\"]\n}"
+        },
+        "description": "Sets the tenant's exec/visibility whitelist.\n- Requires `manage_tenant_settings`.\n- Rate limited.\n- This affects who can see EXEC_ONLY / PRIVATE OKRs."
+      },
+      "response": []
+    },
+    {
+      "name": "09 Objectives / Create (Privileged, Rate Limited)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{authToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/objectives",
+          "host": ["{{baseUrl}}"],
+          "path": ["objectives"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Increase Net Retention\",\n  \"visibilityLevel\": \"PUBLIC_TENANT\",\n  \"cycleId\": \"{{cycleId}}\",\n  \"ownerUserId\": \"{{ownerUserId}}\"\n}"
+        },
+        "description": "Creates a new Objective.\n- Requires create_okr.\n- Rate limited.\n- Backend should return canEdit/canDelete in later GET /okr/overview calls.\n\nNote: After successful creation, update objectiveId in environment with the returned objective ID."
+      },
+      "response": [],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Extract objective ID from response if successful",
+              "if (pm.response.code === 200 || pm.response.code === 201) {",
+              "    try {",
+              "        const json = pm.response.json();",
+              "        if (json.id) {",
+              "            pm.environment.set(\"objectiveId\", json.id);",
+              "        }",
+              "    } catch(e) {}",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Objectives / Update (Privileged, Rate Limited)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{authToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/objectives/{{objectiveId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["objectives", "{{objectiveId}}"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Increase Net Revenue Retention\",\n  \"status\": \"ON_TRACK\"\n}"
+        },
+        "description": "Updates an Objective.\n- Requires edit_okr.\n- Should be blocked if cycle is LOCKED/ARCHIVED unless caller is TENANT_ADMIN.\n- Rate limited."
+      },
+      "response": []
+    },
+    {
+      "name": "11 Objectives / Delete (Privileged, Rate Limited)",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{authToken}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/objectives/{{objectiveId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["objectives", "{{objectiveId}}"]
+        },
+        "description": "Deletes an Objective.\n- Requires edit_okr.\n- Should be blocked by governance rules (published/locked cycles).\n- Rate limited."
+      },
+      "response": []
+    }
+  ],
+  "event": [],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3001"
+    },
+    {
+      "key": "authToken",
+      "value": ""
+    },
+    {
+      "key": "page",
+      "value": "1"
+    },
+    {
+      "key": "pageSize",
+      "value": "20"
+    },
+    {
+      "key": "targetUserId",
+      "value": "cmhesnyxt00064xhjwh8jy6g7"
+    },
+    {
+      "key": "keyResultId1",
+      "value": "cmhg3js1m000w5yxw70tegnme"
+    },
+    {
+      "key": "keyResultId2",
+      "value": "cmhg3js1k000t5yxwdvwllvxx"
+    },
+    {
+      "key": "userIdToElevate",
+      "value": "cmhesnyxt00064xhjwh8jy6g7"
+    },
+    {
+      "key": "tenantId",
+      "value": "cmhesnyvx00004xhjjxs272gs"
+    },
+    {
+      "key": "assignmentId",
+      "value": ""
+    },
+    {
+      "key": "execUserId1",
+      "value": "cmhesnyxo00054xhjb6h2qm1v"
+    },
+    {
+      "key": "execUserId2",
+      "value": "cmhesnyxt00064xhjwh8jy6g7"
+    },
+    {
+      "key": "cycleId",
+      "value": "cmhesnyzr00124xhjtmx1ak82"
+    },
+    {
+      "key": "ownerUserId",
+      "value": "cmhesnyxo00054xhjb6h2qm1v"
+    },
+    {
+      "key": "objectiveId",
+      "value": "cmhg3js0w000d5yxwcfwz4bhb"
+    }
+  ]
+}
+

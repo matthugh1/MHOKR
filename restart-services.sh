@@ -23,3 +23,4 @@ echo ""
 echo "📋 To view logs, run: docker-compose logs -f"
 echo "📋 To view specific service logs, run: docker-compose logs -f <service-name>"
 
+

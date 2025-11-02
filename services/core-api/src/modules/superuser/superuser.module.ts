@@ -4,10 +4,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { SuperuserController } from './superuser.controller';
 import { SuperuserService } from './superuser.service';
 import { PrismaModule } from '../../common/prisma/prisma.module';
+import { RBACModule } from '../rbac/rbac.module';
 
 @Module({
   imports: [
     PrismaModule,
+    RBACModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
