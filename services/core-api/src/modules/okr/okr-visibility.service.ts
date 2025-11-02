@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RBACService } from '../rbac/rbac.service';
-import { UserContext } from '../rbac/types';
 import { canViewOKR } from '../rbac/visibilityPolicy';
 
 /**
@@ -95,8 +94,11 @@ export class OkrVisibilityService {
       id: objective.id,
       ownerId: objective.ownerId,
       organizationId: objective.organizationId,
-      visibilityLevel: objective.visibilityLevel,
-      isPublished: false, // Not needed for visibility check
+      tenantId: objective.organizationId,
+      visibilityLevel: objective.visibilityLevel as any,
+      isPublished: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
     return canViewOKR(userContext, okrEntity, tenant);

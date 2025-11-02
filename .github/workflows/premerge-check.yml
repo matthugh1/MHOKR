@@ -36,3 +36,6 @@ jobs:
       - name: Run TODO compliance audit
         run: npm run todo:audit
 
+      - name: Run smoke tests
+        working-directory: services/core-api
+        run: npm run smoke:test

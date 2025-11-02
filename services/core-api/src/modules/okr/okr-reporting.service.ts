@@ -74,6 +74,9 @@ export class OkrReportingService {
     // Filter by visibility
     const visibleObjectives = [];
     for (const obj of objectives) {
+      if (!obj.organizationId) {
+        continue;
+      }
       const canSee = await this.visibilityService.canUserSeeObjective({
         objective: {
           id: obj.id,
@@ -82,7 +85,7 @@ export class OkrReportingService {
           visibilityLevel: obj.visibilityLevel,
         },
         requesterUserId,
-        requesterOrgId: userOrganizationId,
+        requesterOrgId: userOrganizationId ?? null,
       });
 
       if (canSee) {
@@ -399,6 +402,9 @@ export class OkrReportingService {
       }
 
       const parentObjective = kr.objectives[0].objective;
+      if (!parentObjective.organizationId) {
+        continue;
+      }
       const canSee = await this.visibilityService.canUserSeeObjective({
         objective: {
           id: parentObjective.id,
@@ -407,7 +413,7 @@ export class OkrReportingService {
           visibilityLevel: parentObjective.visibilityLevel,
         },
         requesterUserId,
-        requesterOrgId: userOrganizationId,
+        requesterOrgId: userOrganizationId ?? null,
       });
 
       if (canSee) {
@@ -671,6 +677,9 @@ export class OkrReportingService {
         // Filter by visibility
         let visibleCount = 0;
         for (const obj of objectives) {
+          if (!obj.organizationId) {
+            continue;
+          }
           const canSee = await this.visibilityService.canUserSeeObjective({
             objective: {
               id: obj.id,
@@ -679,7 +688,7 @@ export class OkrReportingService {
               visibilityLevel: obj.visibilityLevel,
             },
             requesterUserId,
-            requesterOrgId: userOrganizationId,
+            requesterOrgId: userOrganizationId ?? null,
           });
 
           if (canSee) {
@@ -943,6 +952,10 @@ export class OkrReportingService {
           continue; // Skip KRs without parent objective
         }
 
+        if (!objective.organizationId) {
+          continue; // Skip objectives without organizationId
+        }
+
         // Filter by visibility
         const canSee = await this.visibilityService.canUserSeeObjective({
           objective: {
@@ -952,7 +965,7 @@ export class OkrReportingService {
             visibilityLevel: objective.visibilityLevel,
           },
           requesterUserId,
-          requesterOrgId: userOrganizationId,
+          requesterOrgId: userOrganizationId ?? null,
         });
 
         if (!canSee) {

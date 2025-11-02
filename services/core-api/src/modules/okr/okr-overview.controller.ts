@@ -128,6 +128,9 @@ export class OkrOverviewController {
     // Filter objectives by visibility
     const visibleObjectives = [];
     for (const objective of allObjectives) {
+      if (!objective.organizationId) {
+        continue;
+      }
       const canSee = await this.visibilityService.canUserSeeObjective({
         objective: {
           id: objective.id,
@@ -229,7 +232,7 @@ export class OkrOverviewController {
             parentObjective: {
               id: o.id,
               ownerId: o.ownerId,
-              organizationId: o.organizationId,
+              organizationId: o.organizationId || '',
               visibilityLevel: o.visibilityLevel,
             },
             requesterUserId,
@@ -244,7 +247,7 @@ export class OkrOverviewController {
           let canCheckIn = false;
           try {
             const resourceContext = await buildResourceContextFromOKR(this.prisma, o.id);
-            canCheckIn = await this.rbacService.canPerformAction(requesterUserId, 'check_in_okr', resourceContext);
+            canCheckIn = await this.rbacService.canPerformAction(requesterUserId, 'edit_okr', resourceContext);
 
             // Check governance locks for check-in
             if (canCheckIn) {

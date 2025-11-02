@@ -28,7 +28,7 @@ export class MeController {
       this.reportingService.getUserOwnedObjectives(userId, userOrganizationId),
       this.reportingService.getUserOwnedKeyResults(userId, userOrganizationId),
       this.activityService.getRecentActivityForUserScope(userId, userOrganizationId),
-      this.reportingService.getOverdueCheckIns(userOrganizationId),
+      this.reportingService.getOverdueCheckIns(userOrganizationId, userId),
     ]);
 
     // Filter overdue check-ins to only those owned by this user

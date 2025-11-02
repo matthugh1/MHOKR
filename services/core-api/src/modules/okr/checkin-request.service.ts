@@ -500,7 +500,7 @@ export class CheckInRequestService {
    * @param userOrganizationId - Requester's organization ID (for tenant isolation)
    */
   async getRollup(
-    requesterUserId: string,
+    _requesterUserId: string,
     cycleId: string | undefined,
     teamId: string | undefined,
     daysBack: number = 14,
@@ -592,7 +592,7 @@ export class CheckInRequestService {
     // Group by user
     const rollupByUser = new Map<string, Array<typeof requests[0]>>();
     
-    requests.forEach((request) => {
+    requests.forEach((request: any) => {
       const userId = request.targetUserId;
       if (!rollupByUser.has(userId)) {
         rollupByUser.set(userId, []);
@@ -616,7 +616,7 @@ export class CheckInRequestService {
 
     // Group overdue counts by user
     const overdueCountsByUser = new Map<string, number>();
-    allRequests.forEach((req) => {
+    allRequests.forEach((req: any) => {
       if (req.status === 'LATE') {
         overdueCountsByUser.set(req.targetUserId, (overdueCountsByUser.get(req.targetUserId) || 0) + 1);
       }
