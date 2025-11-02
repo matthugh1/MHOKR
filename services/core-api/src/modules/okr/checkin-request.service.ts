@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OkrTenantGuard } from './tenant-guard';
+import { RBACService } from '../rbac/rbac.service';
+import { AuditLogService } from '../audit/audit-log.service';
+import { assertNotSuperuserWrite } from '../rbac/superuser-guard.util';
+import { AuditTargetType } from '@prisma/client';
 
 /**
  * CheckInRequest Service
@@ -12,12 +16,115 @@ import { OkrTenantGuard } from './tenant-guard';
  * - Users can only create requests for users in their organization
  * - Users can only view/submit requests assigned to them or created by them
  * 
- * TODO [phase7-hardening]: Add RBAC checks for manager permissions
- * TODO [phase7-hardening]: Add audit logging for request creation/submission
+ * Authorization:
+ * - Only authorized users can create check-in requests for others
+ * - Requester must be: direct manager, TENANT_OWNER/TENANT_ADMIN, WORKSPACE_LEAD, or TEAM_LEAD
+ * - SUPERUSER cannot create check-in requests (read-only)
  */
 @Injectable()
 export class CheckInRequestService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private rbacService: RBACService,
+    private auditLogService: AuditLogService,
+  ) {}
+
+  /**
+   * Check if requester is authorized to create a check-in request for target user.
+   * 
+   * Authorization rules (at least one must be true):
+   * 1. Requester is direct manager of target (targetUser.managerId === requester.id)
+   * 2. Requester has TENANT_OWNER or TENANT_ADMIN role in the organization
+   * 3. Requester is WORKSPACE_LEAD for any workspace the target belongs to
+   * 4. Requester is TEAM_LEAD for any team the target belongs to
+   * 
+   * @param requesterUserId - User requesting the check-in
+   * @param targetUserId - User who needs to submit the update
+   * @param organizationId - Organization ID (tenant scope)
+   * @returns true if requester is authorized, false otherwise
+   */
+  private async canRequestCheckinForUser(
+    requesterUserId: string,
+    targetUserId: string,
+    organizationId: string,
+  ): Promise<boolean> {
+    // Load requester and target users
+    const [requester, targetUser] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: requesterUserId },
+        select: { id: true, isSuperuser: true, managerId: true },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: targetUserId },
+        select: { id: true, managerId: true },
+      }),
+    ]);
+
+    if (!requester || !targetUser) {
+      return false;
+    }
+
+    // SUPERUSER cannot create check-in requests
+    if (requester.isSuperuser) {
+      return false;
+    }
+
+    // Check 1: Direct manager relationship
+    if (targetUser.managerId === requesterUserId) {
+      return true;
+    }
+
+    // Build user context for RBAC checks
+    const requesterContext = await this.rbacService.buildUserContext(requesterUserId);
+
+    // Check 2: TENANT_OWNER or TENANT_ADMIN role in organization
+    const tenantRoles = requesterContext.tenantRoles.get(organizationId) || [];
+    if (tenantRoles.includes('TENANT_OWNER') || tenantRoles.includes('TENANT_ADMIN')) {
+      return true;
+    }
+
+    // Check 3 & 4: WORKSPACE_LEAD or TEAM_LEAD roles
+    // Get all workspaces and teams the target user belongs to
+    const targetWorkspaces = await this.prisma.workspaceMember.findMany({
+      where: {
+        userId: targetUserId,
+        workspace: {
+          organizationId,
+        },
+      },
+      select: { workspaceId: true },
+    });
+
+    const targetTeams = await this.prisma.teamMember.findMany({
+      where: {
+        userId: targetUserId,
+        team: {
+          workspace: {
+            organizationId,
+          },
+        },
+      },
+      select: { teamId: true },
+    });
+
+    // Check if requester is WORKSPACE_LEAD for any target workspace
+    for (const ws of targetWorkspaces) {
+      const workspaceRoles = requesterContext.workspaceRoles.get(ws.workspaceId) || [];
+      if (workspaceRoles.includes('WORKSPACE_LEAD')) {
+        return true;
+      }
+    }
+
+    // Check if requester is TEAM_LEAD for any target team
+    for (const team of targetTeams) {
+      const teamRoles = requesterContext.teamRoles.get(team.teamId) || [];
+      if (teamRoles.includes('TEAM_LEAD')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
 
   /**
    * Create check-in requests for one or more target users.
@@ -44,9 +151,21 @@ export class CheckInRequestService {
       throw new BadRequestException('At least one target user is required');
     }
 
+    // Load requester to check superuser status
+    const requester = await this.prisma.user.findUnique({
+      where: { id: requesterUserId },
+      select: { id: true, isSuperuser: true },
+    });
+
+    if (!requester) {
+      throw new NotFoundException('Requester user not found');
+    }
+
+    // Enforce SUPERUSER read-only rule
+    assertNotSuperuserWrite(requester.isSuperuser);
+
     // Verify all target users belong to the same organization
     // Users can belong to an org via direct membership OR via team membership (team -> workspace -> org)
-    // TODO [phase7-hardening]: Check manager relationship (requester should be manager of targets)
     const targetUsers = await this.prisma.user.findMany({
       where: {
         id: { in: targetUserIds },
@@ -80,10 +199,25 @@ export class CheckInRequestService {
       throw new BadRequestException('All target users must belong to your organization');
     }
 
+    // Validate authorization for each target user
+    for (const targetUserId of targetUserIds) {
+      const isAuthorized = await this.canRequestCheckinForUser(
+        requesterUserId,
+        targetUserId,
+        userOrganizationId,
+      );
+
+      if (!isAuthorized) {
+        throw new ForbiddenException(
+          `You are not allowed to request a check-in for user ${targetUserId}. You must be their direct manager, a tenant admin, workspace lead, or team lead.`,
+        );
+      }
+    }
+
     // Create requests
     const requests = await Promise.all(
-      targetUserIds.map((targetUserId) =>
-        this.prisma.checkInRequest.create({
+      targetUserIds.map(async (targetUserId) => {
+        const request = await this.prisma.checkInRequest.create({
           data: {
             requesterUserId,
             targetUserId,
@@ -107,8 +241,24 @@ export class CheckInRequestService {
               },
             },
           },
-        }),
-      ),
+        });
+
+        // Audit log: record check-in request creation
+        await this.auditLogService.record({
+          action: 'REQUEST_CHECKIN_CREATED',
+          actorUserId: requesterUserId,
+          targetUserId: targetUserId,
+          targetId: request.id,
+          targetType: AuditTargetType.USER,
+          organizationId: userOrganizationId,
+          metadata: {
+            dueAt: dueAt.toISOString(),
+            reason: 'async_checkin_request',
+          },
+        });
+
+        return request;
+      }),
     );
 
     return requests;

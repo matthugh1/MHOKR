@@ -19,7 +19,7 @@ export class CheckInRequestController {
   constructor(private readonly checkInRequestService: CheckInRequestService) {}
 
   @Post('checkin-requests')
-  @RequireAction('edit_okr') // TODO [phase7-hardening]: Consider a more specific action like 'request_checkin'
+  @RequireAction('request_checkin')
   @ApiOperation({ summary: 'Create async check-in requests for one or more team members' })
   @ApiBody({
     schema: {
@@ -151,4 +151,5 @@ export class CheckInRequestController {
     );
   }
 }
+
 

@@ -112,6 +112,9 @@ export function can(
     case 'create_okr':
       return canCreateOKRAction(userContext, resourceContext);
     
+    case 'request_checkin':
+      return canRequestCheckinAction(userContext, resourceContext);
+    
     case 'publish_okr':
       return canPublishOKRAction(userContext, resourceContext);
     
@@ -175,8 +178,8 @@ function canSuperuser(
     return true;
   }
 
-  // SUPERUSER CANNOT edit/delete/create OKRs
-  if (action === 'edit_okr' || action === 'delete_okr' || action === 'create_okr' || action === 'publish_okr') {
+  // SUPERUSER CANNOT edit/delete/create OKRs or request check-ins
+  if (action === 'edit_okr' || action === 'delete_okr' || action === 'create_okr' || action === 'publish_okr' || action === 'request_checkin') {
     return false;
   }
 
@@ -457,6 +460,53 @@ function canCreateOKRAction(
     }
   }
 
+  return false;
+}
+
+/**
+ * Check if user can request a check-in from another user.
+ * 
+ * Basic RBAC check: user must have tenant membership.
+ * Detailed authorization (manager relationship, workspace/team leads) is handled
+ * in the service layer via canRequestCheckinForUser().
+ */
+function canRequestCheckinAction(
+  userContext: UserContext,
+  resourceContext: ResourceContext,
+): boolean {
+  const tenantId = resourceContext.tenantId;
+
+  if (!tenantId) {
+    return false;
+  }
+
+  // Check if user has any role in the tenant (except TENANT_VIEWER alone)
+  const tenantRoles = userContext.tenantRoles.get(tenantId) || [];
+  if (tenantRoles.length > 0) {
+    // TENANT_VIEWER alone cannot request check-ins
+    if (tenantRoles.includes('TENANT_VIEWER') && tenantRoles.length === 1) {
+      return false;
+    }
+    return true;
+  }
+
+  // Check workspace membership
+  if (resourceContext.workspaceId) {
+    const workspaceRoles = userContext.workspaceRoles.get(resourceContext.workspaceId) || [];
+    if (workspaceRoles.length > 0) {
+      return true;
+    }
+  }
+
+  // Check team membership
+  if (resourceContext.teamId) {
+    const teamRoles = userContext.teamRoles.get(resourceContext.teamId) || [];
+    if (teamRoles.length > 0 && !teamRoles.includes('TEAM_VIEWER')) {
+      return true;
+    }
+  }
+
+  // User has no tenant/workspace/team membership - cannot request check-ins
   return false;
 }
 

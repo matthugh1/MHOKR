@@ -10,7 +10,7 @@
  */
 
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 const CODE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'];
@@ -59,7 +59,7 @@ function extractPhaseTags(content: string): Set<string> {
   return tags;
 }
 
-function checkForDoneTags(content: string, filePath: string): { found: boolean; lineNumbers: number[] } {
+function checkForDoneTags(content: string): { found: boolean; lineNumbers: number[] } {
   const lines = content.split('\n');
   const lineNumbers: number[] = [];
   
@@ -98,7 +98,7 @@ function main() {
     }
     
     // Check for :done tags in staged content
-    const doneCheck = checkForDoneTags(stagedContent, filePath);
+    const doneCheck = checkForDoneTags(stagedContent);
     if (doneCheck.found) {
       errors.push({
         file: filePath,
@@ -173,4 +173,5 @@ function main() {
 }
 
 main();
+
 

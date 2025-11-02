@@ -63,6 +63,7 @@ export type Action =
   | 'delete_okr'        // Delete an OKR
   | 'publish_okr'       // Publish/approve an OKR for visibility
   | 'create_okr'        // Create a new OKR
+  | 'request_checkin'   // Request a check-in update from another user
   | 'manage_users'      // Invite/remove users, assign roles
   | 'manage_billing'    // Manage tenant billing and contracts
   | 'manage_workspaces' // Create/edit/delete workspaces
