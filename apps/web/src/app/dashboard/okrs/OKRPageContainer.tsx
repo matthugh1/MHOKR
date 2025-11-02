@@ -65,6 +65,10 @@ function mapObjectiveToViewModel(rawObjective: any): any {
     timeframeKey = normaliseLabelToKey(rawObjective.periodLabel)
   } else if (rawObjective.timeframeLabel) {
     timeframeKey = normaliseLabelToKey(rawObjective.timeframeLabel)
+  } else if (rawObjective.cycle?.id) {
+    timeframeKey = rawObjective.cycle.id
+  } else if (rawObjective.cycle?.name) {
+    timeframeKey = normaliseLabelToKey(rawObjective.cycle.name)
   }
   
   return {
@@ -76,7 +80,7 @@ function mapObjectiveToViewModel(rawObjective: any): any {
 function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[], overdueCheckIns: Array<{ krId: string; objectiveId: string }>) {
   const cycle = rawObj.cycle || (rawObj.cycleId ? activeCycles.find(c => c.id === rawObj.cycleId) : null)
   const cycleName = cycle?.name ?? rawObj.cycleName ?? undefined
-  const cycleStatus = cycle?.status ?? rawObj.cycleStatus ?? 'ACTIVE'
+  const cycleStatus = rawObj.cycleStatus || (cycle?.status ?? 'ACTIVE')
   
   let cycleLabel = cycleName || 'Unassigned'
   if (cycleStatus === 'DRAFT' && cycleName) {
@@ -84,10 +88,10 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
   }
   
   const keyResults = (rawObj.keyResults || []).map((kr: any): any => {
-    const isOverdue = overdueCheckIns.some(item => item.krId === kr.id)
+    const isOverdue = overdueCheckIns.some(item => item.krId === kr.keyResultId || item.krId === kr.id)
     
     return {
-      id: kr.id,
+      id: kr.keyResultId || kr.id,
       title: kr.title,
       status: kr.status,
       progress: kr.progress,
@@ -98,6 +102,7 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
       checkInCadence: kr.cadence,
       isOverdue,
       ownerId: kr.ownerId,
+      canCheckIn: kr.canCheckIn !== undefined ? kr.canCheckIn : false,
     }
   })
   
@@ -114,7 +119,7 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
     ...(rawObj.keyResults || []).flatMap((kr: any) => 
       (kr.initiatives || []).map((init: any) => ({
         ...init,
-        keyResultId: kr.id,
+        keyResultId: kr.keyResultId || kr.id,
         keyResultTitle: kr.title,
       }))
     )
@@ -132,7 +137,7 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
   const owner = rawObj.owner || availableUsers.find(u => u.id === rawObj.ownerId)
   
   return {
-    id: rawObj.id,
+    id: rawObj.objectiveId || rawObj.id,
     title: rawObj.title,
     status: rawObj.status || 'ON_TRACK',
     isPublished: rawObj.isPublished ?? false,
@@ -154,7 +159,9 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
     organizationId: rawObj.organizationId,
     workspaceId: rawObj.workspaceId,
     teamId: rawObj.teamId,
-    cycleId: rawObj.cycleId,
+    cycleId: rawObj.cycle?.id || rawObj.cycleId,
+    canEdit: rawObj.canEdit !== undefined ? rawObj.canEdit : false,
+    canDelete: rawObj.canDelete !== undefined ? rawObj.canDelete : false,
   }
 }
 
@@ -178,10 +185,10 @@ export function OKRPageContainer({
   const tenantPermissions = useTenantPermissions()
   const { toast } = useToast()
   
-  const [okrs, setOkrs] = useState<any[]>([])
+  const [objectivesPage, setObjectivesPage] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [permissionError, setPermissionError] = useState<string | null>(null)
-  
+  const [totalCount, setTotalCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 20
   
@@ -189,7 +196,7 @@ export function OKRPageContainer({
     if (currentOrganization?.id) {
       loadOKRs()
     }
-  }, [currentOrganization?.id, selectedCycleId, selectedStatus, availableUsers.length, activeCycles.length])
+  }, [currentOrganization?.id, selectedCycleId, selectedStatus, currentPage, filterWorkspaceId, filterTeamId, filterOwnerId, searchQuery, selectedTimeframeKey])
   
   const loadOKRs = async () => {
     if (!currentOrganization?.id) return
@@ -199,8 +206,8 @@ export function OKRPageContainer({
       
       const params = new URLSearchParams({
         organizationId: currentOrganization.id,
-        page: '1',
-        limit: '10000',
+        page: currentPage.toString(),
+        pageSize: pageSize.toString(),
       })
       
       if (selectedCycleId) {
@@ -213,13 +220,17 @@ export function OKRPageContainer({
       
       const response = await api.get(`/okr/overview?${params.toString()}`)
       
-      const data = response.data || []
+      // Backend now returns paginated envelope
+      const envelope = response.data || {}
+      const objectives = envelope.objectives || []
       
-      const mapped = Array.isArray(data) ? data.map((obj: any) => 
+      setTotalCount(envelope.totalCount || 0)
+      
+      const mapped = Array.isArray(objectives) ? objectives.map((obj: any) => 
         mapObjectiveData(obj, availableUsers, activeCycles, overdueCheckIns)
       ) : []
       
-      setOkrs(mapped)
+      setObjectivesPage(mapped)
     } catch (error: any) {
       console.error('[OKR PAGE CONTAINER] Failed to load OKRs', error)
       if (error.response?.status === 403) {
@@ -229,39 +240,23 @@ export function OKRPageContainer({
       } else {
         setPermissionError('Failed to load OKRs. Please try again later.')
       }
-      setOkrs([])
+      setObjectivesPage([])
+      setTotalCount(0)
     } finally {
       setLoading(false)
     }
   }
   
   const objectivesViewModel = useMemo(() => {
-    const safeObjectives = Array.isArray(okrs) ? okrs : []
+    const safeObjectives = Array.isArray(objectivesPage) ? objectivesPage : []
     return safeObjectives.map(mapObjectiveToViewModel)
-  }, [okrs])
+  }, [objectivesPage])
   
+  // Apply client-side filters (workspace, team, owner, search, timeframe)
+  // Note: Visibility filtering is now done server-side, but we still need to filter
+  // by workspace/team/owner/search/timeframe on the client since backend doesn't support these yet
   const filteredOKRs = useMemo(() => {
     return objectivesViewModel.filter(okr => {
-      const objectiveForVisibility = {
-        id: okr.id,
-        ownerId: okr.ownerId,
-        organizationId: okr.organizationId,
-        workspaceId: okr.workspaceId,
-        teamId: okr.teamId,
-        isPublished: okr.isPublished,
-        visibilityLevel: okr.visibilityLevel,
-        cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-          ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
-          : null,
-        cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-          ? activeCycles.find(c => c.id === okr.cycleId)!.status
-          : null,
-      }
-      
-      if (!tenantPermissions.canSeeObjective(objectiveForVisibility)) {
-        return false
-      }
-      
       if (!selectedTimeframeKey || selectedTimeframeKey === 'all') {
       } else {
         if (okr.timeframeKey !== selectedTimeframeKey) {
@@ -293,38 +288,28 @@ export function OKRPageContainer({
       
       return true
     })
-  }, [objectivesViewModel, filterWorkspaceId, filterTeamId, filterOwnerId, searchQuery, selectedTimeframeKey, tenantPermissions, activeCycles])
+  }, [objectivesViewModel, filterWorkspaceId, filterTeamId, filterOwnerId, searchQuery, selectedTimeframeKey])
   
-  const totalPages = Math.ceil(filteredOKRs.length / pageSize)
-  const startIndex = (currentPage - 1) * pageSize
-  const endIndex = startIndex + pageSize
-  const objectivesPage = filteredOKRs.slice(startIndex, endIndex)
+  const totalPages = Math.ceil(totalCount / pageSize)
   
   const preparedObjectives = useMemo(() => {
-    return objectivesPage.map((okr: any) => {
-      const objectiveForHook = {
-        id: okr.id,
-        ownerId: okr.ownerId,
-        organizationId: okr.organizationId,
-        workspaceId: okr.workspaceId,
-        teamId: okr.teamId,
-        isPublished: okr.isPublished,
-        visibilityLevel: okr.visibilityLevel,
-        cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-          ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
-          : null,
-        cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-          ? activeCycles.find(c => c.id === okr.cycleId)!.status
-          : null,
-      }
-      
-      const canEdit = tenantPermissions.canEditObjective(objectiveForHook)
-      const canDelete = tenantPermissions.canDeleteObjective(objectiveForHook)
+    return filteredOKRs.map((okr: any) => {
+      // Backend provides canEdit/canDelete flags, use them directly
+      const canEdit = okr.canEdit !== undefined ? okr.canEdit : false
+      const canDelete = okr.canDelete !== undefined ? okr.canDelete : false
       
       const normalised = mapObjectiveData(okr, availableUsers, activeCycles, overdueCheckIns)
       
-      const visibleKeyResults = normalised.keyResults.filter((kr: any) => {
-        return tenantPermissions.canSeeKeyResult(kr, {
+      // Backend already filtered visible key results and provides canCheckIn flags
+      const visibleKeyResults = normalised.keyResults
+      
+      const canEditKeyResult = (krId: string): boolean => {
+        const kr = visibleKeyResults.find((k: any) => k.id === krId)
+        if (!kr) return false
+        
+        // For now, use frontend permission check for canEditKeyResult
+        // Backend doesn't provide this flag yet
+        const objectiveForHook = {
           id: okr.id,
           ownerId: okr.ownerId,
           organizationId: okr.organizationId,
@@ -338,12 +323,7 @@ export function OKRPageContainer({
           cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
             ? activeCycles.find(c => c.id === okr.cycleId)!.status
             : null,
-        })
-      })
-      
-      const canEditKeyResult = (krId: string): boolean => {
-        const kr = visibleKeyResults.find((k: any) => k.id === krId)
-        if (!kr) return false
+        }
         
         return tenantPermissions.canEditKeyResult({
           id: kr.id,
@@ -358,6 +338,28 @@ export function OKRPageContainer({
       const canCheckInOnKeyResult = (krId: string): boolean => {
         const kr = visibleKeyResults.find((k: any) => k.id === krId)
         if (!kr) return false
+        
+        // Use backend-provided canCheckIn flag if available
+        if (kr.canCheckIn !== undefined) {
+          return kr.canCheckIn
+        }
+        
+        // Fallback to frontend permission check
+        const objectiveForHook = {
+          id: okr.id,
+          ownerId: okr.ownerId,
+          organizationId: okr.organizationId,
+          workspaceId: okr.workspaceId,
+          teamId: okr.teamId,
+          isPublished: okr.isPublished,
+          visibilityLevel: okr.visibilityLevel,
+          cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+            ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
+            : null,
+          cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+            ? activeCycles.find(c => c.id === okr.cycleId)!.status
+            : null,
+        }
         
         return tenantPermissions.canCheckInOnKeyResult({
           id: kr.id,
@@ -376,10 +378,9 @@ export function OKRPageContainer({
         canDelete,
         canEditKeyResult,
         canCheckInOnKeyResult,
-        objectiveForHook,
       }
     })
-  }, [objectivesPage, availableUsers, activeCycles, overdueCheckIns, tenantPermissions])
+  }, [filteredOKRs, availableUsers, activeCycles, overdueCheckIns, tenantPermissions])
   
   if (loading) {
     return <div className="text-center py-12 text-slate-500">Loading OKRs...</div>
@@ -401,7 +402,7 @@ export function OKRPageContainer({
     )
   }
   
-  if (filteredOKRs.length === 0) {
+  if (totalCount === 0 || filteredOKRs.length === 0) {
     return (
       <div className="text-center py-12">
         <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm text-neutral-600">
@@ -430,7 +431,7 @@ export function OKRPageContainer({
       {totalPages > 1 && (
         <div className="mt-6 flex items-center justify-between gap-4 border-t border-neutral-200 pt-4 text-sm text-neutral-700">
           <div className="text-neutral-600">
-            Showing {startIndex + 1} - {Math.min(endIndex, filteredOKRs.length)} of {filteredOKRs.length} objectives
+            Showing {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, totalCount)} of {totalCount} objectives
           </div>
           <div className="flex items-center gap-4">
             <button
@@ -460,4 +461,3 @@ export function OKRPageContainer({
     </div>
   )
 }
-

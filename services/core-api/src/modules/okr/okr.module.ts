@@ -12,6 +12,7 @@ import { InitiativeService } from './initiative.service';
 import { OkrProgressService } from './okr-progress.service';
 import { OkrGovernanceService } from './okr-governance.service';
 import { OkrReportingService } from './okr-reporting.service';
+import { OkrVisibilityService } from './okr-visibility.service';
 import { CheckInRequestService } from './checkin-request.service';
 import { RBACModule } from '../rbac/rbac.module';
 import { ActivityModule } from '../activity/activity.module';
@@ -19,8 +20,8 @@ import { ActivityModule } from '../activity/activity.module';
 @Module({
   imports: [RBACModule, forwardRef(() => ActivityModule)],
   controllers: [ObjectiveController, KeyResultController, InitiativeController, MeController, OkrReportingController, OkrOverviewController, CheckInRequestController],
-  providers: [ObjectiveService, KeyResultService, InitiativeService, OkrProgressService, OkrGovernanceService, OkrReportingService, CheckInRequestService],
-  exports: [ObjectiveService, KeyResultService, InitiativeService, OkrProgressService, OkrGovernanceService, OkrReportingService, CheckInRequestService],
+  providers: [ObjectiveService, KeyResultService, InitiativeService, OkrProgressService, OkrGovernanceService, OkrReportingService, OkrVisibilityService, CheckInRequestService],
+  exports: [ObjectiveService, KeyResultService, InitiativeService, OkrProgressService, OkrGovernanceService, OkrReportingService, OkrVisibilityService, CheckInRequestService],
 })
 export class OkrModule {}
 

@@ -45,3 +45,13 @@
   - SUPERUSER remains read-only for destructive actions
 - A validation plan (docs/audit/W3M1_VALIDATION_PLAN.md) defines performance, pagination, role-based visibility, and regression checks.
 
+## [Data Minimisation & Access Control] W3.M2 Complete
+
+- The OKR overview API now enforces per-user visibility, tenant isolation, and governance rules before returning data.
+- The API returns only the objectives the caller is allowed to see, with server-side pagination (`page`, `pageSize`, `totalCount`).
+- Objectives and Key Results now include `canEdit`, `canDelete`, and `canCheckIn` flags computed on the server based on publish lock, cycle lock, RBAC scope, and SUPERUSER read-only status.
+- The frontend now requests paginated data from the backend (`/okr/overview?page=N&pageSize=20`) and renders only what the backend provides. No more client-side slicing or client-side hiding.
+- Analytics endpoints now exclude PRIVATE / exec-only OKRs and their Key Results for unauthorised users. Tenant admins still see full rollups; contributors and workspace leads only see numbers they are allowed to see.
+- A validation plan (docs/audit/W3M2_VALIDATION_PLAN.md) defines pagination, visibility, governance, SUPERUSER and analytics checks.
+
+

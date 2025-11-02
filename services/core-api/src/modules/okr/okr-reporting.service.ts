@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OkrTenantGuard } from './tenant-guard';
+import { OkrVisibilityService } from './okr-visibility.service';
 
 /**
  * OKR Reporting Service
@@ -21,6 +22,7 @@ import { OkrTenantGuard } from './tenant-guard';
 export class OkrReportingService {
   constructor(
     private prisma: PrismaService,
+    private visibilityService: OkrVisibilityService,
   ) {}
 
   /**
@@ -28,12 +30,14 @@ export class OkrReportingService {
    * 
    * Moved from ObjectiveService.getOrgSummary() in Phase 4.
    * 
-   * TODO [phase7-performance]: May need optimization for large datasets.
+   * W3.M2: Now filters by visibility before aggregating.
+   * Only includes objectives visible to the requester.
    * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @param requesterUserId - User ID of the requester (for visibility checks)
    * @returns Summary object with total objectives, counts by status, and at-risk ratio
    */
-  async getOrgSummary(userOrganizationId: string | null | undefined): Promise<{
+  async getOrgSummary(userOrganizationId: string | null | undefined, requesterUserId: string): Promise<{
     totalObjectives: number;
     byStatus: { [status: string]: number };
     atRiskRatio: number;
@@ -55,20 +59,43 @@ export class OkrReportingService {
     }
     // Superuser (null): aggregate across ALL organisations
 
-    // Get all objectives with their status
+    // Get all objectives with their status and visibility info
     const objectives = await this.prisma.objective.findMany({
       where,
       select: {
+        id: true,
         status: true,
+        ownerId: true,
+        organizationId: true,
+        visibilityLevel: true,
       },
     });
 
-    const totalObjectives = objectives.length;
+    // Filter by visibility
+    const visibleObjectives = [];
+    for (const obj of objectives) {
+      const canSee = await this.visibilityService.canUserSeeObjective({
+        objective: {
+          id: obj.id,
+          ownerId: obj.ownerId,
+          organizationId: obj.organizationId,
+          visibilityLevel: obj.visibilityLevel,
+        },
+        requesterUserId,
+        requesterOrgId: userOrganizationId,
+      });
+
+      if (canSee) {
+        visibleObjectives.push(obj);
+      }
+    }
+
+    const totalObjectives = visibleObjectives.length;
     const byStatus: { [status: string]: number } = {};
     let atRiskCount = 0;
 
     // Count by status
-    for (const obj of objectives) {
+    for (const obj of visibleObjectives) {
       const status = obj.status || 'ON_TRACK';
       byStatus[status] = (byStatus[status] || 0) + 1;
       if (status === 'AT_RISK') {
@@ -281,14 +308,18 @@ export class OkrReportingService {
    * 
    * Moved from KeyResultService.getRecentCheckInFeed() in Phase 4.
    * 
+   * W3.M2: Now filters by visibility before returning check-ins.
+   * Only includes check-ins for KRs whose parent objectives are visible to the requester.
+   * 
    * Returns last ~10 check-ins across all Key Results in the user's organization.
    * Tenant isolation MUST apply - only includes check-ins for KRs whose parent objectives
    * are in the user's organization (or all orgs if superuser).
    * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @param requesterUserId - User ID of the requester (for visibility checks)
    * @returns Array of recent check-ins with KR title, user info, value, confidence, timestamp
    */
-  async getRecentCheckInFeed(userOrganizationId: string | null | undefined): Promise<Array<{
+  async getRecentCheckInFeed(userOrganizationId: string | null | undefined, requesterUserId: string): Promise<Array<{
     id: string;
     krId: string;
     krTitle: string;
@@ -339,8 +370,53 @@ export class OkrReportingService {
       take: 10,
     });
 
+    // Fetch parent objectives for visibility filtering
+    const keyResultIds = checkIns.map(ci => ci.keyResult.id);
+    const keyResultsWithObjectives = await this.prisma.keyResult.findMany({
+      where: { id: { in: keyResultIds } },
+      include: {
+        objectives: {
+          include: {
+            objective: {
+              select: {
+                id: true,
+                ownerId: true,
+                organizationId: true,
+                visibilityLevel: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Filter check-ins by visibility
+    const visibleCheckIns = [];
+    for (const checkIn of checkIns) {
+      const kr = keyResultsWithObjectives.find(k => k.id === checkIn.keyResult.id);
+      if (!kr || kr.objectives.length === 0) {
+        continue;
+      }
+
+      const parentObjective = kr.objectives[0].objective;
+      const canSee = await this.visibilityService.canUserSeeObjective({
+        objective: {
+          id: parentObjective.id,
+          ownerId: parentObjective.ownerId,
+          organizationId: parentObjective.organizationId,
+          visibilityLevel: parentObjective.visibilityLevel,
+        },
+        requesterUserId,
+        requesterOrgId: userOrganizationId,
+      });
+
+      if (canSee) {
+        visibleCheckIns.push(checkIn);
+      }
+    }
+
     // Fetch user names for all unique user IDs
-    const userIds = [...new Set(checkIns.map(ci => ci.userId))];
+    const userIds = [...new Set(visibleCheckIns.map(ci => ci.userId))];
     const users = await this.prisma.user.findMany({
       where: {
         id: { in: userIds },
@@ -354,7 +430,7 @@ export class OkrReportingService {
     const userMap = new Map(users.map(u => [u.id, u.name]));
 
     // Transform to response format
-    return checkIns.map(checkIn => ({
+    return visibleCheckIns.map(checkIn => ({
       id: checkIn.id,
       krId: checkIn.keyResult.id,
       krTitle: checkIn.keyResult.title,
@@ -498,6 +574,9 @@ export class OkrReportingService {
    * 
    * Moved from ObjectiveService.getPillarCoverageForActiveCycle() in Phase 4.
    * 
+   * W3.M2: Now filters by visibility before counting objectives.
+   * Only includes objectives visible to the requester.
+   * 
    * Shows which pillars have active Objectives in the currently ACTIVE cycle.
    * Returns pillars with zero Objectives flagged for visibility.
    * 
@@ -510,9 +589,10 @@ export class OkrReportingService {
    * TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
    * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @param requesterUserId - User ID of the requester (for visibility checks)
    * @returns Array of pillars with id, name, and objectiveCountInActiveCycle
    */
-  async getPillarCoverageForActiveCycle(userOrganizationId: string | null | undefined): Promise<Array<{
+  async getPillarCoverageForActiveCycle(userOrganizationId: string | null | undefined, requesterUserId: string): Promise<Array<{
     pillarId: string;
     pillarName: string;
     objectiveCountInActiveCycle: number;
@@ -566,26 +646,51 @@ export class OkrReportingService {
       },
     });
 
-    // For each pillar, count Objectives in active cycle(s)
+    // For each pillar, count Objectives in active cycle(s) - filter by visibility
     const cycleIds = activeCycles.map((c: { id: string }) => c.id);
     const coverage = await Promise.all(
       pillars.map(async (pillar: { id: string; name: string }) => {
-        // Count Objectives where:
+        // Get all Objectives where:
         // - pillarId matches this pillar
         // - cycleId is in active cycle(s)
-        const objectiveCount = await this.prisma.objective.count({
+        const objectives = await this.prisma.objective.findMany({
           where: {
             pillarId: pillar.id,
             cycleId: {
               in: cycleIds,
             },
           },
+          select: {
+            id: true,
+            ownerId: true,
+            organizationId: true,
+            visibilityLevel: true,
+          },
         });
+
+        // Filter by visibility
+        let visibleCount = 0;
+        for (const obj of objectives) {
+          const canSee = await this.visibilityService.canUserSeeObjective({
+            objective: {
+              id: obj.id,
+              ownerId: obj.ownerId,
+              organizationId: obj.organizationId,
+              visibilityLevel: obj.visibilityLevel,
+            },
+            requesterUserId,
+            requesterOrgId: userOrganizationId,
+          });
+
+          if (canSee) {
+            visibleCount++;
+          }
+        }
 
         return {
           pillarId: pillar.id,
           pillarName: pillar.name,
-          objectiveCountInActiveCycle: objectiveCount,
+          objectiveCountInActiveCycle: visibleCount,
         };
       })
     );
@@ -688,6 +793,9 @@ export class OkrReportingService {
    * 
    * Moved from KeyResultService.getOverdueCheckIns() in Phase 4.
    * 
+   * W3.M2: Now filters by visibility before returning overdue check-ins.
+   * Only includes overdue KRs whose parent objectives are visible to the requester.
+   * 
    * Returns Key Results that haven't been checked in within their expected cadence period.
    * Tenant isolation applies: null (superuser) sees all orgs, string sees that org only, undefined returns [].
    * 
@@ -695,9 +803,10 @@ export class OkrReportingService {
    * Future optimization: use SQL window functions or subqueries to calculate overdue in database.
    * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @param requesterUserId - User ID of the requester (for visibility checks)
    * @returns Array of overdue Key Results with KR details, owner info, last check-in, and days late
    */
-  async getOverdueCheckIns(userOrganizationId: string | null | undefined): Promise<Array<{
+  async getOverdueCheckIns(userOrganizationId: string | null | undefined, requesterUserId: string): Promise<Array<{
     krId: string;
     krTitle: string;
     objectiveId: string;
@@ -745,6 +854,9 @@ export class OkrReportingService {
               select: {
                 id: true,
                 title: true,
+                ownerId: true,
+                organizationId: true,
+                visibilityLevel: true,
               },
             },
           },
@@ -829,6 +941,22 @@ export class OkrReportingService {
         const objective = kr.objectives[0]?.objective;
         if (!objective) {
           continue; // Skip KRs without parent objective
+        }
+
+        // Filter by visibility
+        const canSee = await this.visibilityService.canUserSeeObjective({
+          objective: {
+            id: objective.id,
+            ownerId: objective.ownerId,
+            organizationId: objective.organizationId,
+            visibilityLevel: objective.visibilityLevel,
+          },
+          requesterUserId,
+          requesterOrgId: userOrganizationId,
+        });
+
+        if (!canSee) {
+          continue; // Skip KRs whose parent objective is not visible
         }
 
         const owner = ownerMap.get(kr.ownerId);

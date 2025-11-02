@@ -50,7 +50,8 @@ export class OkrReportingController {
   @ApiOperation({ summary: 'Get organization summary statistics' })
   async getAnalyticsSummary(@Req() req: any) {
     const userOrganizationId = req.user?.organizationId ?? null;
-    return this.reportingService.getOrgSummary(userOrganizationId);
+    const requesterUserId = req.user?.id;
+    return this.reportingService.getOrgSummary(userOrganizationId, requesterUserId);
   }
 
   /**
@@ -65,7 +66,8 @@ export class OkrReportingController {
   @ApiOperation({ summary: 'Get recent check-in activity feed' })
   async getAnalyticsFeed(@Req() req: any) {
     const userOrganizationId = req.user?.organizationId ?? null;
-    return this.reportingService.getRecentCheckInFeed(userOrganizationId);
+    const requesterUserId = req.user?.id;
+    return this.reportingService.getRecentCheckInFeed(userOrganizationId, requesterUserId);
   }
 
   /**
@@ -151,7 +153,8 @@ export class OkrReportingController {
   @ApiOperation({ summary: 'Get strategic pillar coverage for active cycle' })
   async getPillarCoverage(@Req() req: any) {
     const userOrganizationId = req.user?.organizationId ?? null;
-    return this.reportingService.getPillarCoverageForActiveCycle(userOrganizationId);
+    const requesterUserId = req.user?.id;
+    return this.reportingService.getPillarCoverageForActiveCycle(userOrganizationId, requesterUserId);
   }
 
   /**
@@ -165,7 +168,8 @@ export class OkrReportingController {
   @ApiOperation({ summary: 'Get overdue check-ins for Key Results' })
   async getOverdueCheckIns(@Req() req: any) {
     const userOrganizationId = req.user?.organizationId ?? null;
-    return this.reportingService.getOverdueCheckIns(userOrganizationId);
+    const requesterUserId = req.user?.id;
+    return this.reportingService.getOverdueCheckIns(userOrganizationId, requesterUserId);
   }
 }
 
