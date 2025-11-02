@@ -552,7 +552,6 @@ export default function OKRsPage() {
   // Helper function to render objective row
   const renderObjectiveRow = (okr: any) => {
     // Map okr to Objective interface expected by hook for permissions
-    // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
     // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
     const objectiveForHook = {
       id: okr.id,
@@ -574,6 +573,35 @@ export default function OKRsPage() {
     
     // Normalise objective data for ObjectiveRow
     const normalised = mapObjectiveData(okr, availableUsers, activeCycles, overdueCheckIns)
+    
+    // Permission check functions for Key Results
+    const canEditKeyResult = (krId: string): boolean => {
+      const kr = normalised.keyResults.find((k: any) => k.id === krId)
+      if (!kr) return false
+      
+      return tenantPermissions.canEditKeyResult({
+        id: kr.id,
+        ownerId: kr.ownerId || okr.ownerId,
+        organizationId: okr.organizationId,
+        workspaceId: okr.workspaceId,
+        teamId: okr.teamId,
+        parentObjective: objectiveForHook,
+      })
+    }
+    
+    const canCheckInOnKeyResult = (krId: string): boolean => {
+      const kr = normalised.keyResults.find((k: any) => k.id === krId)
+      if (!kr) return false
+      
+      return tenantPermissions.canCheckInOnKeyResult({
+        id: kr.id,
+        ownerId: kr.ownerId || okr.ownerId,
+        organizationId: okr.organizationId,
+        workspaceId: okr.workspaceId,
+        teamId: okr.teamId,
+        parentObjective: objectiveForHook,
+      })
+    }
     
     return (
       <ObjectiveRow
@@ -608,13 +636,14 @@ export default function OKRsPage() {
         onAddCheckIn={handleAddCheckIn}
         canEdit={canEdit}
         canDelete={canDelete}
+        canEditKeyResult={canEditKeyResult}
+        canCheckInOnKeyResult={canCheckInOnKeyResult}
         availableUsers={availableUsers}
       />
     )
   }
 
   // Group objectives by health status
-  // TODO [phase7-hardening]: Virtualise ObjectiveRows when >50 items using react-window or similar.
   const groupedObjectives = useMemo(() => {
     const needsAttentionObjectives: typeof filteredOKRs = []
     const activeObjectives: typeof filteredOKRs = []
@@ -926,7 +955,6 @@ export default function OKRsPage() {
                 <button
                   className="text-[12px] font-medium text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
                   onClick={() => router.push('/dashboard/builder')}
-                  // TODO [phase7-hardening]: restrict Visual Builder to admin / strategy roles only
                 >
                   Visual Builder
                 </button>

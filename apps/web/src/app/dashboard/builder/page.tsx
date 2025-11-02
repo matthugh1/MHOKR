@@ -331,30 +331,51 @@ export default function BuilderPage() {
         // Map objective to view model to get timeframeKey
         const objectiveViewModel = mapObjectiveToViewModel(obj)
         
+        // Check permissions for this objective
+        const objectiveForPerms = {
+          id: obj.id,
+          ownerId: obj.ownerId,
+          organizationId: obj.organizationId,
+          workspaceId: obj.workspaceId,
+          teamId: obj.teamId,
+          isPublished: obj.isPublished || false,
+          cycle: obj.cycleId && activeCycles.find(c => c.id === obj.cycleId)
+            ? { id: obj.cycleId, status: activeCycles.find(c => c.id === obj.cycleId)!.status }
+            : null,
+          cycleStatus: obj.cycleId && activeCycles.find(c => c.id === obj.cycleId)
+            ? activeCycles.find(c => c.id === obj.cycleId)!.status
+            : null,
+        }
+        const canEditObjective = tenantPermissions.canEditObjective(objectiveForPerms)
+        
         loadedNodes.push({
           id: `obj-${obj.id}`,
           type: 'objective',
           position,
-            data: {
-              label: obj.title,
-              description: obj.description,
-              progress: obj.progress || 0,
-              owner: obj.ownerId,
-              ownerId: obj.ownerId,
-              ownerName: obj.owner?.name,
-              parentId: obj.parentId,
-              organizationId: obj.organizationId,
-              workspaceId: obj.workspaceId,
-              teamId: obj.teamId,
-              period: obj.period,
-              startDate: obj.startDate ? formatDateForInput(obj.startDate) : undefined,
-              endDate: obj.endDate ? formatDateForInput(obj.endDate) : undefined,
-              cycleId: obj.cycleId || null,
-              timeframeKey: objectiveViewModel.timeframeKey,
-              onEdit: handleEditNode,
-              onQuickSave: handleQuickSave,
-              okrId: obj.id,
-            },
+          data: {
+            label: obj.title,
+            description: obj.description,
+            progress: obj.progress || 0,
+            owner: obj.ownerId,
+            ownerId: obj.ownerId,
+            ownerName: obj.owner?.name,
+            parentId: obj.parentId,
+            organizationId: obj.organizationId,
+            workspaceId: obj.workspaceId,
+            teamId: obj.teamId,
+            period: obj.period,
+            startDate: obj.startDate ? formatDateForInput(obj.startDate) : undefined,
+            endDate: obj.endDate ? formatDateForInput(obj.endDate) : undefined,
+            cycleId: obj.cycleId || null,
+            timeframeKey: objectiveViewModel.timeframeKey,
+            onEdit: handleEditNode,
+            onQuickSave: handleQuickSave,
+            okrId: obj.id,
+            canEdit: canEditObjective,
+            isPublished: obj.isPublished || false,
+            cycle: objectiveForPerms.cycle,
+            cycleStatus: objectiveForPerms.cycleStatus,
+          },
         })
 
         // Add key results as nodes and connect to objectives
@@ -372,6 +393,17 @@ export default function BuilderPage() {
             
             const position = getNodePosition('KEY_RESULT', kr.id, defaultPosition)
             
+            // Check permissions for this key result
+            const krForPerms = {
+              id: kr.id,
+              ownerId: kr.ownerId || obj.ownerId,
+              organizationId: obj.organizationId,
+              workspaceId: obj.workspaceId,
+              teamId: obj.teamId,
+              parentObjective: objectiveForPerms,
+            }
+            const canEditKR = tenantPermissions.canEditKeyResult(krForPerms)
+            
             loadedNodes.push({
               id: krNodeId,
               type: 'keyResult',
@@ -388,7 +420,13 @@ export default function BuilderPage() {
                 endDate: kr.endDate ? formatDateForInput(kr.endDate) : undefined,
                 onEdit: handleEditNode,
                 onQuickSave: handleQuickSave,
-                okrId: kr.id, // Use the actual KeyResult ID, not the junction table ID
+                okrId: kr.id,
+                canEdit: canEditKR,
+                ownerId: kr.ownerId || obj.ownerId,
+                organizationId: obj.organizationId,
+                workspaceId: obj.workspaceId,
+                teamId: obj.teamId,
+                parentObjective: objectiveForPerms,
               },
             })
             
@@ -504,6 +542,10 @@ export default function BuilderPage() {
       month: initStartDate.getMonth(),
       year: initStartDate.getFullYear(),
       visibilityLevel: data.visibilityLevel || 'PUBLIC_TENANT',
+      isPublished: data.isPublished || false,
+      cycle: data.cycle || null,
+      cycleStatus: data.cycleStatus || null,
+      parentObjective: data.parentObjective || null,
     })
   }
 
@@ -798,13 +840,16 @@ export default function BuilderPage() {
       newNode.data.progress = 0
       newNode.data.description = ''
       newNode.data.owner = ''
+      newNode.data.canEdit = true
     } else if (type === 'keyResult') {
       newNode.data.current = 0
       newNode.data.target = 100
       newNode.data.unit = 'units'
       newNode.data.progress = 0
+      newNode.data.canEdit = true
     } else if (type === 'initiative') {
       newNode.data.status = 'Not Started'
+      newNode.data.canEdit = true
     }
 
     setNodes((nds) => [...nds, newNode])
@@ -1152,7 +1197,6 @@ export default function BuilderPage() {
                 organizationId: editingFormData.organizationId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
-                // @ts-expect-error TODO [phase7-hardening]: tighten typing - parentObjective needs proper interface
                 parentObjective: editingFormData.parentObjective as Record<string, unknown> || null,
               })
             }
@@ -1207,7 +1251,6 @@ export default function BuilderPage() {
                 organizationId: editingFormData.organizationId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
-                // @ts-expect-error TODO [phase7-hardening]: tighten typing - parentObjective needs proper interface
                 parentObjective: editingFormData.parentObjective as Record<string, unknown> || null,
               })
               return lockInfo.isLocked ? lockInfo.message : undefined

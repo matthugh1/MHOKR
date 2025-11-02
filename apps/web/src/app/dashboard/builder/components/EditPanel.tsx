@@ -53,7 +53,7 @@ export function EditPanel({
 
   const handleDelete = async () => {
     if (!nodeId || !canDelete) return
-    // TODO [phase7-hardening]: add confirm modal before destructive actions
+    if (!confirm('Delete this item? This cannot be undone.')) return
     await onDelete(nodeId)
   }
 
@@ -137,7 +137,6 @@ export function EditPanel({
               <div className="mt-3 rounded-lg border border-neutral-100 bg-neutral-50 p-3 text-sm text-neutral-600 shadow-sm">
                 {lockMessage}
               </div>
-              {/* TODO [phase6-polish]: replace with a nicer inline callout component */}
             </>
           )}
           
@@ -151,32 +150,30 @@ export function EditPanel({
       {/* Footer Actions */}
       <div className="sticky bottom-0 bg-white border-t border-neutral-200 p-4">
         <div className="flex gap-2 justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleDelete}
-              disabled={!canDelete || isSaving}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete
-            </Button>
-            {!canDelete && (
-              <p className="text-xs text-neutral-500">You cannot delete this item</p>
-            )}
-          </div>
-          <div className="flex gap-2">
+          {canDelete && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDelete}
+                disabled={isSaving}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+            </div>
+          )}
+          <div className="flex gap-2 ml-auto">
             <Button variant="outline" onClick={onClose} disabled={isSaving}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={!canEdit || isSaving}>
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </Button>
+            {canEdit && (
+              <Button onClick={handleSave} disabled={isSaving}>
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            )}
           </div>
         </div>
-        {!canEdit && (
-          <p className="text-xs text-neutral-500 text-right mt-2">You cannot edit this item</p>
-        )}
       </div>
     </div>
   )

@@ -16,3 +16,11 @@
 - A dedicated RBAC action ('request_checkin') and guard path have been added so this capability is explicitly permissioned.
 - Manual validation steps are defined in W1.M2's validation plan (manager allowed, peer blocked, superuser blocked).
 
+## [Governance Alignment] W2.M1 Complete
+
+- The UI now hides edit, delete, drag, and update actions when the user is not allowed to perform them.
+- Publish-locked and cycle-locked OKRs are now effectively read-only in the UI for normal users, but remain editable for tenant admins.
+- The visual OKR builder is now permission-aware: contributors and workspace leads cannot drag or edit locked objectives, and destructive actions are not displayed.
+- All destructive controls are now aligned with backend RBAC and governance rules. Buttons that would 403 are no longer rendered.
+- This prevents accidental or misleading actions during demos and enforces trust in what the user sees.
+

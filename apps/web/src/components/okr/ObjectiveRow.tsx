@@ -60,6 +60,8 @@ export interface ObjectiveRowProps {
   onAddCheckIn?: (krId: string) => void
   canEdit: boolean
   canDelete: boolean
+  canEditKeyResult?: (krId: string) => boolean
+  canCheckInOnKeyResult?: (krId: string) => boolean
   availableUsers?: Array<{ id: string; name: string; email?: string }>
 }
 
@@ -214,6 +216,8 @@ export function ObjectiveRow({
   onAddCheckIn,
   canEdit,
   canDelete,
+  canEditKeyResult,
+  canCheckInOnKeyResult,
   availableUsers = [],
 }: ObjectiveRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -375,12 +379,11 @@ export function ObjectiveRow({
             )}
             
             {/* Edit button */}
-            {onEdit && (
+            {onEdit && canEdit && (
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-8 px-2 text-[12px] font-medium"
-                disabled={!canEdit}
                 onClick={() => onEdit(objective.id)}
                 aria-label="Edit objective"
               >
@@ -403,21 +406,20 @@ export function ObjectiveRow({
               {/* Menu dropdown */}
               {menuOpen && (
                 <div className="absolute right-0 top-full mt-1 rounded-md border bg-white shadow-lg text-[13px] z-50 min-w-[160px]">
-                  {onDelete && (
+                  {onDelete && canDelete && (
                     <button
                       className="w-full px-3 py-2 text-left hover:bg-neutral-100 rounded-t-md text-rose-600"
                       onClick={() => {
                         onDelete(objective.id)
                         setMenuOpen(false)
                       }}
-                      disabled={!canDelete}
                     >
                       Delete Objective
                     </button>
                   )}
                   {onOpenHistory && (
                     <button
-                      className="w-full px-3 py-2 text-left hover:bg-neutral-100 rounded-b-md"
+                      className={`w-full px-3 py-2 text-left hover:bg-neutral-100 ${onDelete && canDelete ? '' : 'rounded-t-md'} rounded-b-md`}
                       onClick={() => {
                         onOpenHistory()
                         setMenuOpen(false)
@@ -515,7 +517,7 @@ export function ObjectiveRow({
                             
                             {/* Action buttons */}
                             <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                              {onAddCheckIn && (
+                              {onAddCheckIn && canCheckInOnKeyResult && canCheckInOnKeyResult(kr.id) && (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -525,7 +527,7 @@ export function ObjectiveRow({
                                   Check in
                                 </Button>
                               )}
-                              {onAddInitiativeToKr && (
+                              {onAddInitiativeToKr && canEditKeyResult && canEditKeyResult(kr.id) && (
                                 <Button
                                   variant="outline"
                                   size="sm"

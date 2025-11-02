@@ -97,7 +97,6 @@ export function EditFormTabs({
   const [availableObjectives, setAvailableObjectives] = useState<Array<{ id: string; title: string }>>([])
 
   // Determine if editing is allowed based on node type
-  // TODO [phase7-hardening]: parent objective should always be available for KR checks
   const canEdit = nodeType === 'obj' 
     ? tenantPermissions.canEditObjective({
         id: formData.okrId as string || '',
@@ -116,7 +115,6 @@ export function EditFormTabs({
         organizationId: formData.organizationId as string | null || null,
         workspaceId: formData.workspaceId as string | null || null,
         teamId: formData.teamId as string | null || null,
-        // @ts-expect-error TODO [phase7-hardening]: tighten typing - parentObjective needs proper interface
         parentObjective: formData.parentObjective as UnknownObjective || null,
       })
     : true // Initiatives don't have lock logic yet
@@ -139,7 +137,6 @@ export function EditFormTabs({
         organizationId: formData.organizationId as string | null || null,
         workspaceId: formData.workspaceId as string | null || null,
         teamId: formData.teamId as string | null || null,
-        // @ts-expect-error TODO [phase7-hardening]: tighten typing - parentObjective needs proper interface
         parentObjective: formData.parentObjective as UnknownObjective || null,
       })
     : { isLocked: false, reason: null, message: '' }
@@ -209,15 +206,14 @@ export function EditFormTabs({
 
   return (
     <div className="space-y-4">
-      {/* Lock messaging */}
-      {lockInfo.isLocked && (
-        <>
-          <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-3 text-sm text-neutral-600 shadow-sm">
-            {lockInfo.message || 'This item is locked.'}
-          </div>
-          {/* TODO [phase6-polish]: replace with a nicer inline callout component */}
-        </>
-      )}
+          {/* Lock messaging */}
+          {lockInfo.isLocked && (
+            <>
+              <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-3 text-sm text-neutral-600 shadow-sm">
+                {lockInfo.message || 'This item is locked.'}
+              </div>
+            </>
+          )}
 
       <Tabs defaultValue="basic" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
