@@ -414,8 +414,23 @@ export default function OKRsPage() {
   
   // Apply filters and visibility checks with safe defaults
   const filteredOKRs = objectivesViewModel.filter(okr => {
-    // Apply visibility check
-    if (!canSeeObjective(okr)) {
+    // Apply visibility check - must include visibilityLevel
+    const objectiveForVisibility = {
+      id: okr.id,
+      ownerId: okr.ownerId,
+      organizationId: okr.organizationId,
+      workspaceId: okr.workspaceId,
+      teamId: okr.teamId,
+      isPublished: okr.isPublished,
+      visibilityLevel: okr.visibilityLevel,
+      cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+        ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
+        : null,
+      cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+        ? activeCycles.find(c => c.id === okr.cycleId)!.status
+        : null,
+    }
+    if (!canSeeObjective(objectiveForVisibility)) {
       return false
     }
     
@@ -478,6 +493,7 @@ export default function OKRsPage() {
       workspaceId: okr.workspaceId,
       teamId: okr.teamId,
       isPublished: okr.isPublished,
+      visibilityLevel: okr.visibilityLevel,
       cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
         ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
         : null,
@@ -560,6 +576,7 @@ export default function OKRsPage() {
       workspaceId: okr.workspaceId,
       teamId: okr.teamId,
       isPublished: okr.isPublished,
+      visibilityLevel: okr.visibilityLevel,
       cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
         ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
         : null,
@@ -574,9 +591,28 @@ export default function OKRsPage() {
     // Normalise objective data for ObjectiveRow
     const normalised = mapObjectiveData(okr, availableUsers, activeCycles, overdueCheckIns)
     
+    // Filter Key Results by visibility - only include ones the user can view
+    const visibleKeyResults = normalised.keyResults.filter((kr: any) => {
+      return tenantPermissions.canSeeKeyResult(kr, {
+        id: okr.id,
+        ownerId: okr.ownerId,
+        organizationId: okr.organizationId,
+        workspaceId: okr.workspaceId,
+        teamId: okr.teamId,
+        isPublished: okr.isPublished,
+        visibilityLevel: okr.visibilityLevel,
+        cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+          ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
+          : null,
+        cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+          ? activeCycles.find(c => c.id === okr.cycleId)!.status
+          : null,
+      })
+    })
+    
     // Permission check functions for Key Results
     const canEditKeyResult = (krId: string): boolean => {
-      const kr = normalised.keyResults.find((k: any) => k.id === krId)
+      const kr = visibleKeyResults.find((k: any) => k.id === krId)
       if (!kr) return false
       
       return tenantPermissions.canEditKeyResult({
@@ -590,7 +626,7 @@ export default function OKRsPage() {
     }
     
     const canCheckInOnKeyResult = (krId: string): boolean => {
-      const kr = normalised.keyResults.find((k: any) => k.id === krId)
+      const kr = visibleKeyResults.find((k: any) => k.id === krId)
       if (!kr) return false
       
       return tenantPermissions.canCheckInOnKeyResult({
@@ -619,7 +655,7 @@ export default function OKRsPage() {
           owner: normalised.owner,
           overdueCountForObjective: normalised.overdueCountForObjective,
           lowestConfidence: normalised.lowestConfidence,
-          keyResults: normalised.keyResults,
+          keyResults: visibleKeyResults,
           initiatives: normalised.initiatives,
         }}
         isExpanded={expandedObjectiveId === normalised.id}
@@ -704,6 +740,7 @@ export default function OKRsPage() {
       workspaceId: okr.workspaceId,
       teamId: okr.teamId,
       isPublished: okr.isPublished,
+      visibilityLevel: okr.visibilityLevel,
       cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
         ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
         : null,
@@ -1404,6 +1441,7 @@ export default function OKRsPage() {
               workspaceId: selectedObjectiveForLock.workspaceId,
               teamId: selectedObjectiveForLock.teamId,
               isPublished: selectedObjectiveForLock.isPublished,
+              visibilityLevel: selectedObjectiveForLock.visibilityLevel,
               cycle: selectedObjectiveForLock.cycleId && activeCycles.find(c => c.id === selectedObjectiveForLock.cycleId)
                 ? { id: selectedObjectiveForLock.cycleId, status: activeCycles.find(c => c.id === selectedObjectiveForLock.cycleId)!.status }
                 : null,

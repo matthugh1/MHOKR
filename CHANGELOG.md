@@ -24,3 +24,12 @@
 - All destructive controls are now aligned with backend RBAC and governance rules. Buttons that would 403 are no longer rendered.
 - This prevents accidental or misleading actions during demos and enforces trust in what the user sees.
 
+## [Visibility Enforcement] W2.M2 Complete
+
+- Sensitive and executive-only OKRs are now fully suppressed from the UI for unauthorised users. They do not render at all.
+- PRIVATE objectives are only visible to their owner, tenant admins/owners, or explicitly whitelisted viewers.
+- Key Results inherit visibility from their parent Objective and are hidden when the Objective is hidden.
+- The OKR list and visual builder both pre-filter data before rendering. Contributors and workspace leads no longer see exec/board objectives unless allowed.
+- Tenant admins continue to see full strategic context.
+- This prevents leakage of strategic and performance-sensitive objectives to unauthorised users.
+

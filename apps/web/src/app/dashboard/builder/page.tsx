@@ -322,6 +322,28 @@ export default function BuilderPage() {
 
       // Add objectives as nodes
       objectivesRes.data.forEach((obj: any, index: number) => {
+        // Check visibility first - only create nodes for visible objectives
+        const objectiveForPerms = {
+          id: obj.id,
+          ownerId: obj.ownerId,
+          organizationId: obj.organizationId,
+          workspaceId: obj.workspaceId,
+          teamId: obj.teamId,
+          isPublished: obj.isPublished || false,
+          visibilityLevel: obj.visibilityLevel,
+          cycle: obj.cycleId && activeCycles.find(c => c.id === obj.cycleId)
+            ? { id: obj.cycleId, status: activeCycles.find(c => c.id === obj.cycleId)!.status }
+            : null,
+          cycleStatus: obj.cycleId && activeCycles.find(c => c.id === obj.cycleId)
+            ? activeCycles.find(c => c.id === obj.cycleId)!.status
+            : null,
+        }
+        
+        const canView = tenantPermissions.canViewObjective(objectiveForPerms)
+        if (!canView) {
+          return // Skip this objective entirely - don't create node or edges
+        }
+        
         const defaultPosition = obj.positionX !== null && obj.positionY !== null 
           ? { x: obj.positionX, y: obj.positionY }
           : getDefaultNodePosition('objective', index)
@@ -332,20 +354,6 @@ export default function BuilderPage() {
         const objectiveViewModel = mapObjectiveToViewModel(obj)
         
         // Check permissions for this objective
-        const objectiveForPerms = {
-          id: obj.id,
-          ownerId: obj.ownerId,
-          organizationId: obj.organizationId,
-          workspaceId: obj.workspaceId,
-          teamId: obj.teamId,
-          isPublished: obj.isPublished || false,
-          cycle: obj.cycleId && activeCycles.find(c => c.id === obj.cycleId)
-            ? { id: obj.cycleId, status: activeCycles.find(c => c.id === obj.cycleId)!.status }
-            : null,
-          cycleStatus: obj.cycleId && activeCycles.find(c => c.id === obj.cycleId)
-            ? activeCycles.find(c => c.id === obj.cycleId)!.status
-            : null,
-        }
         const canEditObjective = tenantPermissions.canEditObjective(objectiveForPerms)
         
         loadedNodes.push({
@@ -372,6 +380,7 @@ export default function BuilderPage() {
             onQuickSave: handleQuickSave,
             okrId: obj.id,
             canEdit: canEditObjective,
+            canView: canView,
             isPublished: obj.isPublished || false,
             cycle: objectiveForPerms.cycle,
             cycleStatus: objectiveForPerms.cycleStatus,
@@ -385,6 +394,12 @@ export default function BuilderPage() {
             // The actual KeyResult is nested in krJunction.keyResult
             const kr = krJunction.keyResult
             if (!kr) return // Skip if keyResult is missing
+            
+            // Check if user can view this key result (inherits from parent objective)
+            const canViewKR = tenantPermissions.canSeeKeyResult(kr, objectiveForPerms)
+            if (!canViewKR) {
+              return // Skip this key result entirely
+            }
             
             const krNodeId = `kr-${kr.id}`
             const defaultPosition = kr.positionX !== null && kr.positionY !== null
@@ -422,6 +437,7 @@ export default function BuilderPage() {
                 onQuickSave: handleQuickSave,
                 okrId: kr.id,
                 canEdit: canEditKR,
+                canView: canViewKR,
                 ownerId: kr.ownerId || obj.ownerId,
                 organizationId: obj.organizationId,
                 workspaceId: obj.workspaceId,
@@ -430,7 +446,7 @@ export default function BuilderPage() {
               },
             })
             
-            // Connect KR to Objective
+            // Connect KR to Objective (only if both nodes exist)
             loadedEdges.push({
               id: `e-${obj.id}-${kr.id}`,
               source: `obj-${obj.id}`,
@@ -441,9 +457,10 @@ export default function BuilderPage() {
         }
       })
 
-      // Create parent-child edges between objectives
+      // Create parent-child edges between objectives (only if both nodes are visible)
+      const visibleObjectiveIds = new Set(loadedNodes.filter(n => n.type === 'objective').map(n => n.id.replace('obj-', '')))
       objectivesRes.data.forEach((obj: any) => {
-        if (obj.parentId) {
+        if (obj.parentId && visibleObjectiveIds.has(obj.parentId) && visibleObjectiveIds.has(obj.id)) {
           loadedEdges.push({
             id: `edge-obj-${obj.parentId}-obj-${obj.id}`,
             source: `obj-${obj.parentId}`,

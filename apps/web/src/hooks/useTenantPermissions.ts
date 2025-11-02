@@ -28,6 +28,7 @@ interface Objective {
   workspaceId?: string | null
   teamId?: string | null
   isPublished?: boolean
+  visibilityLevel?: string
   cycle?: {
     id: string
     status: string // 'LOCKED' | 'ACTIVE' | 'DRAFT' | 'ARCHIVED'
@@ -76,6 +77,7 @@ interface PermissionChecks {
 
 export function useTenantPermissions(): PermissionChecks {
   const { currentOrganization } = useWorkspace()
+  const { user } = useAuth()
   const permissions = usePermissions()
 
   // Helper: Check if user can override publish/cycle locks (tenant admin/owner)
@@ -100,31 +102,116 @@ export function useTenantPermissions(): PermissionChecks {
   }, [])
 
   const canViewObjective = useMemo(() => {
-    return (_objective: Objective): boolean => {
-      // For now, if it's rendered, you can view it (matches current behavior)
-      // TODO [phase7-hardening]: align with backend visibility rules once fully exposed
-      // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
-      return true
+    return (objective: Objective): boolean => {
+      // Superuser can view everything
+      if (permissions.isSuperuser) {
+        return true
+      }
+
+      // Owner can always view their own OKRs
+      if (objective.ownerId && user?.id && objective.ownerId === user.id) {
+        return true
+      }
+
+      // Only PRIVATE visibility level restricts read access
+      // All other levels (PUBLIC_TENANT, EXEC_ONLY, etc.) are globally visible
+      if (objective.visibilityLevel !== 'PRIVATE') {
+        return true
+      }
+
+      // PRIVATE: Check if user is TENANT_OWNER for this organization
+      if (objective.organizationId && permissions.isTenantAdminOrOwner(objective.organizationId)) {
+        return true
+      }
+
+      // PRIVATE: Check whitelist from organization metadata
+      if (objective.organizationId && currentOrganization?.id === objective.organizationId) {
+        const org = currentOrganization as any
+        const userId = user?.id
+        
+        if (!userId) {
+          return false
+        }
+
+        // Check top-level whitelist fields
+        if (org.privateWhitelist && Array.isArray(org.privateWhitelist)) {
+          if (org.privateWhitelist.includes(userId)) {
+            return true
+          }
+        }
+        
+        if (org.execOnlyWhitelist && Array.isArray(org.execOnlyWhitelist)) {
+          if (org.execOnlyWhitelist.includes(userId)) {
+            return true
+          }
+        }
+
+        // Check metadata whitelist fields
+        if (org.metadata) {
+          const metadata = org.metadata as any
+          if (metadata.privateWhitelist && Array.isArray(metadata.privateWhitelist)) {
+            if (metadata.privateWhitelist.includes(userId)) {
+              return true
+            }
+          }
+          if (metadata.execOnlyWhitelist && Array.isArray(metadata.execOnlyWhitelist)) {
+            if (metadata.execOnlyWhitelist.includes(userId)) {
+              return true
+            }
+          }
+        }
+      }
+
+      // Different tenant - deny by default (should not happen due to tenant isolation, but be defensive)
+      if (objective.organizationId && currentOrganization?.id && objective.organizationId !== currentOrganization.id) {
+        return false
+      }
+
+      // PRIVATE OKR: deny by default if we can't prove access
+      return false
     }
-  }, [])
+  }, [permissions, currentOrganization, user])
 
   const canSeeObjective = useMemo(() => {
-    return (_obj: any): boolean => {
-      // TODO [phase7-hardening]: Backend already enforces visibility via RBAC + tenant isolation.
-      // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
-      // Frontend callsites should still be explicit so we don't accidentally render leaked data.
-      // In future we will check obj.visibilityLevel against the current user's effective visibility scope.
-      return true
+    return (obj: any): boolean => {
+      // Alias for canViewObjective with relaxed typing for backwards compatibility
+      return canViewObjective({
+        id: obj.id,
+        ownerId: obj.ownerId,
+        organizationId: obj.organizationId,
+        workspaceId: obj.workspaceId,
+        teamId: obj.teamId,
+        isPublished: obj.isPublished,
+        cycle: obj.cycle,
+        cycleStatus: obj.cycleStatus,
+        visibilityLevel: obj.visibilityLevel,
+      })
     }
-  }, [])
+  }, [canViewObjective])
 
   const canSeeKeyResult = useMemo(() => {
-    return (_kr: any): boolean => {
-      // TODO [phase7-hardening]: Mirror canSeeObjective() once KR-level visibility is modelled distinctly.
-      // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
-      return true
+    return (kr: any, parentObjective?: any): boolean => {
+      // Key Results inherit visibility from parent Objective
+      // If parent objective is provided, check that
+      if (parentObjective) {
+        return canViewObjective({
+          id: parentObjective.id,
+          ownerId: parentObjective.ownerId,
+          organizationId: parentObjective.organizationId,
+          workspaceId: parentObjective.workspaceId,
+          teamId: parentObjective.teamId,
+          isPublished: parentObjective.isPublished,
+          cycle: parentObjective.cycle,
+          cycleStatus: parentObjective.cycleStatus,
+          visibilityLevel: parentObjective.visibilityLevel,
+        })
+      }
+
+      // If no parent objective, check KR's own visibility (should not happen in practice)
+      // Default to denying if we can't determine parent visibility
+      return false
     }
-  }, [])
+  }, [canViewObjective])
 
   const canEditObjective = useMemo(() => {
     return (objective: Objective): boolean => {
