@@ -1,9 +1,15 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { OkrTenantGuard } from '../okr/tenant-guard';
+import { AuditLogService } from '../audit/audit-log.service';
+import { AuditTargetType } from '@prisma/client';
 
 @Injectable()
 export class WorkspaceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditLogService: AuditLogService,
+  ) {}
 
   async findAll(organizationId?: string) {
     return this.prisma.workspace.findMany({
@@ -115,7 +121,13 @@ export class WorkspaceService {
     return workspaces[0];
   }
 
-  async create(data: { name: string; organizationId: string; parentWorkspaceId?: string }) {
+  async create(data: { name: string; organizationId: string; parentWorkspaceId?: string }, userOrganizationId: string | null | undefined, actorUserId: string) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Tenant isolation: verify org match
+    OkrTenantGuard.assertSameTenant(data.organizationId, userOrganizationId);
+
     // If parent workspace is provided, validate it belongs to the same organization
     if (data.parentWorkspaceId) {
       const parentWorkspace = await this.prisma.workspace.findUnique({
@@ -131,7 +143,7 @@ export class WorkspaceService {
       }
     }
 
-    return this.prisma.workspace.create({
+    const created = await this.prisma.workspace.create({
       data: {
         name: data.name,
         organizationId: data.organizationId,
@@ -144,6 +156,16 @@ export class WorkspaceService {
         teams: true,
       },
     });
+
+    await this.auditLogService.record({
+      action: 'CREATE_WORKSPACE',
+      actorUserId,
+      targetId: created.id,
+      targetType: AuditTargetType.WORKSPACE,
+      organizationId: data.organizationId,
+    });
+
+    return created;
   }
 
   /**
@@ -184,17 +206,24 @@ export class WorkspaceService {
     return false;
   }
 
-  async update(id: string, data: { name?: string; parentWorkspaceId?: string | null }) {
+  async update(id: string, data: { name?: string; parentWorkspaceId?: string | null }, userOrganizationId: string | null | undefined, actorUserId: string) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Get existing workspace to check tenant isolation
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id },
+    });
+
+    if (!workspace) {
+      throw new NotFoundException(`Workspace with ID ${id} not found`);
+    }
+
+    // Tenant isolation: verify org match
+    OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
+
     // If parent workspace is being updated, validate it
     if (data.parentWorkspaceId !== undefined) {
-      const workspace = await this.prisma.workspace.findUnique({
-        where: { id },
-      });
-
-      if (!workspace) {
-        throw new NotFoundException(`Workspace with ID ${id} not found`);
-      }
-
       if (data.parentWorkspaceId) {
         const parentWorkspace = await this.prisma.workspace.findUnique({
           where: { id: data.parentWorkspaceId },
@@ -216,7 +245,7 @@ export class WorkspaceService {
       }
     }
 
-    return this.prisma.workspace.update({
+    const updated = await this.prisma.workspace.update({
       where: { id },
       data: {
         name: data.name,
@@ -229,6 +258,16 @@ export class WorkspaceService {
         teams: true,
       },
     });
+
+    await this.auditLogService.record({
+      action: 'UPDATE_WORKSPACE',
+      actorUserId,
+      targetId: id,
+      targetType: AuditTargetType.WORKSPACE,
+      organizationId: workspace.organizationId,
+    });
+
+    return updated;
   }
 
   /**
@@ -255,7 +294,22 @@ export class WorkspaceService {
     return rootWorkspaces;
   }
 
-  async delete(id: string) {
+  async delete(id: string, userOrganizationId: string | null | undefined, actorUserId: string) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Get existing workspace to check tenant isolation
+    const workspace = await this.findById(id);
+    OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
+
+    await this.auditLogService.record({
+      action: 'DELETE_WORKSPACE',
+      actorUserId,
+      targetId: id,
+      targetType: AuditTargetType.WORKSPACE,
+      organizationId: workspace.organizationId,
+    });
+
     return this.prisma.workspace.delete({
       where: { id },
     });
@@ -372,9 +426,13 @@ export class WorkspaceService {
     return !!teamMember;
   }
 
-  async addMember(workspaceId: string, userId: string, role: 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER' = 'MEMBER') {
-    // Verify workspace exists
-    await this.findById(workspaceId);
+  async addMember(workspaceId: string, userId: string, role: 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER' = 'MEMBER', userOrganizationId: string | null | undefined, actorUserId: string) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Verify workspace exists and tenant match
+    const workspace = await this.findById(workspaceId);
+    OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
     
     // Verify user exists
     const user = await this.prisma.user.findUnique({
@@ -395,7 +453,7 @@ export class WorkspaceService {
 
     if (existing) {
       // Update role if already exists
-      return this.prisma.workspaceMember.update({
+      const updated = await this.prisma.workspaceMember.update({
         where: { id: existing.id },
         data: { role },
         include: {
@@ -403,10 +461,22 @@ export class WorkspaceService {
           workspace: true,
         },
       });
+
+      await this.auditLogService.record({
+        action: 'UPDATE_WORKSPACE_MEMBER_ROLE',
+        actorUserId,
+        targetUserId: userId,
+        targetId: userId,
+        targetType: AuditTargetType.USER,
+        organizationId: workspace.organizationId,
+        metadata: { role, previousRole: existing.role },
+      });
+
+      return updated;
     }
 
     // Create new membership
-    return this.prisma.workspaceMember.create({
+    const created = await this.prisma.workspaceMember.create({
       data: {
         userId,
         workspaceId,
@@ -421,9 +491,28 @@ export class WorkspaceService {
         },
       },
     });
+
+    await this.auditLogService.record({
+      action: 'ADD_WORKSPACE_MEMBER',
+      actorUserId,
+      targetUserId: userId,
+      targetId: userId,
+      targetType: AuditTargetType.USER,
+      organizationId: workspace.organizationId,
+      metadata: { role },
+    });
+
+    return created;
   }
 
-  async removeMember(workspaceId: string, userId: string) {
+  async removeMember(workspaceId: string, userId: string, userOrganizationId: string | null | undefined, actorUserId: string) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Verify workspace exists and tenant match
+    const workspace = await this.findById(workspaceId);
+    OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
+
     const membership = await this.prisma.workspaceMember.findFirst({
       where: {
         userId,
@@ -434,6 +523,15 @@ export class WorkspaceService {
     if (!membership) {
       throw new NotFoundException(`User is not a member of this workspace`);
     }
+
+    await this.auditLogService.record({
+      action: 'REMOVE_WORKSPACE_MEMBER',
+      actorUserId,
+      targetUserId: userId,
+      targetId: userId,
+      targetType: AuditTargetType.USER,
+      organizationId: workspace.organizationId,
+    });
 
     return this.prisma.workspaceMember.delete({
       where: { id: membership.id },

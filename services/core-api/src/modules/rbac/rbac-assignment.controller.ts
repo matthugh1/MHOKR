@@ -235,6 +235,7 @@ export class RBACAssignmentController {
       dto.scopeType,
       dto.scopeId,
       req.user.id,
+      req.user.organizationId,
     );
 
     return assignment;
@@ -262,6 +263,7 @@ export class RBACAssignmentController {
       assignment.scopeType as ScopeType,
       assignment.scopeId,
       req.user.id,
+      req.user.organizationId,
     );
 
     return { success: true };
@@ -289,10 +291,17 @@ export class ExecWhitelistController {
   async addToWhitelist(
     @Param('tenantId') tenantId: string,
     @Body() body: { userId: string },
+    @Request() req: any,
   ) {
+    // Verify tenant match
+    if (tenantId !== req.user.organizationId) {
+      throw new NotFoundException('Tenant not found');
+    }
     const whitelist = await this.execWhitelistService.addToWhitelist(
       tenantId,
       body.userId,
+      req.user.organizationId,
+      req.user.id,
     );
     return { tenantId, whitelist };
   }
@@ -303,10 +312,17 @@ export class ExecWhitelistController {
   async removeFromWhitelist(
     @Param('tenantId') tenantId: string,
     @Body() body: { userId: string },
+    @Request() req: any,
   ) {
+    // Verify tenant match
+    if (tenantId !== req.user.organizationId) {
+      throw new NotFoundException('Tenant not found');
+    }
     const whitelist = await this.execWhitelistService.removeFromWhitelist(
       tenantId,
       body.userId,
+      req.user.organizationId,
+      req.user.id,
     );
     return { tenantId, whitelist };
   }
@@ -317,10 +333,17 @@ export class ExecWhitelistController {
   async setWhitelist(
     @Param('tenantId') tenantId: string,
     @Body() body: { userIds: string[] },
+    @Request() req: any,
   ) {
+    // Verify tenant match
+    if (tenantId !== req.user.organizationId) {
+      throw new NotFoundException('Tenant not found');
+    }
     const whitelist = await this.execWhitelistService.setWhitelist(
       tenantId,
       body.userIds,
+      req.user.organizationId,
+      req.user.id,
     );
     return { tenantId, whitelist };
   }
@@ -328,8 +351,12 @@ export class ExecWhitelistController {
   @Delete(':tenantId')
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Clear EXEC_ONLY whitelist' })
-  async clearWhitelist(@Param('tenantId') tenantId: string) {
-    await this.execWhitelistService.clearWhitelist(tenantId);
+  async clearWhitelist(@Param('tenantId') tenantId: string, @Request() req: any) {
+    // Verify tenant match
+    if (tenantId !== req.user.organizationId) {
+      throw new NotFoundException('Tenant not found');
+    }
+    await this.execWhitelistService.clearWhitelist(tenantId, req.user.organizationId, req.user.id);
     return { tenantId, whitelist: [] };
   }
 }

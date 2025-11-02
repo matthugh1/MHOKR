@@ -71,6 +71,7 @@ export class RBACMigrationService {
             'TENANT',
             member.organizationId,
             migratedBy,
+            null, // Migration bypasses tenant checks
           );
           orgCount++;
         } catch (error) {
@@ -96,6 +97,7 @@ export class RBACMigrationService {
             'WORKSPACE',
             member.workspaceId,
             migratedBy,
+            null, // Migration bypasses tenant checks
           );
           workspaceCount++;
         } catch (error) {
@@ -121,6 +123,7 @@ export class RBACMigrationService {
             'TEAM',
             member.teamId,
             migratedBy,
+            null, // Migration bypasses tenant checks
           );
           teamCount++;
         } catch (error) {
@@ -167,6 +170,7 @@ export class RBACMigrationService {
           'TENANT',
           member.organizationId,
           migratedBy,
+          null, // Migration bypasses tenant checks
         );
       }
     }
@@ -186,6 +190,7 @@ export class RBACMigrationService {
           'WORKSPACE',
           member.workspaceId,
           migratedBy,
+          null, // Migration bypasses tenant checks
         );
       }
     }
@@ -205,6 +210,7 @@ export class RBACMigrationService {
           'TEAM',
           member.teamId,
           migratedBy,
+          null, // Migration bypasses tenant checks
         );
       }
     }

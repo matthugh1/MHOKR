@@ -9,15 +9,18 @@ import { Controller, Post, Get, UseGuards, Body, Param } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { RBACMigrationService } from './migration.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RBACGuard } from './rbac.guard';
+import { RequireAction } from './rbac.decorator';
 
 @ApiTags('RBAC Migration')
 @Controller('rbac/migration')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RBACGuard)
 @ApiBearerAuth()
 export class RBACMigrationController {
   constructor(private migrationService: RBACMigrationService) {}
 
   @Post('all')
+  @RequireAction('impersonate_user')
   @ApiOperation({ summary: 'Migrate all memberships to RoleAssignment model' })
   async migrateAll(@Body() body: { migratedBy?: string }) {
     const result = await this.migrationService.migrateAllMemberships(
@@ -31,6 +34,7 @@ export class RBACMigrationController {
   }
 
   @Post('user/:userId')
+  @RequireAction('impersonate_user')
   @ApiOperation({ summary: 'Migrate a single user\'s memberships' })
   async migrateUser(
     @Param('userId') userId: string,

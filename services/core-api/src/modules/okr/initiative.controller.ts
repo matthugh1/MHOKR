@@ -54,7 +54,7 @@ export class InitiativeController {
       }
     }
 
-    return this.initiativeService.create(data, req.user.id);
+    return this.initiativeService.create(data, req.user.id, req.user.organizationId);
   }
 
   @Patch(':id')
@@ -66,7 +66,7 @@ export class InitiativeController {
     if (!canEdit) {
       throw new ForbiddenException('You do not have permission to edit this initiative');
     }
-    return this.initiativeService.update(id, data, req.user.id);
+    return this.initiativeService.update(id, data, req.user.id, req.user.organizationId);
   }
 
   @Delete(':id')
@@ -78,6 +78,6 @@ export class InitiativeController {
     if (!canDelete) {
       throw new ForbiddenException('You do not have permission to delete this initiative');
     }
-    return this.initiativeService.delete(id);
+    return this.initiativeService.delete(id, req.user.id, req.user.organizationId);
   }
 }

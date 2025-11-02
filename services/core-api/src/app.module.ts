@@ -12,6 +12,7 @@ import { ActivityModule } from './modules/activity/activity.module';
 import { LayoutModule } from './modules/layout/layout.module';
 import { RBACModule } from './modules/rbac/rbac.module';
 import { SuperuserModule } from './modules/superuser/superuser.module';
+import { AuditModule } from './modules/audit/audit.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SuperuserModule } from './modules/superuser/superuser.module';
     PrismaModule,
     RedisModule,
     RBACModule, // RBAC system - loaded early for guards
+    AuditModule, // Audit logging - make available globally
     AuthModule,
     UserModule,
     OrganizationModule,

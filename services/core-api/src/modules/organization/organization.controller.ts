@@ -34,22 +34,22 @@ export class OrganizationController {
   @Post()
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Create organization' })
-  async create(@Body() data: { name: string; slug: string }) {
-    return this.organizationService.create(data);
+  async create(@Body() data: { name: string; slug: string }, @Req() req: any) {
+    return this.organizationService.create(data, req.user.organizationId, req.user.id);
   }
 
   @Patch(':id')
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Update organization' })
-  async update(@Param('id') id: string, @Body() data: { name?: string; slug?: string }) {
-    return this.organizationService.update(id, data);
+  async update(@Param('id') id: string, @Body() data: { name?: string; slug?: string }, @Req() req: any) {
+    return this.organizationService.update(id, data, req.user.organizationId, req.user.id);
   }
 
   @Delete(':id')
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Delete organization' })
-  async delete(@Param('id') id: string) {
-    return this.organizationService.delete(id);
+  async delete(@Param('id') id: string, @Req() req: any) {
+    return this.organizationService.delete(id, req.user.organizationId, req.user.id);
   }
 
   @Get(':id/members')
@@ -65,8 +65,9 @@ export class OrganizationController {
   async addMember(
     @Param('id') organizationId: string,
     @Body() data: { userId: string; role?: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER' },
+    @Req() req: any,
   ) {
-    return this.organizationService.addMember(organizationId, data.userId, data.role || 'MEMBER');
+    return this.organizationService.addMember(organizationId, data.userId, data.role || 'MEMBER', req.user.organizationId, req.user.id);
   }
 
   @Delete(':id/members/:userId')
@@ -75,7 +76,8 @@ export class OrganizationController {
   async removeMember(
     @Param('id') organizationId: string,
     @Param('userId') userId: string,
+    @Req() req: any,
   ) {
-    return this.organizationService.removeMember(organizationId, userId);
+    return this.organizationService.removeMember(organizationId, userId, req.user.organizationId, req.user.id);
   }
 }

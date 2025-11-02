@@ -1,9 +1,3 @@
-/**
- * RBAC Module
- * 
- * NestJS module for RBAC functionality.
- */
-
 import { Module } from '@nestjs/common';
 import { RBACService } from './rbac.service';
 import { RBACGuard } from './rbac.guard';

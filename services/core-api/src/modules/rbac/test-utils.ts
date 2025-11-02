@@ -30,7 +30,7 @@ export class RBACTestHelper {
     assignedBy: string = 'test',
   ): Promise<void> {
     for (const { role, scopeType, scopeId } of roles) {
-      await this.rbacService.assignRole(userId, role, scopeType, scopeId, assignedBy);
+      await this.rbacService.assignRole(userId, role, scopeType, scopeId, assignedBy, null);
     }
   }
 
@@ -48,6 +48,7 @@ export class RBACTestHelper {
       'TENANT',
       tenantId,
       assignedBy,
+      null,
     );
   }
 
@@ -65,6 +66,7 @@ export class RBACTestHelper {
       'TENANT',
       tenantId,
       assignedBy,
+      null,
     );
   }
 
@@ -82,6 +84,7 @@ export class RBACTestHelper {
       'WORKSPACE',
       workspaceId,
       assignedBy,
+      null,
     );
   }
 
@@ -99,6 +102,7 @@ export class RBACTestHelper {
       'TEAM',
       teamId,
       assignedBy,
+      null,
     );
   }
 
@@ -193,5 +197,6 @@ export function createRBACTestHelper(
 ): RBACTestHelper {
   return new RBACTestHelper(prisma, rbacService);
 }
+
 
 

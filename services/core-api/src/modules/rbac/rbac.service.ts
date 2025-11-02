@@ -5,7 +5,7 @@
  * Provides methods to build user context, check permissions, and manage role assignments.
  */
 
-import { Injectable, Optional, Logger } from '@nestjs/common';
+import { Injectable, Optional, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   UserContext,
@@ -19,6 +19,9 @@ import {
 import { can, getEffectiveRoles } from './rbac';
 import { ResourceContext, Action } from './types';
 import { RBACCacheService } from './rbac-cache.service';
+import { OkrTenantGuard } from '../okr/tenant-guard';
+import { AuditLogService } from '../audit/audit-log.service';
+import { AuditTargetType, RBACRole } from '@prisma/client';
 
 @Injectable()
 export class RBACService {
@@ -27,6 +30,7 @@ export class RBACService {
 
   constructor(
     private prisma: PrismaService,
+    private auditLogService: AuditLogService,
     @Optional() private cacheService?: RBACCacheService,
   ) {}
 
@@ -254,11 +258,43 @@ export class RBACService {
     role: Role,
     scopeType: ScopeType,
     scopeId: string | null,
-    _assignedBy: string,
+    assignedBy: string,
+    userOrganizationId: string | null | undefined,
   ): Promise<RoleAssignment> {
     // Validate scopeId requirement
     if (scopeType !== 'PLATFORM' && !scopeId) {
       throw new Error(`scopeId is required for ${scopeType} scope`);
+    }
+
+    // Tenant isolation: enforce mutation rules (except PLATFORM scope which is superuser-only)
+    if (scopeType !== 'PLATFORM') {
+      OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+      // Tenant isolation based on scopeType
+      if (scopeType === 'TENANT') {
+        // Verify scopeId matches caller's org
+        OkrTenantGuard.assertSameTenant(scopeId, userOrganizationId);
+      } else if (scopeType === 'WORKSPACE') {
+        // Verify workspace belongs to caller's org
+        const workspace = await this.prisma.workspace.findUnique({
+          where: { id: scopeId! },
+          select: { organizationId: true },
+        });
+        if (!workspace) {
+          throw new NotFoundException(`Workspace with ID ${scopeId} not found`);
+        }
+        OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
+      } else if (scopeType === 'TEAM') {
+        // Verify team's workspace belongs to caller's org
+        const team = await this.prisma.team.findUnique({
+          where: { id: scopeId! },
+          include: { workspace: { select: { organizationId: true } } },
+        });
+        if (!team) {
+          throw new NotFoundException(`Team with ID ${scopeId} not found`);
+        }
+        OkrTenantGuard.assertSameTenant(team.workspace.organizationId, userOrganizationId);
+      }
     }
 
     // Create or update role assignment
@@ -280,6 +316,17 @@ export class RBACService {
           data: { updatedAt: new Date() },
         });
         this.invalidateUserContextCache(userId);
+        
+        await this.auditLogService.record({
+          action: 'GRANT_ROLE',
+          actorUserId: assignedBy,
+          targetUserId: userId,
+          targetId: userId,
+          targetType: AuditTargetType.ROLE_ASSIGNMENT,
+          newRole: role as RBACRole,
+          metadata: { scopeType: 'PLATFORM', scopeId: null },
+        });
+        
         return this.mapPrismaToRoleAssignment(updated);
       }
 
@@ -292,6 +339,17 @@ export class RBACService {
         },
       });
       this.invalidateUserContextCache(userId);
+      
+      await this.auditLogService.record({
+        action: 'GRANT_ROLE',
+        actorUserId: assignedBy,
+        targetUserId: userId,
+        targetId: userId,
+        targetType: AuditTargetType.ROLE_ASSIGNMENT,
+        newRole: role as RBACRole,
+        metadata: { scopeType: 'PLATFORM', scopeId: null },
+      });
+      
       return this.mapPrismaToRoleAssignment(created);
     }
 
@@ -320,8 +378,16 @@ export class RBACService {
     // Invalidate cache for this user
     this.invalidateUserContextCache(userId);
 
-    // TODO [phase7-hardening]: Record audit log for RBAC changes for audit/compliance visibility
-    // await this.auditService.recordRoleChange(...)
+    await this.auditLogService.record({
+      action: 'GRANT_ROLE',
+      actorUserId: assignedBy,
+      targetUserId: userId,
+      targetId: userId,
+      targetType: AuditTargetType.ROLE_ASSIGNMENT,
+      newRole: role as RBACRole,
+      organizationId: scopeType === 'TENANT' ? (scopeId || undefined) : undefined,
+      metadata: { scopeType, scopeId },
+    });
 
     return this.mapPrismaToRoleAssignment(assignment);
   }
@@ -334,8 +400,40 @@ export class RBACService {
     role: Role,
     scopeType: ScopeType,
     scopeId: string | null,
-    _revokedBy: string,
+    revokedBy: string,
+    userOrganizationId: string | null | undefined,
   ): Promise<void> {
+    // Tenant isolation: enforce mutation rules (except PLATFORM scope which is superuser-only)
+    if (scopeType !== 'PLATFORM') {
+      OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+      // Tenant isolation based on scopeType
+      if (scopeType === 'TENANT') {
+        // Verify scopeId matches caller's org
+        OkrTenantGuard.assertSameTenant(scopeId, userOrganizationId);
+      } else if (scopeType === 'WORKSPACE') {
+        // Verify workspace belongs to caller's org
+        const workspace = await this.prisma.workspace.findUnique({
+          where: { id: scopeId! },
+          select: { organizationId: true },
+        });
+        if (!workspace) {
+          throw new NotFoundException(`Workspace with ID ${scopeId} not found`);
+        }
+        OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
+      } else if (scopeType === 'TEAM') {
+        // Verify team's workspace belongs to caller's org
+        const team = await this.prisma.team.findUnique({
+          where: { id: scopeId! },
+          include: { workspace: { select: { organizationId: true } } },
+        });
+        if (!team) {
+          throw new NotFoundException(`Team with ID ${scopeId} not found`);
+        }
+        OkrTenantGuard.assertSameTenant(team.workspace.organizationId, userOrganizationId);
+      }
+    }
+
     await this.prisma.roleAssignment.deleteMany({
       where: {
         userId,
@@ -348,7 +446,16 @@ export class RBACService {
     // Invalidate cache for this user
     this.invalidateUserContextCache(userId);
 
-    // TODO [phase7-hardening]: Record audit log for RBAC changes for audit/compliance visibility
+    await this.auditLogService.record({
+      action: 'REVOKE_ROLE',
+      actorUserId: revokedBy,
+      targetUserId: userId,
+      targetId: userId,
+      targetType: AuditTargetType.ROLE_ASSIGNMENT,
+      previousRole: role as RBACRole,
+      organizationId: scopeType === 'TENANT' ? (scopeId || undefined) : undefined,
+      metadata: { scopeType, scopeId },
+    });
   }
 
   /**

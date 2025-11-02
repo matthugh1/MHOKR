@@ -2,12 +2,16 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RBACService } from '../rbac/rbac.service';
 import { buildResourceContextFromOKR } from '../rbac/helpers';
+import { OkrTenantGuard } from './tenant-guard';
+import { AuditLogService } from '../audit/audit-log.service';
+import { AuditTargetType } from '@prisma/client';
 
 @Injectable()
 export class InitiativeService {
   constructor(
     private prisma: PrismaService,
     private rbacService: RBACService,
+    private auditLogService: AuditLogService,
   ) {}
 
   async findAll(_userId: string, objectiveId?: string, keyResultId?: string) {
@@ -162,7 +166,10 @@ export class InitiativeService {
     }
   }
 
-  async create(data: any, _userId: string) {
+  async create(data: any, userId: string, userOrganizationId: string | null | undefined) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
     // Validate required fields
     if (!data.ownerId) {
       throw new BadRequestException('ownerId is required');
@@ -183,38 +190,99 @@ export class InitiativeService {
     }
 
     // Validate objectiveId if provided
+    let objective: { organizationId: string | null } | null = null;
     if (data.objectiveId) {
-      const objective = await this.prisma.objective.findUnique({
+      objective = await this.prisma.objective.findUnique({
         where: { id: data.objectiveId },
       });
 
       if (!objective) {
         throw new NotFoundException(`Objective with ID ${data.objectiveId} not found`);
       }
+
+      // Tenant isolation: verify org match
+      OkrTenantGuard.assertSameTenant(objective.organizationId, userOrganizationId);
     }
 
-    return this.prisma.initiative.create({
+    const created = await this.prisma.initiative.create({
       data,
     });
+
+    await this.auditLogService.record({
+      action: 'CREATE_INITIATIVE',
+      actorUserId: userId,
+      targetId: created.id,
+      targetType: AuditTargetType.OKR,
+      organizationId: objective?.organizationId || undefined,
+    });
+
+    return created;
   }
 
-  async update(id: string, data: any, _userId: string) {
-    return this.prisma.initiative.update({
+  async update(id: string, data: any, userId: string, userOrganizationId: string | null | undefined) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Get existing initiative to check tenant isolation
+    const existing = await this.prisma.initiative.findUnique({
+      where: { id },
+      include: { objective: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`Initiative with ID ${id} not found`);
+    }
+
+    // Tenant isolation: verify org match via parent objective
+    if (existing.objectiveId) {
+      const objective = existing.objective;
+      OkrTenantGuard.assertSameTenant(objective?.organizationId, userOrganizationId);
+    }
+
+    const updated = await this.prisma.initiative.update({
       where: { id },
       data,
     });
+
+    await this.auditLogService.record({
+      action: 'UPDATE_INITIATIVE',
+      actorUserId: userId,
+      targetId: id,
+      targetType: AuditTargetType.OKR,
+      organizationId: existing.objective?.organizationId || undefined,
+    });
+
+    return updated;
   }
 
-  async delete(id: string) {
+  async delete(id: string, userId: string, userOrganizationId: string | null | undefined) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
     try {
-      // Check if initiative exists
+      // Get existing initiative to check tenant isolation
       const initiative = await this.prisma.initiative.findUnique({
         where: { id },
+        include: { objective: true },
       });
 
       if (!initiative) {
         throw new NotFoundException(`Initiative with ID ${id} not found`);
       }
+
+      // Tenant isolation: verify org match via parent objective
+      if (initiative.objectiveId) {
+        const objective = initiative.objective;
+        OkrTenantGuard.assertSameTenant(objective?.organizationId, userOrganizationId);
+      }
+
+      await this.auditLogService.record({
+        action: 'DELETE_INITIATIVE',
+        actorUserId: userId,
+        targetId: id,
+        targetType: AuditTargetType.OKR,
+        organizationId: initiative.objective?.organizationId || undefined,
+      });
 
       // Delete initiative
       return await this.prisma.initiative.delete({

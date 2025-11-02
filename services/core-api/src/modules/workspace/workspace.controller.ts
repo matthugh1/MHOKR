@@ -38,22 +38,22 @@ export class WorkspaceController {
   @Post()
   @RequireAction('manage_workspaces')
   @ApiOperation({ summary: 'Create workspace (supports hierarchy with parentWorkspaceId)' })
-  async create(@Body() data: { name: string; organizationId: string; parentWorkspaceId?: string }) {
-    return this.workspaceService.create(data);
+  async create(@Body() data: { name: string; organizationId: string; parentWorkspaceId?: string }, @Req() req: any) {
+    return this.workspaceService.create(data, req.user.organizationId, req.user.id);
   }
 
   @Patch(':id')
   @RequireAction('manage_workspaces')
   @ApiOperation({ summary: 'Update workspace (supports changing parent workspace)' })
-  async update(@Param('id') id: string, @Body() data: { name?: string; parentWorkspaceId?: string | null }) {
-    return this.workspaceService.update(id, data);
+  async update(@Param('id') id: string, @Body() data: { name?: string; parentWorkspaceId?: string | null }, @Req() req: any) {
+    return this.workspaceService.update(id, data, req.user.organizationId, req.user.id);
   }
 
   @Delete(':id')
   @RequireAction('manage_workspaces')
   @ApiOperation({ summary: 'Delete workspace' })
-  async delete(@Param('id') id: string) {
-    return this.workspaceService.delete(id);
+  async delete(@Param('id') id: string, @Req() req: any) {
+    return this.workspaceService.delete(id, req.user.organizationId, req.user.id);
   }
 
   @Get(':id/members')
@@ -69,8 +69,9 @@ export class WorkspaceController {
   async addMember(
     @Param('id') workspaceId: string,
     @Body() data: { userId: string; role?: 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER' },
+    @Req() req: any,
   ) {
-    return this.workspaceService.addMember(workspaceId, data.userId, data.role || 'MEMBER');
+    return this.workspaceService.addMember(workspaceId, data.userId, data.role || 'MEMBER', req.user.organizationId, req.user.id);
   }
 
   @Delete(':id/members/:userId')
@@ -79,8 +80,9 @@ export class WorkspaceController {
   async removeMember(
     @Param('id') workspaceId: string,
     @Param('userId') userId: string,
+    @Req() req: any,
   ) {
-    return this.workspaceService.removeMember(workspaceId, userId);
+    return this.workspaceService.removeMember(workspaceId, userId, req.user.organizationId, req.user.id);
   }
 
   @Get('hierarchy/:organizationId')

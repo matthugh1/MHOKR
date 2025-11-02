@@ -12,10 +12,11 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SuperuserService } from './superuser.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RBACGuard, RequireAction } from '../rbac';
 
 @ApiTags('Superuser')
 @Controller('superuser')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RBACGuard)
 @ApiBearerAuth()
 export class SuperuserController {
   constructor(private readonly superuserService: SuperuserService) {}
@@ -34,6 +35,7 @@ export class SuperuserController {
    * Create a new superuser (requires superuser)
    */
   @Post('create')
+  @RequireAction('impersonate_user')
   @ApiOperation({ summary: 'Create a new superuser account' })
   async createSuperuser(
     @Body() data: { email: string; name: string; password: string },
@@ -52,6 +54,7 @@ export class SuperuserController {
    * Promote user to superuser
    */
   @Post('promote/:userId')
+  @RequireAction('impersonate_user')
   @ApiOperation({ summary: 'Promote user to superuser' })
   async promoteToSuperuser(@Param('userId') userId: string, @Req() req: any) {
     const isSuper = await this.superuserService.isSuperuser(req.user.id);
@@ -66,6 +69,7 @@ export class SuperuserController {
    * Revoke superuser status
    */
   @Post('revoke/:userId')
+  @RequireAction('impersonate_user')
   @ApiOperation({ summary: 'Revoke superuser status' })
   async revokeSuperuser(@Param('userId') userId: string, @Req() req: any) {
     const isSuper = await this.superuserService.isSuperuser(req.user.id);
@@ -97,11 +101,14 @@ export class SuperuserController {
 
   /**
    * Create organization (superuser only)
+   * NOTE: SUPERUSER is read-only per RBAC_MATRIX.md - this endpoint should not exist or should be blocked.
+   * Keeping for now but blocking SUPERUSER mutations at service layer.
    */
   @Post('organizations')
+  @RequireAction('impersonate_user')
   @ApiOperation({ summary: 'Create a new organization' })
   async createOrganization(
-    @Body() data: { name: string; slug: string },
+    @Body() _data: { name: string; slug: string },
     @Req() req: any,
   ) {
     const isSuper = await this.superuserService.isSuperuser(req.user.id);
@@ -109,18 +116,21 @@ export class SuperuserController {
       throw new ForbiddenException('Only superusers can create organizations');
     }
 
-    return this.superuserService.createOrganization(data);
+    // SUPERUSER is read-only - block mutations per RBAC_MATRIX.md
+    throw new ForbiddenException('SUPERUSER is read-only; cannot modify tenant data.');
   }
 
   /**
    * Add user to organization (superuser only)
+   * NOTE: SUPERUSER is read-only per RBAC_MATRIX.md - blocking mutations.
    */
   @Post('organizations/:organizationId/users/:userId')
+  @RequireAction('impersonate_user')
   @ApiOperation({ summary: 'Add user to organization' })
   async addUserToOrganization(
-    @Param('organizationId') organizationId: string,
-    @Param('userId') userId: string,
-    @Body() data: { role?: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER' },
+    @Param('organizationId') _organizationId: string,
+    @Param('userId') _userId: string,
+    @Body() _data: { role?: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER' },
     @Req() req: any,
   ) {
     const isSuper = await this.superuserService.isSuperuser(req.user.id);
@@ -128,21 +138,20 @@ export class SuperuserController {
       throw new ForbiddenException('Only superusers can assign users to organizations');
     }
 
-    return this.superuserService.addUserToOrganization(
-      userId,
-      organizationId,
-      data.role || 'MEMBER',
-    );
+    // SUPERUSER is read-only - block mutations per RBAC_MATRIX.md
+    throw new ForbiddenException('SUPERUSER is read-only; cannot modify tenant data.');
   }
 
   /**
    * Remove user from organization (superuser only)
+   * NOTE: SUPERUSER is read-only per RBAC_MATRIX.md - blocking mutations.
    */
   @Delete('organizations/:organizationId/users/:userId')
+  @RequireAction('impersonate_user')
   @ApiOperation({ summary: 'Remove user from organization' })
   async removeUserFromOrganization(
-    @Param('organizationId') organizationId: string,
-    @Param('userId') userId: string,
+    @Param('organizationId') _organizationId: string,
+    @Param('userId') _userId: string,
     @Req() req: any,
   ) {
     const isSuper = await this.superuserService.isSuperuser(req.user.id);
@@ -150,7 +159,8 @@ export class SuperuserController {
       throw new ForbiddenException('Only superusers can remove users from organizations');
     }
 
-    return this.superuserService.removeUserFromOrganization(userId, organizationId);
+    // SUPERUSER is read-only - block mutations per RBAC_MATRIX.md
+    throw new ForbiddenException('SUPERUSER is read-only; cannot modify tenant data.');
   }
 
   /**
@@ -185,6 +195,7 @@ export class SuperuserController {
    * Impersonate a user (superuser only)
    */
   @Post('impersonate/:userId')
+  @RequireAction('impersonate_user')
   @ApiOperation({ summary: 'Impersonate a user (superuser only)' })
   async impersonateUser(
     @Param('userId') userId: string,

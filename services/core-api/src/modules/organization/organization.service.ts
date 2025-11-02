@@ -1,9 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { OkrTenantGuard } from '../okr/tenant-guard';
+import { AuditLogService } from '../audit/audit-log.service';
+import { AuditTargetType } from '@prisma/client';
 
 @Injectable()
 export class OrganizationService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditLogService: AuditLogService,
+  ) {}
 
   async findAll() {
     return this.prisma.organization.findMany({
@@ -125,26 +131,71 @@ export class OrganizationService {
     return this.findById(organizations[0].id);
   }
 
-  async create(data: { name: string; slug: string }) {
-    return this.prisma.organization.create({
+  async create(data: { name: string; slug: string }, userOrganizationId: string | null | undefined, actorUserId: string) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    const created = await this.prisma.organization.create({
       data,
       include: {
         workspaces: true,
       },
     });
+
+    await this.auditLogService.record({
+      action: 'CREATE_ORG',
+      actorUserId,
+      targetId: created.id,
+      targetType: AuditTargetType.TENANT,
+      organizationId: created.id,
+    });
+
+    return created;
   }
 
-  async update(id: string, data: { name?: string; slug?: string }) {
-    return this.prisma.organization.update({
+  async update(id: string, data: { name?: string; slug?: string }, userOrganizationId: string | null | undefined, actorUserId: string) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Get existing organization to check tenant isolation
+    const existing = await this.findById(id);
+    OkrTenantGuard.assertSameTenant(existing.id, userOrganizationId);
+
+    const updated = await this.prisma.organization.update({
       where: { id },
       data,
       include: {
         workspaces: true,
       },
     });
+
+    await this.auditLogService.record({
+      action: 'UPDATE_ORG',
+      actorUserId,
+      targetId: id,
+      targetType: AuditTargetType.TENANT,
+      organizationId: id,
+    });
+
+    return updated;
   }
 
-  async delete(id: string) {
+  async delete(id: string, userOrganizationId: string | null | undefined, actorUserId: string) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Get existing organization to check tenant isolation
+    const existing = await this.findById(id);
+    OkrTenantGuard.assertSameTenant(existing.id, userOrganizationId);
+
+    await this.auditLogService.record({
+      action: 'DELETE_ORG',
+      actorUserId,
+      targetId: id,
+      targetType: AuditTargetType.TENANT,
+      organizationId: id,
+    });
+
     return this.prisma.organization.delete({
       where: { id },
     });
@@ -217,9 +268,13 @@ export class OrganizationService {
     }));
   }
 
-  async addMember(organizationId: string, userId: string, role: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER' = 'MEMBER') {
-    // Verify organization exists
-    await this.findById(organizationId);
+  async addMember(organizationId: string, userId: string, role: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER' = 'MEMBER', userOrganizationId: string | null | undefined, actorUserId: string) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Verify organization exists and tenant match
+    const org = await this.findById(organizationId);
+    OkrTenantGuard.assertSameTenant(org.id, userOrganizationId);
     
     // Verify user exists
     const user = await this.prisma.user.findUnique({
@@ -240,7 +295,7 @@ export class OrganizationService {
 
     if (existing) {
       // Update role if already exists
-      return this.prisma.organizationMember.update({
+      const updated = await this.prisma.organizationMember.update({
         where: { id: existing.id },
         data: { role },
         include: {
@@ -248,10 +303,22 @@ export class OrganizationService {
           organization: true,
         },
       });
+
+      await this.auditLogService.record({
+        action: 'UPDATE_ORG_MEMBER_ROLE',
+        actorUserId,
+        targetUserId: userId,
+        targetId: userId,
+        targetType: AuditTargetType.USER,
+        organizationId,
+        metadata: { role, previousRole: existing.role },
+      });
+
+      return updated;
     }
 
     // Create new membership
-    return this.prisma.organizationMember.create({
+    const created = await this.prisma.organizationMember.create({
       data: {
         userId,
         organizationId,
@@ -262,9 +329,28 @@ export class OrganizationService {
         organization: true,
       },
     });
+
+    await this.auditLogService.record({
+      action: 'ADD_ORG_MEMBER',
+      actorUserId,
+      targetUserId: userId,
+      targetId: userId,
+      targetType: AuditTargetType.USER,
+      organizationId,
+      metadata: { role },
+    });
+
+    return created;
   }
 
-  async removeMember(organizationId: string, userId: string) {
+  async removeMember(organizationId: string, userId: string, userOrganizationId: string | null | undefined, actorUserId: string) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Verify organization exists and tenant match
+    const org = await this.findById(organizationId);
+    OkrTenantGuard.assertSameTenant(org.id, userOrganizationId);
+
     const membership = await this.prisma.organizationMember.findFirst({
       where: {
         userId,
@@ -275,6 +361,15 @@ export class OrganizationService {
     if (!membership) {
       throw new NotFoundException(`User is not a member of this organization`);
     }
+
+    await this.auditLogService.record({
+      action: 'REMOVE_ORG_MEMBER',
+      actorUserId,
+      targetUserId: userId,
+      targetId: userId,
+      targetType: AuditTargetType.USER,
+      organizationId,
+    });
 
     return this.prisma.organizationMember.delete({
       where: { id: membership.id },

@@ -1,10 +1,16 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
+import { OkrTenantGuard } from '../okr/tenant-guard';
+import { AuditLogService } from '../audit/audit-log.service';
+import { AuditTargetType } from '@prisma/client';
 
 @Injectable()
 export class UserService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditLogService: AuditLogService,
+  ) {}
 
   async findAll() {
     return this.prisma.user.findMany({
@@ -154,7 +160,15 @@ export class UserService {
       role?: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER';
       workspaceRole?: 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER';
     },
+    userOrganizationId: string | null | undefined,
+    actorUserId: string,
   ) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Tenant isolation: verify caller's org matches the org being created in
+    OkrTenantGuard.assertSameTenant(data.organizationId, userOrganizationId);
+
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email: data.email },
@@ -228,17 +242,40 @@ export class UserService {
       return newUser;
     });
 
+    await this.auditLogService.record({
+      action: 'CREATE_USER',
+      actorUserId,
+      targetUserId: user.id,
+      targetId: user.id,
+      targetType: AuditTargetType.USER,
+      organizationId: data.organizationId,
+    });
+
     return user;
   }
 
-  async resetPassword(userId: string, newPassword: string) {
-    // Check if user exists
+  async resetPassword(userId: string, newPassword: string, userOrganizationId: string | null | undefined, actorUserId: string) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Check if user exists and belongs to caller's org
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
+      include: {
+        organizationMembers: {
+          select: { organizationId: true },
+        },
+      },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+
+    // Tenant isolation: verify user belongs to caller's org
+    const userOrgIds = user.organizationMembers.map(om => om.organizationId);
+    if (!userOrgIds.includes(userOrganizationId!)) {
+      throw new NotFoundException('User not found in your organization');
     }
 
     // Hash new password
@@ -250,17 +287,40 @@ export class UserService {
       data: { passwordHash: hashedPassword },
     });
 
+    await this.auditLogService.record({
+      action: 'RESET_PASSWORD',
+      actorUserId,
+      targetUserId: userId,
+      targetId: userId,
+      targetType: AuditTargetType.USER,
+      organizationId: userOrganizationId || undefined,
+    });
+
     return { message: 'Password reset successfully' };
   }
 
-  async updateUser(userId: string, data: { name?: string; email?: string }) {
-    // Check if user exists
+  async updateUser(userId: string, data: { name?: string; email?: string }, userOrganizationId: string | null | undefined, actorUserId: string) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Check if user exists and belongs to caller's org
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
+      include: {
+        organizationMembers: {
+          select: { organizationId: true },
+        },
+      },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+
+    // Tenant isolation: verify user belongs to caller's org
+    const userOrgIds = user.organizationMembers.map(om => om.organizationId);
+    if (!userOrgIds.includes(userOrganizationId!)) {
+      throw new NotFoundException('User not found in your organization');
     }
 
     // Check if email is being changed and if it already exists
@@ -285,6 +345,15 @@ export class UserService {
         createdAt: true,
         updatedAt: true,
       },
+    });
+
+    await this.auditLogService.record({
+      action: 'UPDATE_USER',
+      actorUserId,
+      targetUserId: userId,
+      targetId: userId,
+      targetType: AuditTargetType.USER,
+      organizationId: userOrganizationId || undefined,
     });
 
     return updatedUser;
