@@ -40,7 +40,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Search, X } from 'lucide-react'
+import { Plus, Search, X, Bell } from 'lucide-react'
 // W4.M1: Period utilities removed - Cycle is canonical
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
@@ -94,6 +94,7 @@ export default function OKRsPage() {
   const [expandedObjectiveId, setExpandedObjectiveId] = useState<string | null>(null)
   const [reloadTrigger, setReloadTrigger] = useState(0)
   const [attentionDrawerOpen, setAttentionDrawerOpen] = useState(false)
+  const [attentionCount, setAttentionCount] = useState<number>(0)
   const [liveRegionMessage, setLiveRegionMessage] = useState<string | null>(null)
   const liveRegionRef = useRef<HTMLDivElement>(null)
   const [activeCycles, setActiveCycles] = useState<Array<{
@@ -189,7 +190,8 @@ export default function OKRsPage() {
     loadUsers()
     loadActiveCycles()
     loadOverdueCheckIns()
-  }, [currentOrganization?.id, user])
+    loadAttentionCount()
+  }, [currentOrganization?.id, user, selectedCycleId])
   
   
   const loadUsers = async () => {
@@ -244,6 +246,29 @@ export default function OKRsPage() {
         console.error('Failed to load overdue check-ins:', error)
       }
       setOverdueCheckIns([])
+    }
+  }
+
+  const loadAttentionCount = async () => {
+    if (!selectedCycleId) {
+      setAttentionCount(0)
+      return
+    }
+    try {
+      const params = new URLSearchParams({
+        page: '1',
+        pageSize: '1', // We only need the totalCount
+      })
+      params.append('cycleId', selectedCycleId)
+      
+      const response = await api.get(`/okr/insights/attention?${params.toString()}`)
+      setAttentionCount(response.data?.totalCount || 0)
+    } catch (error: any) {
+      // Attention endpoint is optional - gracefully degrade
+      if (error.response?.status !== 403) {
+        console.error('Failed to load attention count:', error)
+      }
+      setAttentionCount(0)
     }
   }
 
@@ -602,48 +627,21 @@ export default function OKRsPage() {
       <DashboardLayout>
         <div className="p-8">
           <header role="banner" className="mb-8">
-            <div className="flex items-start justify-between flex-wrap gap-4">
-              <div className="flex-1">
-                <PageHeader
-                  title="Objectives & Key Results"
-                  subtitle="Aligned execution. Live progress. Governance state at a glance."
-                  badges={[
-                    ...(selectedTimeframeLabel ? [
-                      {
-                        label: `Viewing: ${selectedTimeframeLabel}`,
-                        tone: 'neutral' as const,
-                      },
-                    ] : []),
-                    ...(activeCycles.some((c) => c.status === 'LOCKED')
-                      ? [{ label: 'Locked', tone: 'warning' as const }]
-                      : []),
-                  ]}
-                />
-              </div>
-              <div className="flex items-center gap-4">
-                {/* W4.M1: Permission-gated New Objective button */}
-                {canCreateObjective && (
-                  <Button 
-                    onClick={() => setIsCreateDrawerOpen(true)}
-                    data-focus-restorer
-                    aria-label="Create new objective"
-                    className="focus:ring-2 focus:ring-ring focus:outline-none"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Objective
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  onClick={() => setAttentionDrawerOpen(true)}
-                  data-focus-restorer
-                  aria-label="Open needs attention drawer"
-                  className="focus:ring-2 focus:ring-ring focus:outline-none"
-                >
-                  Needs attention
-                </Button>
-              </div>
-            </div>
+            <PageHeader
+              title="Objectives & Key Results"
+              subtitle="Aligned execution. Live progress. Governance state at a glance."
+              badges={[
+                ...(selectedTimeframeLabel ? [
+                  {
+                    label: `Viewing: ${selectedTimeframeLabel}`,
+                    tone: 'neutral' as const,
+                  },
+                ] : []),
+                ...(activeCycles.some((c) => c.status === 'LOCKED')
+                  ? [{ label: 'Locked', tone: 'warning' as const }]
+                  : []),
+              ]}
+            />
             {/* Cycle Health Strip */}
             {selectedCycleId && (
               <div className="mt-4">
@@ -758,83 +756,136 @@ export default function OKRsPage() {
             {/* Removed duplicate cycle select - using CycleSelector in filters section below */}
           </div>
 
-          {/* Filters and Search */}
-          <div className="mb-6 space-y-4">
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex-1 relative min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input 
-                  placeholder="Search OKRs..." 
-                  className="pl-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+          {/* Filters and Search Toolbar */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              {/* Left: Filters */}
+              <div className="flex items-center gap-4 flex-wrap flex-1 min-w-0">
+                <div className="flex-1 relative min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input 
+                    placeholder="Search OKRs..." 
+                    className="pl-10"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                
+                <Select value={filterWorkspaceId} onValueChange={setFilterWorkspaceId}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="All Workspaces" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Workspaces</SelectItem>
+                    {workspaces.map(ws => (
+                      <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Select value={filterTeamId} onValueChange={setFilterTeamId}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="All Teams" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Teams</SelectItem>
+                    {teams.map(team => (
+                      <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                <Select value={filterOwnerId} onValueChange={setFilterOwnerId}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="All Owners" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Owners</SelectItem>
+                    {availableUsers.map(u => (
+                      <SelectItem key={u.id} value={u.id}>{u.name || u.email}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                
+                {/* W4.M1: Cycle selector only (periods removed) */}
+                <CycleSelector
+                  cycles={normalizedCycles}
+                  legacyPeriods={legacyPeriods}
+                  selectedId={selectedTimeframeKey}
+                  onSelect={(opt: { key: string; label: string }) => {
+                    setSelectedTimeframeKey(opt.key)
+                    setSelectedTimeframeLabel(opt.label)
+                    // Sync selectedCycleId when a cycle is selected (for CycleHealthStrip and AttentionDrawer)
+                    // Only set if it's a valid cycle ID (not 'all' or 'unassigned')
+                    if (opt.key && opt.key !== 'all' && opt.key !== 'unassigned' && normalizedCycles.some(c => c.id === opt.key)) {
+                      setSelectedCycleId(opt.key)
+                    } else {
+                      setSelectedCycleId(null)
+                    }
+                  }}
                 />
+                
+                {hasActiveFilters && (
+                  <Button variant="outline" size="sm" onClick={clearFilters}>
+                    <X className="h-4 w-4 mr-1" />
+                    Clear Filters
+                  </Button>
+                )}
               </div>
-              
-              <Select value={filterWorkspaceId} onValueChange={setFilterWorkspaceId}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All Workspaces" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Workspaces</SelectItem>
-                  {workspaces.map(ws => (
-                    <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              <Select value={filterTeamId} onValueChange={setFilterTeamId}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All Teams" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Teams</SelectItem>
-                  {teams.map(team => (
-                    <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              <Select value={filterOwnerId} onValueChange={setFilterOwnerId}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All Owners" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Owners</SelectItem>
-                  {availableUsers.map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.name || u.email}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              {/* W4.M1: Cycle selector only (periods removed) */}
-              <CycleSelector
-                cycles={normalizedCycles}
-                legacyPeriods={legacyPeriods}
-                selectedId={selectedTimeframeKey}
-                onSelect={(opt: { key: string; label: string }) => {
-                  setSelectedTimeframeKey(opt.key)
-                  setSelectedTimeframeLabel(opt.label)
-                  // Sync selectedCycleId when a cycle is selected (for CycleHealthStrip and AttentionDrawer)
-                  // Only set if it's a valid cycle ID (not 'all' or 'unassigned')
-                  if (opt.key && opt.key !== 'all' && opt.key !== 'unassigned' && normalizedCycles.some(c => c.id === opt.key)) {
-                    setSelectedCycleId(opt.key)
-                  } else {
-                    setSelectedCycleId(null)
-                  }
-                }}
-              />
-              
-              {hasActiveFilters && (
-                <Button variant="outline" size="sm" onClick={clearFilters}>
-                  <X className="h-4 w-4 mr-1" />
-                  Clear Filters
+
+              {/* Right: Actions */}
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {/* Needs Attention - Icon button with badge */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    setAttentionDrawerOpen(true)
+                    console.log('[Telemetry] okr.attention.open', {
+                      userId: user?.id,
+                      cycleId: selectedCycleId,
+                      timestamp: new Date().toISOString(),
+                    })
+                  }}
+                  aria-label="Open attention drawer"
+                  className="relative focus:ring-2 focus:ring-ring focus:outline-none"
+                >
+                  <Bell className="h-4 w-4" />
+                  {attentionCount > 0 && (
+                    <Badge 
+                      variant="destructive" 
+                      className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                      aria-label={`${attentionCount} items need attention`}
+                    >
+                      {attentionCount > 99 ? '99+' : attentionCount}
+                    </Badge>
+                  )}
                 </Button>
-              )}
+
+                {/* New Objective - Permission-gated */}
+                {canCreateObjective && (
+                  <Button 
+                    onClick={() => {
+                      setIsCreateDrawerOpen(true)
+                      console.log('[Telemetry] okr.create.open', {
+                        userId: user?.id,
+                        cycleId: selectedCycleId,
+                        timestamp: new Date().toISOString(),
+                      })
+                    }}
+                    aria-label="Create new objective"
+                    className="focus:ring-2 focus:ring-ring focus:outline-none"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Objective
+                  </Button>
+                )}
+              </div>
             </div>
             
+            {/* Active Filters Display */}
             {hasActiveFilters && (
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap mt-3">
                 <span className="text-sm text-slate-600">Active filters:</span>
                 {filterWorkspaceId !== 'all' && (
                   <Badge variant="secondary" className="text-xs">
@@ -853,7 +904,6 @@ export default function OKRsPage() {
                 )}
               </div>
             )}
-            {/* [phase6-polish] Reintroduce compact multi-column grid view for exec scanning. */}
           </div>
 
           {/* Live Region for Async Announcements */}
@@ -1143,7 +1193,11 @@ export default function OKRsPage() {
           {/* Attention Drawer */}
           <AttentionDrawer
             isOpen={attentionDrawerOpen}
-            onClose={() => setAttentionDrawerOpen(false)}
+            onClose={() => {
+              setAttentionDrawerOpen(false)
+              // Refresh attention count when drawer closes
+              loadAttentionCount()
+            }}
             cycleId={selectedCycleId}
             onNavigateToObjective={(objectiveId) => {
               // Scroll to objective or expand it
