@@ -251,6 +251,165 @@ export class RBACService {
   }
 
   /**
+   * Get effective permissions for a user
+   * 
+   * Returns all actions the user can perform at different scopes.
+   * Used for debugging, auditing, and RBAC visualization.
+   */
+  async getEffectivePermissions(
+    userId: string,
+    filterTenantId?: string,
+    filterWorkspaceId?: string,
+    filterTeamId?: string,
+  ): Promise<{
+    userId: string;
+    isSuperuser: boolean;
+    scopes: Array<{
+      tenantId: string;
+      workspaceId?: string;
+      teamId?: string;
+      effectiveRoles: Role[];
+      actionsAllowed: Action[];
+      actionsDenied: Action[];
+    }>;
+  }> {
+    const userContext = await this.buildUserContext(userId, false);
+    
+    // Define all possible actions to test
+    const allActions: Action[] = [
+      'view_okr',
+      'edit_okr',
+      'delete_okr',
+      'create_okr',
+      'request_checkin',
+      'publish_okr',
+      'manage_users',
+      'manage_billing',
+      'manage_workspaces',
+      'manage_teams',
+      'impersonate_user',
+      'manage_tenant_settings',
+      'view_all_okrs',
+      'export_data',
+    ];
+
+    const scopes: Array<{
+      tenantId: string;
+      workspaceId?: string;
+      teamId?: string;
+      effectiveRoles: Role[];
+      actionsAllowed: Action[];
+      actionsDenied: Action[];
+    }> = [];
+
+    // Get all tenants user has roles in
+    const tenantIds = filterTenantId 
+      ? [filterTenantId] 
+      : Array.from(userContext.tenantRoles.keys());
+
+    for (const tenantId of tenantIds) {
+      // Tenant-level scope
+      if (!filterWorkspaceId && !filterTeamId) {
+        const effectiveRoles = getEffectiveRoles(userContext, tenantId);
+        const actionsAllowed: Action[] = [];
+        const actionsDenied: Action[] = [];
+
+        for (const action of allActions) {
+          const resourceContext: ResourceContext = { tenantId };
+          const allowed = can(userContext, action, resourceContext);
+          
+          if (allowed) {
+            actionsAllowed.push(action);
+          } else {
+            actionsDenied.push(action);
+          }
+        }
+
+        scopes.push({
+          tenantId,
+          effectiveRoles,
+          actionsAllowed,
+          actionsDenied,
+        });
+      }
+
+      // Workspace-level scopes
+      const workspaceIds = filterWorkspaceId 
+        ? [filterWorkspaceId] 
+        : Array.from(userContext.workspaceRoles.keys());
+
+      for (const workspaceId of workspaceIds) {
+        if (!filterTeamId) {
+          const effectiveRoles = getEffectiveRoles(userContext, tenantId, workspaceId);
+          const actionsAllowed: Action[] = [];
+          const actionsDenied: Action[] = [];
+
+          for (const action of allActions) {
+            const resourceContext: ResourceContext = { 
+              tenantId, 
+              workspaceId 
+            };
+            const allowed = can(userContext, action, resourceContext);
+            
+            if (allowed) {
+              actionsAllowed.push(action);
+            } else {
+              actionsDenied.push(action);
+            }
+          }
+
+          scopes.push({
+            tenantId,
+            workspaceId,
+            effectiveRoles,
+            actionsAllowed,
+            actionsDenied,
+          });
+        }
+      }
+
+      // Team-level scopes
+      const teamIds = filterTeamId 
+        ? [filterTeamId] 
+        : Array.from(userContext.teamRoles.keys());
+
+      for (const teamId of teamIds) {
+        const effectiveRoles = getEffectiveRoles(userContext, tenantId, null, teamId);
+        const actionsAllowed: Action[] = [];
+        const actionsDenied: Action[] = [];
+
+        for (const action of allActions) {
+          const resourceContext: ResourceContext = { 
+            tenantId, 
+            teamId 
+          };
+          const allowed = can(userContext, action, resourceContext);
+          
+          if (allowed) {
+            actionsAllowed.push(action);
+          } else {
+            actionsDenied.push(action);
+          }
+        }
+
+        scopes.push({
+          tenantId,
+          teamId,
+          effectiveRoles,
+          actionsAllowed,
+          actionsDenied,
+        });
+      }
+    }
+
+    return {
+      userId,
+      isSuperuser: userContext.isSuperuser,
+      scopes,
+    };
+  }
+
+  /**
    * Assign a role to a user
    */
   async assignRole(

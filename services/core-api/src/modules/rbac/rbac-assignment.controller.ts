@@ -21,11 +21,13 @@ import { RBACService } from './rbac.service';
 import { ExecWhitelistService } from './exec-whitelist.service';
 import { UserService } from '../user/user.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AuditLogService } from '../audit/audit-log.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard } from './rbac.guard';
 import { RequireAction } from './rbac.decorator';
 import { Role, ScopeType } from './types';
 import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
+import { AuditTargetType } from '@prisma/client';
 
 interface AssignRoleDto {
   userEmail: string;
@@ -44,6 +46,7 @@ export class RBACAssignmentController {
     private rbacService: RBACService,
     private userService: UserService,
     private prisma: PrismaService,
+    private auditLogService: AuditLogService,
   ) {}
 
   @Get('me')
@@ -108,6 +111,74 @@ export class RBACAssignmentController {
       isSuperuser: req.user.isSuperuser || false,
       roles: rolesByScope,
     };
+  }
+
+  @Get('effective')
+  @ApiOperation({ 
+    summary: 'Get effective permissions for current user or specified user',
+    description: 'Returns all actions the user can perform at different scopes, based on their roles. Useful for debugging and auditing RBAC rules. Admin users can inspect other users by providing userId query param.'
+  })
+  @ApiQuery({ name: 'userId', required: false, description: 'User ID to inspect (requires manage_users permission). If omitted, returns current user permissions.' })
+  @ApiQuery({ name: 'tenantId', required: false, description: 'Filter by tenant ID' })
+  @ApiQuery({ name: 'workspaceId', required: false, description: 'Filter by workspace ID' })
+  @ApiQuery({ name: 'teamId', required: false, description: 'Filter by team ID' })
+  async getEffectivePermissions(
+    @Request() req: any,
+    @Query('userId') userId?: string,
+    @Query('tenantId') tenantId?: string,
+    @Query('workspaceId') workspaceId?: string,
+    @Query('teamId') teamId?: string,
+  ) {
+    // If userId is provided, verify caller has manage_users permission and enforce tenant isolation
+    if (userId && userId !== req.user.id) {
+      // Check manage_users permission for the tenant scope
+      const canManage = await this.rbacService.canPerformAction(
+        req.user.id,
+        'manage_users',
+        { tenantId: tenantId || req.user.organizationId || undefined },
+      );
+
+      if (!canManage) {
+        throw new NotFoundException('Permission denied: manage_users required to inspect other users');
+      }
+
+      // Verify tenant isolation: ensure target user belongs to the same tenant if tenantId provided
+      if (tenantId) {
+        const targetUserContext = await this.rbacService.buildUserContext(userId, false);
+        const targetUserTenants = Array.from(targetUserContext.tenantRoles.keys());
+        
+        if (!targetUserTenants.includes(tenantId)) {
+          throw new NotFoundException('User not found in specified tenant');
+        }
+      }
+    }
+
+    const targetUserId = userId || req.user.id;
+
+    // Record audit log if inspecting another user
+    if (userId && userId !== req.user.id) {
+      await this.auditLogService.record({
+        action: 'view_user_access',
+        actorUserId: req.user.id,
+        targetUserId: userId,
+        targetId: userId,
+        targetType: AuditTargetType.USER,
+        organizationId: tenantId || req.user.organizationId || null,
+        metadata: { 
+          inspectedUserId: userId,
+          tenantId: tenantId || undefined,
+          workspaceId: workspaceId || undefined,
+          teamId: teamId || undefined,
+        },
+      });
+    }
+
+    return await this.rbacService.getEffectivePermissions(
+      targetUserId,
+      tenantId,
+      workspaceId,
+      teamId,
+    );
   }
 
   @Get()
