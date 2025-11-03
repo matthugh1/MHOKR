@@ -321,13 +321,6 @@ export function ObjectiveRow({
     try {
       const response = await api.patch(`/objectives/${optimisticObjective.id}`, { title: newTitle })
       
-      console.log('[Telemetry] okr.inline.save.success', {
-        kind: 'objective',
-        field: 'title',
-        objectiveId: optimisticObjective.id,
-        timestamp: new Date().toISOString(),
-      })
-      
       // Update from server response
       setOptimisticObjective(prev => ({ ...prev, title: response.data.title }))
       onUpdate?.()
@@ -347,14 +340,6 @@ export function ObjectiveRow({
         variant: toastVariant,
       })
       
-      console.log('[Telemetry] okr.inline.save.error', {
-        kind: 'objective',
-        field: 'title',
-        httpStatus: error.response?.status,
-        objectiveId: optimisticObjective.id,
-        timestamp: new Date().toISOString(),
-      })
-      
       throw error
     }
   }
@@ -372,13 +357,6 @@ export function ObjectiveRow({
       const response = await api.patch(`/objectives/${optimisticObjective.id}`, { ownerId: userId })
       
       const updatedOwner = availableUsers.find(u => u.id === response.data.ownerId) || newOwner
-      
-      console.log('[Telemetry] okr.inline.save.success', {
-        kind: 'objective',
-        field: 'owner',
-        objectiveId: optimisticObjective.id,
-        timestamp: new Date().toISOString(),
-      })
       
       // Update from server response
       setOptimisticObjective(prev => ({
@@ -402,14 +380,6 @@ export function ObjectiveRow({
         variant: toastVariant,
       })
       
-      console.log('[Telemetry] okr.inline.save.error', {
-        kind: 'objective',
-        field: 'owner',
-        httpStatus: error.response?.status,
-        objectiveId: optimisticObjective.id,
-        timestamp: new Date().toISOString(),
-      })
-      
       throw error
     }
   }
@@ -420,13 +390,6 @@ export function ObjectiveRow({
     
     try {
       const response = await api.patch(`/objectives/${optimisticObjective.id}`, { status })
-      
-      console.log('[Telemetry] okr.inline.save.success', {
-        kind: 'objective',
-        field: 'status',
-        objectiveId: optimisticObjective.id,
-        timestamp: new Date().toISOString(),
-      })
       
       // Update from server response
       setOptimisticObjective(prev => ({ ...prev, status: response.data.status }))
@@ -447,14 +410,6 @@ export function ObjectiveRow({
         variant: toastVariant,
       })
       
-      console.log('[Telemetry] okr.inline.save.error', {
-        kind: 'objective',
-        field: 'status',
-        httpStatus: error.response?.status,
-        objectiveId: optimisticObjective.id,
-        timestamp: new Date().toISOString(),
-      })
-      
       throw error
     }
   }
@@ -469,13 +424,6 @@ export function ObjectiveRow({
     
     try {
       const response = await api.patch(`/key-results/${krId}`, { title: newTitle })
-      
-      console.log('[Telemetry] okr.inline.save.success', {
-        kind: 'kr',
-        field: 'title',
-        keyResultId: krId,
-        timestamp: new Date().toISOString(),
-      })
       
       // Update from server response
       setOptimisticObjective(prev => ({
@@ -505,14 +453,6 @@ export function ObjectiveRow({
         variant: toastVariant,
       })
       
-      console.log('[Telemetry] okr.inline.save.error', {
-        kind: 'kr',
-        field: 'title',
-        httpStatus: error.response?.status,
-        keyResultId: krId,
-        timestamp: new Date().toISOString(),
-      })
-      
       throw error
     }
   }
@@ -520,13 +460,6 @@ export function ObjectiveRow({
   const handleUpdateKeyResultOwner = async (krId: string, userId: string) => {
     try {
       const response = await api.patch(`/key-results/${krId}`, { ownerId: userId })
-      
-      console.log('[Telemetry] okr.inline.save.success', {
-        kind: 'kr',
-        field: 'owner',
-        keyResultId: krId,
-        timestamp: new Date().toISOString(),
-      })
       
       // Update from server response - need to refresh KR ownerId
       setOptimisticObjective(prev => ({
@@ -547,14 +480,6 @@ export function ObjectiveRow({
         variant: toastVariant,
       })
       
-      console.log('[Telemetry] okr.inline.save.error', {
-        kind: 'kr',
-        field: 'owner',
-        httpStatus: error.response?.status,
-        keyResultId: krId,
-        timestamp: new Date().toISOString(),
-      })
-      
       throw error
     }
   }
@@ -568,13 +493,6 @@ export function ObjectiveRow({
     
     try {
       const response = await api.patch(`/key-results/${krId}`, { currentValue: value })
-      
-      console.log('[Telemetry] okr.inline.save.success', {
-        kind: 'kr',
-        field: 'current',
-        keyResultId: krId,
-        timestamp: new Date().toISOString(),
-      })
       
       // Update from server response
       setOptimisticObjective(prev => ({
@@ -604,14 +522,6 @@ export function ObjectiveRow({
         variant: toastVariant,
       })
       
-      console.log('[Telemetry] okr.inline.save.error', {
-        kind: 'kr',
-        field: 'current',
-        httpStatus: error.response?.status,
-        keyResultId: krId,
-        timestamp: new Date().toISOString(),
-      })
-      
       throw error
     }
   }
@@ -625,13 +535,6 @@ export function ObjectiveRow({
     
     try {
       const response = await api.patch(`/key-results/${krId}`, { targetValue: value })
-      
-      console.log('[Telemetry] okr.inline.save.success', {
-        kind: 'kr',
-        field: 'target',
-        keyResultId: krId,
-        timestamp: new Date().toISOString(),
-      })
       
       // Update from server response
       setOptimisticObjective(prev => ({
@@ -659,14 +562,6 @@ export function ObjectiveRow({
         title: 'Could not save',
         description: errorInfo.message,
         variant: toastVariant,
-      })
-      
-      console.log('[Telemetry] okr.inline.save.error', {
-        kind: 'kr',
-        field: 'target',
-        httpStatus: error.response?.status,
-        keyResultId: krId,
-        timestamp: new Date().toISOString(),
       })
       
       throw error
@@ -925,7 +820,7 @@ export function ObjectiveRow({
             )}
             
             {/* Fallback: Legacy + KR button (if contextual menu not available but onAddKeyResult provided) */}
-            {!canCreateKeyResult && !canCreateInitiative && onAddKeyResult && (
+            {canCreateKeyResult === false && canCreateInitiative === false && onAddKeyResult && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -938,7 +833,7 @@ export function ObjectiveRow({
             )}
             
             {/* Fallback: Legacy + Initiative button (if contextual menu not available but onAddInitiative provided) */}
-            {!canCreateKeyResult && !canCreateInitiative && onAddInitiative && (
+            {canCreateKeyResult === false && canCreateInitiative === false && onAddInitiative && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -950,54 +845,36 @@ export function ObjectiveRow({
               </Button>
             )}
             
-            {/* Edit button */}
-            {onEdit && (
-              canEdit ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2 text-[12px] font-medium"
-                  onClick={() => onEdit(objective.id)}
-                  aria-label="Edit objective"
-                >
-                  Edit
-                </Button>
-              ) : (
-                <RbacWhyTooltip
-                  action="edit_okr"
-                  resource={objective}
-                  allowed={false}
-                >
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-2 text-[12px] font-medium opacity-50 cursor-not-allowed"
-                    disabled
-                    aria-label="Edit objective (not permitted)"
-                  >
-                    Edit
-                  </Button>
-                </RbacWhyTooltip>
-              )
-            )}
-            
-            {/* Menu button */}
-            <div className="relative" ref={menuRef}>
+            {/* Edit button - hidden if not permitted */}
+            {onEdit && canEdit && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 w-8 p-0"
-                onClick={() => setMenuOpen(!menuOpen)}
-                aria-label="More actions"
+                className="h-8 px-2 text-[12px] font-medium"
+                onClick={() => onEdit(objective.id)}
+                aria-label="Edit objective"
               >
-                <MoreVertical className="h-4 w-4" />
+                Edit
               </Button>
-              
-              {/* Menu dropdown */}
-              {menuOpen && (
-                <div className="absolute right-0 top-full mt-1 rounded-md border bg-white shadow-lg text-[13px] z-50 min-w-[160px]">
-                  {onDelete && (
-                    canDelete ? (
+            )}
+            
+            {/* Menu button - only show if at least one action is available */}
+            {((onDelete && canDelete) || (typeof onOpenHistory === 'function')) ? (
+              <div className="relative" ref={menuRef}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={() => setMenuOpen(!menuOpen)}
+                  aria-label="More actions"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+                
+                {/* Menu dropdown */}
+                {menuOpen && (
+                  <div className="absolute right-0 top-full mt-1 rounded-md border bg-white shadow-lg text-[13px] z-50 min-w-[160px]">
+                    {onDelete && canDelete && (
                       <button
                         className="w-full px-3 py-2 text-left hover:bg-neutral-100 rounded-t-md text-rose-600"
                         onClick={() => {
@@ -1007,35 +884,22 @@ export function ObjectiveRow({
                       >
                         Delete Objective
                       </button>
-                    ) : (
-                      <RbacWhyTooltip
-                        action="delete_okr"
-                        resource={objective}
-                        allowed={false}
+                    )}
+                    {onOpenHistory != null && (
+                      <button
+                        className={`w-full px-3 py-2 text-left hover:bg-neutral-100 ${((onDelete && canDelete)) ? 'rounded-b-md' : 'rounded-t-md rounded-b-md'}`}
+                        onClick={() => {
+                          onOpenHistory()
+                          setMenuOpen(false)
+                        }}
                       >
-                        <button
-                          className="w-full px-3 py-2 text-left text-slate-400 opacity-50 cursor-not-allowed rounded-t-md"
-                          disabled
-                        >
-                          Delete Objective
-                        </button>
-                      </RbacWhyTooltip>
-                    )
-                  )}
-                  {onOpenHistory ? (
-                    <button
-                      className={`w-full px-3 py-2 text-left hover:bg-neutral-100 ${(onDelete !== undefined && canDelete) ? '' : 'rounded-t-md'} rounded-b-md`}
-                      onClick={() => {
-                        onOpenHistory()
-                        setMenuOpen(false)
-                      }}
-                    >
-                      View history
-                    </button>
-                  ) : null}
-                </div>
-              )}
-            </div>
+                        View history
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : null}
             
             {/* Chevron */}
             <motion.div
@@ -1276,19 +1140,21 @@ export function ObjectiveRow({
                 ) : (
                   <div className="rounded-lg border border-dashed border-neutral-300 bg-white/60 p-4 text-center">
                     <p className="text-[13px] text-neutral-600 mb-2">No initiatives yet</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2 text-[11px] font-medium"
-                      onClick={() => onAddInitiative(objective.id, objective.title)}
-                    >
-                      + New Initiative
-                    </Button>
+                    {canCreateInitiative && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 px-2 text-[11px] font-medium"
+                        onClick={() => onAddInitiative(objective.id, objective.title)}
+                      >
+                        + New Initiative
+                      </Button>
+                    )}
                   </div>
                 )}
                 
-                {/* Always show + New Initiative button at the end */}
-                {initiatives.length > 0 && (
+                {/* Always show + New Initiative button at the end if permitted */}
+                {initiatives.length > 0 && canCreateInitiative && (
                   <div className="mt-3">
                     <Button
                       variant="outline"

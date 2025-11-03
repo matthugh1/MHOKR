@@ -31,6 +31,7 @@ interface OKRPageContainerProps {
   selectedTimeframeKey: string | null
   selectedStatus: string | null
   selectedCycleId: string | null
+  selectedScope: 'my' | 'team-workspace' | 'tenant'
   onAction: {
     onEdit: (okr: any) => void
     onDelete: (okr: any) => void
@@ -77,18 +78,6 @@ function mapObjectiveToViewModel(rawObjective: any): any {
     timeframeKey = normaliseLabelToKey(rawObjective.timeframeLabel)
   } else if (rawObjective.cycle?.name && typeof rawObjective.cycle.name === 'string') {
     timeframeKey = normaliseLabelToKey(rawObjective.cycle.name)
-  }
-  
-  // Debug: Log if timeframeKey is still 'unassigned' but cycleId exists
-  if (timeframeKey === 'unassigned' && rawObjective.cycleId) {
-    console.warn('[OKR PAGE CONTAINER] ⚠️ timeframeKey not set despite cycleId:', {
-      title: rawObjective.title,
-      cycleId: rawObjective.cycleId,
-      cycleIdType: typeof rawObjective.cycleId,
-      cycleIdLength: rawObjective.cycleId?.length,
-      hasCycle: !!rawObjective.cycle,
-      cycleIdFromCycle: rawObjective.cycle?.id,
-    })
   }
   
   // Ensure timeframeKey is always a string (never undefined)
@@ -203,6 +192,7 @@ export function OKRPageContainer({
   selectedTimeframeKey,
   selectedStatus,
   selectedCycleId,
+  selectedScope,
   onAction,
   expandedObjectiveId,
   onToggleObjective,
@@ -238,14 +228,6 @@ export function OKRPageContainer({
         pageSize: pageSize.toString(),
       })
       
-      // Debug: Log what organizationId is being sent
-      console.log('[OKR PAGE CONTAINER] Sending request with:', {
-        organizationId: currentOrganization.id,
-        organizationName: currentOrganization.name,
-        userId: user?.id,
-        userEmail: user?.email,
-      })
-      
       if (selectedCycleId) {
         params.set('cycleId', selectedCycleId)
       }
@@ -254,32 +236,24 @@ export function OKRPageContainer({
         params.set('status', selectedStatus)
       }
       
+      // Apply scope-based filtering
+      if (selectedScope === 'my' && user?.id) {
+        // My scope: filter by ownerId
+        // Note: backend visibility filtering handles this, but we can add explicit filter if needed
+        // For now, rely on backend visibility
+      } else if (selectedScope === 'team-workspace') {
+        // Team/Workspace scope: use managed workspace/team IDs
+        // Backend visibility filtering will handle this
+      } else if (selectedScope === 'tenant') {
+        // Tenant scope: show all visible OKRs in tenant
+        // Backend visibility filtering handles this
+      }
+      
       const response = await api.get(`/okr/overview?${params.toString()}`)
       
       // Backend now returns paginated envelope
       const envelope = response.data || {}
       const objectives = envelope.objectives || []
-      
-      // Debug: Log the full response to see what we're actually getting
-      console.log('[OKR PAGE CONTAINER] Full response:', {
-        responseDataType: typeof response.data,
-        envelopeKeys: Object.keys(envelope),
-        envelope: envelope,
-        hasCanCreateObjective: 'canCreateObjective' in envelope,
-        canCreateObjectiveValue: envelope.canCreateObjective,
-        canCreateObjectiveType: typeof envelope.canCreateObjective,
-      })
-      
-      // Debug: Log specifically about canCreateObjective
-      if (envelope.canCreateObjective === false) {
-        console.warn('[OKR PAGE CONTAINER] ⚠️ canCreateObjective is FALSE', {
-          organizationIdSent: currentOrganization.id,
-          userId: user?.id,
-          userEmail: user?.email,
-          'Expected organizationId (from role assignment)': 'cmhesnyvx00004xhjjxs272gs',
-          'Does sent ID match expected?': currentOrganization.id === 'cmhesnyvx00004xhjjxs272gs',
-        })
-      }
       
       setTotalCount(envelope.totalCount || 0)
       
@@ -290,7 +264,6 @@ export function OKRPageContainer({
         } else {
           // Fallback: if backend doesn't return flag, default to false
           // This is conservative - button won't show until backend explicitly allows it
-          console.warn('[OKR PAGE CONTAINER] Backend did not return canCreateObjective flag, defaulting to false')
           onCanCreateChange(false)
         }
       }
@@ -298,31 +271,6 @@ export function OKRPageContainer({
       const mapped = Array.isArray(objectives) ? objectives.map((obj: any) => 
         mapObjectiveData(obj, availableUsers, activeCycles, overdueCheckIns)
       ) : []
-      
-      // Debug: Log Test objectives specifically
-      const testObjectives = mapped.filter((obj: any) => obj.title === 'Test')
-      if (testObjectives.length > 0) {
-        console.log('[OKR PAGE CONTAINER] ✅ Test objectives received from backend:', testObjectives.length)
-        testObjectives.forEach((obj: any) => {
-          console.log('[OKR PAGE CONTAINER] Test objective details:', {
-            id: obj.id,
-            title: obj.title,
-            cycleId: obj.cycleId,
-            timeframeKey: obj.timeframeKey,
-            selectedTimeframeKey,
-            matchesTimeframe: obj.timeframeKey === selectedTimeframeKey,
-            isPublished: obj.isPublished,
-            status: obj.status,
-          })
-        })
-      } else {
-        console.log('[OKR PAGE CONTAINER] ⚠️ No Test objectives received from backend')
-        console.log('[OKR PAGE CONTAINER] All objectives received:', objectives.map((obj: any) => ({
-          id: obj.id?.substring(0, 15),
-          title: obj.title,
-          cycleId: obj.cycleId,
-        })))
-      }
       
       setObjectivesPage(mapped)
     } catch (error: any) {
@@ -344,22 +292,6 @@ export function OKRPageContainer({
   const objectivesViewModel = useMemo(() => {
     const safeObjectives = Array.isArray(objectivesPage) ? objectivesPage : []
     const mapped = safeObjectives.map(mapObjectiveToViewModel)
-    
-    // Debug: Check Test objectives after mapObjectiveToViewModel
-    const testObjsAfterMapping = mapped.filter((obj: any) => obj.title === 'Test')
-    if (testObjsAfterMapping.length > 0) {
-      testObjsAfterMapping.forEach((obj: any) => {
-        console.log('[OKR PAGE CONTAINER] Test objective after mapObjectiveToViewModel:', {
-          id: obj.id,
-          title: obj.title,
-          cycleId: obj.cycleId,
-          timeframeKey: obj.timeframeKey,
-          hasCycleId: !!obj.cycleId,
-          hasCycleObject: !!obj.cycle,
-          cycleObjectId: obj.cycle?.id,
-        })
-      })
-    }
     
     return mapped
   }, [objectivesPage])

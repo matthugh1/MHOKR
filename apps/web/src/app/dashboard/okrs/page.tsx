@@ -67,7 +67,6 @@ import { OKRCreationDrawer } from './components/OKRCreationDrawer'
 import { CycleHealthStrip } from '@/components/okr/CycleHealthStrip'
 import { AttentionDrawer } from '@/components/okr/AttentionDrawer'
 import api from '@/lib/api'
-import { logTokenInfo } from '@/lib/jwt-debug'
 import { cn } from '@/lib/utils'
 
 // NOTE: This screen is now the system of record for CRUD on Objectives, Key Results, and Initiatives.
@@ -82,9 +81,54 @@ export default function OKRsPage() {
   const [filterOwnerId, setFilterOwnerId] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   
-  const { workspaces, teams, currentOrganization } = useWorkspace()
+  const { workspaces, teams, currentOrganization, isSuperuser } = useWorkspace()
   const { user } = useAuth()
   const permissions = usePermissions()
+  
+  // Scope toggle: My | Team/Workspace | Tenant
+  const availableScopes = useMemo(() => {
+    const scopes: Array<'my' | 'team-workspace' | 'tenant'> = []
+    
+    // "My" is always available
+    scopes.push('my')
+    
+    // "Team/Workspace" if user has WORKSPACE_* or TEAM_* roles
+    const hasWorkspaceRole = permissions.rolesByScope?.workspace?.some(
+      (w: any) => w.roles.some((r: string) => r.startsWith('WORKSPACE_'))
+    )
+    const hasTeamRole = permissions.rolesByScope?.team?.some(
+      (t: any) => t.roles.some((r: string) => r.startsWith('TEAM_'))
+    )
+    if (hasWorkspaceRole || hasTeamRole) {
+      scopes.push('team-workspace')
+    }
+    
+    // "Tenant" if user has TENANT_ADMIN / TENANT_OWNER / SUPERUSER
+    if (
+      currentOrganization?.id &&
+      (permissions.isTenantAdminOrOwner(currentOrganization.id) || isSuperuser)
+    ) {
+      scopes.push('tenant')
+    }
+    
+    return scopes
+  }, [permissions, currentOrganization?.id, isSuperuser])
+  
+  // Determine default scope
+  const defaultScope = useMemo(() => {
+    // Check if user has personal OKRs (we'll check this after data loads)
+    // For now, default based on available scopes
+    if (availableScopes.includes('my')) {
+      return 'my'
+    } else if (availableScopes.includes('team-workspace')) {
+      return 'team-workspace'
+    } else if (availableScopes.includes('tenant')) {
+      return 'tenant'
+    }
+    return 'my' // fallback
+  }, [availableScopes])
+  
+  const [selectedScope, setSelectedScope] = useState<'my' | 'team-workspace' | 'tenant'>(defaultScope)
   const { canSeeObjective, ...tenantPermissions } = useTenantPermissions()
   const { toast } = useToast()
   const [availableUsers, setAvailableUsers] = useState<any[]>([])
@@ -144,7 +188,6 @@ export default function OKRsPage() {
   const [initiativeParentKeyResultId, setInitiativeParentKeyResultId] = useState<string | null>(null)
   const [initiativeParentName, setInitiativeParentName] = useState<string | null>(null)
   
-  // TODO [phase6-polish]: consolidate these into a reducer.
   
   // Helper to normalize a label string to a timeframeKey
   const normaliseLabelToKey = (label: string): string => {
@@ -183,22 +226,7 @@ export default function OKRsPage() {
   }
   
   useEffect(() => {
-    // Debug: Log JWT token info and user context (remove in production)
-    if (process.env.NODE_ENV === 'development') {
-      logTokenInfo()
-      console.log('👤 Current User from Auth Context:', user)
-      console.log('🏢 Current Organization:', currentOrganization)
-      
-      // Check what /users/me actually returns (backend req.user)
-      api.get('/users/me')
-        .then((res) => {
-          console.log('🔍 Backend /users/me response:', res.data)
-          console.log('   organizationId:', res.data.organizationId || '❌ NOT SET')
-        })
-        .catch((err) => {
-          console.error('Failed to fetch /users/me:', err)
-        })
-    }
+    // Initialization
     
     loadUsers()
     loadActiveCycles()
@@ -226,7 +254,6 @@ export default function OKRsPage() {
       const response = await api.get('/reports/cycles/active')
       const cycles = response.data || []
       setActiveCycles(cycles)
-      // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
       // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
       // Set default selected cycle to first active cycle if available
       if (cycles.length > 0) {
@@ -403,25 +430,11 @@ export default function OKRsPage() {
   }
 
   // Story 5: Contextual Add menu handlers
-  const handleOpenContextualAddMenu = (objectiveId: string) => {
-    console.log('[Telemetry] okr.row.add.menu.open', {
-      userId: user?.id,
-      organizationId: currentOrganization?.id,
-      objectiveId,
-      timestamp: new Date().toISOString(),
-    })
+  const handleOpenContextualAddMenu = (_objectiveId: string) => {
+    // Telemetry handler for contextual add menu
   }
 
   const handleContextualAddKeyResult = (objectiveId: string, objectiveTitle: string) => {
-    console.log('[Telemetry] okr.row.add.kr.click', {
-      userId: user?.id,
-      organizationId: currentOrganization?.id,
-      objectiveId,
-      timestamp: new Date().toISOString(),
-    })
-    
-    // Find the objective to get its full details
-    // For now, we'll use the provided id and title
     setCreationDrawerMode('kr')
     setCreationDrawerParentContext({
       type: 'objective',
@@ -432,13 +445,6 @@ export default function OKRsPage() {
   }
 
   const handleContextualAddInitiative = (objectiveId: string, objectiveTitle: string) => {
-    console.log('[Telemetry] okr.row.add.initiative.click', {
-      userId: user?.id,
-      organizationId: currentOrganization?.id,
-      objectiveId,
-      timestamp: new Date().toISOString(),
-    })
-    
     setCreationDrawerMode('initiative')
     setCreationDrawerParentContext({
       type: 'objective',
@@ -704,116 +710,10 @@ export default function OKRsPage() {
             {/* Cycle Health Strip */}
             {selectedCycleId && (
               <div className="mt-4">
-                <CycleHealthStrip
-                  cycleId={selectedCycleId}
-                  onFilterClick={(filterType, value) => {
-                    // Handle filter clicks (simplified for now)
-                    console.log('[Cycle Health] Filter clicked:', filterType, value)
-                  }}
-                />
+                <CycleHealthStrip cycleId={selectedCycleId} />
               </div>
             )}
           </header>
-
-          {/* Sticky Filter and Pagination Header */}
-          <div className="sticky top-0 z-10 bg-white border-b border-neutral-200 mb-4 pb-4 -mx-8 px-8 pt-4">
-            {/* Quick Status Chips */}
-            <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Status filters">
-              <button
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                  selectedStatus === null
-                    ? "bg-violet-100 text-violet-700 border border-violet-300"
-                    : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                )}
-                onClick={() => {
-                  setSelectedStatus(null)
-                }}
-                aria-label="Show all statuses"
-                aria-pressed={selectedStatus === null}
-              >
-                All statuses
-              </button>
-              <button
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                  selectedStatus === 'ON_TRACK'
-                    ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
-                    : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                )}
-                onClick={() => {
-                  setSelectedStatus('ON_TRACK')
-                }}
-                aria-label="Filter by status: On track"
-                aria-pressed={selectedStatus === 'ON_TRACK'}
-              >
-                On track
-              </button>
-              <button
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                  selectedStatus === 'AT_RISK'
-                    ? "bg-amber-100 text-amber-700 border border-amber-300"
-                    : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                )}
-                onClick={() => {
-                  setSelectedStatus('AT_RISK')
-                }}
-                aria-label="Filter by status: At risk"
-                aria-pressed={selectedStatus === 'AT_RISK'}
-              >
-                At risk
-              </button>
-              <button
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                  selectedStatus === 'BLOCKED'
-                    ? "bg-rose-100 text-rose-700 border border-rose-300"
-                    : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                )}
-                onClick={() => {
-                  setSelectedStatus('BLOCKED')
-                }}
-                aria-label="Filter by status: Blocked"
-                aria-pressed={selectedStatus === 'BLOCKED'}
-              >
-                Blocked
-              </button>
-              <button
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                  selectedStatus === 'COMPLETED'
-                    ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
-                    : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                )}
-                onClick={() => {
-                  setSelectedStatus('COMPLETED')
-                }}
-                aria-label="Filter by status: Completed"
-                aria-pressed={selectedStatus === 'COMPLETED'}
-              >
-                Completed
-              </button>
-              <button
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                  selectedStatus === 'CANCELLED'
-                    ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
-                    : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                )}
-                onClick={() => {
-                  setSelectedStatus('CANCELLED')
-                }}
-                aria-label="Filter by status: Cancelled"
-                aria-pressed={selectedStatus === 'CANCELLED'}
-              >
-                Cancelled
-              </button>
-            </div>
-
-            {/* Cycle Filter and Top Pagination */}
-            {/* Removed duplicate cycle select - using CycleSelector in filters section below */}
-          </div>
 
           {/* Filters and Search Toolbar */}
           <div className="mb-6">
@@ -830,42 +730,88 @@ export default function OKRsPage() {
                   />
                 </div>
                 
-                <Select value={filterWorkspaceId} onValueChange={setFilterWorkspaceId}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="All Workspaces" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Workspaces</SelectItem>
-                    {workspaces.map(ws => (
-                      <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
-                <Select value={filterTeamId} onValueChange={setFilterTeamId}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="All Teams" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Teams</SelectItem>
-                    {teams.map(team => (
-                      <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
-                <Select value={filterOwnerId} onValueChange={setFilterOwnerId}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="All Owners" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Owners</SelectItem>
-                    {availableUsers.map(u => (
-                      <SelectItem key={u.id} value={u.id}>{u.name || u.email}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                
+                {/* Status Filter */}
+                <div className="flex items-center gap-2 flex-wrap" role="group" aria-label="Status filters">
+                  <button
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
+                      selectedStatus === null
+                        ? "bg-violet-100 text-violet-700 border border-violet-300"
+                        : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
+                    )}
+                    onClick={() => setSelectedStatus(null)}
+                    aria-label="Show all statuses"
+                    aria-pressed={selectedStatus === null}
+                  >
+                    All statuses
+                  </button>
+                  <button
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
+                      selectedStatus === 'ON_TRACK'
+                        ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
+                        : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
+                    )}
+                    onClick={() => setSelectedStatus('ON_TRACK')}
+                    aria-label="Filter by status: On track"
+                    aria-pressed={selectedStatus === 'ON_TRACK'}
+                  >
+                    On track
+                  </button>
+                  <button
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
+                      selectedStatus === 'AT_RISK'
+                        ? "bg-amber-100 text-amber-700 border border-amber-300"
+                        : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
+                    )}
+                    onClick={() => setSelectedStatus('AT_RISK')}
+                    aria-label="Filter by status: At risk"
+                    aria-pressed={selectedStatus === 'AT_RISK'}
+                  >
+                    At risk
+                  </button>
+                  <button
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
+                      selectedStatus === 'BLOCKED'
+                        ? "bg-rose-100 text-rose-700 border border-rose-300"
+                        : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
+                    )}
+                    onClick={() => setSelectedStatus('BLOCKED')}
+                    aria-label="Filter by status: Blocked"
+                    aria-pressed={selectedStatus === 'BLOCKED'}
+                  >
+                    Blocked
+                  </button>
+                  <button
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
+                      selectedStatus === 'COMPLETED'
+                        ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
+                        : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
+                    )}
+                    onClick={() => setSelectedStatus('COMPLETED')}
+                    aria-label="Filter by status: Completed"
+                    aria-pressed={selectedStatus === 'COMPLETED'}
+                  >
+                    Completed
+                  </button>
+                  <button
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
+                      selectedStatus === 'CANCELLED'
+                        ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
+                        : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
+                    )}
+                    onClick={() => setSelectedStatus('CANCELLED')}
+                    aria-label="Filter by status: Cancelled"
+                    aria-pressed={selectedStatus === 'CANCELLED'}
+                  >
+                    Cancelled
+                  </button>
+                </div>
+
                 {/* W4.M1: Cycle selector only (periods removed) */}
                 <CycleSelector
                   cycles={normalizedCycles}
@@ -874,8 +820,6 @@ export default function OKRsPage() {
                   onSelect={(opt: { key: string; label: string }) => {
                     setSelectedTimeframeKey(opt.key)
                     setSelectedTimeframeLabel(opt.label)
-                    // Sync selectedCycleId when a cycle is selected (for CycleHealthStrip and AttentionDrawer)
-                    // Only set if it's a valid cycle ID (not 'all' or 'unassigned')
                     if (opt.key && opt.key !== 'all' && opt.key !== 'unassigned' && normalizedCycles.some(c => c.id === opt.key)) {
                       setSelectedCycleId(opt.key)
                     } else {
@@ -892,19 +836,63 @@ export default function OKRsPage() {
                 )}
               </div>
 
-              {/* Right: Actions */}
+              {/* Right: Scope Toggle + Actions */}
               <div className="flex items-center gap-3 flex-shrink-0">
+                {/* Scope Toggle */}
+                {availableScopes.length > 1 && (
+                  <div className="flex items-center gap-1 rounded-lg border border-neutral-300 bg-neutral-50 p-1" role="group" aria-label="Scope filter">
+                    {availableScopes.includes('my') && (
+                      <button
+                        className={cn(
+                          "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
+                          selectedScope === 'my'
+                            ? "bg-white text-neutral-900 shadow-sm"
+                            : "text-neutral-600 hover:text-neutral-900"
+                        )}
+                        onClick={() => setSelectedScope('my')}
+                        aria-pressed={selectedScope === 'my'}
+                      >
+                        My
+                      </button>
+                    )}
+                    {availableScopes.includes('team-workspace') && (
+                      <button
+                        className={cn(
+                          "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
+                          selectedScope === 'team-workspace'
+                            ? "bg-white text-neutral-900 shadow-sm"
+                            : "text-neutral-600 hover:text-neutral-900"
+                        )}
+                        onClick={() => setSelectedScope('team-workspace')}
+                        aria-pressed={selectedScope === 'team-workspace'}
+                      >
+                        Team/Workspace
+                      </button>
+                    )}
+                    {availableScopes.includes('tenant') && (
+                      <button
+                        className={cn(
+                          "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
+                          selectedScope === 'tenant'
+                            ? "bg-white text-neutral-900 shadow-sm"
+                            : "text-neutral-600 hover:text-neutral-900"
+                        )}
+                        onClick={() => setSelectedScope('tenant')}
+                        aria-pressed={selectedScope === 'tenant'}
+                      >
+                        Tenant
+                      </button>
+                    )}
+                  </div>
+                )}
+                
+                {/* Actions */}
                 {/* Needs Attention - Icon button with badge */}
                 <Button
                   variant="outline"
                   size="icon"
                   onClick={() => {
                     setAttentionDrawerOpen(true)
-                    console.log('[Telemetry] okr.attention.open', {
-                      userId: user?.id,
-                      cycleId: selectedCycleId,
-                      timestamp: new Date().toISOString(),
-                    })
                   }}
                   aria-label="Open attention drawer"
                   className="relative focus:ring-2 focus:ring-ring focus:outline-none"
@@ -929,11 +917,6 @@ export default function OKRsPage() {
                         onClick={() => {
                           setCreationDrawerMode('objective')
                           setIsCreateDrawerOpen(true)
-                          console.log('[Telemetry] okr.create.menu.open', {
-                            userId: user?.id,
-                            cycleId: selectedCycleId,
-                            timestamp: new Date().toISOString(),
-                          })
                         }}
                         aria-label="Add"
                         className="focus:ring-2 focus:ring-ring focus:outline-none rounded-r-none border-r-0"
@@ -958,11 +941,6 @@ export default function OKRsPage() {
                           onClick={() => {
                             setCreationDrawerMode('objective')
                             setIsCreateDrawerOpen(true)
-                            console.log('[Telemetry] okr.create.objective.click', {
-                              userId: user?.id,
-                              cycleId: selectedCycleId,
-                              timestamp: new Date().toISOString(),
-                            })
                           }}
                           role="menuitem"
                         >
@@ -974,11 +952,6 @@ export default function OKRsPage() {
                           onClick={() => {
                             setCreationDrawerMode('kr')
                             setIsCreateDrawerOpen(true)
-                            console.log('[Telemetry] okr.create.key_result.click', {
-                              userId: user?.id,
-                              cycleId: selectedCycleId,
-                              timestamp: new Date().toISOString(),
-                            })
                           }}
                           role="menuitem"
                         >
@@ -990,11 +963,6 @@ export default function OKRsPage() {
                           onClick={() => {
                             setCreationDrawerMode('initiative')
                             setIsCreateDrawerOpen(true)
-                            console.log('[Telemetry] okr.create.initiative.click', {
-                              userId: user?.id,
-                              cycleId: selectedCycleId,
-                              timestamp: new Date().toISOString(),
-                            })
                           }}
                           role="menuitem"
                         >
@@ -1055,6 +1023,7 @@ export default function OKRsPage() {
               selectedTimeframeKey={selectedTimeframeKey}
               selectedStatus={selectedStatus}
               selectedCycleId={selectedCycleId}
+              selectedScope={selectedScope}
               onAction={{
                 onEdit: handleEditOKR,
                 onDelete: handleDeleteOKR,
@@ -1075,7 +1044,6 @@ export default function OKRsPage() {
           </main>
 
           {/* Activity Timeline Drawer */}
-          {/* TODO [phase7-performance]: pass pagination cursor + load handler once backend supports it. */}
           <ActivityDrawer
             isOpen={activityDrawerOpen}
             onClose={handleCloseActivityDrawer}
@@ -1102,7 +1070,6 @@ export default function OKRsPage() {
                 : null,
             }
             const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
-            // TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
             const lockMessage = lockInfo.message || 'This item is locked and cannot be changed in the current cycle.'
             
             return (
@@ -1154,9 +1121,7 @@ export default function OKRsPage() {
                 setShowNewObjective(false)
                 handleReloadOKRs()
               } catch (err) {
-                // TODO [phase7-hardening]: map backend validation errors to field-level messages.
                 console.error('Failed to create objective', err)
-                // TODO [phase6-polish]: surface inline form error state
               }
             }}
             availableUsers={availableUsers}
@@ -1191,9 +1156,7 @@ export default function OKRsPage() {
                 setEditObjectiveData(null)
                 handleReloadOKRs()
               } catch (err) {
-                // TODO [phase7-hardening]: map backend validation errors to field-level messages.
                 console.error('Failed to update objective', err)
-                // TODO [phase6-polish]: surface inline form error state
               }
             }}
             availableUsers={availableUsers}
@@ -1225,9 +1188,7 @@ export default function OKRsPage() {
                 setActiveCheckInKrId(null)
                 handleReloadOKRs()
               } catch (err) {
-                // TODO [phase7-hardening]: map backend validation errors to field-level messages.
                 console.error('Failed to create check-in', err)
-                // TODO [phase6-polish]: surface inline form error state
               }
             }}
           />
@@ -1257,9 +1218,7 @@ export default function OKRsPage() {
                 setKrParentObjectiveName(null)
                 handleReloadOKRs()
               } catch (err) {
-                // TODO [phase7-hardening]: map backend validation errors to field-level messages.
                 console.error('Failed to create key result', err)
-                // TODO [phase6-polish]: surface inline form error state
               }
             }}
             availableUsers={availableUsers}
@@ -1297,9 +1256,7 @@ export default function OKRsPage() {
                 setInitiativeParentName(null)
                 handleReloadOKRs()
               } catch (err) {
-                // TODO [phase7-hardening]: map backend validation errors to field-level messages.
                 console.error('Failed to create initiative', err)
-                // TODO [phase6-polish]: surface inline form error state
               }
             }}
             availableUsers={availableUsers}
@@ -1342,7 +1299,6 @@ export default function OKRsPage() {
             }}
             onNavigateToKeyResult={(krId) => {
               // Find and expand the objective containing this KR
-              console.log('[Attention Drawer] Navigate to KR:', krId)
             }}
             canRequestCheckIn={permissions.isTenantAdminOrOwner(currentOrganization?.id)}
             onRequestCheckIn={(krId) => {
