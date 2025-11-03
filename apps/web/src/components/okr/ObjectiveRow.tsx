@@ -14,12 +14,13 @@ export interface ObjectiveRowProps {
     id: string
     title: string
     status: 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED'
+    publishState?: 'PUBLISHED' | 'DRAFT' // W4.M1: New field from backend
     progress: number
-    isPublished: boolean
+    isPublished: boolean // W4.M1: Kept for backward compatibility
     cycleName?: string
     cycleLabel?: string
     cycleStatus?: string
-    visibilityLevel?: string
+    visibilityLevel?: string // W4.M1: Not displayed as badge (server-enforced)
     owner: {
       id: string
       name: string
@@ -72,6 +73,7 @@ const getStatusBadge = (status: string) => {
     case 'AT_RISK':
       return { tone: 'warn' as const, label: 'At risk' }
     case 'BLOCKED':
+    case 'OFF_TRACK':
       return { tone: 'bad' as const, label: 'Blocked' }
     case 'COMPLETED':
       return { tone: 'neutral' as const, label: 'Completed' }
@@ -79,6 +81,21 @@ const getStatusBadge = (status: string) => {
       return { tone: 'neutral' as const, label: 'Cancelled' }
     default:
       return { tone: 'neutral' as const, label: '—' }
+  }
+}
+
+// W4.M1: Publish State badge (governance state, separate from status)
+const getPublishStateBadge = (publishState?: string, isPublished?: boolean) => {
+  // Use publishState if available, otherwise derive from isPublished
+  const state = publishState || (isPublished ? 'PUBLISHED' : 'DRAFT')
+  
+  switch (state) {
+    case 'PUBLISHED':
+      return { tone: 'neutral' as const, label: 'Published' }
+    case 'DRAFT':
+      return { tone: 'warn' as const, label: 'Draft' }
+    default:
+      return { tone: 'neutral' as const, label: publishState || 'Draft' }
   }
 }
 
@@ -224,6 +241,7 @@ export function ObjectiveRow({
   const menuRef = useRef<HTMLDivElement>(null)
   
   const statusBadge = getStatusBadge(objective.status)
+  const publishStateBadge = getPublishStateBadge(objective.publishState, objective.isPublished)
   const keyResults = objective.keyResults || []
   const initiatives = objective.initiatives || []
   const overdueCount = objective.overdueCountForObjective ?? 0
@@ -276,16 +294,16 @@ export function ObjectiveRow({
               {objective.title}
             </h3>
             
-            {/* Badges row */}
+            {/* Badges row - W4.M1: Separate Status and Publish State chips */}
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Status pill */}
+              {/* Status chip - Progress state */}
               <OkrBadge tone={statusBadge.tone}>
                 {statusBadge.label}
               </OkrBadge>
               
-              {/* Publication/lock pill */}
-              <OkrBadge tone={objective.isPublished ? 'neutral' : 'warn'}>
-                {objective.isPublished ? 'Published' : 'Draft'}
+              {/* Publish State chip - Governance state */}
+              <OkrBadge tone={publishStateBadge.tone}>
+                {publishStateBadge.label}
               </OkrBadge>
               
               {/* Cycle pill */}

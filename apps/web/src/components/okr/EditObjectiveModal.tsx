@@ -33,7 +33,7 @@ export interface EditObjectiveModalProps {
     cycleId?: string
     status: OKRStatus
     visibilityLevel: VisibilityLevel
-    pillarId?: string
+    // W4.M1: pillarId removed - deprecated
   }
   onClose: () => void
   onSubmit: (data: {
@@ -43,13 +43,13 @@ export interface EditObjectiveModalProps {
     cycleId?: string
     status: OKRStatus
     visibilityLevel: VisibilityLevel
-    pillarId?: string
+    // W4.M1: pillarId removed - deprecated
   }) => Promise<void>
   // Options for dropdowns (parent should provide these)
   availableUsers?: Array<{ id: string; name: string; email?: string }>
   availableWorkspaces?: Array<{ id: string; name: string }>
   availableCycles?: Array<{ id: string; name: string }>
-  availablePillars?: Array<{ id: string; name: string }>
+  availablePillars?: Array<{ id: string; name: string }> // W4.M1: Deprecated - not used
 }
 
 export function EditObjectiveModal({
@@ -69,7 +69,7 @@ export function EditObjectiveModal({
   const [cycleId, setCycleId] = React.useState<string>("")
   const [status, setStatus] = React.useState<OKRStatus>("ON_TRACK")
   const [visibilityLevel, setVisibilityLevel] = React.useState<VisibilityLevel>("PUBLIC_TENANT")
-  const [pillarId, setPillarId] = React.useState<string>("")
+  // W4.M1: pillarId removed - deprecated
   const [isSubmitting, setIsSubmitting] = React.useState(false)
 
   // Load objective data when modal opens or data changes
@@ -81,7 +81,7 @@ export function EditObjectiveModal({
       setCycleId(objectiveData.cycleId || "")
       setStatus(objectiveData.status || "ON_TRACK")
       setVisibilityLevel(objectiveData.visibilityLevel || "PUBLIC_TENANT")
-      setPillarId(objectiveData.pillarId || "")
+      // W4.M1: pillarId removed
     }
   }, [isOpen, objectiveData])
 
@@ -102,7 +102,7 @@ export function EditObjectiveModal({
         cycleId: cycleId || undefined,
         status,
         visibilityLevel,
-        pillarId: pillarId || undefined,
+        // W4.M1: pillarId removed
       })
       // Don't reset form here - let parent handle closing
       onClose()
@@ -242,24 +242,7 @@ export function EditObjectiveModal({
             </Select>
           </div>
 
-          {availablePillars.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="edit-pillar">Strategic Theme / Pillar (Optional)</Label>
-              <Select value={pillarId} onValueChange={setPillarId}>
-                <SelectTrigger id="edit-pillar">
-                  <SelectValue placeholder="Select strategic theme" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">None</SelectItem>
-                  {availablePillars.map((pillar) => (
-                    <SelectItem key={pillar.id} value={pillar.id}>
-                      {pillar.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          {/* W4.M1: Pillar UI removed - deprecated */}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>

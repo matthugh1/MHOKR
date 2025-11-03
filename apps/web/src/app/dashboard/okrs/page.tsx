@@ -25,10 +25,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Plus, Search, X, Lock, LockKeyhole } from 'lucide-react'
-import { 
-  getAvailablePeriodFilters, 
-  getCurrentPeriodFilter,
-} from '@/lib/date-utils'
+// W4.M1: Period utilities removed - Cycle is canonical
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -45,6 +42,7 @@ import { EditObjectiveModal } from '@/components/okr/EditObjectiveModal'
 import { NewKeyResultModal } from '@/components/okr/NewKeyResultModal'
 import { NewCheckInModal } from '@/components/okr/NewCheckInModal'
 import { NewInitiativeModal } from '@/components/okr/NewInitiativeModal'
+import { OKRCreationDrawer } from './components/OKRCreationDrawer'
 import api from '@/lib/api'
 import { logTokenInfo } from '@/lib/jwt-debug'
 import { cn } from '@/lib/utils'
@@ -55,8 +53,7 @@ export default function OKRsPage() {
   const router = useRouter()
   // [phase6-polish] Reintroduce compact multi-column grid view for exec scanning.
   const [_viewMode, _setViewMode] = useState<'grid' | 'list'>('list')
-  const [selectedPeriod, _setSelectedPeriod] = useState<string>(getCurrentPeriodFilter())
-  const _availablePeriods = getAvailablePeriodFilters()
+  // W4.M1: Period removed - Cycle is canonical
   
   // Filter states
   const [filterWorkspaceId, setFilterWorkspaceId] = useState<string>('all')
@@ -80,6 +77,7 @@ export default function OKRsPage() {
   const [selectedObjectiveForLock, setSelectedObjectiveForLock] = useState<any | null>(null)
   const [pendingDeleteOkr, setPendingDeleteOkr] = useState<{ id: string; title: string } | null>(null)
   const [expandedObjectiveId, setExpandedObjectiveId] = useState<string | null>(null)
+  const [reloadTrigger, setReloadTrigger] = useState(0)
   const [activeCycles, setActiveCycles] = useState<Array<{
     id: string
     name: string
@@ -91,6 +89,8 @@ export default function OKRsPage() {
   
   // Objective creation
   const [showNewObjective, setShowNewObjective] = useState(false)
+  const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false)
+  const [canCreateObjective, setCanCreateObjective] = useState<boolean>(false)
   
   // Objective editing
   const [showEditObjective, setShowEditObjective] = useState(false)
@@ -126,24 +126,21 @@ export default function OKRsPage() {
   }
   
   // Helper to map raw objective from API to view model with timeframeKey
+  // W4.M1: Period removed - only use cycleId/cycleName
   const mapObjectiveToViewModel = (rawObjective: any): any => {
     let timeframeKey: string = 'unassigned'
     
-    // Priority 1: cycleId
+    // Priority 1: cycleId (canonical)
     if (rawObjective.cycleId) {
       timeframeKey = rawObjective.cycleId
     }
-    // Priority 2: plannedCycleId (if exists)
-    else if (rawObjective.plannedCycleId) {
-      timeframeKey = rawObjective.plannedCycleId
-    }
-    // Priority 3: cycle-like label fields (cycleName, periodLabel, timeframeLabel, etc.)
+    // Priority 2: cycleName (fallback)
     else if (rawObjective.cycleName) {
       timeframeKey = normaliseLabelToKey(rawObjective.cycleName)
-    } else if (rawObjective.periodLabel) {
-      timeframeKey = normaliseLabelToKey(rawObjective.periodLabel)
-    } else if (rawObjective.timeframeLabel) {
-      timeframeKey = normaliseLabelToKey(rawObjective.timeframeLabel)
+    }
+    // Priority 3: cycle object (from API response)
+    else if (rawObjective.cycle?.id) {
+      timeframeKey = rawObjective.cycle.id
     }
     // Priority 4: fallback to 'unassigned'
     
@@ -272,9 +269,7 @@ export default function OKRsPage() {
     }
   }
 
-  const _selectedPeriodOption = _availablePeriods.find(p => p.value === selectedPeriod);
-  
-  // Transform cycles for CycleSelector (map startDate/endDate to startsAt/endsAt)
+  // W4.M1: Transform cycles for CycleSelector (map startDate/endDate to startsAt/endsAt)
   const cyclesFromApi = activeCycles.map(cycle => ({
     id: cycle.id,
     name: cycle.name,
@@ -305,24 +300,18 @@ export default function OKRsPage() {
     ]
   }, [cyclesFromApi])
 
-  // Build legacy periods list
-  const legacyPeriods = useMemo(() => [
-    { id: '2025-Q4', label: 'Q4 2025 (current)' },
-    { id: '2026-Q1-planning', label: 'Q1 2026 (planning)', isFuture: true },
-    { id: '2026-Q2-draft', label: 'Q2 2026 (draft)', isFuture: true },
-    // [phase6-polish]: hydrate from backend once periods endpoint exists
-  ], [])
+  // W4.M1: Legacy periods removed - only cycles are canonical
+  const legacyPeriods: Array<{ id: string; label: string }> = []
 
   // State for timeframe selection (key and label)
+  // W4.M1: Only cycles, no periods
   const [selectedTimeframeKey, setSelectedTimeframeKey] = useState<string | null>(() => {
     if (normalizedCycles.length > 0) return normalizedCycles[0].id
-    if (legacyPeriods.length > 0) return legacyPeriods[0].id
     return 'all' // Default to 'all' if no cycles available
   })
   const [selectedTimeframeLabel, setSelectedTimeframeLabel] = useState<string>(() => {
     if (normalizedCycles.length > 0) return normalizedCycles[0].name
-    if (legacyPeriods.length > 0) return legacyPeriods[0].label
-    return 'All periods'
+    return 'All cycles'
   })
   
   // Legacy selectedId for backwards compatibility during transition
@@ -461,7 +450,8 @@ export default function OKRsPage() {
   }
   
   const handleReloadOKRs = () => {
-    window.location.reload()
+    // Increment reload trigger to force OKRPageContainer to reload
+    setReloadTrigger(prev => prev + 1)
   }
 
   const handleOpenActivityDrawer = async (entityType: 'OBJECTIVE' | 'KEY_RESULT', entityId: string, entityTitle?: string) => {
@@ -657,10 +647,13 @@ export default function OKRsPage() {
                 />
               </div>
               <div className="flex items-center gap-4">
-                <Button onClick={() => setShowNewObjective(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Objective
-                </Button>
+                {/* W4.M1: Permission-gated New Objective button */}
+                {canCreateObjective && (
+                  <Button onClick={() => setIsCreateDrawerOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Objective
+                  </Button>
+                )}
                 <button
                   className="text-[12px] font-medium text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
                   onClick={() => router.push('/dashboard/builder')}
@@ -699,7 +692,7 @@ export default function OKRsPage() {
                         {cycle.status === 'LOCKED' && !permissions.isTenantAdminOrOwner(currentOrganization?.id) && (
                           <p className="text-sm text-slate-500 mt-2 flex items-center gap-1">
                             <Lock className="h-3 w-3" />
-                            This cycle is locked. You can't change targets in this period.
+                            This cycle is locked. You can't change targets in this cycle.
                           </p>
                         )}
                       </div>
@@ -866,6 +859,7 @@ export default function OKRsPage() {
                 </SelectContent>
               </Select>
               
+              {/* W4.M1: Cycle selector only (periods removed) */}
               <CycleSelector
                 cycles={normalizedCycles}
                 legacyPeriods={legacyPeriods}
@@ -909,6 +903,7 @@ export default function OKRsPage() {
 
           {/* OKRs List with Pagination */}
           <OKRPageContainer
+            key={reloadTrigger}
             availableUsers={availableUsers}
             activeCycles={activeCycles}
             overdueCheckIns={overdueCheckIns}
@@ -930,6 +925,7 @@ export default function OKRsPage() {
             }}
             expandedObjectiveId={expandedObjectiveId}
             onToggleObjective={handleToggleObjective}
+            onCanCreateChange={setCanCreateObjective}
           />
 
           {/* Activity Timeline Drawer */}
@@ -1161,6 +1157,19 @@ export default function OKRsPage() {
               }
             }}
             availableUsers={availableUsers}
+          />
+
+          {/* OKR Creation Drawer */}
+          <OKRCreationDrawer
+            isOpen={isCreateDrawerOpen}
+            onClose={() => setIsCreateDrawerOpen(false)}
+            availableUsers={availableUsers}
+            activeCycles={activeCycles}
+            currentOrganization={currentOrganization}
+            onSuccess={() => {
+              setIsCreateDrawerOpen(false)
+              handleReloadOKRs()
+            }}
           />
         </div>
       </DashboardLayout>

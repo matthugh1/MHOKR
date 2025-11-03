@@ -8,8 +8,9 @@ interface PreparedObjective {
   id: string
   title: string
   status: 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED'
+  publishState?: 'PUBLISHED' | 'DRAFT' // W4.M1: New field
   progress: number
-  isPublished: boolean
+  isPublished: boolean // W4.M1: Kept for backward compatibility
   cycleName?: string
   cycleLabel?: string
   cycleStatus?: string
@@ -137,6 +138,7 @@ export function OKRListVirtualised({
           id: objective.id,
           title: objective.title,
           status: objective.status,
+          publishState: objective.publishState, // W4.M1: Pass publishState
           progress: Math.round(objective.progress),
           isPublished: objective.isPublished,
           cycleName: objective.cycleName,

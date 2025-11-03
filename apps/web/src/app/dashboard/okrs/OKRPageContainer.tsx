@@ -40,6 +40,7 @@ interface OKRPageContainerProps {
   }
   expandedObjectiveId: string | null
   onToggleObjective: (id: string) => void
+  onCanCreateChange?: (canCreate: boolean) => void
 }
 
 function mapObjectiveToViewModel(rawObjective: any): any {
@@ -55,25 +56,40 @@ function mapObjectiveToViewModel(rawObjective: any): any {
   
   let timeframeKey: string = 'unassigned'
   
-  if (rawObjective.cycleId) {
+  // Priority order: cycleId (from mapObjectiveData) > plannedCycleId > cycle?.id > cycle name > other labels
+  // Explicitly check for cycleId first (this should be set by mapObjectiveData)
+  if (rawObjective.cycleId && typeof rawObjective.cycleId === 'string' && rawObjective.cycleId.length > 0) {
     timeframeKey = rawObjective.cycleId
-  } else if (rawObjective.plannedCycleId) {
+  } else if (rawObjective.plannedCycleId && typeof rawObjective.plannedCycleId === 'string' && rawObjective.plannedCycleId.length > 0) {
     timeframeKey = rawObjective.plannedCycleId
-  } else if (rawObjective.cycleName) {
-    timeframeKey = normaliseLabelToKey(rawObjective.cycleName)
-  } else if (rawObjective.periodLabel) {
-    timeframeKey = normaliseLabelToKey(rawObjective.periodLabel)
-  } else if (rawObjective.timeframeLabel) {
-    timeframeKey = normaliseLabelToKey(rawObjective.timeframeLabel)
-  } else if (rawObjective.cycle?.id) {
+  } else if (rawObjective.cycle?.id && typeof rawObjective.cycle.id === 'string' && rawObjective.cycle.id.length > 0) {
     timeframeKey = rawObjective.cycle.id
-  } else if (rawObjective.cycle?.name) {
+  } else if (rawObjective.cycleName && typeof rawObjective.cycleName === 'string') {
+    timeframeKey = normaliseLabelToKey(rawObjective.cycleName)
+  // W4.M1: periodLabel removed - only cycleId/cycleName used
+  } else if (rawObjective.timeframeLabel && typeof rawObjective.timeframeLabel === 'string') {
+    timeframeKey = normaliseLabelToKey(rawObjective.timeframeLabel)
+  } else if (rawObjective.cycle?.name && typeof rawObjective.cycle.name === 'string') {
     timeframeKey = normaliseLabelToKey(rawObjective.cycle.name)
   }
   
+  // Debug: Log if timeframeKey is still 'unassigned' but cycleId exists
+  if (timeframeKey === 'unassigned' && rawObjective.cycleId) {
+    console.warn('[OKR PAGE CONTAINER] ⚠️ timeframeKey not set despite cycleId:', {
+      title: rawObjective.title,
+      cycleId: rawObjective.cycleId,
+      cycleIdType: typeof rawObjective.cycleId,
+      cycleIdLength: rawObjective.cycleId?.length,
+      hasCycle: !!rawObjective.cycle,
+      cycleIdFromCycle: rawObjective.cycle?.id,
+    })
+  }
+  
+  // Ensure timeframeKey is always a string (never undefined)
+  // Place timeframeKey AFTER spread to ensure it overwrites any existing undefined value
   return {
     ...rawObjective,
-    timeframeKey,
+    timeframeKey: timeframeKey || 'unassigned',
   }
 }
 
@@ -136,12 +152,17 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
   
   const owner = rawObj.owner || availableUsers.find(u => u.id === rawObj.ownerId)
   
-  return {
-    id: rawObj.objectiveId || rawObj.id,
-    title: rawObj.title,
-    status: rawObj.status || 'ON_TRACK',
-    isPublished: rawObj.isPublished ?? false,
-    visibilityLevel: rawObj.visibilityLevel,
+    // W4.M1: Map publishState from backend response (new field)
+    // Falls back to isPublished boolean for backward compatibility
+    const publishState = rawObj.publishState || (rawObj.isPublished ? 'PUBLISHED' : 'DRAFT')
+    
+    return {
+      id: rawObj.objectiveId || rawObj.id,
+      title: rawObj.title,
+      status: rawObj.status || 'ON_TRACK',
+      publishState, // W4.M1: New field
+      isPublished: rawObj.isPublished ?? false, // Kept for backward compatibility
+      visibilityLevel: rawObj.visibilityLevel,
     cycleName,
     cycleLabel,
     cycleStatus,
@@ -179,6 +200,7 @@ export function OKRPageContainer({
   onAction,
   expandedObjectiveId,
   onToggleObjective,
+  onCanCreateChange,
 }: OKRPageContainerProps) {
   const { currentOrganization } = useWorkspace()
   const { user } = useAuth()
@@ -210,6 +232,14 @@ export function OKRPageContainer({
         pageSize: pageSize.toString(),
       })
       
+      // Debug: Log what organizationId is being sent
+      console.log('[OKR PAGE CONTAINER] Sending request with:', {
+        organizationId: currentOrganization.id,
+        organizationName: currentOrganization.name,
+        userId: user?.id,
+        userEmail: user?.email,
+      })
+      
       if (selectedCycleId) {
         params.set('cycleId', selectedCycleId)
       }
@@ -224,11 +254,69 @@ export function OKRPageContainer({
       const envelope = response.data || {}
       const objectives = envelope.objectives || []
       
+      // Debug: Log the full response to see what we're actually getting
+      console.log('[OKR PAGE CONTAINER] Full response:', {
+        responseDataType: typeof response.data,
+        envelopeKeys: Object.keys(envelope),
+        envelope: envelope,
+        hasCanCreateObjective: 'canCreateObjective' in envelope,
+        canCreateObjectiveValue: envelope.canCreateObjective,
+        canCreateObjectiveType: typeof envelope.canCreateObjective,
+      })
+      
+      // Debug: Log specifically about canCreateObjective
+      if (envelope.canCreateObjective === false) {
+        console.warn('[OKR PAGE CONTAINER] ⚠️ canCreateObjective is FALSE', {
+          organizationIdSent: currentOrganization.id,
+          userId: user?.id,
+          userEmail: user?.email,
+          'Expected organizationId (from role assignment)': 'cmhesnyvx00004xhjjxs272gs',
+          'Does sent ID match expected?': currentOrganization.id === 'cmhesnyvx00004xhjjxs272gs',
+        })
+      }
+      
       setTotalCount(envelope.totalCount || 0)
+      
+      // Extract canCreateObjective flag and notify parent
+      if (onCanCreateChange) {
+        if (envelope.canCreateObjective !== undefined) {
+          onCanCreateChange(envelope.canCreateObjective)
+        } else {
+          // Fallback: if backend doesn't return flag, default to false
+          // This is conservative - button won't show until backend explicitly allows it
+          console.warn('[OKR PAGE CONTAINER] Backend did not return canCreateObjective flag, defaulting to false')
+          onCanCreateChange(false)
+        }
+      }
       
       const mapped = Array.isArray(objectives) ? objectives.map((obj: any) => 
         mapObjectiveData(obj, availableUsers, activeCycles, overdueCheckIns)
       ) : []
+      
+      // Debug: Log Test objectives specifically
+      const testObjectives = mapped.filter((obj: any) => obj.title === 'Test')
+      if (testObjectives.length > 0) {
+        console.log('[OKR PAGE CONTAINER] ✅ Test objectives received from backend:', testObjectives.length)
+        testObjectives.forEach((obj: any) => {
+          console.log('[OKR PAGE CONTAINER] Test objective details:', {
+            id: obj.id,
+            title: obj.title,
+            cycleId: obj.cycleId,
+            timeframeKey: obj.timeframeKey,
+            selectedTimeframeKey,
+            matchesTimeframe: obj.timeframeKey === selectedTimeframeKey,
+            isPublished: obj.isPublished,
+            status: obj.status,
+          })
+        })
+      } else {
+        console.log('[OKR PAGE CONTAINER] ⚠️ No Test objectives received from backend')
+        console.log('[OKR PAGE CONTAINER] All objectives received:', objectives.map((obj: any) => ({
+          id: obj.id?.substring(0, 15),
+          title: obj.title,
+          cycleId: obj.cycleId,
+        })))
+      }
       
       setObjectivesPage(mapped)
     } catch (error: any) {
@@ -249,15 +337,34 @@ export function OKRPageContainer({
   
   const objectivesViewModel = useMemo(() => {
     const safeObjectives = Array.isArray(objectivesPage) ? objectivesPage : []
-    return safeObjectives.map(mapObjectiveToViewModel)
+    const mapped = safeObjectives.map(mapObjectiveToViewModel)
+    
+    // Debug: Check Test objectives after mapObjectiveToViewModel
+    const testObjsAfterMapping = mapped.filter((obj: any) => obj.title === 'Test')
+    if (testObjsAfterMapping.length > 0) {
+      testObjsAfterMapping.forEach((obj: any) => {
+        console.log('[OKR PAGE CONTAINER] Test objective after mapObjectiveToViewModel:', {
+          id: obj.id,
+          title: obj.title,
+          cycleId: obj.cycleId,
+          timeframeKey: obj.timeframeKey,
+          hasCycleId: !!obj.cycleId,
+          hasCycleObject: !!obj.cycle,
+          cycleObjectId: obj.cycle?.id,
+        })
+      })
+    }
+    
+    return mapped
   }, [objectivesPage])
   
   // Apply client-side filters (workspace, team, owner, search, timeframe)
   // Note: Visibility filtering is now done server-side, but we still need to filter
   // by workspace/team/owner/search/timeframe on the client since backend doesn't support these yet
   const filteredOKRs = useMemo(() => {
-    return objectivesViewModel.filter(okr => {
+    const filtered = objectivesViewModel.filter(okr => {
       if (!selectedTimeframeKey || selectedTimeframeKey === 'all') {
+        // No timeframe filter - show all
       } else {
         if (okr.timeframeKey !== selectedTimeframeKey) {
           return false
@@ -288,6 +395,21 @@ export function OKRPageContainer({
       
       return true
     })
+    
+    // Debug: Log Test objectives after filtering
+    const testObjectivesAfterFilter = filtered.filter((okr: any) => okr.title === 'Test')
+    if (testObjectivesAfterFilter.length === 0 && objectivesViewModel.some((okr: any) => okr.title === 'Test')) {
+      console.warn('[OKR PAGE CONTAINER] ⚠️ Test objective filtered out by client-side filters:', {
+        selectedTimeframeKey,
+        filterWorkspaceId,
+        filterTeamId,
+        filterOwnerId,
+        searchQuery,
+        testObjectiveBeforeFilter: objectivesViewModel.find((okr: any) => okr.title === 'Test'),
+      })
+    }
+    
+    return filtered
   }, [objectivesViewModel, filterWorkspaceId, filterTeamId, filterOwnerId, searchQuery, selectedTimeframeKey])
   
   const totalPages = Math.ceil(totalCount / pageSize)
