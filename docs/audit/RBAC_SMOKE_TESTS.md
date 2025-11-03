@@ -688,6 +688,55 @@ curl -X GET "$API_URL/rbac/assignments/effective?tenantId=$TENANT_ID&teamId=$TEA
   -H "Authorization: Bearer $YOUR_TOKEN"
 ```
 
+### 4. Admin Inspecting Another User (NEW)
+
+**Requires:** `manage_users` permission
+
+#### Test 4.1: TENANT_ADMIN Inspecting Another User (Same Tenant)
+
+```bash
+# TENANT_ADMIN can inspect users in their tenant
+curl -X GET "$API_URL/rbac/assignments/effective?userId=$TARGET_USER_ID&tenantId=$TENANT_A_ID" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  | jq '.'
+
+# Expected: HTTP 200 OK with target user's effective permissions
+# Audit log entry created: action="view_user_access"
+```
+
+#### Test 4.2: TENANT_ADMIN Inspecting User (Cross-Tenant) - Should Fail
+
+```bash
+# Attempting to inspect user in different tenant
+curl -X GET "$API_URL/rbac/assignments/effective?userId=$USER_IN_TENANT_B&tenantId=$TENANT_B_ID" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  -w "\nHTTP Status: %{http_code}\n"
+
+# Expected: HTTP 404 Not Found ("User not found in specified tenant")
+```
+
+#### Test 4.3: WORKSPACE_MEMBER Inspecting Another User - Should Fail
+
+```bash
+# Regular user without manage_users cannot inspect others
+curl -X GET "$API_URL/rbac/assignments/effective?userId=$TARGET_USER_ID" \
+  -H "Authorization: Bearer $WORKSPACE_MEMBER_TOKEN" \
+  -w "\nHTTP Status: %{http_code}\n"
+
+# Expected: HTTP 404 Not Found ("Permission denied: manage_users required")
+```
+
+#### Test 4.4: Admin Inspecting User at Specific Scope
+
+```bash
+# Inspect user's permissions at workspace scope
+curl -X GET "$API_URL/rbac/assignments/effective?userId=$TARGET_USER_ID&tenantId=$TENANT_A_ID&workspaceId=$WORKSPACE_ID" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  | jq '.scopes[] | select(.workspaceId == "'"$WORKSPACE_ID"'")'
+
+# Expected: HTTP 200 OK, scopes filtered to specified workspace
+```
+
 ### 4. Check Specific Action
 
 ```bash

@@ -118,3 +118,4 @@ These are all Keycloak's internal tables for managing:
 Both are valid setups. Use whichever database makes sense for what you're trying to do!
 
 
+

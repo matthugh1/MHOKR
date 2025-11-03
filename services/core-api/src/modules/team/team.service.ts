@@ -4,12 +4,15 @@ import { MemberRole } from '@prisma/client';
 import { OkrTenantGuard } from '../okr/tenant-guard';
 import { AuditLogService } from '../audit/audit-log.service';
 import { AuditTargetType } from '@prisma/client';
+import { RBACService } from '../rbac/rbac.service';
+import { Role } from '../rbac/types';
 
 @Injectable()
 export class TeamService {
   constructor(
     private prisma: PrismaService,
     private auditLogService: AuditLogService,
+    private rbacService: RBACService,
   ) {}
 
   async findAll(workspaceId?: string) {
@@ -17,11 +20,6 @@ export class TeamService {
       where: workspaceId ? { workspaceId } : undefined,
       include: {
         workspace: true,
-        members: {
-          include: {
-            user: true,
-          },
-        },
       },
     });
   }
@@ -31,11 +29,6 @@ export class TeamService {
       where: { id },
       include: {
         workspace: true,
-        members: {
-          include: {
-            user: true,
-          },
-        },
         objectives: true,
       },
     });
@@ -136,6 +129,22 @@ export class TeamService {
     });
   }
 
+  /**
+   * Map legacy team role to RBAC role
+   */
+  private mapLegacyTeamRoleToRBAC(legacyRole: string): Role {
+    switch (legacyRole) {
+      case 'TEAM_LEAD':
+        return 'TEAM_LEAD';
+      case 'MEMBER':
+        return 'TEAM_CONTRIBUTOR';
+      case 'VIEWER':
+        return 'TEAM_VIEWER';
+      default:
+        return 'TEAM_CONTRIBUTOR'; // Default fallback
+    }
+  }
+
   async addMember(teamId: string, data: { userId: string; role: string }, userOrganizationId: string | null | undefined, actorUserId: string) {
     // Tenant isolation: enforce mutation rules
     OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
@@ -153,13 +162,56 @@ export class TeamService {
     // Tenant isolation: verify org match
     OkrTenantGuard.assertSameTenant(team.workspace.organizationId, userOrganizationId);
 
-    const created = await this.prisma.teamMember.create({
-      data: {
-        teamId,
+    // Map legacy role to RBAC role
+    const rbacRole = this.mapLegacyTeamRoleToRBAC(data.role);
+
+    // Check if user already has a role assignment (Phase 3: RBAC only)
+    const existingAssignment = await this.prisma.roleAssignment.findFirst({
+      where: {
         userId: data.userId,
-        role: data.role as MemberRole,
+        scopeType: 'TEAM',
+        scopeId: teamId,
       },
     });
+
+    if (existingAssignment) {
+      // Update RBAC role assignment
+      await this.rbacService.assignRole(
+        data.userId,
+        rbacRole,
+        'TEAM',
+        teamId,
+        actorUserId,
+        userOrganizationId || undefined,
+      );
+
+      await this.auditLogService.record({
+        action: 'UPDATE_TEAM_MEMBER_ROLE',
+        actorUserId,
+        targetUserId: data.userId,
+        targetId: data.userId,
+        targetType: AuditTargetType.USER,
+        organizationId: team.workspace.organizationId,
+        metadata: { role: data.role, previousRole: existingAssignment.role },
+      });
+
+      // Return format compatible with legacy API
+      return {
+        userId: data.userId,
+        teamId,
+        role: data.role as MemberRole,
+      };
+    }
+
+    // Create new RBAC role assignment (Phase 3: RBAC only)
+    await this.rbacService.assignRole(
+      data.userId,
+      rbacRole,
+      'TEAM',
+      teamId,
+      actorUserId,
+      userOrganizationId || undefined,
+    );
 
     await this.auditLogService.record({
       action: 'ADD_TEAM_MEMBER',
@@ -171,7 +223,12 @@ export class TeamService {
       metadata: { role: data.role },
     });
 
-    return created;
+    // Return format compatible with legacy API
+    return {
+      userId: data.userId,
+      teamId,
+      role: data.role as MemberRole,
+    };
   }
 
   async removeMember(teamId: string, userId: string, userOrganizationId: string | null | undefined, actorUserId: string) {
@@ -191,29 +248,41 @@ export class TeamService {
     // Tenant isolation: verify org match
     OkrTenantGuard.assertSameTenant(team.workspace.organizationId, userOrganizationId);
 
-    const teamMember = await this.prisma.teamMember.findFirst({
+    // Check if user has role assignments (Phase 3: RBAC only)
+    const roleAssignments = await this.prisma.roleAssignment.findMany({
       where: {
-        teamId,
         userId,
+        scopeType: 'TEAM',
+        scopeId: teamId,
       },
     });
 
-    if (teamMember) {
-      await this.auditLogService.record({
-        action: 'REMOVE_TEAM_MEMBER',
-        actorUserId,
-        targetUserId: userId,
-        targetId: userId,
-        targetType: AuditTargetType.USER,
-        organizationId: team.workspace.organizationId,
-      });
-
-      return this.prisma.teamMember.delete({
-        where: { id: teamMember.id },
-      });
+    if (roleAssignments.length === 0) {
+      throw new NotFoundException(`User is not a member of this team`);
     }
 
-    return null;
+    // Revoke all RBAC role assignments for this user at this team (Phase 3: RBAC only)
+    for (const assignment of roleAssignments) {
+      await this.rbacService.revokeRole(
+        userId,
+        assignment.role as Role,
+        'TEAM',
+        teamId,
+        actorUserId,
+        userOrganizationId || undefined,
+      );
+    }
+
+    await this.auditLogService.record({
+      action: 'REMOVE_TEAM_MEMBER',
+      actorUserId,
+      targetUserId: userId,
+      targetId: userId,
+      targetType: AuditTargetType.USER,
+      organizationId: team.workspace.organizationId,
+    });
+
+    return { success: true };
   }
 }
 

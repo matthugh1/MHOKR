@@ -8,6 +8,19 @@ import { OkrBadge } from "./OkrBadge"
 import { AvatarCircle } from "@/components/dashboard/AvatarCircle"
 import { Edit2, Trash2, History, Plus, ChevronDown, ChevronUp, MoreVertical } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { InlineInsightBar } from "./InlineInsightBar"
+import { RbacWhyTooltip } from "@/components/rbac/RbacWhyTooltip"
+import { InlineTitleEditor } from "./inline-editors/InlineTitleEditor"
+import { InlineOwnerEditor } from "./inline-editors/InlineOwnerEditor"
+import { InlineStatusEditor } from "./inline-editors/InlineStatusEditor"
+import { InlineNumericEditor } from "./inline-editors/InlineNumericEditor"
+import { useAuth } from "@/contexts/auth.context"
+import { usePermissions } from "@/hooks/usePermissions"
+import { useTenantPermissions } from "@/hooks/useTenantPermissions"
+import { useWorkspace } from "@/contexts/workspace.context"
+import { useToast } from "@/hooks/use-toast"
+import api from "@/lib/api"
+import { mapErrorToMessage } from "@/lib/error-mapping"
 
 export interface ObjectiveRowProps {
   objective: {
@@ -26,6 +39,9 @@ export interface ObjectiveRowProps {
       name: string
       email?: string | null
     }
+    organizationId?: string | null
+    workspaceId?: string | null
+    teamId?: string | null
     overdueCountForObjective?: number
     lowestConfidence?: number | null
     keyResults?: Array<{
@@ -63,7 +79,13 @@ export interface ObjectiveRowProps {
   canDelete: boolean
   canEditKeyResult?: (krId: string) => boolean
   canCheckInOnKeyResult?: (krId: string) => boolean
+  canCreateKeyResult?: boolean // Story 5: RBAC-aware permission to create KR
+  canCreateInitiative?: boolean // Story 5: RBAC-aware permission to create Initiative
+  onOpenContextualAddMenu?: () => void // Story 5: Telemetry callback
+  onContextualAddKeyResult?: (objectiveId: string, objectiveTitle: string) => void // Story 5: Contextual KR creation
+  onContextualAddInitiative?: (objectiveId: string, objectiveTitle: string) => void // Story 5: Contextual Initiative creation
   availableUsers?: Array<{ id: string; name: string; email?: string }>
+  onUpdate?: () => void // Callback when inline edit succeeds (optional - for targeted refresh)
 }
 
 const getStatusBadge = (status: string) => {
@@ -235,29 +257,466 @@ export function ObjectiveRow({
   canDelete,
   canEditKeyResult,
   canCheckInOnKeyResult,
+  canCreateKeyResult = false,
+  canCreateInitiative = false,
+  onOpenContextualAddMenu,
+  onContextualAddKeyResult,
+  onContextualAddInitiative,
   availableUsers = [],
+  onUpdate,
 }: ObjectiveRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const addMenuRef = useRef<HTMLDivElement>(null)
   
-  const statusBadge = getStatusBadge(objective.status)
-  const publishStateBadge = getPublishStateBadge(objective.publishState, objective.isPublished)
-  const keyResults = objective.keyResults || []
-  const initiatives = objective.initiatives || []
-  const overdueCount = objective.overdueCountForObjective ?? 0
+  // Hooks for inline editing
+  const { user } = useAuth()
+  const permissions = usePermissions()
+  const tenantPermissions = useTenantPermissions()
+  const { currentOrganization } = useWorkspace()
+  const { toast } = useToast()
   
-  // Close menu when clicking outside
+  // Optimistic state for inline edits
+  const [optimisticObjective, setOptimisticObjective] = useState(objective)
+  
+  // Sync optimistic state when objective prop changes (from parent refresh)
+  useEffect(() => {
+    setOptimisticObjective(objective)
+  }, [objective])
+  
+  const statusBadge = getStatusBadge(optimisticObjective.status)
+  const publishStateBadge = getPublishStateBadge(optimisticObjective.publishState, optimisticObjective.isPublished)
+  const keyResults = optimisticObjective.keyResults || []
+  const initiatives = optimisticObjective.initiatives || []
+  const overdueCount = optimisticObjective.overdueCountForObjective ?? 0
+  
+  // Build objective context for permission checks
+  const objectiveForHook = {
+    id: optimisticObjective.id,
+    ownerId: optimisticObjective.owner.id,
+    organizationId: optimisticObjective.organizationId,
+    workspaceId: optimisticObjective.workspaceId,
+    teamId: optimisticObjective.teamId,
+    isPublished: optimisticObjective.isPublished,
+    visibilityLevel: optimisticObjective.visibilityLevel,
+    cycle: optimisticObjective.cycleStatus ? { id: '', status: optimisticObjective.cycleStatus } : null,
+    cycleStatus: optimisticObjective.cycleStatus,
+  }
+  
+  // Check if SUPERUSER (read-only)
+  const isSuperuserReadOnly = permissions.isSuperuser
+  
+  // Get lock info for tooltips
+  const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
+  
+  // Check if can edit (respecting SUPERUSER read-only)
+  const canEditInline = canEdit && !isSuperuserReadOnly
+  
+  // Mutation handlers
+  const handleUpdateObjectiveTitle = async (newTitle: string) => {
+    // Optimistic update
+    setOptimisticObjective(prev => ({ ...prev, title: newTitle }))
+    
+    try {
+      const response = await api.patch(`/objectives/${optimisticObjective.id}`, { title: newTitle })
+      
+      console.log('[Telemetry] okr.inline.save.success', {
+        kind: 'objective',
+        field: 'title',
+        objectiveId: optimisticObjective.id,
+        timestamp: new Date().toISOString(),
+      })
+      
+      // Update from server response
+      setOptimisticObjective(prev => ({ ...prev, title: response.data.title }))
+      onUpdate?.()
+    } catch (error: any) {
+      // Revert on error
+      setOptimisticObjective(prev => ({ ...prev, title: objective.title }))
+      
+      const errorInfo = mapErrorToMessage(error)
+      // Map error variant to toast variant (toast doesn't support 'warning')
+      let toastVariant: 'default' | 'destructive' = 'default'
+      if (errorInfo.variant === 'destructive') {
+        toastVariant = 'destructive'
+      }
+      toast({
+        title: 'Could not save',
+        description: errorInfo.message,
+        variant: toastVariant,
+      })
+      
+      console.log('[Telemetry] okr.inline.save.error', {
+        kind: 'objective',
+        field: 'title',
+        httpStatus: error.response?.status,
+        objectiveId: optimisticObjective.id,
+        timestamp: new Date().toISOString(),
+      })
+      
+      throw error
+    }
+  }
+  
+  const handleUpdateObjectiveOwner = async (userId: string) => {
+    const newOwner = availableUsers.find(u => u.id === userId) || optimisticObjective.owner
+    
+    // Optimistic update
+    setOptimisticObjective(prev => ({
+      ...prev,
+      owner: { id: newOwner.id, name: newOwner.name, email: newOwner.email || null },
+    }))
+    
+    try {
+      const response = await api.patch(`/objectives/${optimisticObjective.id}`, { ownerId: userId })
+      
+      const updatedOwner = availableUsers.find(u => u.id === response.data.ownerId) || newOwner
+      
+      console.log('[Telemetry] okr.inline.save.success', {
+        kind: 'objective',
+        field: 'owner',
+        objectiveId: optimisticObjective.id,
+        timestamp: new Date().toISOString(),
+      })
+      
+      // Update from server response
+      setOptimisticObjective(prev => ({
+        ...prev,
+        owner: { id: updatedOwner.id, name: updatedOwner.name, email: updatedOwner.email || null },
+      }))
+      onUpdate?.()
+    } catch (error: any) {
+      // Revert on error
+      setOptimisticObjective(prev => ({ ...prev, owner: objective.owner }))
+      
+      const errorInfo = mapErrorToMessage(error)
+      // Map error variant to toast variant (toast doesn't support 'warning')
+      let toastVariant: 'default' | 'destructive' = 'default'
+      if (errorInfo.variant === 'destructive') {
+        toastVariant = 'destructive'
+      }
+      toast({
+        title: 'Could not save',
+        description: errorInfo.message,
+        variant: toastVariant,
+      })
+      
+      console.log('[Telemetry] okr.inline.save.error', {
+        kind: 'objective',
+        field: 'owner',
+        httpStatus: error.response?.status,
+        objectiveId: optimisticObjective.id,
+        timestamp: new Date().toISOString(),
+      })
+      
+      throw error
+    }
+  }
+  
+  const handleUpdateObjectiveStatus = async (status: 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED') => {
+    // Optimistic update
+    setOptimisticObjective(prev => ({ ...prev, status }))
+    
+    try {
+      const response = await api.patch(`/objectives/${optimisticObjective.id}`, { status })
+      
+      console.log('[Telemetry] okr.inline.save.success', {
+        kind: 'objective',
+        field: 'status',
+        objectiveId: optimisticObjective.id,
+        timestamp: new Date().toISOString(),
+      })
+      
+      // Update from server response
+      setOptimisticObjective(prev => ({ ...prev, status: response.data.status }))
+      onUpdate?.()
+    } catch (error: any) {
+      // Revert on error
+      setOptimisticObjective(prev => ({ ...prev, status: objective.status }))
+      
+      const errorInfo = mapErrorToMessage(error)
+      // Map error variant to toast variant (toast doesn't support 'warning')
+      let toastVariant: 'default' | 'destructive' = 'default'
+      if (errorInfo.variant === 'destructive') {
+        toastVariant = 'destructive'
+      }
+      toast({
+        title: 'Could not save',
+        description: errorInfo.message,
+        variant: toastVariant,
+      })
+      
+      console.log('[Telemetry] okr.inline.save.error', {
+        kind: 'objective',
+        field: 'status',
+        httpStatus: error.response?.status,
+        objectiveId: optimisticObjective.id,
+        timestamp: new Date().toISOString(),
+      })
+      
+      throw error
+    }
+  }
+  
+  // Key Result mutation handlers
+  const handleUpdateKeyResultTitle = async (krId: string, newTitle: string) => {
+    // Optimistic update
+    setOptimisticObjective(prev => ({
+      ...prev,
+      keyResults: prev.keyResults?.map(kr => kr.id === krId ? { ...kr, title: newTitle } : kr),
+    }))
+    
+    try {
+      const response = await api.patch(`/key-results/${krId}`, { title: newTitle })
+      
+      console.log('[Telemetry] okr.inline.save.success', {
+        kind: 'kr',
+        field: 'title',
+        keyResultId: krId,
+        timestamp: new Date().toISOString(),
+      })
+      
+      // Update from server response
+      setOptimisticObjective(prev => ({
+        ...prev,
+        keyResults: prev.keyResults?.map(kr => kr.id === krId ? { ...kr, title: response.data.title } : kr),
+      }))
+      onUpdate?.()
+    } catch (error: any) {
+      // Revert on error
+      const originalKr = objective.keyResults?.find(kr => kr.id === krId)
+      if (originalKr) {
+        setOptimisticObjective(prev => ({
+          ...prev,
+          keyResults: prev.keyResults?.map(kr => kr.id === krId ? originalKr : kr),
+        }))
+      }
+      
+      const errorInfo = mapErrorToMessage(error)
+      // Map error variant to toast variant (toast doesn't support 'warning')
+      let toastVariant: 'default' | 'destructive' = 'default'
+      if (errorInfo.variant === 'destructive') {
+        toastVariant = 'destructive'
+      }
+      toast({
+        title: 'Could not save',
+        description: errorInfo.message,
+        variant: toastVariant,
+      })
+      
+      console.log('[Telemetry] okr.inline.save.error', {
+        kind: 'kr',
+        field: 'title',
+        httpStatus: error.response?.status,
+        keyResultId: krId,
+        timestamp: new Date().toISOString(),
+      })
+      
+      throw error
+    }
+  }
+  
+  const handleUpdateKeyResultOwner = async (krId: string, userId: string) => {
+    try {
+      const response = await api.patch(`/key-results/${krId}`, { ownerId: userId })
+      
+      console.log('[Telemetry] okr.inline.save.success', {
+        kind: 'kr',
+        field: 'owner',
+        keyResultId: krId,
+        timestamp: new Date().toISOString(),
+      })
+      
+      // Update from server response - need to refresh KR ownerId
+      setOptimisticObjective(prev => ({
+        ...prev,
+        keyResults: prev.keyResults?.map(kr => kr.id === krId ? { ...kr, ownerId: userId } : kr),
+      }))
+      onUpdate?.()
+    } catch (error: any) {
+      const errorInfo = mapErrorToMessage(error)
+      // Map error variant to toast variant (toast doesn't support 'warning')
+      let toastVariant: 'default' | 'destructive' = 'default'
+      if (errorInfo.variant === 'destructive') {
+        toastVariant = 'destructive'
+      }
+      toast({
+        title: 'Could not save',
+        description: errorInfo.message,
+        variant: toastVariant,
+      })
+      
+      console.log('[Telemetry] okr.inline.save.error', {
+        kind: 'kr',
+        field: 'owner',
+        httpStatus: error.response?.status,
+        keyResultId: krId,
+        timestamp: new Date().toISOString(),
+      })
+      
+      throw error
+    }
+  }
+  
+  const handleUpdateKeyResultCurrent = async (krId: string, value: number | undefined) => {
+    // Optimistic update
+    setOptimisticObjective(prev => ({
+      ...prev,
+      keyResults: prev.keyResults?.map(kr => kr.id === krId ? { ...kr, currentValue: value } : kr),
+    }))
+    
+    try {
+      const response = await api.patch(`/key-results/${krId}`, { currentValue: value })
+      
+      console.log('[Telemetry] okr.inline.save.success', {
+        kind: 'kr',
+        field: 'current',
+        keyResultId: krId,
+        timestamp: new Date().toISOString(),
+      })
+      
+      // Update from server response
+      setOptimisticObjective(prev => ({
+        ...prev,
+        keyResults: prev.keyResults?.map(kr => kr.id === krId ? { ...kr, currentValue: response.data.currentValue } : kr),
+      }))
+      onUpdate?.()
+    } catch (error: any) {
+      // Revert on error
+      const originalKr = objective.keyResults?.find(kr => kr.id === krId)
+      if (originalKr) {
+        setOptimisticObjective(prev => ({
+          ...prev,
+          keyResults: prev.keyResults?.map(kr => kr.id === krId ? originalKr : kr),
+        }))
+      }
+      
+      const errorInfo = mapErrorToMessage(error)
+      // Map error variant to toast variant (toast doesn't support 'warning')
+      let toastVariant: 'default' | 'destructive' = 'default'
+      if (errorInfo.variant === 'destructive') {
+        toastVariant = 'destructive'
+      }
+      toast({
+        title: 'Could not save',
+        description: errorInfo.message,
+        variant: toastVariant,
+      })
+      
+      console.log('[Telemetry] okr.inline.save.error', {
+        kind: 'kr',
+        field: 'current',
+        httpStatus: error.response?.status,
+        keyResultId: krId,
+        timestamp: new Date().toISOString(),
+      })
+      
+      throw error
+    }
+  }
+  
+  const handleUpdateKeyResultTarget = async (krId: string, value: number | undefined) => {
+    // Optimistic update
+    setOptimisticObjective(prev => ({
+      ...prev,
+      keyResults: prev.keyResults?.map(kr => kr.id === krId ? { ...kr, targetValue: value } : kr),
+    }))
+    
+    try {
+      const response = await api.patch(`/key-results/${krId}`, { targetValue: value })
+      
+      console.log('[Telemetry] okr.inline.save.success', {
+        kind: 'kr',
+        field: 'target',
+        keyResultId: krId,
+        timestamp: new Date().toISOString(),
+      })
+      
+      // Update from server response
+      setOptimisticObjective(prev => ({
+        ...prev,
+        keyResults: prev.keyResults?.map(kr => kr.id === krId ? { ...kr, targetValue: response.data.targetValue } : kr),
+      }))
+      onUpdate?.()
+    } catch (error: any) {
+      // Revert on error
+      const originalKr = objective.keyResults?.find(kr => kr.id === krId)
+      if (originalKr) {
+        setOptimisticObjective(prev => ({
+          ...prev,
+          keyResults: prev.keyResults?.map(kr => kr.id === krId ? originalKr : kr),
+        }))
+      }
+      
+      const errorInfo = mapErrorToMessage(error)
+      // Map error variant to toast variant (toast doesn't support 'warning')
+      let toastVariant: 'default' | 'destructive' = 'default'
+      if (errorInfo.variant === 'destructive') {
+        toastVariant = 'destructive'
+      }
+      toast({
+        title: 'Could not save',
+        description: errorInfo.message,
+        variant: toastVariant,
+      })
+      
+      console.log('[Telemetry] okr.inline.save.error', {
+        kind: 'kr',
+        field: 'target',
+        httpStatus: error.response?.status,
+        keyResultId: krId,
+        timestamp: new Date().toISOString(),
+      })
+      
+      throw error
+    }
+  }
+  
+  // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuOpen(false)
       }
+      if (addMenuRef.current && !addMenuRef.current.contains(event.target as Node)) {
+        setAddMenuOpen(false)
+      }
     }
-    if (menuOpen) {
+    if (menuOpen || addMenuOpen) {
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [menuOpen])
+  }, [menuOpen, addMenuOpen])
+
+  // Keyboard shortcut: Alt+A (or Option+A on Mac) to open Add menu when row is focused
+  useEffect(() => {
+    if (!(canCreateKeyResult || canCreateInitiative)) return
+
+    const rowElement = menuRef.current?.closest('section')
+    if (!rowElement) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only trigger if the row or its children have focus
+      const isFocused = rowElement.contains(document.activeElement)
+      if (!isFocused) return
+      
+      if ((e.key === 'a' || e.key === 'A') && (e.altKey || e.metaKey)) {
+        e.preventDefault()
+        e.stopPropagation()
+        setAddMenuOpen(prev => {
+          if (!prev) {
+            onOpenContextualAddMenu?.()
+          }
+          return !prev
+        })
+      }
+    }
+    
+    // Add to window to catch keyboard events
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [canCreateKeyResult, canCreateInitiative, onOpenContextualAddMenu])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -288,18 +747,37 @@ export function ObjectiveRow({
       >
         <div className="flex items-center justify-between gap-4">
           {/* Left block: Title, status, publication, cycle, owner */}
-          <div className="flex flex-col md:flex-row md:items-center gap-2 flex-1 min-w-0">
-            {/* Title */}
-            <h3 className="truncate text-[14px] font-medium text-neutral-900">
-              {objective.title}
-            </h3>
+          <div className="flex flex-col md:flex-row md:items-center gap-2 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+            {/* Title - Inline Editor */}
+            <div className="flex-1 min-w-0">
+              <InlineTitleEditor
+                value={optimisticObjective.title}
+                onSave={handleUpdateObjectiveTitle}
+                canEdit={canEditInline}
+                lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                ariaLabel="Edit objective title"
+                resource={objectiveForHook}
+                disabled={isSuperuserReadOnly}
+              />
+            </div>
             
             {/* Badges row - W4.M1: Separate Status and Publish State chips */}
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Status chip - Progress state */}
-              <OkrBadge tone={statusBadge.tone}>
-                {statusBadge.label}
-              </OkrBadge>
+              {/* Status chip - Progress state - Inline Editor */}
+              <InlineStatusEditor
+                currentStatus={optimisticObjective.status}
+                onSave={handleUpdateObjectiveStatus}
+                canEdit={canEditInline}
+                lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                ariaLabel="Edit objective status"
+                resource={objectiveForHook}
+                disabled={isSuperuserReadOnly}
+                renderBadge={(status, label, tone) => (
+                  <OkrBadge tone={tone === 'success' ? 'good' : tone === 'warning' ? 'warn' : 'bad'}>
+                    {label}
+                  </OkrBadge>
+                )}
+              />
               
               {/* Publish State chip - Governance state */}
               <OkrBadge tone={publishStateBadge.tone}>
@@ -307,7 +785,7 @@ export function ObjectiveRow({
               </OkrBadge>
               
               {/* Cycle pill */}
-              {objective.cycleLabel && (
+              {optimisticObjective.cycleLabel && (
                 <>
                   <span className={cyclePill.className}>
                     {cyclePill.text}
@@ -320,13 +798,18 @@ export function ObjectiveRow({
                 </>
               )}
               
-              {/* Owner chip */}
-              <div className="flex items-center gap-1.5">
-                <AvatarCircle name={objective.owner.name} size="sm" />
-                <span className="text-[11px] text-neutral-600">
-                  {objective.owner.name}
-                </span>
-              </div>
+              {/* Owner chip - Inline Editor */}
+              <InlineOwnerEditor
+                currentOwner={optimisticObjective.owner}
+                availableUsers={availableUsers}
+                onSave={handleUpdateObjectiveOwner}
+                canEdit={canEditInline}
+                lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                ariaLabel="Edit objective owner"
+                resource={objectiveForHook}
+                disabled={isSuperuserReadOnly}
+                size="sm"
+              />
             </div>
           </div>
 
@@ -366,12 +849,83 @@ export function ObjectiveRow({
                 </span>
               )}
             </div>
+            
+            {/* Inline Insight Bar */}
+            {isExpanded && (
+              <div className="mt-2">
+                <InlineInsightBar
+                  objectiveId={objective.id}
+                  isVisible={isExpanded}
+                  onCheckInClick={(krId) => {
+                    if (onAddCheckIn) {
+                      onAddCheckIn(krId)
+                    }
+                  }}
+                />
+              </div>
+            )}
           </div>
 
           {/* Right block: Action buttons */}
           <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-            {/* + KR button */}
-            {onAddKeyResult && (
+            {/* Story 5: Contextual Add menu (replaces individual + KR and + Initiative buttons) */}
+            {(canCreateKeyResult || canCreateInitiative) && (
+              <div className="relative" ref={addMenuRef}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  onClick={() => {
+                    setAddMenuOpen(!addMenuOpen)
+                    onOpenContextualAddMenu?.()
+                  }}
+                  aria-label="Add Key Result or Initiative"
+                  aria-expanded={addMenuOpen}
+                  aria-haspopup="true"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+                
+                {/* Add menu dropdown */}
+                {addMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1 rounded-md border bg-white shadow-lg text-[13px] z-50 min-w-[180px]">
+                    {canCreateKeyResult && (
+                      <button
+                        className="w-full px-3 py-2 text-left hover:bg-neutral-100 rounded-t-md"
+                        onClick={() => {
+                          if (onContextualAddKeyResult) {
+                            onContextualAddKeyResult(objective.id, objective.title)
+                          } else if (onAddKeyResult) {
+                            onAddKeyResult(objective.id, objective.title)
+                          }
+                          setAddMenuOpen(false)
+                        }}
+                      >
+                        Add Key Result
+                      </button>
+                    )}
+                    {canCreateInitiative && (
+                      <button
+                        className={`w-full px-3 py-2 text-left hover:bg-neutral-100 ${canCreateKeyResult ? '' : 'rounded-t-md'} rounded-b-md`}
+                        onClick={() => {
+                          if (onContextualAddInitiative) {
+                            onContextualAddInitiative(objective.id, objective.title)
+                          } else if (onAddInitiative) {
+                            onAddInitiative(objective.id, objective.title)
+                          }
+                          setAddMenuOpen(false)
+                        }}
+                      >
+                        Add Initiative
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Fallback: Legacy + KR button (if contextual menu not available but onAddKeyResult provided) */}
+            {!canCreateKeyResult && !canCreateInitiative && onAddKeyResult && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -383,8 +937,8 @@ export function ObjectiveRow({
               </Button>
             )}
             
-            {/* + Initiative button */}
-            {onAddInitiative && (
+            {/* Fallback: Legacy + Initiative button (if contextual menu not available but onAddInitiative provided) */}
+            {!canCreateKeyResult && !canCreateInitiative && onAddInitiative && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -397,16 +951,34 @@ export function ObjectiveRow({
             )}
             
             {/* Edit button */}
-            {onEdit && canEdit && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2 text-[12px] font-medium"
-                onClick={() => onEdit(objective.id)}
-                aria-label="Edit objective"
-              >
-                Edit
-              </Button>
+            {onEdit && (
+              canEdit ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-[12px] font-medium"
+                  onClick={() => onEdit(objective.id)}
+                  aria-label="Edit objective"
+                >
+                  Edit
+                </Button>
+              ) : (
+                <RbacWhyTooltip
+                  action="edit_okr"
+                  resource={objective}
+                  allowed={false}
+                >
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-[12px] font-medium opacity-50 cursor-not-allowed"
+                    disabled
+                    aria-label="Edit objective (not permitted)"
+                  >
+                    Edit
+                  </Button>
+                </RbacWhyTooltip>
+              )
             )}
             
             {/* Menu button */}
@@ -424,20 +996,35 @@ export function ObjectiveRow({
               {/* Menu dropdown */}
               {menuOpen && (
                 <div className="absolute right-0 top-full mt-1 rounded-md border bg-white shadow-lg text-[13px] z-50 min-w-[160px]">
-                  {onDelete && canDelete && (
-                    <button
-                      className="w-full px-3 py-2 text-left hover:bg-neutral-100 rounded-t-md text-rose-600"
-                      onClick={() => {
-                        onDelete(objective.id)
-                        setMenuOpen(false)
-                      }}
-                    >
-                      Delete Objective
-                    </button>
+                  {onDelete && (
+                    canDelete ? (
+                      <button
+                        className="w-full px-3 py-2 text-left hover:bg-neutral-100 rounded-t-md text-rose-600"
+                        onClick={() => {
+                          onDelete(objective.id)
+                          setMenuOpen(false)
+                        }}
+                      >
+                        Delete Objective
+                      </button>
+                    ) : (
+                      <RbacWhyTooltip
+                        action="delete_okr"
+                        resource={objective}
+                        allowed={false}
+                      >
+                        <button
+                          className="w-full px-3 py-2 text-left text-slate-400 opacity-50 cursor-not-allowed rounded-t-md"
+                          disabled
+                        >
+                          Delete Objective
+                        </button>
+                      </RbacWhyTooltip>
+                    )
                   )}
-                  {onOpenHistory && (
+                  {onOpenHistory ? (
                     <button
-                      className={`w-full px-3 py-2 text-left hover:bg-neutral-100 ${onDelete && canDelete ? '' : 'rounded-t-md'} rounded-b-md`}
+                      className={`w-full px-3 py-2 text-left hover:bg-neutral-100 ${(onDelete !== undefined && canDelete) ? '' : 'rounded-t-md'} rounded-b-md`}
                       onClick={() => {
                         onOpenHistory()
                         setMenuOpen(false)
@@ -445,7 +1032,7 @@ export function ObjectiveRow({
                     >
                       View history
                     </button>
-                  )}
+                  ) : null}
                 </div>
               )}
             </div>
@@ -493,10 +1080,17 @@ export function ObjectiveRow({
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex flex-col gap-2 flex-1 min-w-0">
-                              {/* Title */}
-                              <div className="text-[13px] text-neutral-900 font-medium">
-                                {kr.title}
-                              </div>
+                              {/* Title - Inline Editor */}
+                              <InlineTitleEditor
+                                value={kr.title}
+                                onSave={(newTitle) => handleUpdateKeyResultTitle(kr.id, newTitle)}
+                                canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                ariaLabel="Edit key result title"
+                                resource={objectiveForHook}
+                                disabled={isSuperuserReadOnly}
+                                className="text-[13px] font-medium text-neutral-900"
+                              />
                               
                               {/* Badges row */}
                               <div className="flex items-center gap-2 flex-wrap">
@@ -527,10 +1121,63 @@ export function ObjectiveRow({
                                 </div>
                               )}
                               
-                              {/* Progress label */}
-                              <div className="text-[12px] text-neutral-600">
-                                {progressLabel}
+                              {/* Progress label with inline editors for current/target */}
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <div className="text-[12px] text-neutral-600">
+                                  {progressLabel}
+                                </div>
+                                {/* Inline editors for numeric values (only show if KR has numeric values) */}
+                                {kr.currentValue !== undefined || kr.targetValue !== undefined ? (
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    {kr.currentValue !== undefined || kr.targetValue !== undefined ? (
+                                      <>
+                                        <InlineNumericEditor
+                                          label="Current"
+                                          value={kr.currentValue}
+                                          onSave={(value) => handleUpdateKeyResultCurrent(kr.id, value)}
+                                          canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                          lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                          ariaLabel="Edit key result current value"
+                                          resource={objectiveForHook}
+                                          disabled={isSuperuserReadOnly}
+                                          unit={kr.unit || ''}
+                                          allowEmpty={false}
+                                        />
+                                        <span className="text-[12px] text-neutral-400">/</span>
+                                        <InlineNumericEditor
+                                          label="Target"
+                                          value={kr.targetValue}
+                                          onSave={(value) => handleUpdateKeyResultTarget(kr.id, value)}
+                                          canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                          lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                          ariaLabel="Edit key result target value"
+                                          resource={objectiveForHook}
+                                          disabled={isSuperuserReadOnly}
+                                          unit={kr.unit || ''}
+                                          allowEmpty={false}
+                                        />
+                                      </>
+                                    ) : null}
+                                  </div>
+                                ) : null}
                               </div>
+                              
+                              {/* Owner - Inline Editor (if available) */}
+                              {kr.ownerId && availableUsers.length > 0 && (
+                                <div className="flex items-center gap-1.5">
+                                  <InlineOwnerEditor
+                                    currentOwner={availableUsers.find(u => u.id === kr.ownerId) || { id: kr.ownerId, name: 'Unknown' }}
+                                    availableUsers={availableUsers}
+                                    onSave={(userId) => handleUpdateKeyResultOwner(kr.id, userId)}
+                                    canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                    lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                    ariaLabel="Edit key result owner"
+                                    resource={objectiveForHook}
+                                    disabled={isSuperuserReadOnly}
+                                    size="sm"
+                                  />
+                                </div>
+                              )}
                             </div>
                             
                             {/* Action buttons */}

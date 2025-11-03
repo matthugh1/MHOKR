@@ -64,11 +64,19 @@ describe('OKR Overview API - W4.M1 Taxonomy Alignment (Integration)', () => {
     });
 
     it('should not expose period field in API response', async () => {
-      // Period is deprecated (validation-only, not exposed in API)
-      // Response should NOT include period field
+      // Period model removed - API should never return period field
+      // This test verifies that period is completely absent from responses
       
-      // Expected: objectives array should not have period field
-      // This will be verified in actual integration test with real data
+      const response = await request(app.getHttpServer())
+        .get('/okr/overview')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      const responseBody = JSON.stringify(response.body);
+      // Assert that no period keys exist anywhere in the response
+      expect(responseBody).not.toContain('"period"');
+      expect(responseBody).not.toContain('"periodId"');
+      expect(responseBody).not.toContain('"period_"');
     });
   });
 
@@ -151,23 +159,26 @@ describe('OKR Overview API - W4.M1 Taxonomy Alignment (Integration)', () => {
   });
 
   describe('GET /okr/overview - Cycle vs Period', () => {
-    it('should return cycle object but not period field', async () => {
+    it('should return cycle object but never period field', async () => {
       // Cycle is canonical (operational planning period)
-      // Period is deprecated (validation-only, not exposed in API)
-      
-      // Expected response structure:
-      // {
-      //   objectives: [{
-      //     cycle: {           // Cycle object should be present
-      //       id: string,
-      //       name: string,
-      //       status: string
-      //     },
-      //     // period field should NOT be present
-      //   }]
-      // }
+      // Period model has been completely removed
 
-      // This will be verified in actual integration test with real data
+      const response = await request(app.getHttpServer())
+        .get('/okr/overview')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('objectives');
+      if (response.body.objectives && response.body.objectives.length > 0) {
+        const objective = response.body.objectives[0];
+        // Cycle should be present if cycleId exists
+        if (objective.cycleId) {
+          expect(objective).toHaveProperty('cycle');
+        }
+        // Period field should NEVER be present
+        expect(objective).not.toHaveProperty('period');
+        expect(objective).not.toHaveProperty('periodId');
+      }
     });
   });
 

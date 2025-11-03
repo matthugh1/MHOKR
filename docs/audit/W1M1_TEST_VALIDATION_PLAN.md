@@ -235,3 +235,4 @@ curl -X PATCH http://localhost:3000/api/workspaces/workspace-b-id \
 
 **Next:** Complete remaining service implementations (WorkspaceService, TeamService, UserService, RBACService, ExecWhitelistService)
 
+

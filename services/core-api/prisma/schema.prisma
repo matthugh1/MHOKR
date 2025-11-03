@@ -22,7 +22,6 @@ model Organization {
   execOnlyWhitelist              Json? // Array of user IDs allowed to view EXEC_ONLY OKRs: ["userId1", "userId2"]
   metadata                       Json? // Additional tenant configuration
   workspaces                     Workspace[]
-  members                        OrganizationMember[]
   objectives                     Objective[] // Organization-level OKRs
   strategicPillars               StrategicPillar[] // Strategic pillars/themes for this organization
   cycles                         Cycle[] // OKR cycles/quarters for this organization
@@ -42,7 +41,6 @@ model Workspace {
   parentWorkspace   Workspace?        @relation("WorkspaceHierarchy", fields: [parentWorkspaceId], references: [id], onDelete: SetNull)
   childWorkspaces   Workspace[]       @relation("WorkspaceHierarchy")
   teams             Team[]
-  members           WorkspaceMember[]
   objectives        Objective[]
   aiConversations   AIConversation[]
   createdAt         DateTime          @default(now())
@@ -58,7 +56,6 @@ model Team {
   name        String
   workspaceId String
   workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  members     TeamMember[]
   objectives  Objective[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
@@ -75,12 +72,10 @@ model User {
   passwordHash              String?
   avatar                    String?
   isSuperuser               Boolean              @default(false) // System-wide superuser
+  settings                  Json?                @default("{}") // User settings including debug flags (e.g. debug.rbacInspectorEnabled)
   managerId                 String? // Direct manager for MANAGER_CHAIN visibility
   manager                   User?                @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
   directReports             User[]               @relation("UserManager")
-  teamMembers               TeamMember[]
-  workspaceMembers          WorkspaceMember[]
-  organizationMembers       OrganizationMember[]
   roleAssignments           RoleAssignment[]     @relation("RoleAssignmentUser")
   objectives                Objective[]          @relation("ObjectiveOwner")
   permissionAudits          PermissionAudit[]    @relation("PermissionAuditUser")
@@ -100,22 +95,7 @@ model User {
   @@map("users")
 }
 
-model TeamMember {
-  id        String     @id @default(cuid())
-  userId    String
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  teamId    String
-  team      Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  role      MemberRole
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-
-  @@unique([userId, teamId])
-  @@index([userId])
-  @@index([teamId])
-  @@map("team_members")
-}
-
+// Legacy MemberRole enum kept for PermissionAudit backward compatibility
 enum MemberRole {
   SUPERUSER
   ORG_ADMIN
@@ -123,38 +103,6 @@ enum MemberRole {
   TEAM_LEAD
   MEMBER
   VIEWER
-}
-
-model WorkspaceMember {
-  id          String     @id @default(cuid())
-  userId      String
-  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workspaceId String
-  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  role        MemberRole // WORKSPACE_OWNER, MEMBER, VIEWER
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  @@unique([userId, workspaceId])
-  @@index([userId])
-  @@index([workspaceId])
-  @@map("workspace_members")
-}
-
-model OrganizationMember {
-  id             String       @id @default(cuid())
-  userId         String
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  role           MemberRole // ORG_ADMIN, MEMBER, VIEWER
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-
-  @@unique([userId, organizationId])
-  @@index([userId])
-  @@index([organizationId])
-  @@map("organization_members")
 }
 
 model PermissionAudit {
@@ -214,6 +162,8 @@ model Cycle {
   startDate      DateTime
   endDate        DateTime
   objectives     Objective[]
+  keyResults     KeyResult[]
+  initiatives    Initiative[]
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -250,7 +200,6 @@ model Objective {
   children        Objective[]          @relation("ObjectiveHierarchy")
   keyResults      ObjectiveKeyResult[]
   initiatives     Initiative[]
-  period          Period
   startDate       DateTime
   endDate         DateTime
   status          OKRStatus            @default(ON_TRACK)
@@ -289,7 +238,8 @@ model KeyResult {
   visibilityLevel VisibilityLevel      @default(PUBLIC_TENANT) // Visibility level for access control
   isPublished     Boolean              @default(false) // Whether KR is published (draft vs published)
   checkInCadence  CheckInCadence?      // Optional check-in cadence for overdue tracking
-  period          Period?
+  cycleId         String? // Optional link to OKR cycle/quarter (inherited from parent Objective but can be set directly)
+  cycle           Cycle?                @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   startDate       DateTime?
   endDate         DateTime?
   positionX       Float?
@@ -303,6 +253,7 @@ model KeyResult {
   @@index([ownerId])
   @@index([visibilityLevel])
   @@index([isPublished])
+  @@index([cycleId])
   @@map("key_results")
 }
 
@@ -328,9 +279,10 @@ model Initiative {
   keyResultId String?
   objectiveId String?
   objective   Objective?       @relation(fields: [objectiveId], references: [id], onDelete: SetNull)
+  cycleId     String? // Optional link to OKR cycle/quarter (inherited from parent Objective but can be set directly)
+  cycle       Cycle?            @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   ownerId     String
   status      InitiativeStatus
-  period      Period?
   startDate   DateTime?
   endDate     DateTime?
   dueDate     DateTime?
@@ -342,14 +294,8 @@ model Initiative {
   @@index([keyResultId])
   @@index([objectiveId])
   @@index([ownerId])
+  @@index([cycleId])
   @@map("initiatives")
-}
-
-enum Period {
-  MONTHLY
-  QUARTERLY
-  ANNUAL
-  CUSTOM
 }
 
 enum OKRStatus {

@@ -3,10 +3,12 @@ import { PermissionService } from './permission.service';
 import { RoleService } from './role.service';
 import { PermissionGuard } from './permission.guard';
 import { TenantIsolationGuard } from './tenant-isolation.guard';
+import { RBACModule } from '../rbac/rbac.module';
 // PrismaModule is Global, so we don't need to import it
 
 @Global() // Make available to all modules
 @Module({
+  imports: [RBACModule],
   providers: [PermissionService, RoleService, PermissionGuard, TenantIsolationGuard],
   exports: [PermissionService, RoleService, PermissionGuard, TenantIsolationGuard],
 })

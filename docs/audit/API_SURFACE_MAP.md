@@ -219,15 +219,40 @@ app.use('/api/reports', createProxyMiddleware({ ... })); // Line 204 (DUPLICATE)
 |--------|-------|--------|----------------|-------|
 | GET | `/okr/overview` | ✅ JwtAuthGuard, RBACGuard | ✅ `view_okr` | ✅ Complete - W4.M1: Returns `status`, `publishState`, `visibilityLevel` (canonical only), `cycle` (no `period`), no `pillarId` |
 | GET | `/okr/creation-context` | ✅ JwtAuthGuard, RBACGuard | ✅ `view_okr` | ✅ Complete - W4.M1: Returns `allowedVisibilityLevels` with only `PUBLIC_TENANT` and `PRIVATE` |
+| POST | `/okr/create-composite` | ✅ JwtAuthGuard, RBACGuard, RateLimitGuard | ✅ `create_okr` | ✅ Complete - W5.M1: Atomically creates Objective and Key Results with validation, RBAC, governance, and AuditLog |
 
 **Missing Guards:** None
 
 **W4.M1 Changes:**
 - Response includes `publishState` field (`PUBLISHED | DRAFT`) in addition to `isPublished` boolean
 - `visibilityLevel` returns only canonical values (`PUBLIC_TENANT | PRIVATE`)
-- `period` field removed from responses (deprecated)
+- `period` field removed from responses (model completely removed in W4.M2)
 - `pillarId` field removed from responses (deprecated)
-- `allowedVisibilityLevels` in creation context excludes deprecated values (`EXEC_ONLY` removed)
+
+**W5.M1 Changes:**
+- Added `POST /okr/create-composite` endpoint for atomic OKR creation
+- Rate limit: 30 requests per minute per user
+- Supports `PUBLIC_TENANT` and `PRIVATE` visibility levels (EXEC_ONLY excluded per W4.M1)
+
+---
+
+### OkrInsightsController (`/okr/insights`)
+
+| Method | Route | Guards | @RequireAction | Notes |
+|--------|-------|--------|----------------|-------|
+| GET | `/okr/insights/cycle-summary` | ✅ JwtAuthGuard, RBACGuard | ✅ `view_okr` | ✅ Complete - W5.M2: Returns cycle health summary (objectives, KRs, check-ins) with visibility filtering |
+| GET | `/okr/insights/objective/:id` | ✅ JwtAuthGuard, RBACGuard | ✅ `view_okr` | ✅ Complete - W5.M2: Returns objective-level insights (status trend, last update age, KR roll-ups, check-in counts) |
+| GET | `/okr/insights/attention` | ✅ JwtAuthGuard, RBACGuard | ✅ `view_okr` | ✅ Complete - W5.M2: Returns paginated attention feed (overdue check-ins, no updates, status downgrades) |
+
+**Missing Guards:** None
+
+**W5.M2 Changes:**
+- Added three new insights endpoints for inline analytics and cycle health
+- All endpoints respect server-side visibility and tenant isolation
+- Cycle summary includes objectives (published/draft), KRs (on track/at risk/blocked/completed), and check-ins (upcoming/overdue/recent)
+- Objective insights include status trend, last update age, KR roll-ups, and check-in counts
+- Attention feed supports pagination (default 20 per page, max 50)
+- All insights filtered by caller's visibility scope before returning
 
 ---
 

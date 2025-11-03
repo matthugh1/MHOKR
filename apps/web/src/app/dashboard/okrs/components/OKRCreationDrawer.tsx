@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -42,6 +42,12 @@ interface OKRCreationDrawerProps {
   // Optional: preselect parent for KR or Initiative
   preselectedObjectiveId?: string | null
   preselectedKeyResultId?: string | null
+  // Story 5: Parent context for contextual creation from row
+  parentContext?: {
+    type: 'objective' | 'kr'
+    id: string
+    title: string
+  }
 }
 
 type Step = 'basics' | 'visibility' | 'key-results' | 'review'
@@ -76,6 +82,7 @@ export function OKRCreationDrawer({
   onSuccess,
   preselectedObjectiveId = null,
   preselectedKeyResultId = null,
+  parentContext,
 }: OKRCreationDrawerProps) {
   const { user } = useAuth()
   const permissions = usePermissions()
@@ -90,6 +97,27 @@ export function OKRCreationDrawer({
     visibilityLevel: 'PUBLIC_TENANT',
   })
   const [draftKRs, setDraftKRs] = useState<DraftKeyResult[]>([])
+  // Story 5: Determine parent from parentContext or preselectedObjectiveId
+  const effectiveParentObjectiveId = useMemo(() => {
+    if (mode === 'kr' && parentContext?.type === 'objective') {
+      return parentContext.id
+    }
+    return preselectedObjectiveId || ''
+  }, [mode, parentContext, preselectedObjectiveId])
+
+  // Story 5: Determine parent for Initiative
+  const effectiveParentForInitiative = useMemo(() => {
+    if (mode === 'initiative') {
+      if (parentContext?.type === 'objective') {
+        return { objectiveId: parentContext.id, keyResultId: null }
+      }
+      if (parentContext?.type === 'kr') {
+        return { objectiveId: null, keyResultId: parentContext.id }
+      }
+    }
+    return { objectiveId: preselectedObjectiveId || null, keyResultId: preselectedKeyResultId || null }
+  }, [mode, parentContext, preselectedObjectiveId, preselectedKeyResultId])
+
   // KR mode state
   const [krData, setKrData] = useState<{
     title: string
@@ -102,7 +130,7 @@ export function OKRCreationDrawer({
     metricType: 'INCREASE' | 'DECREASE' | 'MAINTAIN' | 'PERCENTAGE' | 'CUSTOM'
   }>({
     title: '',
-    objectiveId: preselectedObjectiveId || '',
+    objectiveId: effectiveParentObjectiveId,
     ownerId: user?.id || '',
     cycleId: activeCycles.length > 0 ? activeCycles[0].id : '',
     targetValue: 100,
@@ -120,8 +148,8 @@ export function OKRCreationDrawer({
     dueDate: string
   }>({
     title: '',
-    objectiveId: preselectedObjectiveId || null,
-    keyResultId: preselectedKeyResultId || null,
+    objectiveId: effectiveParentForInitiative.objectiveId,
+    keyResultId: effectiveParentForInitiative.keyResultId,
     ownerId: user?.id || '',
     status: 'NOT_STARTED',
     dueDate: '',
@@ -262,6 +290,27 @@ export function OKRCreationDrawer({
     }
   }, [isOpen, currentOrganization?.id, user?.id, availableUsers, activeCycles, mode])
 
+  // Story 5: Sync KR data when parentContext changes
+  useEffect(() => {
+    if (mode === 'kr' && effectiveParentObjectiveId) {
+      setKrData(prev => ({
+        ...prev,
+        objectiveId: effectiveParentObjectiveId,
+      }))
+    }
+  }, [mode, effectiveParentObjectiveId])
+
+  // Story 5: Sync Initiative data when parentContext changes
+  useEffect(() => {
+    if (mode === 'initiative') {
+      setInitiativeData(prev => ({
+        ...prev,
+        objectiveId: effectiveParentForInitiative.objectiveId,
+        keyResultId: effectiveParentForInitiative.keyResultId,
+      }))
+    }
+  }, [mode, effectiveParentForInitiative])
+
   // Reset form when drawer closes
   useEffect(() => {
     if (!isOpen) {
@@ -276,7 +325,7 @@ export function OKRCreationDrawer({
       setDraftKRs([])
       setKrData({
         title: '',
-        objectiveId: preselectedObjectiveId || '',
+        objectiveId: effectiveParentObjectiveId,
         ownerId: user?.id || '',
         cycleId: activeCycles.length > 0 ? activeCycles[0].id : '',
         targetValue: 100,
@@ -286,15 +335,15 @@ export function OKRCreationDrawer({
       })
       setInitiativeData({
         title: '',
-        objectiveId: preselectedObjectiveId || null,
-        keyResultId: preselectedKeyResultId || null,
+        objectiveId: effectiveParentForInitiative.objectiveId,
+        keyResultId: effectiveParentForInitiative.keyResultId,
         ownerId: user?.id || '',
         status: 'NOT_STARTED',
         dueDate: '',
       })
       setIsSubmitting(false)
     }
-  }, [isOpen, user?.id, activeCycles, preselectedObjectiveId, preselectedKeyResultId])
+  }, [isOpen, user?.id, activeCycles, effectiveParentObjectiveId, effectiveParentForInitiative])
 
   // Validate Step A
   const canProceedFromBasics = () => {
@@ -962,8 +1011,13 @@ export function OKRCreationDrawer({
 
   // Key Result submit handler
   const canSubmitKR = () => {
+    // Story 5: Check parentContext.id if available, otherwise use krData.objectiveId
+    const objectiveIdToCheck = (mode === 'kr' && parentContext?.type === 'objective')
+      ? parentContext.id
+      : krData.objectiveId
+    
     return krData.title.trim() !== '' && 
-           krData.objectiveId !== '' && 
+           objectiveIdToCheck !== '' && 
            krData.ownerId !== '' &&
            krData.cycleId !== ''
   }
@@ -973,9 +1027,14 @@ export function OKRCreationDrawer({
 
       setIsSubmitting(true)
       try {
+        // Story 5: Use parentContext.id if available, otherwise use krData.objectiveId
+        const objectiveIdToUse = (mode === 'kr' && parentContext?.type === 'objective') 
+          ? parentContext.id 
+          : krData.objectiveId
+        
         const response = await api.post('/key-results', {
           title: krData.title,
-          objectiveId: krData.objectiveId,
+          objectiveId: objectiveIdToUse,
           ownerId: krData.ownerId,
           cycleId: krData.cycleId,
           targetValue: krData.targetValue,
@@ -1043,22 +1102,39 @@ export function OKRCreationDrawer({
           <Label htmlFor="kr-objective">
             Parent Objective <span className="text-red-500">*</span>
           </Label>
-          <Select
-            value={krData.objectiveId}
-            onValueChange={(value) => setKrData(prev => ({ ...prev, objectiveId: value }))}
-          >
-            <SelectTrigger id="kr-objective">
-              <SelectValue placeholder="Select objective" />
-            </SelectTrigger>
-            <SelectContent>
-              {availableObjectives.map((obj) => (
-                <SelectItem key={obj.id} value={obj.id}>
-                  {obj.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">Select the objective this key result measures.</p>
+          {/* Story 5: If parentContext provided, show disabled input with parent title */}
+          {parentContext && parentContext.type === 'objective' ? (
+            <>
+              <Input
+                id="kr-objective"
+                value={parentContext.title}
+                disabled
+                readOnly
+                className="cursor-not-allowed bg-neutral-50"
+                aria-label={`Parent objective: ${parentContext.title}`}
+              />
+              <p className="text-xs text-muted-foreground">Parent objective is pre-selected from row context.</p>
+            </>
+          ) : (
+            <>
+              <Select
+                value={krData.objectiveId}
+                onValueChange={(value) => setKrData(prev => ({ ...prev, objectiveId: value }))}
+              >
+                <SelectTrigger id="kr-objective">
+                  <SelectValue placeholder="Select objective" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableObjectives.map((obj) => (
+                    <SelectItem key={obj.id} value={obj.id}>
+                      {obj.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Select the objective this key result measures.</p>
+            </>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -1162,9 +1238,13 @@ export function OKRCreationDrawer({
 
   // Initiative submit handler
   const canSubmitInitiative = () => {
+    // Story 5: Check parentContext.id if available, otherwise use initiativeData
+    const hasParent = (mode === 'initiative' && parentContext) ||
+      (initiativeData.objectiveId !== null || initiativeData.keyResultId !== null)
+    
     return initiativeData.title.trim() !== '' && 
            initiativeData.ownerId !== '' &&
-           (initiativeData.objectiveId !== null || initiativeData.keyResultId !== null)
+           hasParent
   }
 
   const handleSubmitInitiative = async () => {
@@ -1172,13 +1252,21 @@ export function OKRCreationDrawer({
 
       setIsSubmitting(true)
       try {
+        // Story 5: Use parentContext.id if available, otherwise use initiativeData
+        const objectiveIdToUse = (mode === 'initiative' && parentContext?.type === 'objective')
+          ? parentContext.id
+          : initiativeData.objectiveId
+        const keyResultIdToUse = (mode === 'initiative' && parentContext?.type === 'kr')
+          ? parentContext.id
+          : initiativeData.keyResultId
+        
         const payload: any = {
           title: initiativeData.title,
           ownerId: initiativeData.ownerId,
           status: initiativeData.status,
         }
-        if (initiativeData.objectiveId) payload.objectiveId = initiativeData.objectiveId
-        if (initiativeData.keyResultId) payload.keyResultId = initiativeData.keyResultId
+        if (objectiveIdToUse) payload.objectiveId = objectiveIdToUse
+        if (keyResultIdToUse) payload.keyResultId = keyResultIdToUse
         if (initiativeData.dueDate) payload.dueDate = new Date(initiativeData.dueDate).toISOString()
 
         const response = await api.post('/initiatives', payload)
@@ -1242,41 +1330,62 @@ export function OKRCreationDrawer({
           <Label htmlFor="init-parent">
             Parent (Objective or Key Result) <span className="text-red-500">*</span>
           </Label>
-          <div className="space-y-3">
-            <Select
-              value={initiativeData.objectiveId || ''}
-              onValueChange={(value) => setInitiativeData(prev => ({ ...prev, objectiveId: value || null, keyResultId: null }))}
-            >
-              <SelectTrigger id="init-parent">
-                <SelectValue placeholder="Select objective (or key result below)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">None (select key result below)</SelectItem>
-                {availableObjectives.map((obj) => (
-                  <SelectItem key={obj.id} value={obj.id}>
-                    Objective: {obj.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={initiativeData.keyResultId || ''}
-              onValueChange={(value) => setInitiativeData(prev => ({ ...prev, keyResultId: value || null, objectiveId: null }))}
-            >
-              <SelectTrigger id="init-kr">
-                <SelectValue placeholder="Or select key result" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">None (select objective above)</SelectItem>
-                {availableKeyResults.map((kr) => (
-                  <SelectItem key={kr.id} value={kr.id}>
-                    Key Result: {kr.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <p className="text-xs text-muted-foreground">Link this initiative to an objective or key result.</p>
+          {/* Story 5: If parentContext provided, show disabled input with parent title */}
+          {parentContext ? (
+            <>
+              <Input
+                id="init-parent"
+                value={
+                  parentContext.type === 'objective'
+                    ? `Objective: ${parentContext.title}`
+                    : `Key Result: ${parentContext.title}`
+                }
+                disabled
+                readOnly
+                className="cursor-not-allowed bg-neutral-50"
+                aria-label={`Parent: ${parentContext.type === 'objective' ? 'Objective' : 'Key Result'} - ${parentContext.title}`}
+              />
+              <p className="text-xs text-muted-foreground">Parent is pre-selected from row context.</p>
+            </>
+          ) : (
+            <>
+              <div className="space-y-3">
+                <Select
+                  value={initiativeData.objectiveId || ''}
+                  onValueChange={(value) => setInitiativeData(prev => ({ ...prev, objectiveId: value || null, keyResultId: null }))}
+                >
+                  <SelectTrigger id="init-parent">
+                    <SelectValue placeholder="Select objective (or key result below)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">None (select key result below)</SelectItem>
+                    {availableObjectives.map((obj) => (
+                      <SelectItem key={obj.id} value={obj.id}>
+                        Objective: {obj.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={initiativeData.keyResultId || ''}
+                  onValueChange={(value) => setInitiativeData(prev => ({ ...prev, keyResultId: value || null, objectiveId: null }))}
+                >
+                  <SelectTrigger id="init-kr">
+                    <SelectValue placeholder="Or select key result" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">None (select objective above)</SelectItem>
+                    {availableKeyResults.map((kr) => (
+                      <SelectItem key={kr.id} value={kr.id}>
+                        Key Result: {kr.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">Link this initiative to an objective or key result.</p>
+            </>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -1338,8 +1447,8 @@ export function OKRCreationDrawer({
         <SheetHeader>
           <SheetTitle id="creation-drawer-title">
             {mode === 'objective' && 'New Objective'}
-            {mode === 'kr' && 'New Key Result'}
-            {mode === 'initiative' && 'New Initiative'}
+            {mode === 'kr' && (parentContext ? `New Key Result for '${parentContext.title}'` : 'New Key Result')}
+            {mode === 'initiative' && (parentContext ? `New Initiative for '${parentContext.title}'` : 'New Initiative')}
           </SheetTitle>
           <SheetDescription id="creation-drawer-description">
             {mode === 'objective' && (

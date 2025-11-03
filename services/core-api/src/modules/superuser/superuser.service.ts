@@ -2,12 +2,15 @@ import { Injectable, NotFoundException, ConflictException, ForbiddenException } 
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { RBACService } from '../rbac/rbac.service';
+import { Role } from '../rbac/types';
 
 @Injectable()
 export class SuperuserService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    private rbacService: RBACService,
   ) {}
 
   /**
@@ -154,7 +157,22 @@ export class SuperuserService {
   }
 
   /**
-   * Add user to organization (superuser only)
+   * Map legacy organization role to RBAC role
+   */
+  private mapLegacyOrgRoleToRBAC(legacyRole: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER'): Role {
+    switch (legacyRole) {
+      case 'ORG_ADMIN':
+        return 'TENANT_ADMIN';
+      case 'VIEWER':
+        return 'TENANT_VIEWER';
+      case 'MEMBER':
+      default:
+        return 'TENANT_VIEWER';
+    }
+  }
+
+  /**
+   * Add user to organization (superuser only) - Phase 4: RBAC only
    */
   async addUserToOrganization(
     userId: string,
@@ -179,74 +197,71 @@ export class SuperuserService {
       throw new NotFoundException(`Organization with ID ${organizationId} not found`);
     }
 
-    // Check if already a member
-    const existing = await this.prisma.organizationMember.findUnique({
-      where: {
-        userId_organizationId: {
-          userId,
-          organizationId,
-        },
-      },
-    });
+    // Map legacy role to RBAC role
+    const rbacRole = this.mapLegacyOrgRoleToRBAC(role);
 
-    if (existing) {
-      // Update role
-      return this.prisma.organizationMember.update({
-        where: { id: existing.id },
-        data: { role },
-      });
-    }
+    // Assign RBAC role (Phase 4: RBAC only)
+    await this.rbacService.assignRole(
+      userId,
+      rbacRole,
+      'TENANT',
+      organizationId,
+      userId, // Superuser is the actor
+      organizationId,
+    );
 
-    // Add to organization
-    return this.prisma.organizationMember.create({
-      data: {
-        userId,
-        organizationId,
-        role,
+    // Return format compatible with legacy API
+    return {
+      userId,
+      organizationId,
+      role,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
       },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-          },
-        },
-        organization: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
+      organization: {
+        id: organization.id,
+        name: organization.name,
+        slug: organization.slug,
       },
-    });
+    };
   }
 
   /**
-   * Remove user from organization (superuser only)
+   * Remove user from organization (superuser only) - Phase 4: RBAC only
    */
   async removeUserFromOrganization(userId: string, organizationId: string) {
-    const membership = await this.prisma.organizationMember.findUnique({
+    // Check if user has role assignments (Phase 4: RBAC only)
+    const roleAssignments = await this.prisma.roleAssignment.findMany({
       where: {
-        userId_organizationId: {
-          userId,
-          organizationId,
-        },
+        userId,
+        scopeType: 'TENANT',
+        scopeId: organizationId,
       },
     });
 
-    if (!membership) {
+    if (roleAssignments.length === 0) {
       throw new NotFoundException('User is not a member of this organization');
     }
 
-    return this.prisma.organizationMember.delete({
-      where: { id: membership.id },
-    });
+    // Revoke all RBAC role assignments for this user at this organization
+    for (const assignment of roleAssignments) {
+      await this.rbacService.revokeRole(
+        userId,
+        assignment.role as Role,
+        'TENANT',
+        organizationId,
+        userId, // Superuser is the actor
+        organizationId,
+      );
+    }
+
+    return { success: true };
   }
 
   /**
-   * List all organizations (superuser only)
+   * List all organizations (superuser only) - Phase 4: RBAC only
    */
   async listOrganizations() {
     return this.prisma.organization.findMany({
@@ -256,24 +271,13 @@ export class SuperuserService {
             teams: true,
           },
         },
-        members: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                name: true,
-              },
-            },
-          },
-        },
       },
       orderBy: { createdAt: 'asc' },
     });
   }
 
   /**
-   * List all users (superuser only)
+   * List all users (superuser only) - Phase 4: RBAC only
    */
   async listAllUsers() {
     return this.prisma.user.findMany({
@@ -283,17 +287,6 @@ export class SuperuserService {
         name: true,
         isSuperuser: true,
         createdAt: true,
-        organizationMembers: {
-          include: {
-            organization: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-              },
-            },
-          },
-        },
       },
       orderBy: { createdAt: 'asc' },
     });

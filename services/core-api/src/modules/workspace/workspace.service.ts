@@ -2,13 +2,16 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OkrTenantGuard } from '../okr/tenant-guard';
 import { AuditLogService } from '../audit/audit-log.service';
-import { AuditTargetType } from '@prisma/client';
+import { AuditTargetType, MemberRole } from '@prisma/client';
+import { RBACService } from '../rbac/rbac.service';
+import { Role } from '../rbac/types';
 
 @Injectable()
 export class WorkspaceService {
   constructor(
     private prisma: PrismaService,
     private auditLogService: AuditLogService,
+    private rbacService: RBACService,
   ) {}
 
   async findAll(organizationId?: string) {
@@ -18,15 +21,7 @@ export class WorkspaceService {
         organization: true,
         parentWorkspace: true,
         childWorkspaces: true,
-        teams: {
-          include: {
-            members: {
-              include: {
-                user: true,
-              },
-            },
-          },
-        },
+        teams: true,
       },
     });
   }
@@ -38,15 +33,7 @@ export class WorkspaceService {
         organization: true,
         parentWorkspace: true,
         childWorkspaces: true,
-        teams: {
-          include: {
-            members: {
-              include: {
-                user: true,
-              },
-            },
-          },
-        },
+        teams: true,
         objectives: {
           include: {
             keyResults: true,
@@ -63,26 +50,54 @@ export class WorkspaceService {
   }
 
   async findByUserId(userId: string) {
-    // Find workspaces through direct workspace memberships (primary)
-    const workspaceMembers = await this.prisma.workspaceMember.findMany({
-      where: { userId },
-      include: {
-        workspace: {
+    // Find workspaces through RBAC workspace role assignments (Phase 4: RBAC only)
+    const workspaceAssignments = await this.prisma.roleAssignment.findMany({
+      where: {
+        userId,
+        scopeType: 'WORKSPACE',
+        scopeId: { not: null },
+      },
+    });
+
+    // Get unique workspace IDs
+    const workspaceIds = [...new Set(
+      workspaceAssignments
+        .map(wa => wa.scopeId)
+        .filter((id): id is string => id !== null)
+    )];
+
+    // Fetch direct workspaces
+    const directWorkspaces = workspaceIds.length > 0
+      ? await this.prisma.workspace.findMany({
+          where: { id: { in: workspaceIds } },
           include: {
             organization: true,
             parentWorkspace: true,
             childWorkspaces: true,
             teams: true,
           },
-        },
+        })
+      : [];
+
+    // Also find workspaces through team memberships (Phase 4: RBAC only)
+    const teamAssignments = await this.prisma.roleAssignment.findMany({
+      where: {
+        userId,
+        scopeType: 'TEAM',
+        scopeId: { not: null },
       },
     });
 
-    // Also find workspaces through team memberships (secondary)
-    const teamMembers = await this.prisma.teamMember.findMany({
-      where: { userId },
-      include: {
-        team: {
+    // Get team IDs and fetch teams with workspaces
+    const teamIds = [...new Set(
+      teamAssignments
+        .map(ta => ta.scopeId)
+        .filter((id): id is string => id !== null)
+    )];
+
+    const teamsWithWorkspaces = teamIds.length > 0
+      ? await this.prisma.team.findMany({
+          where: { id: { in: teamIds } },
           include: {
             workspace: {
               include: {
@@ -93,13 +108,12 @@ export class WorkspaceService {
               },
             },
           },
-        },
-      },
-    });
+        })
+      : [];
+
+    const indirectWorkspaces = teamsWithWorkspaces.map(t => t.workspace);
 
     // Combine direct and indirect workspace memberships
-    const directWorkspaces = workspaceMembers.map(wm => wm.workspace);
-    const indirectWorkspaces = teamMembers.map(tm => tm.team.workspace);
     const allWorkspaces = [...directWorkspaces, ...indirectWorkspaces];
 
     // Extract unique workspaces (prioritize direct memberships)
@@ -279,11 +293,6 @@ export class WorkspaceService {
       include: {
         parentWorkspace: true,
         childWorkspaces: true,
-        members: {
-          include: {
-            user: true,
-          },
-        },
       },
       orderBy: { name: 'asc' },
     });
@@ -315,6 +324,50 @@ export class WorkspaceService {
     });
   }
 
+  /**
+   * Map RBAC role to legacy MemberRole for backward compatibility
+   */
+  private mapRBACRoleToLegacyRole(rbacRole: Role, scopeType: 'TEAM' | 'WORKSPACE' | 'TENANT'): MemberRole {
+    if (scopeType === 'TEAM') {
+      switch (rbacRole) {
+        case 'TEAM_LEAD':
+          return MemberRole.TEAM_LEAD;
+        case 'TEAM_CONTRIBUTOR':
+          return MemberRole.MEMBER;
+        case 'TEAM_VIEWER':
+          return MemberRole.VIEWER;
+        default:
+          return MemberRole.MEMBER;
+      }
+    }
+
+    if (scopeType === 'WORKSPACE') {
+      switch (rbacRole) {
+        case 'WORKSPACE_LEAD':
+        case 'WORKSPACE_ADMIN':
+          return MemberRole.WORKSPACE_OWNER;
+        case 'WORKSPACE_MEMBER':
+          return MemberRole.MEMBER;
+        default:
+          return MemberRole.MEMBER;
+      }
+    }
+
+    if (scopeType === 'TENANT') {
+      switch (rbacRole) {
+        case 'TENANT_OWNER':
+        case 'TENANT_ADMIN':
+          return MemberRole.ORG_ADMIN;
+        case 'TENANT_VIEWER':
+          return MemberRole.VIEWER;
+        default:
+          return MemberRole.MEMBER;
+      }
+    }
+
+    return MemberRole.MEMBER;
+  }
+
   async getMembers(workspaceId: string) {
     // Get workspace to find organization
     const workspace = await this.prisma.workspace.findUnique({
@@ -326,87 +379,105 @@ export class WorkspaceService {
       return [];
     }
 
-    // Get all users who are members of teams in this workspace
-    const teamMembers = await this.prisma.teamMember.findMany({
+    // Get members from RBAC system (Phase 2 - primary source)
+    // Get workspace-level role assignments
+    const workspaceAssignments = await this.prisma.roleAssignment.findMany({
       where: {
-        team: {
-          workspaceId,
-        },
-      },
-      include: {
-        user: true,
-        team: true,
-      },
-    });
-
-    // Get workspace-level members
-    const workspaceMembers = await this.prisma.workspaceMember.findMany({
-      where: {
-        workspaceId,
+        scopeType: 'WORKSPACE',
+        scopeId: workspaceId,
       },
       include: {
         user: true,
       },
     });
 
-    // Get organization-level members (they have access to all workspaces)
-    const orgMembers = await this.prisma.organizationMember.findMany({
+    // Get team-level role assignments for teams in this workspace
+    const teams = await this.prisma.team.findMany({
+      where: { workspaceId },
+      select: { id: true, name: true },
+    });
+
+    const teamAssignments = await this.prisma.roleAssignment.findMany({
       where: {
-        organizationId: workspace.organizationId,
+        scopeType: 'TEAM',
+        scopeId: { in: teams.map(t => t.id) },
       },
       include: {
         user: true,
       },
     });
+
+    // Get organization-level role assignments (they have access to all workspaces)
+    const orgAssignments = await this.prisma.roleAssignment.findMany({
+      where: {
+        scopeType: 'TENANT',
+        scopeId: workspace.organizationId,
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    // Create team details map
+    const teamDetails = new Map(teams.map(t => [t.id, t]));
 
     // Aggregate by user
     const userMap = new Map();
     
-    // Add team members
-    teamMembers.forEach(tm => {
-      if (!userMap.has(tm.userId)) {
-        userMap.set(tm.userId, {
-          ...tm.user,
+    // Add team members from RBAC
+    teamAssignments.forEach(assignment => {
+      const team = teamDetails.get(assignment.scopeId!);
+      if (!team) return;
+
+      const legacyRole = this.mapRBACRoleToLegacyRole(assignment.role as Role, 'TEAM');
+      
+      if (!userMap.has(assignment.userId)) {
+        userMap.set(assignment.userId, {
+          ...assignment.user,
           teams: [],
           workspaceRole: null,
           orgRole: null,
         });
       }
-      const user = userMap.get(tm.userId);
+      const user = userMap.get(assignment.userId);
       user.teams.push({
-        id: tm.team.id,
-        name: tm.team.name,
-        role: tm.role,
+        id: team.id,
+        name: team.name,
+        role: legacyRole,
       });
     });
 
-    // Add workspace members (if not already in map)
-    workspaceMembers.forEach(wm => {
-      if (!userMap.has(wm.userId)) {
-        userMap.set(wm.userId, {
-          ...wm.user,
+    // Add workspace members from RBAC (if not already in map)
+    workspaceAssignments.forEach(assignment => {
+      const legacyRole = this.mapRBACRoleToLegacyRole(assignment.role as Role, 'WORKSPACE');
+      
+      if (!userMap.has(assignment.userId)) {
+        userMap.set(assignment.userId, {
+          ...assignment.user,
           teams: [],
-          workspaceRole: wm.role,
+          workspaceRole: legacyRole,
           orgRole: null,
         });
       } else {
-        const user = userMap.get(wm.userId);
-        user.workspaceRole = wm.role;
+        const user = userMap.get(assignment.userId);
+        user.workspaceRole = legacyRole;
       }
     });
 
-    // Add organization members (if not already in map)
-    orgMembers.forEach(om => {
-      if (!userMap.has(om.userId)) {
-        userMap.set(om.userId, {
-          ...om.user,
+    // Add organization members from RBAC (if not already in map)
+    orgAssignments.forEach(assignment => {
+      const legacyRole = this.mapRBACRoleToLegacyRole(assignment.role as Role, 'TENANT');
+      
+      if (!userMap.has(assignment.userId)) {
+        userMap.set(assignment.userId, {
+          ...assignment.user,
           teams: [],
           workspaceRole: null,
-          orgRole: om.role,
+          orgRole: legacyRole,
         });
       } else {
-        const user = userMap.get(om.userId);
-        user.orgRole = om.role;
+        const user = userMap.get(assignment.userId);
+        user.orgRole = legacyRole;
       }
     });
 
@@ -414,16 +485,59 @@ export class WorkspaceService {
   }
 
   async verifyUserAccess(workspaceId: string, userId: string): Promise<boolean> {
-    const teamMember = await this.prisma.teamMember.findFirst({
+    // Phase 4: Check RBAC for workspace or team access
+    const workspaceAssignment = await this.prisma.roleAssignment.findFirst({
       where: {
         userId,
-        team: {
-          workspaceId,
-        },
+        scopeType: 'WORKSPACE',
+        scopeId: workspaceId,
       },
     });
 
-    return !!teamMember;
+    if (workspaceAssignment) {
+      return true;
+    }
+
+    // Check if user has team access in this workspace
+    const teamAssignments = await this.prisma.roleAssignment.findMany({
+      where: {
+        userId,
+        scopeType: 'TEAM',
+        scopeId: { not: null },
+      },
+    });
+
+    const teamIds = teamAssignments
+      .map(ta => ta.scopeId)
+      .filter((id): id is string => id !== null);
+
+    if (teamIds.length > 0) {
+      const teamsInWorkspace = await this.prisma.team.findFirst({
+        where: {
+          id: { in: teamIds },
+          workspaceId,
+        },
+      });
+
+      return !!teamsInWorkspace;
+    }
+
+    return false;
+  }
+
+  /**
+   * Map legacy workspace role to RBAC role
+   */
+  private mapLegacyWorkspaceRoleToRBAC(legacyRole: 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER'): Role {
+    switch (legacyRole) {
+      case 'WORKSPACE_OWNER':
+        return 'WORKSPACE_LEAD';
+      case 'MEMBER':
+        return 'WORKSPACE_MEMBER';
+      case 'VIEWER':
+      default:
+        return 'WORKSPACE_MEMBER'; // VIEWER becomes MEMBER in RBAC
+    }
   }
 
   async addMember(workspaceId: string, userId: string, role: 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER' = 'MEMBER', userOrganizationId: string | null | undefined, actorUserId: string) {
@@ -443,24 +557,28 @@ export class WorkspaceService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    // Check if user is already a member
-    const existing = await this.prisma.workspaceMember.findFirst({
+    // Map legacy role to RBAC role
+    const rbacRole = this.mapLegacyWorkspaceRoleToRBAC(role);
+
+    // Check if user already has a role assignment (Phase 3: RBAC only)
+    const existingAssignment = await this.prisma.roleAssignment.findFirst({
       where: {
         userId,
-        workspaceId,
+        scopeType: 'WORKSPACE',
+        scopeId: workspaceId,
       },
     });
 
-    if (existing) {
-      // Update role if already exists
-      const updated = await this.prisma.workspaceMember.update({
-        where: { id: existing.id },
-        data: { role },
-        include: {
-          user: true,
-          workspace: true,
-        },
-      });
+    if (existingAssignment) {
+      // Update RBAC role assignment
+      await this.rbacService.assignRole(
+        userId,
+        rbacRole,
+        'WORKSPACE',
+        workspaceId,
+        actorUserId,
+        userOrganizationId || undefined,
+      );
 
       await this.auditLogService.record({
         action: 'UPDATE_WORKSPACE_MEMBER_ROLE',
@@ -469,28 +587,28 @@ export class WorkspaceService {
         targetId: userId,
         targetType: AuditTargetType.USER,
         organizationId: workspace.organizationId,
-        metadata: { role, previousRole: existing.role },
+        metadata: { role, previousRole: existingAssignment.role },
       });
 
-      return updated;
-    }
-
-    // Create new membership
-    const created = await this.prisma.workspaceMember.create({
-      data: {
+      // Return format compatible with legacy API
+      return {
         userId,
         workspaceId,
         role,
-      },
-      include: {
-        user: true,
-        workspace: {
-          include: {
-            organization: true,
-          },
-        },
-      },
-    });
+        user,
+        workspace,
+      };
+    }
+
+    // Create new RBAC role assignment (Phase 3: RBAC only)
+    await this.rbacService.assignRole(
+      userId,
+      rbacRole,
+      'WORKSPACE',
+      workspaceId,
+      actorUserId,
+      userOrganizationId || undefined,
+    );
 
     await this.auditLogService.record({
       action: 'ADD_WORKSPACE_MEMBER',
@@ -502,7 +620,14 @@ export class WorkspaceService {
       metadata: { role },
     });
 
-    return created;
+    // Return format compatible with legacy API
+    return {
+      userId,
+      workspaceId,
+      role,
+      user,
+      workspace,
+    };
   }
 
   async removeMember(workspaceId: string, userId: string, userOrganizationId: string | null | undefined, actorUserId: string) {
@@ -513,15 +638,29 @@ export class WorkspaceService {
     const workspace = await this.findById(workspaceId);
     OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
 
-    const membership = await this.prisma.workspaceMember.findFirst({
+    // Check if user has role assignments (Phase 3: RBAC only)
+    const roleAssignments = await this.prisma.roleAssignment.findMany({
       where: {
         userId,
-        workspaceId,
+        scopeType: 'WORKSPACE',
+        scopeId: workspaceId,
       },
     });
 
-    if (!membership) {
+    if (roleAssignments.length === 0) {
       throw new NotFoundException(`User is not a member of this workspace`);
+    }
+
+    // Revoke all RBAC role assignments for this user at this workspace (Phase 3: RBAC only)
+    for (const assignment of roleAssignments) {
+      await this.rbacService.revokeRole(
+        userId,
+        assignment.role as Role,
+        'WORKSPACE',
+        workspaceId,
+        actorUserId,
+        userOrganizationId || undefined,
+      );
     }
 
     await this.auditLogService.record({
@@ -533,8 +672,6 @@ export class WorkspaceService {
       organizationId: workspace.organizationId,
     });
 
-    return this.prisma.workspaceMember.delete({
-      where: { id: membership.id },
-    });
+    return { success: true };
   }
 }

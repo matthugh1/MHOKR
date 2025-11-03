@@ -7,7 +7,8 @@
 // Then run:
 //   npx prisma db seed
 
-import { PrismaClient, MemberRole } from '@prisma/client';
+import { PrismaClient, MemberRole, RBACRole, ScopeType } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
@@ -27,72 +28,110 @@ const USERS = [
 ];
 
 /**
+ * Maps legacy MemberRole to RBAC Role for tenant scope
+ */
+function mapLegacyOrgRoleToRBAC(legacyRole: MemberRole): RBACRole {
+  switch (legacyRole) {
+    case 'ORG_ADMIN':
+      return 'TENANT_ADMIN';
+    case 'VIEWER':
+      return 'TENANT_VIEWER';
+    case 'MEMBER':
+    default:
+      return 'TENANT_VIEWER'; // Default to VIEWER for MEMBER
+  }
+}
+
+/**
  * Ensures an organisation member exists with the specified role.
- * Uses findFirst + create pattern since id is auto-generated.
+ * Uses RBAC system (Phase 4: RBAC only)
  */
 async function ensureOrgMember(userId: string, role: MemberRole): Promise<void> {
-  const existing = await prisma.organizationMember.findFirst({
+  const rbacRole = mapLegacyOrgRoleToRBAC(role);
+  
+  const existing = await prisma.roleAssignment.findFirst({
     where: {
-      organizationId: ORG_ID,
-      userId: userId,
+      userId,
+      scopeType: 'TENANT' as ScopeType,
+      scopeId: ORG_ID,
     },
   });
 
   if (existing) {
     // Update role if membership exists but role differs
-    if (existing.role !== role) {
-      await prisma.organizationMember.update({
+    if (existing.role !== rbacRole) {
+      await prisma.roleAssignment.update({
         where: { id: existing.id },
-        data: { role },
+        data: { role: rbacRole },
       });
-      console.log(`  ✓ Updated organisation membership for user ${userId} to role ${role}`);
+      console.log(`  ✓ Updated organisation membership for user ${userId} to role ${rbacRole} (${role})`);
     } else {
-      console.log(`  ✓ Organisation membership already exists for user ${userId} with role ${role}`);
+      console.log(`  ✓ Organisation membership already exists for user ${userId} with role ${rbacRole} (${role})`);
     }
   } else {
-    await prisma.organizationMember.create({
+    await prisma.roleAssignment.create({
       data: {
         userId,
-        organizationId: ORG_ID,
-        role,
+        role: rbacRole,
+        scopeType: 'TENANT' as ScopeType,
+        scopeId: ORG_ID,
       },
     });
-    console.log(`  ✓ Created organisation membership for user ${userId} with role ${role}`);
+    console.log(`  ✓ Created organisation membership for user ${userId} with role ${rbacRole} (${role})`);
+  }
+}
+
+/**
+ * Maps legacy MemberRole to RBAC Role for workspace scope
+ */
+function mapLegacyWorkspaceRoleToRBAC(legacyRole: MemberRole): RBACRole {
+  switch (legacyRole) {
+    case 'WORKSPACE_OWNER':
+      return 'WORKSPACE_LEAD';
+    case 'MEMBER':
+      return 'WORKSPACE_MEMBER';
+    case 'VIEWER':
+    default:
+      return 'WORKSPACE_MEMBER'; // VIEWER becomes MEMBER in RBAC
   }
 }
 
 /**
  * Ensures a workspace member exists with the specified role.
- * Uses findFirst + create pattern since id is auto-generated.
+ * Uses RBAC system (Phase 4: RBAC only)
  */
 async function ensureWorkspaceMember(workspaceId: string, userId: string, role: MemberRole): Promise<void> {
-  const existing = await prisma.workspaceMember.findFirst({
+  const rbacRole = mapLegacyWorkspaceRoleToRBAC(role);
+  
+  const existing = await prisma.roleAssignment.findFirst({
     where: {
-      workspaceId: workspaceId,
-      userId: userId,
+      userId,
+      scopeType: 'WORKSPACE' as ScopeType,
+      scopeId: workspaceId,
     },
   });
 
   if (existing) {
     // Update role if membership exists but role differs
-    if (existing.role !== role) {
-      await prisma.workspaceMember.update({
+    if (existing.role !== rbacRole) {
+      await prisma.roleAssignment.update({
         where: { id: existing.id },
-        data: { role },
+        data: { role: rbacRole },
       });
-      console.log(`  ✓ Updated workspace membership for user ${userId} to role ${role}`);
+      console.log(`  ✓ Updated workspace membership for user ${userId} to role ${rbacRole} (${role})`);
     } else {
-      console.log(`  ✓ Workspace membership already exists for user ${userId} with role ${role}`);
+      console.log(`  ✓ Workspace membership already exists for user ${userId} with role ${rbacRole} (${role})`);
     }
   } else {
-    await prisma.workspaceMember.create({
+    await prisma.roleAssignment.create({
       data: {
         userId,
-        workspaceId: workspaceId,
-        role,
+        role: rbacRole,
+        scopeType: 'WORKSPACE' as ScopeType,
+        scopeId: workspaceId,
       },
     });
-    console.log(`  ✓ Created workspace membership for user ${userId} with role ${role}`);
+    console.log(`  ✓ Created workspace membership for user ${userId} with role ${rbacRole} (${role})`);
   }
 }
 
@@ -206,22 +245,27 @@ async function main() {
   console.log(`✓ Ensured cycle: ${CYCLE_Q1_2026_ID} (Q1 2026 - DRAFT)`);
 
   // Upsert Users
+  // Default password for all seeded users: 'test123'
+  const defaultPassword = 'test123';
+  const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+  
   for (const user of USERS) {
     await prisma.user.upsert({
       where: { id: user.id },
       update: {
         email: user.email,
         name: user.displayName,
+        passwordHash: hashedPassword, // Set proper password hash
       },
       create: {
         id: user.id,
         email: user.email,
         name: user.displayName,
-        passwordHash: 'DEV_PLACEHOLDER_HASH', // Placeholder for development only
+        passwordHash: hashedPassword, // Set proper password hash
         isSuperuser: false,
       },
     });
-    console.log(`✓ Ensured user: ${user.id} (${user.email})`);
+    console.log(`✓ Ensured user: ${user.id} (${user.email}) - password: ${defaultPassword}`);
   }
 
   // Ensure Organisation Memberships

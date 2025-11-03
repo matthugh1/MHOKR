@@ -3,13 +3,16 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { OkrTenantGuard } from '../okr/tenant-guard';
 import { AuditLogService } from '../audit/audit-log.service';
-import { AuditTargetType } from '@prisma/client';
+import { AuditTargetType, MemberRole } from '@prisma/client';
+import { RBACService } from '../rbac/rbac.service';
+import { Role } from '../rbac/types';
 
 @Injectable()
 export class UserService {
   constructor(
     private prisma: PrismaService,
     private auditLogService: AuditLogService,
+    private rbacService: RBACService,
   ) {}
 
   async findAll() {
@@ -29,13 +32,6 @@ export class UserService {
   async findById(id: string) {
     return this.prisma.user.findUnique({
       where: { id },
-      include: {
-        teamMembers: {
-          include: {
-            team: true,
-          },
-        },
-      },
     });
   }
 
@@ -53,19 +49,138 @@ export class UserService {
     });
   }
 
+  /**
+   * Map RBAC role to legacy MemberRole for backward compatibility
+   * Used during migration period to maintain compatibility with frontend
+   */
+  private mapRBACRoleToLegacyRole(rbacRole: Role, scopeType: 'TEAM' | 'WORKSPACE' | 'TENANT'): MemberRole {
+    // Team-level role mapping
+    if (scopeType === 'TEAM') {
+      switch (rbacRole) {
+        case 'TEAM_LEAD':
+          return MemberRole.TEAM_LEAD;
+        case 'TEAM_CONTRIBUTOR':
+          return MemberRole.MEMBER;
+        case 'TEAM_VIEWER':
+          return MemberRole.VIEWER;
+        default:
+          return MemberRole.MEMBER; // Default fallback
+      }
+    }
+
+    // Workspace-level role mapping
+    if (scopeType === 'WORKSPACE') {
+      switch (rbacRole) {
+        case 'WORKSPACE_LEAD':
+        case 'WORKSPACE_ADMIN':
+          return MemberRole.WORKSPACE_OWNER;
+        case 'WORKSPACE_MEMBER':
+          return MemberRole.MEMBER;
+        default:
+          return MemberRole.MEMBER; // Default fallback
+      }
+    }
+
+    // Tenant-level role mapping
+    if (scopeType === 'TENANT') {
+      switch (rbacRole) {
+        case 'TENANT_OWNER':
+        case 'TENANT_ADMIN':
+          return MemberRole.ORG_ADMIN;
+        case 'TENANT_VIEWER':
+          return MemberRole.VIEWER;
+        default:
+          return MemberRole.MEMBER; // Default fallback
+      }
+    }
+
+    return MemberRole.MEMBER; // Default fallback
+  }
+
   async getUserContext(userId: string) {
-    // Get user with all memberships: direct (organization/workspace) and indirect (through teams)
+    // Get user basic info
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        // Direct organization memberships
-        organizationMembers: {
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Build RBAC user context to get role assignments (Phase 4: RBAC only)
+    const rbacContext = await this.rbacService.buildUserContext(userId, true);
+
+    // Get organizations from RBAC tenant role assignments
+    const tenantAssignments = await this.prisma.roleAssignment.findMany({
+      where: {
+        userId,
+        scopeType: 'TENANT',
+        scopeId: { not: null },
+      },
+    });
+
+    // Get unique organization IDs
+    const organizationIds = [...new Set(
+      tenantAssignments
+        .map(ta => ta.scopeId)
+        .filter((id): id is string => id !== null)
+    )];
+
+    // Fetch organizations
+    const organizations = organizationIds.length > 0
+      ? await this.prisma.organization.findMany({
+          where: { id: { in: organizationIds } },
+        })
+      : [];
+
+    // Get workspaces from RBAC workspace role assignments
+    const workspaceAssignments = await this.prisma.roleAssignment.findMany({
+      where: {
+        userId,
+        scopeType: 'WORKSPACE',
+        scopeId: { not: null },
+      },
+    });
+
+    // Get unique workspace IDs
+    const workspaceIds = [...new Set(
+      workspaceAssignments
+        .map(wa => wa.scopeId)
+        .filter((id): id is string => id !== null)
+    )];
+
+    // Fetch workspaces with relations
+    const directWorkspaces = workspaceIds.length > 0
+      ? await this.prisma.workspace.findMany({
+          where: { id: { in: workspaceIds } },
           include: {
             organization: true,
+            parentWorkspace: true,
+            childWorkspaces: true,
           },
-        },
-        // Direct workspace memberships
-        workspaceMembers: {
+        })
+      : [];
+
+    // Get teams from RBAC team role assignments
+    const teamAssignments = await this.prisma.roleAssignment.findMany({
+      where: {
+        userId,
+        scopeType: 'TEAM',
+        scopeId: { not: null },
+      },
+    });
+
+    // Get unique team IDs
+    const teamIds = [...new Set(
+      teamAssignments
+        .map(ta => ta.scopeId)
+        .filter((id): id is string => id !== null)
+    )];
+
+    // Fetch teams with workspace relations
+    const teamsWithWorkspaces = teamIds.length > 0
+      ? await this.prisma.team.findMany({
+          where: { id: { in: teamIds } },
           include: {
             workspace: {
               include: {
@@ -75,54 +190,51 @@ export class UserService {
               },
             },
           },
-        },
-        // Team memberships (indirect path to workspaces/organizations)
-        teamMembers: {
-          include: {
-            team: {
-              include: {
-                workspace: {
-                  include: {
-                    organization: true,
-                    parentWorkspace: true,
-                    childWorkspaces: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
+        })
+      : [];
 
-    if (!user) {
-      throw new Error('User not found');
-    }
+    // Extract indirect workspaces from teams
+    const indirectWorkspaces = teamsWithWorkspaces
+      .map(t => t.workspace)
+      .filter((ws, index, self) => 
+        index === self.findIndex(w => w.id === ws.id)
+      );
 
-    // Combine direct and indirect organization memberships
-    const directOrgs = user.organizationMembers.map(om => om.organization);
-    const indirectOrgs = user.teamMembers.map(tm => tm.team.workspace.organization);
-    const allOrgs = [...directOrgs, ...indirectOrgs];
-    const organizations = allOrgs.filter((org, index, self) => 
-      index === self.findIndex(o => o.id === org.id)
-    );
-
-    // Combine direct and indirect workspace memberships
-    const directWorkspaces = user.workspaceMembers.map(wm => wm.workspace);
-    const indirectWorkspaces = user.teamMembers.map(tm => tm.team.workspace);
+    // Combine direct and indirect workspaces
     const allWorkspaces = [...directWorkspaces, ...indirectWorkspaces];
     const workspaces = allWorkspaces.filter((ws, index, self) => 
       index === self.findIndex(w => w.id === ws.id)
     );
 
-    // Get teams with their roles (optional - teams are optional)
-    const teams = user.teamMembers.map(tm => ({
-      id: tm.team.id,
-      name: tm.team.name,
-      role: tm.role,
-      workspaceId: tm.team.workspaceId,
-      workspace: tm.team.workspace.name,
-    }));
+    // Get teams with their roles from RBAC system (Phase 4: RBAC only)
+    const teams = await Promise.all(
+      teamsWithWorkspaces.map(async (team) => {
+        // Get role from RBAC
+        const teamRoles = rbacContext.teamRoles.get(team.id);
+        let role: MemberRole;
+
+        if (teamRoles && teamRoles.length > 0) {
+          // Use highest priority role from RBAC (TEAM_LEAD > TEAM_CONTRIBUTOR > TEAM_VIEWER)
+          const rbacRole = teamRoles.includes('TEAM_LEAD') 
+            ? 'TEAM_LEAD' 
+            : teamRoles.includes('TEAM_CONTRIBUTOR')
+            ? 'TEAM_CONTRIBUTOR'
+            : teamRoles[0];
+          role = this.mapRBACRoleToLegacyRole(rbacRole as Role, 'TEAM');
+        } else {
+          // Fallback to MEMBER if no role found (shouldn't happen in Phase 4)
+          role = MemberRole.MEMBER;
+        }
+
+        return {
+          id: team.id,
+          name: team.name,
+          role: role as string, // Frontend expects string
+          workspaceId: team.workspaceId,
+          workspace: team.workspace.name,
+        };
+      })
+    );
 
     // Default context for OKR creation
     // Prioritize direct workspace membership over indirect
@@ -148,6 +260,36 @@ export class UserService {
         ownerId: user.id,
       },
     };
+  }
+
+  /**
+   * Map legacy organization role to RBAC role
+   */
+  private mapLegacyOrgRoleToRBAC(legacyRole: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER'): Role {
+    switch (legacyRole) {
+      case 'ORG_ADMIN':
+        return 'TENANT_ADMIN';
+      case 'VIEWER':
+        return 'TENANT_VIEWER';
+      case 'MEMBER':
+      default:
+        return 'TENANT_VIEWER'; // Default to VIEWER for MEMBER
+    }
+  }
+
+  /**
+   * Map legacy workspace role to RBAC role
+   */
+  private mapLegacyWorkspaceRoleToRBAC(legacyRole: 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER'): Role {
+    switch (legacyRole) {
+      case 'WORKSPACE_OWNER':
+        return 'WORKSPACE_LEAD';
+      case 'MEMBER':
+        return 'WORKSPACE_MEMBER';
+      case 'VIEWER':
+      default:
+        return 'WORKSPACE_MEMBER'; // VIEWER becomes MEMBER in RBAC
+    }
   }
 
   async createUser(
@@ -203,9 +345,9 @@ export class UserService {
     // Hash password
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    // Create user and assign to organization and workspace in a transaction
+    // Create user (Phase 3: RBAC only - no legacy membership writes)
     const user = await this.prisma.$transaction(async (tx) => {
-      // Create user
+      // Create user only - no legacy membership writes
       const newUser = await tx.user.create({
         data: {
           email: data.email,
@@ -221,26 +363,42 @@ export class UserService {
         },
       });
 
-      // ALWAYS add user to organization (mandatory)
-      await tx.organizationMember.create({
-        data: {
-          userId: newUser.id,
-          organizationId: data.organizationId,
-          role: data.role || 'MEMBER',
-        },
-      });
-
-      // ALWAYS add user to workspace (mandatory)
-      await tx.workspaceMember.create({
-        data: {
-          userId: newUser.id,
-          workspaceId: data.workspaceId,
-          role: data.workspaceRole || 'MEMBER',
-        },
-      });
-
       return newUser;
     });
+
+    // Create RBAC role assignments after transaction (Phase 3: RBAC only)
+    try {
+      // Map legacy roles to RBAC roles
+      const orgRBACRole = this.mapLegacyOrgRoleToRBAC(data.role || 'MEMBER');
+      const workspaceRBACRole = this.mapLegacyWorkspaceRoleToRBAC(data.workspaceRole || 'MEMBER');
+
+      // Assign organization role
+      await this.rbacService.assignRole(
+        user.id,
+        orgRBACRole,
+        'TENANT',
+        data.organizationId,
+        actorUserId,
+        userOrganizationId || undefined,
+      );
+
+      // Assign workspace role
+      await this.rbacService.assignRole(
+        user.id,
+        workspaceRBACRole,
+        'WORKSPACE',
+        data.workspaceId,
+        actorUserId,
+        userOrganizationId || undefined,
+      );
+    } catch (error) {
+      // If RBAC assignment fails, log error but don't rollback user creation
+      // User exists but may not have proper role assignments
+      console.error(`Failed to assign RBAC roles for new user ${user.id}:`, error);
+      // Consider throwing error if you want to enforce RBAC assignment success
+      // For now, we'll allow user creation to succeed even if RBAC assignment fails
+      // This allows manual recovery if needed
+    }
 
     await this.auditLogService.record({
       action: 'CREATE_USER',
@@ -258,23 +416,25 @@ export class UserService {
     // Tenant isolation: enforce mutation rules
     OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
 
-    // Check if user exists and belongs to caller's org
+    // Check if user exists and belongs to caller's org (Phase 4: RBAC only)
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        organizationMembers: {
-          select: { organizationId: true },
-        },
-      },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    // Tenant isolation: verify user belongs to caller's org
-    const userOrgIds = user.organizationMembers.map(om => om.organizationId);
-    if (!userOrgIds.includes(userOrganizationId!)) {
+    // Tenant isolation: verify user belongs to caller's org via RBAC
+    const tenantAssignment = await this.prisma.roleAssignment.findFirst({
+      where: {
+        userId,
+        scopeType: 'TENANT',
+        scopeId: userOrganizationId || undefined,
+      },
+    });
+
+    if (!tenantAssignment) {
       throw new NotFoundException('User not found in your organization');
     }
 
@@ -303,23 +463,25 @@ export class UserService {
     // Tenant isolation: enforce mutation rules
     OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
 
-    // Check if user exists and belongs to caller's org
+    // Check if user exists and belongs to caller's org (Phase 4: RBAC only)
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        organizationMembers: {
-          select: { organizationId: true },
-        },
-      },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    // Tenant isolation: verify user belongs to caller's org
-    const userOrgIds = user.organizationMembers.map(om => om.organizationId);
-    if (!userOrgIds.includes(userOrganizationId!)) {
+    // Tenant isolation: verify user belongs to caller's org via RBAC
+    const tenantAssignment = await this.prisma.roleAssignment.findFirst({
+      where: {
+        userId,
+        scopeType: 'TENANT',
+        scopeId: userOrganizationId || undefined,
+      },
+    });
+
+    if (!tenantAssignment) {
       throw new NotFoundException('User not found in your organization');
     }
 

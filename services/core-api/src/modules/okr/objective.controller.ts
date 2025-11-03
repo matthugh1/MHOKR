@@ -66,7 +66,7 @@ export class ObjectiveController {
       }
     }
 
-    return this.objectiveService.create(data, req.user.id);
+    return this.objectiveService.create(data, req.user.id, req.user.organizationId);
   }
 
   @Patch(':id')

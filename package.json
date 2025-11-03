@@ -5,6 +5,10 @@
   "description": "AI-first OKR platform with visual builder and intelligent assistance",
   "scripts": {
     "dev": "concurrently \"npm run dev:gateway\" \"npm run dev:core-api\" \"npm run dev:ai-service\" \"npm run dev:integration-service\" \"npm run dev:web\"",
+    "dev:all": "ts-node scripts/dev/devctl.ts up",
+    "dev:status": "ts-node scripts/dev/devctl.ts status",
+    "dev:down": "ts-node scripts/dev/devctl.ts down",
+    "devctl": "ts-node scripts/dev/devctl.ts",
     "dev:gateway": "cd services/api-gateway && npm run dev",
     "dev:core-api": "cd services/core-api && npm run dev",
     "dev:ai-service": "cd services/ai-service && npm run dev",

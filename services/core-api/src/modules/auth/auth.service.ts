@@ -2,12 +2,14 @@ import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
+import { RBACService } from '../rbac/rbac.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private jwtService: JwtService,
     private prisma: PrismaService,
+    private rbacService: RBACService,
   ) {}
 
   async register(data: { 
@@ -55,9 +57,9 @@ export class AuthService {
     // Hash password
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    // Create user and assign to organization and workspace in a transaction
+    // Create user (Phase 3: RBAC only - no legacy membership writes)
     const user = await this.prisma.$transaction(async (tx) => {
-      // Create user
+      // Create user only - no legacy membership writes
       const newUser = await tx.user.create({
         data: {
           email: normalizedEmail,
@@ -66,26 +68,35 @@ export class AuthService {
         },
       });
 
-      // ALWAYS add user to organization (mandatory)
-      await tx.organizationMember.create({
-        data: {
-          userId: newUser.id,
-          organizationId: data.organizationId,
-          role: 'MEMBER', // Default role for self-registered users
-        },
-      });
-
-      // ALWAYS add user to workspace (mandatory)
-      await tx.workspaceMember.create({
-        data: {
-          userId: newUser.id,
-          workspaceId: data.workspaceId,
-          role: 'MEMBER', // Default role for self-registered users
-        },
-      });
-
       return newUser;
     });
+
+    // Create RBAC role assignments after transaction (Phase 3: RBAC only)
+    // For self-registration, use the user's own ID as actor (they're registering themselves)
+    try {
+      // Default roles for self-registered users: TENANT_VIEWER and WORKSPACE_MEMBER
+      await this.rbacService.assignRole(
+        user.id,
+        'TENANT_VIEWER',
+        'TENANT',
+        data.organizationId,
+        user.id, // User is registering themselves
+        data.organizationId,
+      );
+
+      await this.rbacService.assignRole(
+        user.id,
+        'WORKSPACE_MEMBER',
+        'WORKSPACE',
+        data.workspaceId,
+        user.id, // User is registering themselves
+        data.organizationId,
+      );
+    } catch (error) {
+      // If RBAC assignment fails, log error but don't rollback user creation
+      console.error(`Failed to assign RBAC roles for new user ${user.id} during registration:`, error);
+      // User exists but may not have proper role assignments - manual recovery may be needed
+    }
 
     // Generate JWT
     const accessToken = this.jwtService.sign({

@@ -1,3 +1,95 @@
+## [Production-Gated RBAC Inspector] 2025-11-03
+
+### Features
+- **RBAC Inspector**: Production-safe "Why can't I...?" permission reasoning tooltips
+  - **Per-User Toggle**: Enabled via User Management drawer (requires `manage_users` permission)
+  - **Tooltip Component**: Shows detailed permission reasoning when actions are denied
+  - **Guards Displayed**: RBAC Permission, Publish Lock, Visibility (PRIVATE), EXEC_ONLY Flag, Tenant Match
+  - **Security**: Never reveals cross-tenant resources or raw IDs the caller cannot access
+  - **Audit Logging**: All toggles create `toggle_rbac_inspector` audit log entries
+
+### Backend Changes
+- **Migration**: Added `users.settings` JSONB column for user preferences and debug flags
+- **New Endpoint**: `POST /rbac/inspector/enable` for toggling inspector per user
+  - Requires `manage_users` permission
+  - Enforces tenant isolation
+  - Creates audit log entries
+- **Session Feature Flag**: `req.user.features.rbacInspector` exposed in JWT strategy
+- **Implementation**: `services/core-api/src/modules/rbac/rbac-inspector.controller.ts` and `.service.ts`
+
+### Frontend Changes
+- **User Management**: Added Troubleshooting section with RBAC Inspector toggle
+- **Feature Flag Hook**: `apps/web/src/hooks/useFeatureFlags.ts` for accessing feature flags
+- **Tooltip Component**: `apps/web/src/components/rbac/RbacWhyTooltip.tsx` for permission reasoning
+- **OKR Integration**: Wrapped edit/delete buttons in ObjectiveRow with tooltip component
+- **Type Updates**: Extended User interface to include `features` field
+
+### Documentation
+- **docs/audit/RBAC_INSPECTOR.md**: Comprehensive guide for enabling and using the inspector
+
+### Technical Details
+- Runtime cost near-zero when inspector disabled (feature flag check only)
+- Tooltip only renders when:
+  1. User has `rbacInspector` feature flag enabled
+  2. Action is denied (not allowed)
+- No schema changes beyond adding `settings` JSONB column
+- British English copy throughout
+- No TODO/FIXME/HACK comments
+
+---
+
+## [User Management RBAC Enhancements] 2025-11-03
+
+### Features
+- **Enhanced User Management Screen**: Added RBAC insights and governance context to existing User Management screen
+  - **Table Enhancements**: New columns for Roles (grouped by scope), Effective Permissions (count badge), and Governance Status (pill)
+  - **Quick Filter**: "Show users with edit rights" filter to quickly find users with edit permissions
+  - **Row Drawer Enhancements**: 
+    - Roles & Scopes section showing role chips grouped by TENANT/WORKSPACE/TEAM scope
+    - Effective Actions grouped by category (OKR, Governance, Admin)
+    - Governance overlays (SUPERUSER read-only flag, publish lock info)
+    - Visibility policy note explaining PRIVATE-only restrictions
+  - **Role Assignment**: Assign/revoke controls shown only if caller has `manage_users` permission
+  - **Backend Extension**: `GET /rbac/assignments/effective` now accepts optional `userId` query param for admin inspection
+  - **Audit Logging**: Admin inspection of user permissions creates `view_user_access` audit log entry
+  - **Tenant Isolation**: Cross-tenant inspection blocked; requires `manage_users` permission
+
+### Backend Changes
+- Extended `GET /rbac/assignments/effective` endpoint:
+  - Added `userId` query parameter (optional) for admin inspection
+  - Added tenant isolation check when inspecting other users
+  - Added `manage_users` permission check for cross-user inspection
+  - Added audit logging for `view_user_access` events
+  - Implementation: `services/core-api/src/modules/rbac/rbac-assignment.controller.ts:113-182`
+
+### Frontend Changes
+- Enhanced User Management table (`apps/web/src/app/dashboard/settings/people/page.tsx`):
+  - Added Roles column with chips grouped by scope
+  - Added Effective Permissions badge showing action count
+  - Added Governance Status pill (Read-only (Superuser) | Normal)
+  - Added quick filter for users with edit rights
+- Enhanced user drawer:
+  - Added RBAC Insights section with roles by scope
+  - Added Effective Actions grouped by category
+  - Added Governance Status overlays
+  - Added Visibility Policy note
+  - Conditional role assignment controls (requires `manage_users`)
+- New hook: `apps/web/src/hooks/useEffectivePermissions.ts` for fetching effective permissions
+
+### Documentation
+- **docs/audit/RBAC_EFFECTIVE_API.md**: Comprehensive API documentation for effective permissions endpoint
+- **docs/audit/RBAC_SMOKE_TESTS.md**: Added admin inspection test cases with curl examples
+
+### Technical Details
+- Reuses existing endpoints: `GET /rbac/assignments/effective`, `GET /rbac/assignments/me`
+- No schema changes
+- No new routes
+- All changes are additive
+- British English copy throughout
+- No TODO/FIXME/HACK comments
+
+---
+
 ## [RBAC Audit & Snapshot Tools] 2025-11-03
 
 ### Features

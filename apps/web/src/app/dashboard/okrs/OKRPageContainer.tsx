@@ -10,6 +10,8 @@ import api from '@/lib/api'
 import { OKRListVirtualised } from './OKRListVirtualised'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { OkrRowSkeleton } from '@/components/ui/skeletons'
+import { mapErrorToMessage } from '@/lib/error-mapping'
 
 interface OKRPageContainerProps {
   availableUsers: any[]
@@ -37,6 +39,10 @@ interface OKRPageContainerProps {
     onAddInitiativeToKr: (krId: string, krTitle: string) => void
     onAddCheckIn: (krId: string) => void
     onOpenHistory: (entityType: 'OBJECTIVE' | 'KEY_RESULT', entityId: string, entityTitle?: string) => void
+    // Story 5: Contextual Add menu handlers
+    onOpenContextualAddMenu?: (objectiveId: string) => void
+    onContextualAddKeyResult?: (objectiveId: string, objectiveTitle: string) => void
+    onContextualAddInitiative?: (objectiveId: string, objectiveTitle: string) => void
   }
   expandedObjectiveId: string | null
   onToggleObjective: (id: string) => void
@@ -425,28 +431,29 @@ export function OKRPageContainer({
       // Backend already filtered visible key results and provides canCheckIn flags
       const visibleKeyResults = normalised.keyResults
       
+      // Build objectiveForHook once for use in permission checks and return value
+      const objectiveForHook = {
+        id: okr.id,
+        ownerId: okr.ownerId,
+        organizationId: okr.organizationId,
+        workspaceId: okr.workspaceId,
+        teamId: okr.teamId,
+        isPublished: okr.isPublished,
+        visibilityLevel: okr.visibilityLevel,
+        cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+          ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
+          : null,
+        cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
+          ? activeCycles.find(c => c.id === okr.cycleId)!.status
+          : null,
+      }
+      
       const canEditKeyResult = (krId: string): boolean => {
         const kr = visibleKeyResults.find((k: any) => k.id === krId)
         if (!kr) return false
         
         // For now, use frontend permission check for canEditKeyResult
         // Backend doesn't provide this flag yet
-        const objectiveForHook = {
-          id: okr.id,
-          ownerId: okr.ownerId,
-          organizationId: okr.organizationId,
-          workspaceId: okr.workspaceId,
-          teamId: okr.teamId,
-          isPublished: okr.isPublished,
-          visibilityLevel: okr.visibilityLevel,
-          cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-            ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
-            : null,
-          cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-            ? activeCycles.find(c => c.id === okr.cycleId)!.status
-            : null,
-        }
-        
         return tenantPermissions.canEditKeyResult({
           id: kr.id,
           ownerId: kr.ownerId || okr.ownerId,
@@ -467,22 +474,6 @@ export function OKRPageContainer({
         }
         
         // Fallback to frontend permission check
-        const objectiveForHook = {
-          id: okr.id,
-          ownerId: okr.ownerId,
-          organizationId: okr.organizationId,
-          workspaceId: okr.workspaceId,
-          teamId: okr.teamId,
-          isPublished: okr.isPublished,
-          visibilityLevel: okr.visibilityLevel,
-          cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-            ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
-            : null,
-          cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-            ? activeCycles.find(c => c.id === okr.cycleId)!.status
-            : null,
-        }
-        
         return tenantPermissions.canCheckInOnKeyResult({
           id: kr.id,
           ownerId: kr.ownerId || okr.ownerId,
@@ -500,6 +491,7 @@ export function OKRPageContainer({
         canDelete,
         canEditKeyResult,
         canCheckInOnKeyResult,
+        objectiveForHook,
       }
     })
   }, [filteredOKRs, availableUsers, activeCycles, overdueCheckIns, tenantPermissions])
@@ -541,44 +533,66 @@ export function OKRPageContainer({
   }
   
   return (
-    <div>
-      <OKRListVirtualised
-        objectives={preparedObjectives}
-        expandedObjectiveId={expandedObjectiveId}
-        onToggleObjective={onToggleObjective}
-        onAction={onAction}
-        availableUsers={availableUsers}
-      />
-      
-      {totalPages > 1 && (
-        <div className="mt-6 flex items-center justify-between gap-4 border-t border-neutral-200 pt-4 text-sm text-neutral-700">
-          <div className="text-neutral-600">
-            Showing {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, totalCount)} of {totalCount} objectives
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              className={cn(
-                "rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-violet-500"
-              )}
-              disabled={currentPage <= 1}
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-            >
-              ‹ Previous
-            </button>
-            <div className="tabular-nums text-neutral-600">
-              Page {currentPage} of {totalPages}
-            </div>
-            <button
-              className={cn(
-                "rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-violet-500"
-              )}
-              disabled={currentPage >= totalPages}
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            >
-              Next ›
-            </button>
-          </div>
+    <div aria-busy={loading}>
+      {loading && (
+        <div className="space-y-4 md:space-y-6">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <OkrRowSkeleton key={`skeleton-${i}`} />
+          ))}
         </div>
+      )}
+      
+      {!loading && permissionError && (
+        <div className="rounded-md border border-destructive bg-destructive/10 p-4 text-sm text-destructive" role="alert">
+          {permissionError}
+        </div>
+      )}
+      
+      {!loading && !permissionError && (
+        <>
+          <OKRListVirtualised
+            objectives={preparedObjectives}
+            expandedObjectiveId={expandedObjectiveId}
+            onToggleObjective={onToggleObjective}
+            onAction={onAction}
+            availableUsers={availableUsers}
+          />
+          
+          {totalPages > 1 && (
+            <nav className="mt-6 flex items-center justify-between gap-4 border-t border-neutral-200 pt-4 text-sm text-neutral-700" aria-label="Pagination">
+              <div className="text-neutral-600" role="status">
+                Showing {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, totalCount)} of {totalCount} objectives
+              </div>
+              <div className="flex items-center gap-4">
+                <button
+                  className={cn(
+                    "rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-ring",
+                    "focus:ring-offset-2"
+                  )}
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  aria-label="Previous page"
+                >
+                  ‹ Previous
+                </button>
+                <div className="tabular-nums text-neutral-600" aria-current="page">
+                  Page {currentPage} of {totalPages}
+                </div>
+                <button
+                  className={cn(
+                    "rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-ring",
+                    "focus:ring-offset-2"
+                  )}
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  aria-label="Next page"
+                >
+                  Next ›
+                </button>
+              </div>
+            </nav>
+          )}
+        </>
       )}
     </div>
   )

@@ -136,7 +136,6 @@ async function main() {
         cycleId: CYCLE_Q3_2025_ID,
         pillarId: pillarCxQuality.id,
         ownerId: USER_FOUNDER_ID,
-        period: 'QUARTERLY',
         startDate: new Date('2025-07-01'),
         endDate: new Date('2025-09-30'),
         status: 'COMPLETED',
@@ -177,7 +176,6 @@ async function main() {
         cycleId: CYCLE_Q3_2025_ID,
         pillarId: pillarAgentProductivity.id,
         ownerId: USER_AGENT_ID,
-        period: 'QUARTERLY',
         startDate: new Date('2025-07-01'),
         endDate: new Date('2025-09-30'),
         status: 'COMPLETED',
@@ -220,7 +218,6 @@ async function main() {
         cycleId: CYCLE_Q4_2025_ID,
         pillarId: pillarCxQuality.id,
         ownerId: USER_FOUNDER_ID,
-        period: 'QUARTERLY',
         startDate: new Date('2025-10-01'),
         endDate: new Date('2025-12-31'),
         status: 'AT_RISK',
@@ -261,7 +258,6 @@ async function main() {
         cycleId: CYCLE_Q4_2025_ID,
         pillarId: pillarAgentProductivity.id,
         ownerId: USER_AGENT_ID,
-        period: 'QUARTERLY',
         startDate: new Date('2025-10-01'),
         endDate: new Date('2025-12-31'),
         status: 'ON_TRACK',
@@ -301,7 +297,6 @@ async function main() {
         workspaceId: WORKSPACE_REVOPS_ID,
         cycleId: CYCLE_Q4_2025_ID,
         ownerId: USER_FOUNDER_ID,
-        period: 'QUARTERLY',
         startDate: new Date('2025-10-01'),
         endDate: new Date('2025-12-31'),
         status: 'ON_TRACK',
@@ -342,7 +337,6 @@ async function main() {
         cycleId: CYCLE_Q1_2026_ID,
         pillarId: pillarAgentProductivity.id,
         ownerId: USER_FOUNDER_ID,
-        period: 'QUARTERLY',
         startDate: new Date('2026-01-01'),
         endDate: new Date('2026-03-31'),
         status: 'ON_TRACK',
@@ -382,7 +376,6 @@ async function main() {
         cycleId: CYCLE_Q1_2026_ID,
         pillarId: pillarAgentProductivity.id,
         ownerId: USER_AGENT_ID,
-        period: 'QUARTERLY',
         startDate: new Date('2026-01-01'),
         endDate: new Date('2026-03-31'),
         status: 'ON_TRACK',
@@ -421,7 +414,6 @@ async function main() {
         workspaceId: WORKSPACE_REVOPS_ID,
         cycleId: CYCLE_Q1_2026_ID,
         ownerId: USER_FOUNDER_ID,
-        period: 'QUARTERLY',
         startDate: new Date('2026-01-01'),
         endDate: new Date('2026-03-31'),
         status: 'ON_TRACK',
@@ -469,7 +461,7 @@ async function main() {
         unit: 'percentage',
         status: 'COMPLETED',
         progress: 85,
-        period: 'QUARTERLY',
+        cycleId: CYCLE_Q3_2025_ID, // Sync cycleId from parent objective
         startDate: new Date('2025-07-01'),
         endDate: new Date('2025-09-30'),
         visibilityLevel: 'PUBLIC_TENANT',
@@ -482,6 +474,7 @@ async function main() {
       where: { id: krPast1.id },
       data: {
         ownerId: USER_FOUNDER_ID,
+        cycleId: CYCLE_Q3_2025_ID, // Sync cycleId from parent objective
         status: 'COMPLETED',
         isPublished: true,
       },
@@ -523,7 +516,7 @@ async function main() {
         unit: 'percentage',
         status: 'AT_RISK',
         progress: 8,
-        period: 'QUARTERLY',
+        cycleId: CYCLE_Q4_2025_ID, // Sync cycleId from parent objective
         startDate: new Date('2025-10-01'),
         endDate: new Date('2025-12-31'),
         visibilityLevel: 'PUBLIC_TENANT',
@@ -536,6 +529,7 @@ async function main() {
       where: { id: krCurrent1.id },
       data: {
         ownerId: USER_FOUNDER_ID,
+        cycleId: CYCLE_Q4_2025_ID, // Sync cycleId from parent objective
         status: 'AT_RISK',
         isPublished: true,
       },
@@ -576,7 +570,7 @@ async function main() {
         unit: 'seconds',
         status: 'ON_TRACK',
         progress: 50,
-        period: 'QUARTERLY',
+        cycleId: CYCLE_Q4_2025_ID, // Sync cycleId from parent objective
         startDate: new Date('2025-10-01'),
         endDate: new Date('2025-12-31'),
         visibilityLevel: 'PUBLIC_TENANT',
@@ -589,6 +583,7 @@ async function main() {
       where: { id: krCurrent2.id },
       data: {
         ownerId: USER_FOUNDER_ID,
+        cycleId: CYCLE_Q4_2025_ID, // Sync cycleId from parent objective
         status: 'ON_TRACK',
         isPublished: true,
       },
@@ -629,7 +624,7 @@ async function main() {
         unit: 'percentage',
         status: 'ON_TRACK',
         progress: 50,
-        period: 'QUARTERLY',
+        cycleId: CYCLE_Q4_2025_ID, // Sync cycleId from parent objective
         startDate: new Date('2025-10-01'),
         endDate: new Date('2025-12-31'),
         visibilityLevel: 'PUBLIC_TENANT',
@@ -642,6 +637,7 @@ async function main() {
       where: { id: krCurrent3.id },
       data: {
         ownerId: USER_AGENT_ID,
+        cycleId: CYCLE_Q4_2025_ID, // Sync cycleId from parent objective
         status: 'ON_TRACK',
         isPublished: true,
       },
@@ -683,7 +679,7 @@ async function main() {
         unit: 'GBP',
         status: 'ON_TRACK',
         progress: 67,
-        period: 'QUARTERLY',
+        cycleId: CYCLE_Q4_2025_ID, // Sync cycleId from parent objective
         startDate: new Date('2025-10-01'),
         endDate: new Date('2025-12-31'),
         visibilityLevel: 'PUBLIC_TENANT',
@@ -696,6 +692,7 @@ async function main() {
       where: { id: krCurrent4.id },
       data: {
         ownerId: USER_FOUNDER_ID,
+        cycleId: CYCLE_Q4_2025_ID, // Sync cycleId from parent objective
         status: 'ON_TRACK',
         isPublished: false,
         checkInCadence: 'WEEKLY',
@@ -738,7 +735,7 @@ async function main() {
         unit: 'percentage',
         status: 'ON_TRACK',
         progress: 0,
-        period: 'QUARTERLY',
+        cycleId: CYCLE_Q1_2026_ID, // Sync cycleId from parent objective
         startDate: new Date('2026-01-01'),
         endDate: new Date('2026-03-31'),
         visibilityLevel: 'PUBLIC_TENANT',
@@ -751,6 +748,7 @@ async function main() {
       where: { id: krFuture1.id },
       data: {
         ownerId: USER_FOUNDER_ID,
+        cycleId: CYCLE_Q1_2026_ID, // Sync cycleId from parent objective
         isPublished: false,
       },
     });
@@ -790,7 +788,7 @@ async function main() {
         unit: 'seconds',
         status: 'ON_TRACK',
         progress: 0,
-        period: 'QUARTERLY',
+        cycleId: CYCLE_Q1_2026_ID, // Sync cycleId from parent objective
         startDate: new Date('2026-01-01'),
         endDate: new Date('2026-03-31'),
         visibilityLevel: 'PUBLIC_TENANT',
@@ -803,6 +801,7 @@ async function main() {
       where: { id: krFuture2.id },
       data: {
         ownerId: USER_AGENT_ID,
+        cycleId: CYCLE_Q1_2026_ID, // Sync cycleId from parent objective
         isPublished: false,
       },
     });
@@ -910,9 +909,9 @@ async function main() {
         title: 'Agent Assist Rollout',
         description: 'Deploy AI-powered agent assistance tool across UK and EU support teams',
         objectiveId: objCurrent1.id,
+        cycleId: CYCLE_Q4_2025_ID, // Sync cycleId from parent objective
         ownerId: USER_FOUNDER_ID,
         status: 'IN_PROGRESS',
-        period: 'QUARTERLY',
         startDate: new Date('2025-10-01'),
         endDate: new Date('2025-12-31'),
         positionX: 100,
@@ -924,6 +923,7 @@ async function main() {
       where: { id: initiative1.id },
       data: {
         objectiveId: objCurrent1.id,
+        cycleId: CYCLE_Q4_2025_ID, // Sync cycleId from parent objective
         ownerId: USER_FOUNDER_ID,
         status: 'IN_PROGRESS',
       },
@@ -942,9 +942,9 @@ async function main() {
         title: 'Unified Knowledge Base Programme',
         description: 'Consolidate and enhance knowledge base with billing scenarios and improved search',
         objectiveId: objCurrent1.id,
+        cycleId: CYCLE_Q4_2025_ID, // Sync cycleId from parent objective
         ownerId: USER_AGENT_ID,
         status: 'IN_PROGRESS',
-        period: 'QUARTERLY',
         startDate: new Date('2025-10-15'),
         endDate: new Date('2025-12-31'),
         positionX: 300,
@@ -956,6 +956,7 @@ async function main() {
       where: { id: initiative2.id },
       data: {
         objectiveId: objCurrent1.id,
+        cycleId: CYCLE_Q4_2025_ID, // Sync cycleId from parent objective
         ownerId: USER_AGENT_ID,
         status: 'IN_PROGRESS',
       },
@@ -974,9 +975,9 @@ async function main() {
         title: 'Self-Service Deflection Pilot',
         description: 'Launch self-service portal for common billing inquiries to reduce contact volume',
         objectiveId: objCurrent2.id,
+        cycleId: CYCLE_Q4_2025_ID, // Sync cycleId from parent objective
         ownerId: USER_FOUNDER_ID,
         status: 'IN_PROGRESS',
-        period: 'QUARTERLY',
         startDate: new Date('2025-10-20'),
         endDate: new Date('2025-12-31'),
         positionX: 200,
@@ -988,6 +989,7 @@ async function main() {
       where: { id: initiative3.id },
       data: {
         objectiveId: objCurrent2.id,
+        cycleId: CYCLE_Q4_2025_ID, // Sync cycleId from parent objective
         ownerId: USER_FOUNDER_ID,
         status: 'IN_PROGRESS',
       },
@@ -1007,9 +1009,9 @@ async function main() {
         title: 'AI Intent Recognition Enhancement',
         description: 'Upgrade AI models to improve intent classification for billing queries',
         objectiveId: objFuture1.id,
+        cycleId: CYCLE_Q1_2026_ID, // Sync cycleId from parent objective
         ownerId: USER_FOUNDER_ID,
         status: 'NOT_STARTED',
-        period: 'QUARTERLY',
         startDate: new Date('2026-01-01'),
         endDate: new Date('2026-03-31'),
         positionX: 150,
@@ -1021,6 +1023,7 @@ async function main() {
       where: { id: initiative4.id },
       data: {
         objectiveId: objFuture1.id,
+        cycleId: CYCLE_Q1_2026_ID, // Sync cycleId from parent objective
         ownerId: USER_FOUNDER_ID,
         status: 'NOT_STARTED',
       },

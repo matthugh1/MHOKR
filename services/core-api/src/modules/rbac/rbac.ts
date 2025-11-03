@@ -222,7 +222,7 @@ function hasTenantOwnerRole(userContext: UserContext, tenantId: string): boolean
  * - Operational admin for the tenant
  * - Invite/remove users from the tenant
  * - Assign workspace and team roles
- * - Create/close OKR periods / quarters
+ * - Create/close OKR cycles / quarters
  * - Run reporting across the whole tenant
  * - View all PUBLIC / TEAM / MANAGER-CHAIN OKRs across the tenant
  * - May or may not see EXEC_ONLY OKRs depending on tenant setting

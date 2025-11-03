@@ -142,8 +142,6 @@ export class OkrReportingService {
     const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
     if (orgFilter === null && userOrganizationId !== null) {
       // User has no org or invalid org → return empty CSV with headers only
-      // W4.M1: period is deprecated but kept in CSV export for backward compatibility
-      const exposePeriod = process.env.OKR_EXPOSE_PERIOD_ALIAS === 'true';
       const headers = [
         'objectiveId',
         'title',
@@ -151,7 +149,6 @@ export class OkrReportingService {
         'status',
         'progress',
         'isPublished',
-        ...(exposePeriod ? ['period'] : []), // Conditionally include period
         'startDate',
         'endDate',
         'parentId',
@@ -220,9 +217,6 @@ export class OkrReportingService {
     const rows: string[] = [];
     
     // CSV header row
-    // W4.M1: period is deprecated but kept in CSV export for backward compatibility
-    // Use OKR_EXPOSE_PERIOD_ALIAS env flag to control inclusion
-    const exposePeriod = process.env.OKR_EXPOSE_PERIOD_ALIAS === 'true';
     const headers = [
       'objectiveId',
       'title',
@@ -230,7 +224,6 @@ export class OkrReportingService {
       'status',
       'progress',
       'isPublished',
-      ...(exposePeriod ? ['period'] : []), // Conditionally include period
       'startDate',
       'endDate',
       'parentId',
@@ -268,7 +261,6 @@ export class OkrReportingService {
         escapeCSV(obj.status),
         escapeCSV(obj.progress),
         escapeCSV(obj.isPublished),
-        ...(exposePeriod ? [escapeCSV(obj.period)] : []), // Conditionally include period
         escapeCSV(obj.startDate?.toISOString().split('T')[0] || ''),
         escapeCSV(obj.endDate?.toISOString().split('T')[0] || ''),
         escapeCSV(obj.parentId),
@@ -810,7 +802,7 @@ export class OkrReportingService {
    * W3.M2: Now filters by visibility before returning overdue check-ins.
    * Only includes overdue KRs whose parent objectives are visible to the requester.
    * 
-   * Returns Key Results that haven't been checked in within their expected cadence period.
+   * Returns Key Results that haven't been checked in within their expected cadence timeframe.
    * Tenant isolation applies: null (superuser) sees all orgs, string sees that org only, undefined returns [].
    * 
    * TODO [phase7-performance]: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
@@ -832,24 +824,26 @@ export class OkrReportingService {
     daysLate: number;
     cadence: string | null;
   }>> {
-    // Tenant isolation: if user has no org, return empty
-    if (userOrganizationId === undefined || userOrganizationId === '') {
-      return [];
-    }
+    console.log('[OKR REPORTING] getOverdueCheckIns called:', { userOrganizationId, requesterUserId });
+    try {
+      // Tenant isolation: if user has no org, return empty
+      if (userOrganizationId === undefined || userOrganizationId === '') {
+        return [];
+      }
 
-    // Build where clause for objectives (tenant isolation)
-    const objectiveWhere: any = {};
-    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
-    if (orgFilter) {
-      objectiveWhere.organizationId = orgFilter.organizationId;
-    }
-    // Superuser (null): no filter, see all orgs
+      // Build where clause for objectives (tenant isolation)
+      const objectiveWhere: any = {};
+      const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+      if (orgFilter) {
+        objectiveWhere.organizationId = orgFilter.organizationId;
+      }
+      // Superuser (null): no filter, see all orgs
 
-    // TODO [phase7-performance]: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
-    // Future optimization: use SQL window functions or subqueries to calculate overdue in database.
+      // TODO [phase7-performance]: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
+      // Future optimization: use SQL window functions or subqueries to calculate overdue in database.
 
-    // Fetch all Key Results in scope with their objectives and latest check-in
-    const keyResults = await this.prisma.keyResult.findMany({
+      // Fetch all Key Results in scope with their objectives and latest check-in
+      const keyResults = await this.prisma.keyResult.findMany({
       where: {
         objectives: {
           some: {
@@ -997,10 +991,26 @@ export class OkrReportingService {
       }
     }
 
-    // Sort by days late (most overdue first)
-    overdueResults.sort((a, b) => b.daysLate - a.daysLate);
+      // Sort by days late (most overdue first)
+      overdueResults.sort((a, b) => b.daysLate - a.daysLate);
 
-    return overdueResults;
+      return overdueResults;
+    } catch (error: any) {
+      console.error('[OKR REPORTING] Error in getOverdueCheckIns:');
+      console.error('[OKR REPORTING] Message:', error?.message || 'Unknown error');
+      console.error('[OKR REPORTING] Name:', error?.name || 'Unknown');
+      console.error('[OKR REPORTING] Code:', error?.code || 'N/A');
+      console.error('[OKR REPORTING] Stack:', error?.stack || 'No stack trace');
+      if (error?.meta) {
+        console.error('[OKR REPORTING] Prisma Meta:', JSON.stringify(error.meta, null, 2));
+      }
+      try {
+        console.error('[OKR REPORTING] Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+      } catch (e) {
+        console.error('[OKR REPORTING] Error object (non-serializable):', error);
+      }
+      throw error;
+    }
   }
 
   /**

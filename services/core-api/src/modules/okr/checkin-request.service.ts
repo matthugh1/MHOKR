@@ -84,28 +84,59 @@ export class CheckInRequestService {
     }
 
     // Check 3 & 4: WORKSPACE_LEAD or TEAM_LEAD roles
-    // Get all workspaces and teams the target user belongs to
-    const targetWorkspaces = await this.prisma.workspaceMember.findMany({
+    // Get all workspaces and teams the target user belongs to (Phase 2: Read from RBAC)
+    const targetWorkspaceAssignments = await this.prisma.roleAssignment.findMany({
       where: {
         userId: targetUserId,
+        scopeType: 'WORKSPACE',
+        scopeId: {
+          not: null,
+        },
+      },
+    });
+
+    // Filter workspaces that belong to this organization
+    const workspaceIds = targetWorkspaceAssignments
+      .map(a => a.scopeId)
+      .filter((id): id is string => id !== null);
+    
+    const workspacesInOrg = await this.prisma.workspace.findMany({
+      where: {
+        id: { in: workspaceIds },
+        organizationId,
+      },
+      select: { id: true },
+    });
+    
+    const targetWorkspaces = workspacesInOrg.map(w => ({ workspaceId: w.id }));
+
+    // Get team assignments for target user in this organization
+    const targetTeamAssignments = await this.prisma.roleAssignment.findMany({
+      where: {
+        userId: targetUserId,
+        scopeType: 'TEAM',
+        scopeId: {
+          not: null,
+        },
+      },
+    });
+
+    // Filter teams that belong to workspaces in this organization
+    const teamIds = targetTeamAssignments
+      .map(a => a.scopeId)
+      .filter((id): id is string => id !== null);
+    
+    const teamsInOrg = await this.prisma.team.findMany({
+      where: {
+        id: { in: teamIds },
         workspace: {
           organizationId,
         },
       },
-      select: { workspaceId: true },
+      select: { id: true },
     });
-
-    const targetTeams = await this.prisma.teamMember.findMany({
-      where: {
-        userId: targetUserId,
-        team: {
-          workspace: {
-            organizationId,
-          },
-        },
-      },
-      select: { teamId: true },
-    });
+    
+    const targetTeams = teamsInOrg.map(t => ({ teamId: t.id }));
 
     // Check if requester is WORKSPACE_LEAD for any target workspace
     for (const ws of targetWorkspaces) {
@@ -165,38 +196,62 @@ export class CheckInRequestService {
     assertNotSuperuserWrite(requester.isSuperuser);
 
     // Verify all target users belong to the same organization
-    // Users can belong to an org via direct membership OR via team membership (team -> workspace -> org)
+    // Users can belong to an org via direct RBAC assignment OR via team membership (team -> workspace -> org)
+    // Phase 4: Check RBAC role assignments instead of legacy tables
     const targetUsers = await this.prisma.user.findMany({
       where: {
         id: { in: targetUserIds },
-        OR: [
-          {
-            organizationMembers: {
-              some: {
-                organizationId: userOrganizationId,
-              },
-            },
-          },
-          {
-            teamMembers: {
-              some: {
-                team: {
-                  workspace: {
-                    organizationId: userOrganizationId,
-                  },
-                },
-              },
-            },
-          },
-        ],
       },
       select: {
         id: true,
       },
     });
 
-    if (targetUsers.length !== targetUserIds.length) {
-      throw new BadRequestException('All target users must belong to your organization');
+    // Verify each user belongs to the organization via RBAC
+    for (const user of targetUsers) {
+      // Check direct tenant assignment
+      const tenantAssignment = await this.prisma.roleAssignment.findFirst({
+        where: {
+          userId: user.id,
+          scopeType: 'TENANT',
+          scopeId: userOrganizationId,
+        },
+      });
+
+      if (tenantAssignment) {
+        continue; // User has direct tenant access
+      }
+
+      // Check team assignments that lead to this organization
+      const teamAssignments = await this.prisma.roleAssignment.findMany({
+        where: {
+          userId: user.id,
+          scopeType: 'TEAM',
+          scopeId: { not: null },
+        },
+      });
+
+      const teamIds = teamAssignments
+        .map(ta => ta.scopeId)
+        .filter((id): id is string => id !== null);
+
+      if (teamIds.length > 0) {
+        const teamInOrg = await this.prisma.team.findFirst({
+          where: {
+            id: { in: teamIds },
+            workspace: {
+              organizationId: userOrganizationId,
+            },
+          },
+        });
+
+        if (teamInOrg) {
+          continue; // User has team access in this organization
+        }
+      }
+
+      // User doesn't belong to this organization
+      throw new BadRequestException(`User ${user.id} does not belong to your organization`);
     }
 
     // Validate authorization for each target user
@@ -552,13 +607,16 @@ export class CheckInRequestService {
     // Filter by team if provided
     let teamUserIds: string[] = [];
     if (teamId) {
-      // Get team members
-      const teamMembers = await this.prisma.teamMember.findMany({
-        where: { teamId },
+      // Get team members from RBAC (Phase 4: RBAC only)
+      const teamAssignments = await this.prisma.roleAssignment.findMany({
+        where: {
+          scopeType: 'TEAM',
+          scopeId: teamId,
+        },
         select: { userId: true },
       });
 
-      teamUserIds = teamMembers.map((tm) => tm.userId);
+      teamUserIds = teamAssignments.map((ta) => ta.userId);
       where.targetUserId = { in: teamUserIds };
     }
 

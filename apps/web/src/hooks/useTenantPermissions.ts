@@ -65,7 +65,7 @@ interface LockInfo {
 interface PermissionChecks {
   canViewObjective: (objective: Objective) => boolean
   canSeeObjective: (objective: any) => boolean
-  canSeeKeyResult: (keyResult: any) => boolean
+  canSeeKeyResult: (keyResult: any, parentObjective?: any) => boolean
   canEditObjective: (objective: Objective) => boolean
   canDeleteObjective: (objective: Objective) => boolean
   canEditKeyResult: (keyResult: KeyResult) => boolean

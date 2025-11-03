@@ -2,79 +2,144 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, ArrowRight, BarChart3, Target } from 'lucide-react'
+import Link from 'next/link'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
-import { KpiCard } from '@/components/dashboard/KpiCard'
-import { AvatarCircle } from '@/components/dashboard/AvatarCircle'
 import { useWorkspace } from '@/contexts/workspace.context'
+import { usePermissions } from '@/hooks/usePermissions'
+import { useAuth } from '@/contexts/auth.context'
+import { CycleHealthStrip } from '@/components/okr/CycleHealthStrip'
+import { AttentionDrawer } from '@/components/okr/AttentionDrawer'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { AlertCircle, Clock, TrendingDown } from 'lucide-react'
 import api from '@/lib/api'
 
-interface AnalyticsSummary {
-  totalObjectives: number
-  byStatus: { [status: string]: number }
-  atRiskRatio: number
-}
-
-interface CheckInFeedItem {
+interface Objective {
   id: string
-  krId: string
-  krTitle: string
-  userId: string
-  userName: string | null
-  value: number
-  confidence: number
-  createdAt: string
-}
-
-interface OverdueCheckInItem {
-  krId: string
-  krTitle: string
-  objectiveId: string
-  objectiveTitle: string
+  title: string
+  status: string
+  progress: number
   ownerId: string
-  ownerName: string | null
-  ownerEmail: string
-  lastCheckInAt: string | null
-  daysLate: number
-  cadence: string | null
+  teamId?: string | null
+  workspaceId?: string | null
+  keyResults: Array<{
+    id: string
+    title: string
+    status: string
+    progress: number
+  }>
 }
 
-interface TopContributor {
-  userName: string
-  recentCheckInsCount: number
-  lastCheckInAgeDays: number
-}
-
-function formatTimeAgo(dateString: string): string {
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
-
-  if (diffMins < 60) {
-    return `${diffMins}m ago`
-  } else if (diffHours < 24) {
-    return `${diffHours}h ago`
-  } else {
-    return `${diffDays}d ago`
-  }
-}
-
-function formatDaysAgo(days: number): string {
-  if (days === 0) return 'today'
-  if (days === 1) return '1 day ago'
-  return `${days} days ago`
+interface OKROverviewResponse {
+  objectives: Objective[]
+  totalCount: number
+  page: number
+  pageSize: number
+  canCreateObjective: boolean
+  canPublishOKR: boolean
 }
 
 export default function DashboardPage() {
-  const { currentOrganization } = useWorkspace()
-  const [summary, setSummary] = useState<AnalyticsSummary | null>(null)
-  const [feed, setFeed] = useState<CheckInFeedItem[]>([])
-  const [overdue, setOverdue] = useState<OverdueCheckInItem[]>([])
+  const { currentOrganization, isSuperuser } = useWorkspace()
+  const { user } = useAuth()
+  const permissions = usePermissions()
   const [loading, setLoading] = useState(true)
+  const [activeCycleId, setActiveCycleId] = useState<string | null>(null)
+  const [attentionDrawerOpen, setAttentionDrawerOpen] = useState(false)
+  const [attentionItems, setAttentionItems] = useState<any[]>([])
+  const [cycleHealthSummary, setCycleHealthSummary] = useState<any>(null)
+  const [myOkrs, setMyOkrs] = useState<Objective[]>([])
+  const [myOkrsLoading, setMyOkrsLoading] = useState(false)
+  const [canCreateObjective, setCanCreateObjective] = useState(false)
+  const [canPublishOKR, setCanPublishOKR] = useState(false)
+
+  // Determine user roles and scopes
+  const userRoles = useMemo(() => {
+    if (!currentOrganization?.id) {
+      return {
+        isContributor: true,
+        isManager: false,
+        isAdmin: false,
+        isSuperuser: isSuperuser || false,
+        managedWorkspaces: [] as string[],
+        managedTeams: [] as string[],
+      }
+    }
+
+    const isAdmin = permissions.isTenantAdminOrOwner(currentOrganization.id)
+    const isSuper = isSuperuser || false
+
+    // Get managed workspaces
+    const managedWorkspaces = permissions.rolesByScope?.workspace?.filter(
+      (w: any) => w.roles.includes('WORKSPACE_LEAD') || w.roles.includes('WORKSPACE_ADMIN')
+    ).map((w: any) => w.workspaceId) || []
+
+    // Get managed teams
+    const managedTeams = permissions.rolesByScope?.team?.filter(
+      (t: any) => t.roles.includes('TEAM_LEAD')
+    ).map((t: any) => t.teamId) || []
+
+    const isManager = managedWorkspaces.length > 0 || managedTeams.length > 0
+
+    return {
+      isContributor: !isAdmin && !isManager,
+      isManager,
+      isAdmin,
+      isSuperuser: isSuper,
+      managedWorkspaces,
+      managedTeams,
+    }
+  }, [permissions, currentOrganization?.id, isSuperuser])
+
+  // Fetch My OKRs for any user who might have personal OKRs
+  useEffect(() => {
+    const fetchMyOKRs = async () => {
+      if (!currentOrganization?.id || !user?.id) {
+        setMyOkrs([])
+        return
+      }
+
+      try {
+        setMyOkrsLoading(true)
+        // Use /me/summary for personal OKRs
+        const response = await api.get('/me/summary')
+        const summary = response.data || {}
+        const ownedObjectives = summary.ownedObjectives || []
+        
+        // Transform to match Objective interface
+        const objectives: Objective[] = ownedObjectives.map((obj: any) => ({
+          id: obj.id,
+          title: obj.title,
+          status: obj.status,
+          progress: obj.progress,
+          keyResults: [], // Will be populated separately if needed
+        }))
+        
+        setMyOkrs(objectives)
+        
+        // Check permissions for creating/publishing
+        const overviewResponse = await api.get<OKROverviewResponse>(
+          `/okr/overview?organizationId=${currentOrganization.id}&page=1&pageSize=1`
+        ).catch(() => ({ data: { canCreateObjective: false, canPublishOKR: false } }))
+        
+        setCanCreateObjective(overviewResponse.data.canCreateObjective || false)
+        setCanPublishOKR(overviewResponse.data.canPublishOKR || false)
+      } catch (error) {
+        setMyOkrs([])
+      } finally {
+        setMyOkrsLoading(false)
+      }
+    }
+
+    fetchMyOKRs()
+  }, [currentOrganization?.id, user?.id])
+
+  // Team and workspace OKRs are shown as summary sections that link to filtered views
+  // The actual OKR list is fetched on the OKRs page with appropriate filters
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -85,125 +150,112 @@ export default function DashboardPage() {
 
       try {
         setLoading(true)
-        // TODO [phase7-hardening]: tighten dashboard access & visibility rules based on tenant/workspace membership
-        const [summaryRes, feedRes, overdueRes] = await Promise.allSettled([
-          api.get('/reports/analytics/summary').catch(() => ({ data: { totalObjectives: 0, byStatus: {}, atRiskRatio: 0 } })),
-          api.get('/reports/analytics/feed').catch(() => ({ data: [] })),
-          api.get('/reports/check-ins/overdue').catch(() => ({ data: [] })),
-        ])
 
-        // Extract data safely, fallback to empty defaults
-        setSummary(
-          summaryRes.status === 'fulfilled' && summaryRes.value?.data
-            ? summaryRes.value.data
-            : { totalObjectives: 0, byStatus: {}, atRiskRatio: 0 }
-        )
-        setFeed(
-          feedRes.status === 'fulfilled' && Array.isArray(feedRes.value?.data)
-            ? feedRes.value.data
-            : []
-        )
-        setOverdue(
-          overdueRes.status === 'fulfilled' && Array.isArray(overdueRes.value?.data)
-            ? overdueRes.value.data
-            : []
-        )
+        // Fetch active cycle
+        const cyclesRes = await api.get('/reports/cycles/active').catch(() => ({ data: [] }))
+        const activeCycles = Array.isArray(cyclesRes.data) ? cyclesRes.data : []
+        const cycle = activeCycles.length > 0 ? activeCycles[0] : null
+        setActiveCycleId(cycle?.id || null)
+
+        const promises: Promise<any>[] = []
+
+        // Fetch attention feed if we have a cycle
+        if (cycle?.id) {
+          promises.push(
+            api.get(`/okr/insights/attention?cycleId=${cycle.id}&page=1&pageSize=5`).catch(() => ({ data: { items: [] } }))
+          )
+          promises.push(
+            api.get(`/okr/insights/cycle-summary?cycleId=${cycle.id}`).catch(() => ({ data: null }))
+          )
+        }
+
+        const results = await Promise.allSettled(promises)
+
+        // Extract attention items if cycle exists
+        if (cycle?.id && results.length > 0) {
+          const attentionRes = results[0]
+          if (attentionRes.status === 'fulfilled' && attentionRes.value?.data?.items) {
+            setAttentionItems(attentionRes.value.data.items || [])
+          }
+
+          // Extract cycle health
+          if (results.length > 1) {
+            const cycleHealthRes = results[1]
+            if (cycleHealthRes.status === 'fulfilled' && cycleHealthRes.value?.data) {
+              setCycleHealthSummary(cycleHealthRes.value.data)
+            }
+          }
+        }
       } catch (error) {
-        // Set empty state on error - page should still render
-        setSummary({
-          totalObjectives: 0,
-          byStatus: {},
-          atRiskRatio: 0,
-        })
-        setFeed([])
-        setOverdue([])
+        // Error handling
       } finally {
         setLoading(false)
       }
     }
 
     fetchDashboard()
-  }, [currentOrganization?.id])
+  }, [currentOrganization?.id, activeCycleId])
 
-  function safePercent(numerator: number, denominator: number): number {
-    if (!denominator || denominator <= 0) return 0
-    if (!numerator || numerator < 0) return 0
-    return Math.round((numerator / denominator) * 100)
+  const getAttentionItemIcon = (type: string) => {
+    switch (type) {
+      case 'OVERDUE_CHECKIN':
+        return <AlertCircle className="w-4 h-4 text-rose-600" />
+      case 'NO_UPDATE_14D':
+        return <Clock className="w-4 h-4 text-amber-600" />
+      case 'STATUS_DOWNGRADE':
+        return <TrendingDown className="w-4 h-4 text-rose-600" />
+      default:
+        return null
+    }
   }
 
-  // Derive top contributors from feed (group by user, count check-ins in last 7 days)
-  const topContributors = useMemo((): TopContributor[] => {
-    const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+  const getAttentionItemLabel = (item: any) => {
+    switch (item.type) {
+      case 'OVERDUE_CHECKIN':
+        return `Overdue check-in${item.ageDays ? ` (${item.ageDays} days)` : ''}`
+      case 'NO_UPDATE_14D':
+        return `No update in ${item.ageDays || 14}+ days`
+      case 'STATUS_DOWNGRADE':
+        return `Status changed from ${item.from || 'ON_TRACK'} to ${item.to || 'AT_RISK'}`
+      default:
+        return 'Needs attention'
+    }
+  }
 
-    const userMap = new Map<string, { count: number; lastCheckIn: Date }>()
+  // Calculate summary metrics
+  const myOkrsCount = myOkrs.length
+  const myOkrsAtRisk = myOkrs.filter(obj => obj.status === 'AT_RISK').length
 
-    feed.forEach((item) => {
-      const checkInDate = new Date(item.createdAt)
-      if (checkInDate >= sevenDaysAgo && item.userName) {
-        const existing = userMap.get(item.userName)
-        if (existing) {
-          existing.count++
-          if (checkInDate > existing.lastCheckIn) {
-            existing.lastCheckIn = checkInDate
-          }
-        } else {
-          userMap.set(item.userName, { count: 1, lastCheckIn: checkInDate })
-        }
-      }
-    })
-
-    return Array.from(userMap.entries())
-      .map(([userName, data]) => {
-        const daysSinceLastCheckIn = Math.floor(
-          (new Date().getTime() - data.lastCheckIn.getTime()) / (1000 * 60 * 60 * 24)
-        )
-        return {
-          userName,
-          recentCheckInsCount: data.count,
-          lastCheckInAgeDays: daysSinceLastCheckIn,
-        }
-      })
-      .sort((a, b) => b.recentCheckInsCount - a.recentCheckInsCount)
-      .slice(0, 5) // Top 5 contributors
-  }, [feed])
-
-  // Get top 3 most recent activity items
-  const recentActivityTop3 = useMemo(() => {
-    return feed.slice(0, 3)
-  }, [feed])
-
-  const onTrackCount = summary?.byStatus?.['ON_TRACK'] || 0
-  const atRiskCount = summary?.byStatus?.['AT_RISK'] || 0
-  const totalObjectives = summary?.totalObjectives || 0
-  const overdueCount = overdue.length
-  
-  // Calculate "Needs Attention" metric
-  const atRiskObjectivesCount = summary?.byStatus?.AT_RISK ?? 0
-  const overdueCheckInsCount = overdue?.length ?? 0
-  const needsAttentionCount = atRiskObjectivesCount + overdueCheckInsCount
-  
-  const onTrackPercent = safePercent(onTrackCount, totalObjectives)
-  const atRiskPercent = safePercent(atRiskCount, totalObjectives)
-
-  // Generate AI summary message (deterministic for now)
+  // Generate AI summary message
   const aiSummary = useMemo(() => {
-    if (atRiskCount > 0) {
-      return 'There are objectives at risk. Focus is required this week.'
-    } else if (overdueCount > 0) {
-      return 'You\'re missing check-ins. Execution discipline is slipping.'
+    if (myOkrsAtRisk > 0) {
+      return 'You have objectives at risk. Focus is required this week.'
+    } else if (attentionItems.length > 0) {
+      return 'You have items requiring attention. Review the attention feed below.'
     } else {
       return 'Execution looks steady. Most objectives are tracking and check-ins are up to date.'
     }
-  }, [atRiskCount, overdueCount])
+  }, [myOkrsAtRisk, attentionItems.length])
 
-  const lastUpdatedDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  const renderReadOnlyTooltip = (children: React.ReactNode) => {
+    if (!userRoles.isSuperuser) return children
+
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>{children}</TooltipTrigger>
+          <TooltipContent>
+            <p>Superuser access is read-only. You cannot modify OKR content.</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    )
+  }
 
   return (
     <ProtectedRoute>
       <DashboardLayout>
         <div className="bg-neutral-50 min-h-screen relative">
-          {/* Gradient mask at top */}
           <div className="absolute top-0 left-0 w-full h-[160px] bg-gradient-to-b from-white/60 to-transparent pointer-events-none" />
           <div className="max-w-[1400px] mx-auto px-6 py-6 relative">
             {/* Header */}
@@ -211,20 +263,52 @@ export default function DashboardPage() {
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
-              className="mb-4"
+              className="mb-6"
             >
-              <h1 className="text-xl font-semibold text-neutral-900 flex items-center gap-2">
-                Organisation health
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gradient-to-r from-violet-600/10 to-fuchsia-400/10 text-violet-700 border border-violet-300/40">
-                  AI-assisted
-                </span>
-              </h1>
-              <p className="text-sm text-neutral-500">
-                Snapshot of OKR performance, delivery risk, and update discipline across the organisation.
-              </p>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h1 className="text-xl font-semibold text-neutral-900 flex items-center gap-2">
+                    My Dashboard
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gradient-to-r from-violet-600/10 to-fuchsia-400/10 text-violet-700 border border-violet-300/40">
+                      AI-assisted
+                    </span>
+                    {userRoles.isSuperuser && (
+                      <Badge variant="outline" className="text-xs">
+                        Read-only
+                      </Badge>
+                    )}
+                  </h1>
+                  <p className="text-sm text-neutral-500 mt-1">
+                    {userRoles.isSuperuser
+                      ? 'System-wide overview with read-only access.'
+                      : userRoles.isAdmin
+                      ? 'Organisation-wide OKR performance and cross-workspace insights.'
+                      : userRoles.isManager
+                      ? 'Your OKRs, team performance, and cycle overview.'
+                      : 'Your OKRs and progress tracking.'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Link href="/dashboard/okrs">
+                    {renderReadOnlyTooltip(
+                      <Button variant="outline" size="sm" className="gap-2" disabled={userRoles.isSuperuser}>
+                        <Target className="w-4 h-4" />
+                        View All OKRs
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </Link>
+                  <Link href="/dashboard/analytics">
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <BarChart3 className="w-4 h-4" />
+                      See Analytics
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </Link>
+                </div>
+              </div>
             </motion.header>
 
-            {/* Gradient accent line */}
             <div className="h-[2px] w-full bg-gradient-to-r from-violet-600 via-fuchsia-400 to-transparent rounded-full mb-6" />
 
             {loading ? (
@@ -233,230 +317,276 @@ export default function DashboardPage() {
               </div>
             ) : (
               <>
-                {/* SECTION 1: STATUS OVERVIEW */}
-                <section className="mb-10">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                    <KpiCard
-                      label="Total Objectives"
-                      value={totalObjectives > 0 ? totalObjectives : '--'}
-                      meta={totalObjectives > 0 ? `${onTrackCount} on track` : 'No data yet'}
-                      tone="neutral"
-                      delay={0}
-                    />
-                    <KpiCard
-                      label="% On Track"
-                      value={totalObjectives > 0 ? `${onTrackPercent}%` : '--'}
-                      meta={totalObjectives > 0 ? `${onTrackCount} of ${totalObjectives}` : 'No data yet'}
-                      tone={onTrackPercent >= 70 ? 'good' : onTrackPercent >= 50 ? 'warning' : 'bad'}
-                      delay={0.05}
-                    />
-                    <KpiCard
-                      label="% At Risk"
-                      value={totalObjectives > 0 ? `${atRiskPercent}%` : '--'}
-                      meta={totalObjectives > 0 ? `${atRiskCount} objective${atRiskCount !== 1 ? 's' : ''}` : 'No data yet'}
-                      tone={atRiskPercent === 0 ? 'good' : atRiskPercent <= 20 ? 'warning' : 'bad'}
-                      delay={0.1}
-                    />
-                    <KpiCard
-                      label="Overdue Check-ins"
-                      value={overdueCount > 0 ? overdueCount : '--'}
-                      meta={overdueCount > 0 ? `${overdueCount} key result${overdueCount !== 1 ? 's' : ''}` : 'No data yet'}
-                      tone={overdueCount === 0 ? 'good' : overdueCount <= 3 ? 'warning' : 'bad'}
-                      delay={0.15}
-                    />
-                    <KpiCard
-                      label="Needs Attention"
-                      value={needsAttentionCount > 0 ? needsAttentionCount : '--'}
-                      meta={needsAttentionCount > 0 ? `${needsAttentionCount} item${needsAttentionCount !== 1 ? 's' : ''} require${needsAttentionCount === 1 ? 's' : ''} follow-up` : 'No active escalations'}
-                      tone={needsAttentionCount > 0 ? 'bad' : 'good'}
-                      trend={{
-                        direction: needsAttentionCount > 0 ? 'up' : 'flat',
-                        text: needsAttentionCount > 0 ? 'Escalate to owners' : 'All stable',
-                      }}
-                      delay={0.2}
-                    />
-                  </div>
+                {/* SECTION 1: My OKRs - Always first if user has personal OKRs */}
+                {myOkrsCount > 0 && (
+                  <motion.section
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.1 }}
+                    className="mb-10"
+                  >
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle>My OKRs</CardTitle>
+                            <CardDescription>
+                              Your personal objectives and key results
+                            </CardDescription>
+                          </div>
+                          {!userRoles.isSuperuser && canCreateObjective && (
+                            <Link href="/dashboard/okrs?action=create">
+                              <Button variant="outline" size="sm">
+                                Create OKR
+                              </Button>
+                            </Link>
+                          )}
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        {myOkrsLoading ? (
+                          <div className="text-sm text-neutral-500 py-4">Loading your OKRs...</div>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                              <div className="text-sm">
+                                <div className="font-medium text-neutral-900 mb-1">Objectives</div>
+                                <div className="text-2xl font-semibold">{myOkrsCount}</div>
+                              </div>
+                              <div className="text-sm">
+                                <div className="font-medium text-neutral-900 mb-1">At Risk</div>
+                                <div className={`text-2xl font-semibold ${myOkrsAtRisk > 0 ? 'text-rose-600' : 'text-neutral-700'}`}>
+                                  {myOkrsAtRisk}
+                                </div>
+                              </div>
+                              <div className="text-sm">
+                                <div className="font-medium text-neutral-900 mb-1">Key Results</div>
+                                <div className="text-2xl font-semibold">
+                                  {myOkrs.reduce((sum, obj) => sum + (obj.keyResults?.length || 0), 0)}
+                                </div>
+                              </div>
+                            </div>
+                            {myOkrs.length > 0 && (
+                              <Link href="/dashboard/okrs?ownerId=self">
+                                <Button variant="ghost" size="sm" className="w-full">
+                                  View all my OKRs
+                                  <ArrowRight className="w-3 h-3 ml-2" />
+                                </Button>
+                              </Link>
+                            )}
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </motion.section>
+                )}
 
-                  {/* AI Summary Bar */}
-                  <motion.div
+                {/* SECTION 2: My Team/Workspace OKRs - For managers */}
+                {userRoles.isManager && (userRoles.managedTeams.length > 0 || userRoles.managedWorkspaces.length > 0) && (
+                  <motion.section
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, delay: 0.2 }}
-                    className="mt-4 text-sm text-neutral-700 bg-gradient-to-r from-violet-50 to-fuchsia-50 border border-neutral-200 rounded-lg p-3 shadow-sm flex items-start gap-2"
+                    className="mb-10"
                   >
-                    <div className="flex items-center justify-center h-6 w-6 rounded-full bg-violet-100 text-violet-700 flex-shrink-0">
-                      <Sparkles size={14} />
-                    </div>
-                    <p className="text-sm leading-5">{aiSummary}</p>
-                  </motion.div>
-                </section>
-
-                {/* SECTION 2: EXECUTION HEALTH */}
-                <motion.section
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.25 }}
-                  className="mt-10 bg-white border border-neutral-200 rounded-xl shadow-sm p-4 transition-all duration-200 hover:shadow-md hover:border-neutral-300"
-                >
-                  <div className="mb-4">
-                    <h2 className="text-sm font-semibold text-neutral-900 flex items-center gap-2">
-                      Execution health
-                      <span className="text-[10px] font-medium text-neutral-500">Updated {lastUpdatedDate}</span>
-                    </h2>
-                    <p className="text-xs text-neutral-500 mt-1 leading-relaxed">
-                      Are people actively updating progress, or are we flying blind?
-                    </p>
-                    <div className="h-[1px] bg-gradient-to-r from-neutral-200 to-transparent mb-3 mt-3" />
-                  </div>
-
-                  <motion.div
-                    initial="hidden"
-                    animate="visible"
-                    variants={{
-                      visible: {
-                        transition: {
-                          staggerChildren: 0.05,
-                        },
-                      },
-                    }}
-                    className="grid grid-cols-1 lg:grid-cols-2 gap-4"
-                  >
-                    {/* Left: Update discipline */}
-                    <motion.div
-                      variants={{
-                        hidden: { opacity: 0, y: 4 },
-                        visible: { opacity: 1, y: 0 },
-                      }}
-                      className="border border-neutral-200 rounded-lg p-3 bg-neutral-50/50"
-                    >
-                      <div className="text-xs font-medium text-neutral-700 mb-2">
-                        Update discipline
-                      </div>
-                      {topContributors.length > 0 ? (
-                        <ul className="space-y-2">
-                          {topContributors.map((contributor) => (
-                            <motion.li
-                              key={contributor.userName}
-                              variants={{
-                                hidden: { opacity: 0, x: -4 },
-                                visible: { opacity: 1, x: 0 },
-                              }}
-                              className="flex items-center gap-2 even:bg-neutral-50/40"
-                            >
-                              <AvatarCircle name={contributor.userName} size="sm" />
-                              <div className="flex-1 min-w-0">
-                                <div className="text-xs text-neutral-700 font-medium truncate">
-                                  {contributor.userName}
-                                </div>
-                                <div className="text-[10px] text-neutral-500">
-                                  {contributor.recentCheckInsCount} check-in{contributor.recentCheckInsCount !== 1 ? 's' : ''} this week
-                                  {' • '}
-                                  last update {formatDaysAgo(contributor.lastCheckInAgeDays)}
-                                </div>
-                              </div>
-                            </motion.li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="text-xs text-neutral-500 italic">
-                          No recent updates logged.
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle>
+                              {userRoles.managedTeams.length > 0 && userRoles.managedWorkspaces.length > 0
+                                ? "My Team & Workspace OKRs"
+                                : userRoles.managedTeams.length > 0
+                                ? "My Team's OKRs"
+                                : "My Workspace OKRs"}
+                            </CardTitle>
+                            <CardDescription>
+                              {userRoles.managedTeams.length > 0 && userRoles.managedWorkspaces.length > 0
+                                ? 'Objectives and key results for your team and workspace'
+                                : userRoles.managedTeams.length > 0
+                                ? 'Objectives and key results for your team'
+                                : 'Objectives and key results for your workspace'}
+                            </CardDescription>
+                          </div>
                         </div>
-                      )}
-                    </motion.div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-sm text-neutral-600 mb-4">
+                          {userRoles.managedTeams.length > 0 && (
+                            <p className="mb-2">
+                              Managing {userRoles.managedTeams.length} team{userRoles.managedTeams.length !== 1 ? 's' : ''}
+                            </p>
+                          )}
+                          {userRoles.managedWorkspaces.length > 0 && (
+                            <p>
+                              Managing {userRoles.managedWorkspaces.length} workspace{userRoles.managedWorkspaces.length !== 1 ? 's' : ''}
+                            </p>
+                          )}
+                        </div>
+                        <Link href="/dashboard/okrs">
+                          <Button variant="ghost" size="sm" className="w-full">
+                            View team and workspace OKRs
+                            <ArrowRight className="w-3 h-3 ml-2" />
+                          </Button>
+                        </Link>
+                      </CardContent>
+                    </Card>
+                  </motion.section>
+                )}
 
-                    {/* Right: Gaps / Risks */}
-                    <motion.div
-                      variants={{
-                        hidden: { opacity: 0, y: 4 },
-                        visible: { opacity: 1, y: 0 },
-                      }}
-                      className="border border-neutral-200 rounded-lg p-3 bg-neutral-50/50"
-                    >
-                      <div className="text-xs font-medium text-neutral-700 mb-2">
-                        Gaps that need attention
-                      </div>
-                      <div className="space-y-0">
-                        <motion.div
-                          variants={{
-                            hidden: { opacity: 0, x: -4 },
-                            visible: { opacity: 1, x: 0 },
-                          }}
-                          className="flex items-center justify-between py-2 border-t border-neutral-200 first:border-t-0"
-                        >
-                          <span className="font-medium text-sm text-neutral-800">
-                            Key results with overdue check-ins
-                          </span>
-                          <span className="text-base font-semibold text-rose-600">
-                            {overdueCount}
-                          </span>
-                        </motion.div>
-                        {/* TODO [phase6-polish]: Add more rows e.g. "Objectives flagged At Risk", etc. */}
-                      </div>
-                    </motion.div>
-                  </motion.div>
-                </motion.section>
+                {/* SECTION 4: Cycle Overview - For managers and admins */}
+                {(userRoles.isManager || userRoles.isAdmin || userRoles.isSuperuser) && activeCycleId && (
+                  <motion.section
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.3 }}
+                    className="mb-10"
+                  >
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>
+                          {userRoles.isAdmin ? 'Cycle Overview' : 'Cycle Health'}
+                        </CardTitle>
+                        <CardDescription>
+                          {userRoles.isAdmin
+                            ? 'Organisation-wide cycle summary'
+                            : 'Team and workspace cycle health'}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {cycleHealthSummary ? (
+                          <CycleHealthStrip
+                            cycleId={activeCycleId}
+                            onFilterClick={(filterType, value) => {
+                              window.location.href = `/dashboard/okrs?filter=${filterType}${value ? `&value=${value}` : ''}`
+                            }}
+                          />
+                        ) : (
+                          <div className="text-sm text-neutral-500 py-4">
+                            Loading cycle health data...
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </motion.section>
+                )}
 
-                {/* SECTION 3: OPERATING RHYTHM */}
+                {/* SECTION 5: Attention Feed - For all users */}
                 <motion.section
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.3 }}
-                  className="mt-10 bg-white border border-neutral-200 rounded-xl shadow-sm p-4 transition-all duration-200 hover:shadow-md hover:border-neutral-300"
+                  transition={{ duration: 0.3, delay: 0.35 }}
+                  className="mt-10"
                 >
                   <div className="mb-4">
-                    <h2 className="text-sm font-semibold text-neutral-900 flex items-center gap-2">
-                      Operating rhythm
+                    <h2 className="text-lg font-semibold text-neutral-900 flex items-center gap-2">
+                      Attention Feed
                     </h2>
-                    <p className="text-xs text-neutral-500 mt-1 leading-relaxed">
-                      Latest changes to targets, confidence, and progress.
+                    <p className="text-sm text-neutral-500 mt-1">
+                      Items requiring your attention
                     </p>
-                    <div className="h-[1px] bg-gradient-to-r from-neutral-200 to-transparent mb-3 mt-3" />
                   </div>
 
-                  {recentActivityTop3.length > 0 ? (
-                    <ul className="divide-y divide-neutral-200">
-                      {recentActivityTop3.map((item) => {
-                        const confidence = item.confidence || 0
-                        const confidenceDotColor =
-                          confidence > 80 ? 'bg-emerald-500' : confidence > 50 ? 'bg-amber-500' : 'bg-rose-500'
-                        
-                        return (
-                          <li
-                            key={item.id}
-                            className="py-3 flex items-start gap-3 transition-colors hover:bg-neutral-50"
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle>Items Requiring Attention</CardTitle>
+                        {attentionItems.length > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setAttentionDrawerOpen(true)}
+                            className="text-xs"
                           >
-                            <AvatarCircle name={item.userName || 'Unknown User'} size="sm" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-xs font-medium text-neutral-900">
-                                  {item.userName || 'Unknown User'} checked in
-                                </span>
-                                <div className={`h-2 w-2 rounded-full ${confidenceDotColor}`} />
-                                <span className="text-[11px] text-neutral-400 ml-auto tabular-nums">
-                                  {formatTimeAgo(item.createdAt)}
-                                </span>
-                              </div>
-                              <div className="text-xs text-neutral-600 truncate mb-1">
-                                {item.krTitle}
-                              </div>
-                              <div className="text-[10px] text-neutral-500">
-                                Value: {item.value} • Confidence: {item.confidence}%
+                            View all
+                            <ArrowRight className="w-3 h-3 ml-1" />
+                          </Button>
+                        )}
+                      </div>
+                      <CardDescription>
+                        Overdue check-ins, status changes, and items needing follow-up
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {attentionItems.length > 0 ? (
+                        <div className="space-y-3">
+                          {attentionItems.slice(0, 5).map((item, index) => (
+                            <div
+                              key={`${item.type}-${item.objectiveId}-${item.keyResultId || ''}-${index}`}
+                              className="flex items-start gap-3 p-3 rounded-md border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                            >
+                              <div className="mt-0.5">{getAttentionItemIcon(item.type)}</div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Badge variant="outline" className="text-xs">
+                                    {item.type.replace(/_/g, ' ')}
+                                  </Badge>
+                                </div>
+                                <p className="text-sm text-neutral-700">
+                                  {getAttentionItemLabel(item)}
+                                </p>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs h-6 mt-2"
+                                  onClick={() => {
+                                    if (item.keyResultId) {
+                                      window.location.href = `/dashboard/okrs?krId=${item.keyResultId}`
+                                    } else {
+                                      window.location.href = `/dashboard/okrs?objectiveId=${item.objectiveId}`
+                                    }
+                                  }}
+                                >
+                                  View in OKRs
+                                  <ArrowRight className="w-3 h-3 ml-1" />
+                                </Button>
                               </div>
                             </div>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  ) : (
-                    <div className="text-xs text-neutral-500 italic">
-                      No recent updates in this workspace.
-                    </div>
-                  )}
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-neutral-500 text-center py-6">
+                          No items need attention at this time.
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 </motion.section>
+
+                {/* AI Summary Bar */}
+                {aiSummary && (
+                  <motion.section
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.4 }}
+                    className="mt-6"
+                  >
+                    <div className="text-sm bg-gradient-to-r from-violet-50 via-fuchsia-50 to-violet-50 border border-neutral-200 rounded-lg p-3 shadow-sm flex items-start gap-2">
+                      <div className="flex items-center justify-center h-6 w-6 rounded-full bg-violet-100 text-violet-700 flex-shrink-0">
+                        <Sparkles size={14} />
+                      </div>
+                      <p className="text-sm leading-5">{aiSummary}</p>
+                    </div>
+                  </motion.section>
+                )}
               </>
             )}
           </div>
         </div>
+
+        {/* Attention Drawer */}
+        <AttentionDrawer
+          isOpen={attentionDrawerOpen}
+          onClose={() => setAttentionDrawerOpen(false)}
+          cycleId={activeCycleId}
+          onNavigateToObjective={(objectiveId) => {
+            window.location.href = `/dashboard/okrs?objectiveId=${objectiveId}`
+          }}
+          onNavigateToKeyResult={(krId) => {
+            window.location.href = `/dashboard/okrs?krId=${krId}`
+          }}
+          canRequestCheckIn={!userRoles.isSuperuser && permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || undefined })}
+        />
       </DashboardLayout>
     </ProtectedRoute>
   )

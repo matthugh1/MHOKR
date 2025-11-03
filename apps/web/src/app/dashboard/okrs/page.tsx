@@ -117,6 +117,12 @@ export default function OKRsPage() {
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false)
   const [canCreateObjective, setCanCreateObjective] = useState<boolean>(false)
   const [creationDrawerMode, setCreationDrawerMode] = useState<'objective' | 'kr' | 'initiative'>('objective')
+  // Story 5: Parent context for contextual creation
+  const [creationDrawerParentContext, setCreationDrawerParentContext] = useState<{
+    type: 'objective' | 'kr'
+    id: string
+    title: string
+  } | undefined>()
   
   // Objective editing
   const [showEditObjective, setShowEditObjective] = useState(false)
@@ -394,6 +400,52 @@ export default function OKRsPage() {
     setInitiativeParentKeyResultId(krId)
     setInitiativeParentName(krTitle)
     setShowNewInitiative(true)
+  }
+
+  // Story 5: Contextual Add menu handlers
+  const handleOpenContextualAddMenu = (objectiveId: string) => {
+    console.log('[Telemetry] okr.row.add.menu.open', {
+      userId: user?.id,
+      organizationId: currentOrganization?.id,
+      objectiveId,
+      timestamp: new Date().toISOString(),
+    })
+  }
+
+  const handleContextualAddKeyResult = (objectiveId: string, objectiveTitle: string) => {
+    console.log('[Telemetry] okr.row.add.kr.click', {
+      userId: user?.id,
+      organizationId: currentOrganization?.id,
+      objectiveId,
+      timestamp: new Date().toISOString(),
+    })
+    
+    // Find the objective to get its full details
+    // For now, we'll use the provided id and title
+    setCreationDrawerMode('kr')
+    setCreationDrawerParentContext({
+      type: 'objective',
+      id: objectiveId,
+      title: objectiveTitle,
+    })
+    setIsCreateDrawerOpen(true)
+  }
+
+  const handleContextualAddInitiative = (objectiveId: string, objectiveTitle: string) => {
+    console.log('[Telemetry] okr.row.add.initiative.click', {
+      userId: user?.id,
+      organizationId: currentOrganization?.id,
+      objectiveId,
+      timestamp: new Date().toISOString(),
+    })
+    
+    setCreationDrawerMode('initiative')
+    setCreationDrawerParentContext({
+      type: 'objective',
+      id: objectiveId,
+      title: objectiveTitle,
+    })
+    setIsCreateDrawerOpen(true)
   }
   
   const handleToggleObjective = (id: string) => {
@@ -1011,6 +1063,10 @@ export default function OKRsPage() {
                 onAddInitiativeToKr: handleAddInitiativeToKrClick,
                 onAddCheckIn: handleAddCheckIn,
                 onOpenHistory: handleOpenActivityDrawer,
+                // Story 5: Contextual Add menu handlers
+                onOpenContextualAddMenu: handleOpenContextualAddMenu,
+                onContextualAddKeyResult: handleContextualAddKeyResult,
+                onContextualAddInitiative: handleContextualAddInitiative,
               }}
               expandedObjectiveId={expandedObjectiveId}
               onToggleObjective={handleToggleObjective}
@@ -1256,13 +1312,16 @@ export default function OKRsPage() {
             onClose={() => {
               setIsCreateDrawerOpen(false)
               setCreationDrawerMode('objective')
+              setCreationDrawerParentContext(undefined)
             }}
             availableUsers={availableUsers}
             activeCycles={activeCycles}
             currentOrganization={currentOrganization}
+            parentContext={creationDrawerParentContext}
             onSuccess={() => {
               setIsCreateDrawerOpen(false)
               setCreationDrawerMode('objective')
+              setCreationDrawerParentContext(undefined)
               handleReloadOKRs()
             }}
           />

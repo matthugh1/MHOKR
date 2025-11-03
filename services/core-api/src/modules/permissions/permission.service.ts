@@ -457,16 +457,30 @@ export class PermissionService {
     );
 
     if (!workspaceRole) {
-      // Check if user has team membership in workspace
-      const teamMember = await this.prisma.teamMember.findFirst({
+      // Check if user has team membership in workspace (Phase 4: RBAC only)
+      const teamAssignments = await this.prisma.roleAssignment.findMany({
         where: {
           userId,
-          team: {
-            workspaceId,
-          },
+          scopeType: 'TEAM',
+          scopeId: { not: null },
         },
       });
-      return !!teamMember; // MEMBER or higher can create
+
+      const teamIds = teamAssignments
+        .map(ta => ta.scopeId)
+        .filter((id): id is string => id !== null);
+
+      if (teamIds.length > 0) {
+        const teamInWorkspace = await this.prisma.team.findFirst({
+          where: {
+            id: { in: teamIds },
+            workspaceId,
+          },
+        });
+        return !!teamInWorkspace; // MEMBER or higher can create
+      }
+
+      return false;
     }
 
     // VIEWER cannot create

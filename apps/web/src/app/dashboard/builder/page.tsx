@@ -1214,7 +1214,15 @@ export default function BuilderPage() {
                 organizationId: editingFormData.organizationId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
-                parentObjective: editingFormData.parentObjective as Record<string, unknown> || null,
+                parentObjective: editingFormData.parentObjective && typeof editingFormData.parentObjective === 'object' && 'id' in editingFormData.parentObjective
+                  ? {
+                      id: (editingFormData.parentObjective as any).id as string,
+                      organizationId: (editingFormData.parentObjective as any).organizationId as string | null | undefined,
+                      isPublished: (editingFormData.parentObjective as any).isPublished as boolean | undefined,
+                      cycle: (editingFormData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
+                      cycleStatus: (editingFormData.parentObjective as any).cycleStatus as string | null | undefined,
+                    }
+                  : null,
               })
             }
             return true // Initiatives don't have lock logic yet
@@ -1268,7 +1276,15 @@ export default function BuilderPage() {
                 organizationId: editingFormData.organizationId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
-                parentObjective: editingFormData.parentObjective as Record<string, unknown> || null,
+                parentObjective: editingFormData.parentObjective && typeof editingFormData.parentObjective === 'object' && 'id' in editingFormData.parentObjective
+                  ? {
+                      id: (editingFormData.parentObjective as any).id as string,
+                      organizationId: (editingFormData.parentObjective as any).organizationId as string | null | undefined,
+                      isPublished: (editingFormData.parentObjective as any).isPublished as boolean | undefined,
+                      cycle: (editingFormData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
+                      cycleStatus: (editingFormData.parentObjective as any).cycleStatus as string | null | undefined,
+                    }
+                  : null,
               })
               return lockInfo.isLocked ? lockInfo.message : undefined
             }

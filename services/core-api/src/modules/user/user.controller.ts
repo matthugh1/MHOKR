@@ -15,12 +15,16 @@ export class UserController {
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user' })
+  // Override class-level guards - only require JWT auth, not RBAC (user can always see themselves)
+  @UseGuards(JwtAuthGuard)
   async getCurrentUser(@Req() req: any) {
     return req.user;
   }
 
   @Get('me/context')
   @ApiOperation({ summary: 'Get current user context with organization, workspace, and team info' })
+  // Override class-level guards - only require JWT auth, not RBAC (user can always see their own context)
+  @UseGuards(JwtAuthGuard)
   async getUserContext(@Req() req: any) {
     return this.userService.getUserContext(req.user.id);
   }

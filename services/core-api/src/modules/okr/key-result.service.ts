@@ -7,6 +7,7 @@ import { OkrProgressService } from './okr-progress.service';
 import { ActivityService } from '../activity/activity.service';
 import { OkrTenantGuard } from './tenant-guard';
 import { OkrGovernanceService } from './okr-governance.service';
+import { AuditLogService } from '../audit/audit-log.service';
 
 /**
  * Key Result Service
@@ -22,6 +23,7 @@ export class KeyResultService {
     private okrProgressService: OkrProgressService,
     private activityService: ActivityService,
     private okrGovernanceService: OkrGovernanceService,
+    private auditLogService: AuditLogService,
   ) {}
 
   async findAll(_userId: string, objectiveId?: string) {
@@ -314,19 +316,34 @@ export class KeyResultService {
       throw new NotFoundException(`User with ID ${data.ownerId} not found`);
     }
 
-    // Validate objective exists if provided
+    // Validate objective exists if provided and sync cycleId
+    let parentCycleId: string | null = null;
     if (objectiveId) {
       const objective = await this.prisma.objective.findUnique({
         where: { id: objectiveId },
+        select: { id: true, cycleId: true },
       });
 
       if (!objective) {
         throw new NotFoundException(`Objective with ID ${objectiveId} not found`);
       }
+
+      // Sync cycleId from parent Objective
+      parentCycleId = objective.cycleId;
     }
 
     // Remove objectiveId from data since it's not a field on KeyResult model
     delete data.objectiveId;
+    
+    // Set cycleId from parent Objective if not explicitly provided
+    if (!data.cycleId && parentCycleId) {
+      data.cycleId = parentCycleId;
+    }
+
+    // Set currentValue to startValue if not provided (required field)
+    if (data.currentValue === undefined && data.startValue !== undefined) {
+      data.currentValue = data.startValue;
+    }
 
     // Calculate initial progress if currentValue is provided
     if (data.currentValue !== undefined && data.startValue !== undefined && data.targetValue !== undefined && data.metricType) {
@@ -355,6 +372,37 @@ export class KeyResultService {
     }).catch(err => {
       // Log error but don't fail the request
       console.error('Failed to log activity for key result creation:', err);
+    });
+
+    // Log audit entry for key result creation
+    // Get organizationId from parent objective if available
+    let organizationId: string | null = null;
+    if (objectiveId) {
+      try {
+        const objective = await this.prisma.objective.findUnique({
+          where: { id: objectiveId },
+          select: { organizationId: true },
+        });
+        organizationId = objective?.organizationId || null;
+      } catch (error) {
+        // If lookup fails, continue without organizationId
+      }
+    }
+
+    await this.auditLogService.record({
+      actorUserId: _userId,
+      action: 'key_result_created',
+      targetType: 'OKR',
+      targetId: createdKr.id,
+      organizationId: organizationId,
+      metadata: {
+        title: createdKr.title,
+        objectiveId: objectiveId || null,
+        ownerId: createdKr.ownerId,
+      },
+    }).catch(err => {
+      // Log error but don't fail the request
+      console.error('Failed to log audit entry for key result creation:', err);
     });
 
     // If KR was linked to an Objective, create the junction table entry
@@ -387,6 +435,7 @@ export class KeyResultService {
                 id: true,
                 organizationId: true,
                 isPublished: true,
+                cycleId: true,
               } 
             }
           },
@@ -404,6 +453,11 @@ export class KeyResultService {
 
     // Tenant isolation: verify org match
     OkrTenantGuard.assertSameTenant(objectiveOrgId, userOrganizationId);
+    
+    // Sync cycleId from parent Objective if not explicitly provided in update
+    if (!data.cycleId && objective?.cycleId) {
+      data.cycleId = objective.cycleId;
+    }
 
     // Governance: Check all locks (cycle lock + publish lock) via OkrGovernanceService
     if (objective) {
@@ -492,6 +546,7 @@ export class KeyResultService {
                 id: true,
                 organizationId: true,
                 isPublished: true,
+                cycleId: true,
               } 
             }
           },
@@ -594,6 +649,7 @@ export class KeyResultService {
                 id: true,
                 organizationId: true,
                 isPublished: true,
+                cycleId: true,
               } 
             }
           },

@@ -46,10 +46,13 @@ import {
 } from '@/components/ui/tooltip'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useWorkspace } from '@/contexts/workspace.context'
-import { UserCog, X, Plus, Edit2, Key, Building2, Briefcase, Users, UserCheck, Search, Info } from 'lucide-react'
+import { UserCog, X, Plus, Edit2, Key, Building2, Briefcase, Users, UserCheck, Search, Info, Shield, Lock, Eye } from 'lucide-react'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/auth.context'
 import { useToast } from '@/hooks/use-toast'
+import { useEffectivePermissions } from '@/hooks/useEffectivePermissions'
+import { usePermissions } from '@/hooks/usePermissions'
+import { useFeatureFlags } from '@/hooks/useFeatureFlags'
 
 export default function PeoplePage() {
   return (
@@ -81,10 +84,25 @@ function PeopleSettings() {
   const [allOrganizations, setAllOrganizations] = useState<any[]>([])
   const [viewMode, setViewMode] = useState<'workspace' | 'organization'>('workspace')
   const [searchQuery, setSearchQuery] = useState('')
+  const [showEditRightsOnly, setShowEditRightsOnly] = useState(false)
   
   // Selected user for editing in drawer
   const [selectedUser, setSelectedUser] = useState<any>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  
+  // Effective permissions for selected user
+  const { data: effectivePermissions, loading: permissionsLoading } = useEffectivePermissions(
+    selectedUser?.id,
+    organization?.id,
+    workspace?.id,
+  )
+  
+  const permissions = usePermissions()
+  const featureFlags = useFeatureFlags()
+  
+  // RBAC Inspector toggle state
+  const [inspectorEnabled, setInspectorEnabled] = useState<boolean | null>(null)
+  const [togglingInspector, setTogglingInspector] = useState(false)
   
   // User creation
   const [showCreateUser, setShowCreateUser] = useState(false)
@@ -240,9 +258,50 @@ function PeopleSettings() {
     }
   }
 
-  const handleUserClick = (user: any) => {
+  const handleUserClick = async (user: any) => {
     setSelectedUser(user)
     setDrawerOpen(true)
+    // Fetch user's inspector setting if caller has manage_users
+    if (permissions.canInviteMembers({ organizationId: organization?.id })) {
+      try {
+        const res = await api.get(`/users/${user.id}`)
+        const settings = res.data?.settings as any
+        setInspectorEnabled(settings?.debug?.rbacInspectorEnabled === true)
+      } catch (error) {
+        console.error('Failed to fetch inspector state:', error)
+        setInspectorEnabled(false)
+      }
+    } else {
+      setInspectorEnabled(false)
+    }
+  }
+
+  const handleToggleInspector = async () => {
+    if (!selectedUser || togglingInspector) return
+    
+    setTogglingInspector(true)
+    try {
+      const newState = !inspectorEnabled
+      await api.post('/rbac/inspector/enable', {
+        userId: selectedUser.id,
+        enabled: newState,
+      })
+      setInspectorEnabled(newState)
+      toast({
+        variant: 'success',
+        title: 'RBAC Inspector updated',
+        description: `RBAC Inspector ${newState ? 'enabled' : 'disabled'} for ${selectedUser.name}.`,
+      })
+    } catch (error: any) {
+      console.error('Failed to toggle inspector:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to update',
+        description: error.response?.data?.message || 'Failed to toggle RBAC Inspector',
+      })
+    } finally {
+      setTogglingInspector(false)
+    }
   }
 
   const handleAssignToOrg = async () => {
@@ -484,18 +543,48 @@ function PeopleSettings() {
     return organizations
   }
 
-  // Filter people based on search query
+  // Helper to get governance status for a user
+  const getGovernanceStatus = useMemo(() => {
+    return (user: any, perms?: typeof effectivePermissions): { label: string; variant: 'default' | 'secondary' | 'destructive' } => {
+      if (user?.isSuperuser || perms?.isSuperuser) {
+        return { label: 'Read-only (Superuser)', variant: 'secondary' }
+      }
+      // Check for locked cycles (if we had that data, we'd show count here)
+      // For now, just show "Normal" vs "Read-only (Superuser)"
+      return { label: 'Normal', variant: 'default' }
+    }
+  }, [])
+
+  // Filter people based on search query and edit rights filter
   const filteredPeople = useMemo(() => {
-    if (!searchQuery.trim()) return people
+    let filtered = people
     
-    const query = searchQuery.toLowerCase()
-    return people.filter((person) => 
-      person.name?.toLowerCase().includes(query) ||
-      person.email?.toLowerCase().includes(query) ||
-      person.orgRole?.toLowerCase().includes(query) ||
-      person.workspaceRole?.toLowerCase().includes(query)
-    )
-  }, [people, searchQuery])
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter((person) => 
+        person.name?.toLowerCase().includes(query) ||
+        person.email?.toLowerCase().includes(query) ||
+        person.orgRole?.toLowerCase().includes(query) ||
+        person.workspaceRole?.toLowerCase().includes(query)
+      )
+    }
+    
+    // Apply edit rights filter (if enabled)
+    if (showEditRightsOnly) {
+      // This would ideally check effective permissions, but for now we use role-based heuristics
+      filtered = filtered.filter((person) => {
+        const hasEditRole = person.orgRole?.includes('ADMIN') || 
+                           person.orgRole?.includes('OWNER') ||
+                           person.workspaceRole?.includes('LEAD') ||
+                           person.workspaceRole?.includes('ADMIN') ||
+                           person.workspaceRole?.includes('OWNER')
+        return hasEditRole && !person.isSuperuser
+      })
+    }
+    
+    return filtered
+  }, [people, searchQuery, showEditRightsOnly])
 
   // Role descriptions for tooltips
   const roleDescriptions = {
@@ -549,15 +638,29 @@ function PeopleSettings() {
           </Button>
         </div>
 
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Search by name, email, or role..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
+        {/* Search Bar and Quick Filter */}
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Search by name, email, or role..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="editRightsFilter"
+              checked={showEditRightsOnly}
+              onChange={(e) => setShowEditRightsOnly(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            <Label htmlFor="editRightsFilter" className="cursor-pointer text-sm">
+              Show users with edit rights
+            </Label>
+          </div>
         </div>
 
         {/* View Mode Toggle */}
@@ -772,6 +875,9 @@ function PeopleSettings() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Roles</TableHead>
+                    <TableHead>Effective Permissions</TableHead>
+                    <TableHead>Governance</TableHead>
                     <TableHead>Organization</TableHead>
                     <TableHead>Workspace</TableHead>
                     <TableHead>Teams</TableHead>
@@ -779,74 +885,155 @@ function PeopleSettings() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPeople.map((person) => (
-                    <TableRow 
-                      key={person.id} 
-                      className="cursor-pointer hover:bg-slate-50"
-                      onClick={() => handleUserClick(person)}
-                    >
-                      <TableCell className="font-medium">{person.name}</TableCell>
-                      <TableCell>{person.email}</TableCell>
-                      <TableCell>
-                        {person.orgRole && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant={getRoleBadgeVariant(person.orgRole)}>
-                                  {person.orgRole}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">{roleDescriptions[person.orgRole as keyof typeof roleDescriptions] || person.orgRole}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {person.workspaceRole && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant={getRoleBadgeVariant(person.workspaceRole)}>
-                                  {person.workspaceRole}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">{roleDescriptions[person.workspaceRole as keyof typeof roleDescriptions] || person.workspaceRole}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {person.teams?.slice(0, 2).map((team: any) => (
-                            <Badge key={team.id} variant="secondary" className="text-xs">
-                              {team.name}
-                            </Badge>
-                          ))}
-                          {person.teams?.length > 2 && (
-                            <Badge variant="secondary" className="text-xs">
-                              +{person.teams.length - 2}
-                            </Badge>
+                  {filteredPeople.map((person) => {
+                    // Get user's roles grouped by scope (from RBAC assignments)
+                    const userRoles = person.rbacRoles || {
+                      tenant: person.orgRole ? [{ organizationId: organization?.id || '', roles: [person.orgRole] }] : [],
+                      workspace: person.workspaceRole ? [{ workspaceId: workspace?.id || '', roles: [person.workspaceRole] }] : [],
+                      team: person.teams?.map((t: any) => ({ teamId: t.id, roles: [t.role || 'MEMBER'] })) || [],
+                    }
+                    
+                    // Calculate effective permissions count (heuristic based on roles)
+                    // Full count would require fetching effective permissions for each user
+                    let effectiveCount = 0
+                    if (person.orgRole?.includes('OWNER')) effectiveCount += 14
+                    else if (person.orgRole?.includes('ADMIN')) effectiveCount += 12
+                    else if (person.workspaceRole?.includes('LEAD')) effectiveCount += 8
+                    else if (person.workspaceRole?.includes('ADMIN')) effectiveCount += 6
+                    else effectiveCount += 3
+                    
+                    const govStatus = getGovernanceStatus(person)
+                    
+                    return (
+                      <TableRow 
+                        key={person.id} 
+                        className="cursor-pointer hover:bg-slate-50"
+                        onClick={() => handleUserClick(person)}
+                      >
+                        <TableCell className="font-medium">{person.name}</TableCell>
+                        <TableCell>{person.email}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1 max-w-[200px]">
+                            {userRoles.tenant.map((t: any, idx: number) => (
+                              <TooltipProvider key={`tenant-${idx}`}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge variant={getRoleBadgeVariant(t.roles[0])} className="text-xs">
+                                      {t.roles[0]}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="max-w-xs">Tenant: {t.roles.join(', ')}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ))}
+                            {userRoles.workspace.map((w: any, idx: number) => (
+                              <TooltipProvider key={`workspace-${idx}`}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge variant={getRoleBadgeVariant(w.roles[0])} className="text-xs">
+                                      {w.roles[0]}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="max-w-xs">Workspace: {w.roles.join(', ')}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ))}
+                            {userRoles.team.slice(0, 2).map((t: any, idx: number) => (
+                              <TooltipProvider key={`team-${idx}`}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {t.roles[0]}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="max-w-xs">Team: {t.roles.join(', ')}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ))}
+                            {userRoles.team.length > 2 && (
+                              <Badge variant="secondary" className="text-xs">
+                                +{userRoles.team.length - 2}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-mono">
+                            {effectiveCount}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={govStatus.variant}>
+                            {govStatus.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {person.orgRole && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant={getRoleBadgeVariant(person.orgRole)}>
+                                    {person.orgRole}
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="max-w-xs">{roleDescriptions[person.orgRole as keyof typeof roleDescriptions] || person.orgRole}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleUserClick(person)
-                          }}
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell>
+                          {person.workspaceRole && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant={getRoleBadgeVariant(person.workspaceRole)}>
+                                    {person.workspaceRole}
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="max-w-xs">{roleDescriptions[person.workspaceRole as keyof typeof roleDescriptions] || person.workspaceRole}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {person.teams?.slice(0, 2).map((team: any) => (
+                              <Badge key={team.id} variant="secondary" className="text-xs">
+                                {team.name}
+                              </Badge>
+                            ))}
+                            {person.teams?.length > 2 && (
+                              <Badge variant="secondary" className="text-xs">
+                                +{person.teams.length - 2}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleUserClick(person)
+                            }}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -912,6 +1099,201 @@ function PeopleSettings() {
                       </Button>
                     </div>
                   </div>
+
+                  {/* RBAC Insights */}
+                  {effectivePermissions && (
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                        <Shield className="h-4 w-4" />
+                        Roles & Effective Permissions
+                      </h3>
+                      
+                      {/* Roles by Scope */}
+                      <div className="mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-xs font-medium text-slate-600">Roles by Scope</h4>
+                          {permissions.canInviteMembers({ organizationId: organization?.id, workspaceId: workspace?.id }) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                // TODO: Open role assignment dialog
+                                toast({
+                                  variant: 'default',
+                                  title: 'Role Assignment',
+                                  description: 'Role assignment UI coming soon. Use the existing assignment controls below.',
+                                })
+                              }}
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              Assign Role
+                            </Button>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          {effectivePermissions.scopes.map((scope, idx) => (
+                            <div key={idx} className="p-3 bg-slate-50 rounded-lg">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-xs font-medium">
+                                  {scope.tenantId && (
+                                    <span>
+                                      Tenant: {scope.tenantId.substring(0, 8)}...
+                                      {scope.workspaceId && ` • Workspace: ${scope.workspaceId.substring(0, 8)}...`}
+                                      {scope.teamId && ` • Team: ${scope.teamId.substring(0, 8)}...`}
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                {scope.effectiveRoles.map((role, rIdx) => (
+                                  <Badge key={rIdx} variant={getRoleBadgeVariant(role)} className="text-xs">
+                                    {role}
+                                  </Badge>
+                                ))}
+                              </div>
+                              <div className="text-xs text-slate-600">
+                                <span className="font-medium">{scope.actionsAllowed.length}</span> allowed,{' '}
+                                <span className="font-medium">{scope.actionsDenied.length}</span> denied
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Effective Actions Grouped by Category */}
+                      <div className="mb-4">
+                        <h4 className="text-xs font-medium text-slate-600 mb-2">Effective Actions</h4>
+                        {effectivePermissions.scopes.length > 0 && (
+                          <div className="space-y-3">
+                            {/* OKR Actions */}
+                            <div>
+                              <h5 className="text-xs font-medium text-slate-500 mb-1">OKR</h5>
+                              <div className="flex flex-wrap gap-1">
+                                {['create_okr', 'edit_okr', 'delete_okr', 'publish_okr', 'view_okr', 'view_all_okrs'].map((action) => {
+                                  const isAllowed = effectivePermissions.scopes.some(s => s.actionsAllowed.includes(action))
+                                  return (
+                                    <Badge
+                                      key={action}
+                                      variant={isAllowed ? 'default' : 'secondary'}
+                                      className="text-xs"
+                                    >
+                                      {action.replace(/_/g, ' ')}
+                                    </Badge>
+                                  )
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Governance Actions */}
+                            <div>
+                              <h5 className="text-xs font-medium text-slate-500 mb-1">Governance</h5>
+                              <div className="flex flex-wrap gap-1">
+                                {['request_checkin'].map((action) => {
+                                  const isAllowed = effectivePermissions.scopes.some(s => s.actionsAllowed.includes(action))
+                                  return (
+                                    <Badge
+                                      key={action}
+                                      variant={isAllowed ? 'default' : 'secondary'}
+                                      className="text-xs"
+                                    >
+                                      {action.replace(/_/g, ' ')}
+                                    </Badge>
+                                  )
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Admin Actions */}
+                            <div>
+                              <h5 className="text-xs font-medium text-slate-500 mb-1">Admin</h5>
+                              <div className="flex flex-wrap gap-1">
+                                {['manage_users', 'manage_workspaces', 'manage_teams', 'manage_tenant_settings', 'export_data', 'manage_billing'].map((action) => {
+                                  const isAllowed = effectivePermissions.scopes.some(s => s.actionsAllowed.includes(action))
+                                  return (
+                                    <Badge
+                                      key={action}
+                                      variant={isAllowed ? 'default' : 'secondary'}
+                                      className="text-xs"
+                                    >
+                                      {action.replace(/_/g, ' ')}
+                                    </Badge>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Governance Overlays */}
+                      <div className="mb-4">
+                        <h4 className="text-xs font-medium text-slate-600 mb-2">Governance Status</h4>
+                        <div className="space-y-2">
+                          {effectivePermissions.isSuperuser && (
+                            <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs">
+                              <div className="flex items-center gap-2">
+                                <Lock className="h-3 w-3 text-amber-600" />
+                                <span className="font-medium">Platform Superuser is read-only for OKR content.</span>
+                              </div>
+                            </div>
+                          )}
+                          <div className="p-2 bg-slate-50 border border-slate-200 rounded text-xs">
+                            <div className="flex items-center gap-2">
+                              <Info className="h-3 w-3 text-slate-600" />
+                              <span>Publish lock applies to published OKRs: only Tenant Owner/Admin can edit or delete.</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Visibility Note */}
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+                        <div className="flex items-start gap-2">
+                          <Eye className="h-4 w-4 text-blue-600 mt-0.5" />
+                          <div className="text-xs text-blue-900">
+                            <p className="font-medium mb-1">Visibility Policy</p>
+                            <p>Only PRIVATE OKRs are access-restricted; all other visibility levels (PUBLIC_TENANT, EXEC_ONLY, WORKSPACE_ONLY, etc.) are treated as tenant-visible.</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {permissionsLoading && (
+                    <div className="text-center py-4 text-sm text-slate-500">
+                      Loading permissions...
+                    </div>
+                  )}
+
+                  {/* Troubleshooting Section - RBAC Inspector Toggle */}
+                  {permissions.canInviteMembers({ organizationId: organization?.id }) && (
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                        <Info className="h-4 w-4" />
+                        Troubleshooting
+                      </h3>
+                      <div className="p-3 bg-slate-50 rounded-lg space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <Label htmlFor="rbac-inspector-toggle" className="font-normal cursor-pointer">
+                              Enable RBAC Inspector for this user
+                            </Label>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Shows permission reasoning tooltips in production for this user.
+                            </p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            id="rbac-inspector-toggle"
+                            checked={inspectorEnabled === true}
+                            onChange={handleToggleInspector}
+                            disabled={togglingInspector || inspectorEnabled === null}
+                            className="h-4 w-4 rounded border-slate-300"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Organization Memberships */}
                   <div>

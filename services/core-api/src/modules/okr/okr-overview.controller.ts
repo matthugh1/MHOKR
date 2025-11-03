@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards, Req, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Req, BadRequestException, Post, Body, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -8,6 +8,8 @@ import { OkrVisibilityService } from './okr-visibility.service';
 import { OkrGovernanceService } from './okr-governance.service';
 import { RBACService } from '../rbac/rbac.service';
 import { buildResourceContextFromOKR } from '../rbac/helpers';
+import { ObjectiveService } from './objective.service';
+import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 
 /**
  * OKR Overview Controller
@@ -34,6 +36,7 @@ export class OkrOverviewController {
     private visibilityService: OkrVisibilityService,
     private governanceService: OkrGovernanceService,
     private rbacService: RBACService,
+    private objectiveService: ObjectiveService,
   ) {}
 
   @Get('overview')
@@ -52,78 +55,108 @@ export class OkrOverviewController {
     @Query('pageSize') pageSize: string | undefined,
     @Req() req: any,
   ) {
-    // Require organizationId query parameter
-    if (!organizationId) {
-      throw new BadRequestException('organizationId is required');
-    }
-
-    // Tenant isolation: validate user has access to this organization
-    const userOrganizationId = req.user.organizationId;
-    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
-    
-    // If user has a specific org and it doesn't match, deny access
-    if (userOrganizationId !== null && orgFilter && orgFilter.organizationId !== organizationId) {
-      throw new BadRequestException('You do not have access to this organisation');
-    }
-
-    // Parse pagination parameters
-    const pageNum = page ? parseInt(page, 10) : 1;
-    const pageSizeNum = pageSize ? parseInt(pageSize, 10) : 20;
-    
-    // Validate pagination parameters
-    if (pageNum < 1) {
-      throw new BadRequestException('Page must be >= 1');
-    }
-    if (pageSizeNum < 1 || pageSizeNum > 50) {
-      throw new BadRequestException('Page size must be between 1 and 50');
-    }
-
-    const requesterUserId = req.user.id;
-
-    // Build where clause for objectives (tenant isolation already enforced)
-    const where: any = { organizationId };
-    
-    // Apply optional filters
-    if (cycleId) {
-      where.cycleId = cycleId;
-    }
-    
-    if (status) {
-      // Validate status enum
-      const validStatuses = ['ON_TRACK', 'AT_RISK', 'BLOCKED', 'COMPLETED', 'CANCELLED'];
-      if (!validStatuses.includes(status)) {
-        throw new BadRequestException(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+    console.log('[OKR OVERVIEW] Request received:', { organizationId, cycleId, status, page, pageSize });
+    try {
+      // Require organizationId query parameter
+      if (!organizationId) {
+        throw new BadRequestException('organizationId is required');
       }
-      where.status = status;
-    }
 
-    // Fetch ALL objectives matching filters (before visibility filtering)
-    const allObjectives = await this.prisma.objective.findMany({
-      where,
-      include: {
-        keyResults: {
-          include: {
-            keyResult: true,
+      // Tenant isolation: validate user has access to this organization
+      const userOrganizationId = req.user.organizationId;
+      
+      // If user has no organization (undefined), deny access
+      if (userOrganizationId === undefined) {
+        throw new BadRequestException('You do not have access to this organisation. No organization assigned.');
+      }
+      
+      const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+      
+      // If user has a specific org and it doesn't match, deny access
+      if (userOrganizationId !== null && orgFilter && orgFilter.organizationId !== organizationId) {
+        throw new BadRequestException('You do not have access to this organisation');
+      }
+
+      // Parse pagination parameters
+      const pageNum = page ? parseInt(page, 10) : 1;
+      const pageSizeNum = pageSize ? parseInt(pageSize, 10) : 20;
+      
+      // Validate pagination parameters
+      if (pageNum < 1) {
+        throw new BadRequestException('Page must be >= 1');
+      }
+      if (pageSizeNum < 1 || pageSizeNum > 50) {
+        throw new BadRequestException('Page size must be between 1 and 50');
+      }
+
+      const requesterUserId = req.user.id;
+
+      // Build where clause for objectives (tenant isolation already enforced)
+      const where: any = { organizationId };
+      
+      // Apply optional filters
+      if (cycleId) {
+        where.cycleId = cycleId;
+      }
+      
+      if (status) {
+        // Validate status enum
+        const validStatuses = ['ON_TRACK', 'AT_RISK', 'BLOCKED', 'COMPLETED', 'CANCELLED'];
+        if (!validStatuses.includes(status)) {
+          throw new BadRequestException(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+        }
+        where.status = status;
+      }
+
+      // Fetch ALL objectives matching filters (before visibility filtering)
+      console.log('[OKR OVERVIEW] Fetching objectives with where clause:', JSON.stringify(where, null, 2));
+      console.log('[OKR OVERVIEW] userOrganizationId:', userOrganizationId, 'type:', typeof userOrganizationId);
+      let allObjectives;
+      try {
+        allObjectives = await this.prisma.objective.findMany({
+        where,
+        include: {
+          keyResults: {
+            include: {
+              keyResult: {
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  progress: true,
+                  startValue: true,
+                  targetValue: true,
+                  currentValue: true,
+                  unit: true,
+                  ownerId: true,
+                  cycleId: true, // Include cycleId scalar field (but not the cycle relation)
+                },
+              },
+            },
+          },
+          initiatives: true, // Include all initiative fields (we only need id, title, status, dueDate, keyResultId)
+          cycle: {
+            select: {
+              id: true,
+              name: true,
+              status: true,
+            },
+          },
+          owner: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
           },
         },
-        initiatives: true,
-        cycle: {
-          select: {
-            id: true,
-            name: true,
-            status: true,
-          },
-        },
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+      });
+      } catch (queryError: any) {
+        console.error('[OKR OVERVIEW] Database query error:', queryError?.message, queryError?.stack);
+        throw queryError;
+      }
+      console.log('[OKR OVERVIEW] Fetched', allObjectives.length, 'objectives from database');
 
     // Filter objectives by visibility
     const visibleObjectives = [];
@@ -131,34 +164,40 @@ export class OkrOverviewController {
       if (!objective.organizationId) {
         continue;
       }
-      const canSee = await this.visibilityService.canUserSeeObjective({
-        objective: {
-          id: objective.id,
-          ownerId: objective.ownerId,
-          organizationId: objective.organizationId,
-          visibilityLevel: objective.visibilityLevel,
-        },
-        requesterUserId,
-        requesterOrgId: userOrganizationId,
-      });
-
-      // Debug logging for visibility checks
-      if (objective.title === 'Test' && objective.createdAt && new Date(objective.createdAt) > new Date('2025-11-03T10:00:00Z')) {
-        console.log('[OKR OVERVIEW] Visibility check for Test objective:', {
-          objectiveId: objective.id,
-          title: objective.title,
-          ownerId: objective.ownerId,
+      try {
+        const canSee = await this.visibilityService.canUserSeeObjective({
+          objective: {
+            id: objective.id,
+            ownerId: objective.ownerId,
+            organizationId: objective.organizationId,
+            visibilityLevel: objective.visibilityLevel,
+          },
           requesterUserId,
-          isOwner: objective.ownerId === requesterUserId,
-          organizationId: objective.organizationId,
           requesterOrgId: userOrganizationId,
-          visibilityLevel: objective.visibilityLevel,
-          canSee,
         });
-      }
 
-      if (canSee) {
-        visibleObjectives.push(objective);
+        // Debug logging for visibility checks
+        if (objective.title === 'Test' && objective.createdAt && new Date(objective.createdAt) > new Date('2025-11-03T10:00:00Z')) {
+          console.log('[OKR OVERVIEW] Visibility check for Test objective:', {
+            objectiveId: objective.id,
+            title: objective.title,
+            ownerId: objective.ownerId,
+            requesterUserId,
+            isOwner: objective.ownerId === requesterUserId,
+            organizationId: objective.organizationId,
+            requesterOrgId: userOrganizationId,
+            visibilityLevel: objective.visibilityLevel,
+            canSee,
+          });
+        }
+
+        if (canSee) {
+          visibleObjectives.push(objective);
+        }
+      } catch (visibilityError: any) {
+        console.warn('[OKR OVERVIEW] Error checking visibility for objective:', objective.id, visibilityError?.message);
+        // If visibility check fails, exclude the objective (fail closed for security)
+        continue;
       }
     }
 
@@ -227,6 +266,12 @@ export class OkrOverviewController {
     });
 
     // Build resource context for governance checks
+    // Ensure organizationId is never undefined - if it is, we shouldn't have gotten this far
+    if (userOrganizationId === undefined) {
+      console.error('[OKR OVERVIEW] CRITICAL: userOrganizationId is undefined after validation check');
+      throw new BadRequestException('User organization not properly set');
+    }
+
     const actingUser = {
       id: requesterUserId,
       organizationId: userOrganizationId,
@@ -263,6 +308,7 @@ export class OkrOverviewController {
           }
         } catch (error) {
           // If RBAC check fails, canEdit/canDelete remain false
+          console.warn('[OKR OVERVIEW] Error checking permissions for objective:', o.id, (error as any)?.message);
         }
 
         // Filter key results by visibility and add canCheckIn flag
@@ -313,6 +359,7 @@ export class OkrOverviewController {
             }
           } catch (error) {
             // If RBAC check fails, canCheckIn remains false
+            console.warn('[OKR OVERVIEW] Error checking canCheckIn for KR:', kr.id, (error as any)?.message);
           }
 
           const krInitiatives = initiativesByKrId.get(kr.id) || [];
@@ -341,7 +388,6 @@ export class OkrOverviewController {
         // - status: progress state (ON_TRACK, AT_RISK, etc.)
         // - isPublished: governance state (true = Published, false = Draft)
         // - visibilityLevel: canonical enum (PUBLIC_TENANT, PRIVATE)
-        // - period: deprecated (validation-only, not exposed in API)
         // - pillarId: deprecated (not used in UI, kept for backward compatibility)
         return {
           objectiveId: o.id,
@@ -496,6 +542,26 @@ export class OkrOverviewController {
     }
 
     return responsePayload;
+    } catch (error: any) {
+      console.error('[OKR OVERVIEW] ========== ERROR START ==========');
+      console.error('[OKR OVERVIEW] Error in getOverview:');
+      console.error('[OKR OVERVIEW] Message:', error?.message || 'Unknown error');
+      console.error('[OKR OVERVIEW] Name:', error?.name || 'Unknown');
+      console.error('[OKR OVERVIEW] Code:', error?.code || 'N/A');
+      console.error('[OKR OVERVIEW] Stack:', error?.stack || 'No stack trace');
+      if (error?.meta) {
+        console.error('[OKR OVERVIEW] Prisma Meta:', JSON.stringify(error.meta, null, 2));
+      }
+      try {
+        console.error('[OKR OVERVIEW] Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+      } catch (e) {
+        console.error('[OKR OVERVIEW] Error object (non-serializable):', error);
+      }
+      console.error('[OKR OVERVIEW] Request params:', { organizationId, cycleId, status, page, pageSize });
+      console.error('[OKR OVERVIEW] User:', { id: req?.user?.id, email: req?.user?.email, organizationId: req?.user?.organizationId });
+      console.error('[OKR OVERVIEW] ========== ERROR END ==========');
+      throw error;
+    }
   }
 
   @Get('creation-context')
@@ -653,5 +719,56 @@ export class OkrOverviewController {
       canAssignOthers,
       availableCycles,
     };
+  }
+
+  @Post('create-composite')
+  @UseGuards(RateLimitGuard)
+  @RequireAction('create_okr')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'W5.M1: Create Objective and Key Results atomically' })
+  async createComposite(
+    @Body() body: {
+      objective: {
+        title: string;
+        description?: string;
+        ownerUserId: string;
+        cycleId: string;
+        visibilityLevel: 'PUBLIC_TENANT' | 'PRIVATE';
+        whitelistUserIds?: string[];
+      };
+      keyResults: Array<{
+        title: string;
+        metricType: 'NUMERIC' | 'PERCENT' | 'BOOLEAN' | 'CUSTOM';
+        targetValue: number | string | boolean | null;
+        ownerUserId: string;
+        updateCadence?: 'WEEKLY' | 'FORTNIGHTLY' | 'MONTHLY';
+        startValue?: number;
+        unit?: string;
+      }>;
+      draft?: boolean;
+    },
+    @Req() req: any,
+  ) {
+    const userOrganizationId = req.user.organizationId;
+    const userId = req.user.id;
+
+    // Validate request body
+    if (!body.objective) {
+      throw new BadRequestException('objective is required');
+    }
+
+    if (!body.keyResults || !Array.isArray(body.keyResults)) {
+      throw new BadRequestException('keyResults array is required');
+    }
+
+    // Call service method
+    const result = await this.objectiveService.createComposite(
+      body.objective,
+      body.keyResults,
+      userId,
+      userOrganizationId,
+    );
+
+    return result;
   }
 }

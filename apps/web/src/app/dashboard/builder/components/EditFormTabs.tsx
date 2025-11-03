@@ -115,7 +115,15 @@ export function EditFormTabs({
         organizationId: formData.organizationId as string | null || null,
         workspaceId: formData.workspaceId as string | null || null,
         teamId: formData.teamId as string | null || null,
-        parentObjective: formData.parentObjective as UnknownObjective || null,
+        parentObjective: formData.parentObjective && typeof formData.parentObjective === 'object' && 'id' in formData.parentObjective
+          ? {
+              id: (formData.parentObjective as any).id as string,
+              organizationId: (formData.parentObjective as any).organizationId as string | null | undefined,
+              isPublished: (formData.parentObjective as any).isPublished as boolean | undefined,
+              cycle: (formData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
+              cycleStatus: (formData.parentObjective as any).cycleStatus as string | null | undefined,
+            }
+          : null,
       })
     : true // Initiatives don't have lock logic yet
 
@@ -137,7 +145,15 @@ export function EditFormTabs({
         organizationId: formData.organizationId as string | null || null,
         workspaceId: formData.workspaceId as string | null || null,
         teamId: formData.teamId as string | null || null,
-        parentObjective: formData.parentObjective as UnknownObjective || null,
+        parentObjective: formData.parentObjective && typeof formData.parentObjective === 'object' && 'id' in formData.parentObjective
+          ? {
+              id: (formData.parentObjective as any).id as string,
+              organizationId: (formData.parentObjective as any).organizationId as string | null | undefined,
+              isPublished: (formData.parentObjective as any).isPublished as boolean | undefined,
+              cycle: (formData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
+              cycleStatus: (formData.parentObjective as any).cycleStatus as string | null | undefined,
+            }
+          : null,
       })
     : { isLocked: false, reason: null, message: '' }
 

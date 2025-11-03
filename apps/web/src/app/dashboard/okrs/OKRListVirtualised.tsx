@@ -62,6 +62,10 @@ interface OKRListVirtualisedProps {
     onAddInitiativeToKr: (krId: string, krTitle: string) => void
     onAddCheckIn: (krId: string) => void
     onOpenHistory: (entityType: 'OBJECTIVE' | 'KEY_RESULT', entityId: string, entityTitle?: string) => void
+    // Story 5: Contextual Add menu handlers
+    onOpenContextualAddMenu?: (objectiveId: string) => void
+    onContextualAddKeyResult?: (objectiveId: string, objectiveTitle: string) => void
+    onContextualAddInitiative?: (objectiveId: string, objectiveTitle: string) => void
   }
   availableUsers?: Array<{ id: string; name: string; email?: string }>
 }
@@ -145,6 +149,10 @@ export function OKRListVirtualised({
           cycleLabel: objective.cycleLabel,
           cycleStatus: objective.cycleStatus,
           visibilityLevel: objective.visibilityLevel,
+          ownerId: objective.ownerId,
+          organizationId: objective.organizationId,
+          workspaceId: objective.workspaceId,
+          teamId: objective.teamId,
           owner: objective.owner,
           overdueCountForObjective: objective.overdueCountForObjective,
           lowestConfidence: objective.lowestConfidence,
@@ -167,6 +175,16 @@ export function OKRListVirtualised({
         canDelete={objective.canDelete}
         canEditKeyResult={objective.canEditKeyResult}
         canCheckInOnKeyResult={objective.canCheckInOnKeyResult}
+        // Story 5: RBAC-aware permissions for contextual Add menu
+        canCreateKeyResult={objective.canEdit} // Can create KR if can edit objective
+        canCreateInitiative={objective.canEdit} // Can create Initiative if can edit objective
+        onOpenContextualAddMenu={() => onAction.onOpenContextualAddMenu?.(objective.id)}
+        onContextualAddKeyResult={(objectiveId, objectiveTitle) => {
+          onAction.onContextualAddKeyResult?.(objectiveId, objectiveTitle)
+        }}
+        onContextualAddInitiative={(objectiveId, objectiveTitle) => {
+          onAction.onContextualAddInitiative?.(objectiveId, objectiveTitle)
+        }}
         availableUsers={availableUsers}
       />
     )

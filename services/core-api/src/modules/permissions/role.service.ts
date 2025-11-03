@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { MemberRole } from '@prisma/client';
+import { Role as RBACRole, ScopeType } from '../rbac/types';
 
 /**
  * Role hierarchy (higher number = more permissions):
@@ -25,7 +26,9 @@ export interface UserRole {
 
 @Injectable()
 export class RoleService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+  ) {}
 
   /**
    * Check if user is a superuser
@@ -39,7 +42,55 @@ export class RoleService {
   }
 
   /**
+   * Map RBAC role to legacy MemberRole for backward compatibility
+   */
+  private mapRBACRoleToLegacyRole(rbacRole: RBACRole, scopeType: ScopeType): MemberRole {
+    // Team-level role mapping
+    if (scopeType === 'TEAM') {
+      switch (rbacRole) {
+        case 'TEAM_LEAD':
+          return MemberRole.TEAM_LEAD;
+        case 'TEAM_CONTRIBUTOR':
+          return MemberRole.MEMBER;
+        case 'TEAM_VIEWER':
+          return MemberRole.VIEWER;
+        default:
+          return MemberRole.MEMBER;
+      }
+    }
+
+    // Workspace-level role mapping
+    if (scopeType === 'WORKSPACE') {
+      switch (rbacRole) {
+        case 'WORKSPACE_LEAD':
+        case 'WORKSPACE_ADMIN':
+          return MemberRole.WORKSPACE_OWNER;
+        case 'WORKSPACE_MEMBER':
+          return MemberRole.MEMBER;
+        default:
+          return MemberRole.MEMBER;
+      }
+    }
+
+    // Tenant-level role mapping
+    if (scopeType === 'TENANT') {
+      switch (rbacRole) {
+        case 'TENANT_OWNER':
+        case 'TENANT_ADMIN':
+          return MemberRole.ORG_ADMIN;
+        case 'TENANT_VIEWER':
+          return MemberRole.VIEWER;
+        default:
+          return MemberRole.MEMBER;
+      }
+    }
+
+    return MemberRole.MEMBER;
+  }
+
+  /**
    * Get all roles for a user across all organizations, workspaces, and teams
+   * Now reads from RBAC system (Phase 2)
    */
   async getUserRoles(userId: string): Promise<UserRole[]> {
     // Check if superuser first
@@ -55,57 +106,59 @@ export class RoleService {
 
     const roles: UserRole[] = [];
 
-    // Get organization memberships
-    const orgMembers = await this.prisma.organizationMember.findMany({
+    // Get all role assignments from RBAC system
+    const roleAssignments = await this.prisma.roleAssignment.findMany({
       where: { userId },
-      include: { organization: true },
     });
 
-    for (const member of orgMembers) {
-      roles.push({
-        role: member.role,
-        entityType: 'ORGANIZATION',
-        entityId: member.organizationId,
-        organizationId: member.organizationId,
-      });
-    }
+    for (const assignment of roleAssignments) {
+      const legacyRole = this.mapRBACRoleToLegacyRole(
+        assignment.role as RBACRole,
+        assignment.scopeType as ScopeType,
+      );
 
-    // Get workspace memberships
-    const workspaceMembers = await this.prisma.workspaceMember.findMany({
-      where: { userId },
-      include: { workspace: true },
-    });
-
-    for (const member of workspaceMembers) {
-      roles.push({
-        role: member.role,
-        entityType: 'WORKSPACE',
-        entityId: member.workspaceId,
-        organizationId: member.workspace.organizationId,
-        workspaceId: member.workspaceId,
-      });
-    }
-
-    // Get team memberships
-    const teamMembers = await this.prisma.teamMember.findMany({
-      where: { userId },
-      include: {
-        team: {
+      if (assignment.scopeType === 'TENANT' && assignment.scopeId) {
+        roles.push({
+          role: legacyRole,
+          entityType: 'ORGANIZATION',
+          entityId: assignment.scopeId,
+          organizationId: assignment.scopeId,
+        });
+      } else if (assignment.scopeType === 'WORKSPACE' && assignment.scopeId) {
+        // Need to get workspace to find organizationId
+        const workspace = await this.prisma.workspace.findUnique({
+          where: { id: assignment.scopeId },
+          select: { organizationId: true },
+        });
+        if (workspace) {
+          roles.push({
+            role: legacyRole,
+            entityType: 'WORKSPACE',
+            entityId: assignment.scopeId,
+            organizationId: workspace.organizationId,
+            workspaceId: assignment.scopeId,
+          });
+        }
+      } else if (assignment.scopeType === 'TEAM' && assignment.scopeId) {
+        // Need to get team to find workspaceId and organizationId
+        const team = await this.prisma.team.findUnique({
+          where: { id: assignment.scopeId },
           include: {
-            workspace: true,
+            workspace: {
+              select: { organizationId: true },
+            },
           },
-        },
-      },
-    });
-
-    for (const member of teamMembers) {
-      roles.push({
-        role: member.role,
-        entityType: 'TEAM',
-        entityId: member.teamId,
-        organizationId: member.team.workspace.organizationId,
-        workspaceId: member.team.workspaceId,
-      });
+        });
+        if (team) {
+          roles.push({
+            role: legacyRole,
+            entityType: 'TEAM',
+            entityId: assignment.scopeId,
+            organizationId: team.workspace.organizationId,
+            workspaceId: team.workspaceId,
+          });
+        }
+      }
     }
 
     return roles;
@@ -113,114 +166,133 @@ export class RoleService {
 
   /**
    * Get the highest role a user has for a specific organization
+   * Now reads from RBAC system (Phase 2)
    */
   async getUserOrganizationRole(
     userId: string,
     organizationId: string,
   ): Promise<MemberRole | null> {
-    // Check direct organization membership
-    const orgMember = await this.prisma.organizationMember.findUnique({
-      where: {
-        userId_organizationId: {
-          userId,
-          organizationId,
-        },
-      },
-    });
-
-    if (orgMember && orgMember.role === MemberRole.ORG_ADMIN) {
-      return MemberRole.ORG_ADMIN;
-    }
-
-    // Check workspace memberships in this organization
-    const workspaceMember = await this.prisma.workspaceMember.findFirst({
+    // Check RBAC role assignments at tenant scope
+    const tenantAssignments = await this.prisma.roleAssignment.findMany({
       where: {
         userId,
-        workspace: {
-          organizationId,
-        },
-      },
-      orderBy: {
-        role: 'desc', // Get highest role
+        scopeType: 'TENANT',
+        scopeId: organizationId,
       },
     });
 
-    if (workspaceMember) {
-      return workspaceMember.role;
+    if (tenantAssignments.length > 0) {
+      // Get highest priority role (TENANT_ADMIN > TENANT_VIEWER)
+      const highestRBACRole = tenantAssignments.reduce((highest, current) => {
+        if (current.role === 'TENANT_ADMIN' || current.role === 'TENANT_OWNER') {
+          return current;
+        }
+        return highest.role === 'TENANT_ADMIN' || highest.role === 'TENANT_OWNER' ? highest : current;
+      });
+
+      return this.mapRBACRoleToLegacyRole(
+        highestRBACRole.role as RBACRole,
+        'TENANT',
+      );
     }
 
-    // Check team memberships in this organization
-    const teamMember = await this.prisma.teamMember.findFirst({
-      where: {
-        userId,
-        team: {
-          workspace: {
-            organizationId,
-          },
-        },
-      },
-      orderBy: {
-        role: 'desc',
-      },
+    // Fallback: Check workspace roles in this organization
+    const workspaces = await this.prisma.workspace.findMany({
+      where: { organizationId },
+      select: { id: true },
     });
 
-    return teamMember?.role || null;
+    for (const workspace of workspaces) {
+      const workspaceRole = await this.getUserWorkspaceRole(userId, workspace.id);
+      if (workspaceRole) {
+        return workspaceRole;
+      }
+    }
+
+    return null;
   }
 
   /**
    * Get the highest role a user has for a specific workspace
+   * Now reads from RBAC system (Phase 2)
    */
   async getUserWorkspaceRole(
     userId: string,
     workspaceId: string,
   ): Promise<MemberRole | null> {
-    // Check direct workspace membership
-    const workspaceMember = await this.prisma.workspaceMember.findUnique({
-      where: {
-        userId_workspaceId: {
-          userId,
-          workspaceId,
-        },
-      },
-    });
-
-    if (workspaceMember) {
-      return workspaceMember.role;
-    }
-
-    // Check team memberships in this workspace
-    const teamMember = await this.prisma.teamMember.findFirst({
+    // Check RBAC role assignments at workspace scope
+    const workspaceAssignments = await this.prisma.roleAssignment.findMany({
       where: {
         userId,
-        team: {
-          workspaceId,
-        },
-      },
-      orderBy: {
-        role: 'desc',
+        scopeType: 'WORKSPACE',
+        scopeId: workspaceId,
       },
     });
 
-    return teamMember?.role || null;
+    if (workspaceAssignments.length > 0) {
+      // Get highest priority role (WORKSPACE_LEAD > WORKSPACE_ADMIN > WORKSPACE_MEMBER)
+      const highestRBACRole = workspaceAssignments.reduce((highest, current) => {
+        if (current.role === 'WORKSPACE_LEAD' || current.role === 'WORKSPACE_ADMIN') {
+          return current;
+        }
+        return highest.role === 'WORKSPACE_LEAD' || highest.role === 'WORKSPACE_ADMIN' ? highest : current;
+      });
+
+      return this.mapRBACRoleToLegacyRole(
+        highestRBACRole.role as RBACRole,
+        'WORKSPACE',
+      );
+    }
+
+    // Fallback: Check team roles in this workspace
+    const teams = await this.prisma.team.findMany({
+      where: { workspaceId },
+      select: { id: true },
+    });
+
+    for (const team of teams) {
+      const teamRole = await this.getUserTeamRole(userId, team.id);
+      if (teamRole) {
+        return teamRole;
+      }
+    }
+
+    return null;
   }
 
   /**
    * Get the role a user has for a specific team
+   * Now reads from RBAC system (Phase 2)
    */
   async getUserTeamRole(
     userId: string,
     teamId: string,
   ): Promise<MemberRole | null> {
-    const teamMember = await this.prisma.teamMember.findUnique({
+    // Check RBAC role assignments at team scope
+    const teamAssignments = await this.prisma.roleAssignment.findMany({
       where: {
-        userId_teamId: {
-          userId,
-          teamId,
-        },
+        userId,
+        scopeType: 'TEAM',
+        scopeId: teamId,
       },
     });
 
-    return teamMember?.role || null;
+    if (teamAssignments.length > 0) {
+      // Get highest priority role (TEAM_LEAD > TEAM_CONTRIBUTOR > TEAM_VIEWER)
+      const highestRBACRole = teamAssignments.reduce((highest, current) => {
+        if (current.role === 'TEAM_LEAD') {
+          return current;
+        }
+        return highest.role === 'TEAM_LEAD' ? highest : current;
+      });
+
+      return this.mapRBACRoleToLegacyRole(
+        highestRBACRole.role as RBACRole,
+        'TEAM',
+      );
+    }
+
+    return null;
   }
 
   /**

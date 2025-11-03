@@ -46,6 +46,11 @@ export function usePermissions() {
 
       try {
         const response = await api.get<RBACAssignmentsResponse>('/rbac/assignments/me')
+        console.log('[usePermissions] Fetched RBAC assignments', {
+          userId: response.data.userId,
+          isSuperuser: response.data.isSuperuser,
+          roles: response.data.roles,
+        })
         setRolesByScope(response.data.roles)
         setIsSuperuser(response.data.isSuperuser || false)
       } catch (error) {
@@ -67,6 +72,11 @@ export function usePermissions() {
 
   const canEditOKR = useMemo(() => {
     return (okr: OKR): boolean => {
+      // Guard against undefined/null okr
+      if (!okr) {
+        return false
+      }
+
       // Superuser: always true
       if (isSuperuser) {
         return true
@@ -117,6 +127,11 @@ export function usePermissions() {
 
   const canDeleteOKR = useMemo(() => {
     return (okr: OKR): boolean => {
+      // Guard against undefined/null okr
+      if (!okr) {
+        return false
+      }
+
       // Superuser: always true
       if (isSuperuser) {
         return true
@@ -231,6 +246,7 @@ export function usePermissions() {
     return (organizationId?: string): boolean => {
       // Superuser: always true (though they're read-only for OKRs)
       if (isSuperuser) {
+        console.log('[usePermissions] canAdministerTenant: superuser, returning true')
         return true
       }
 
@@ -239,16 +255,28 @@ export function usePermissions() {
         const tenantRoles = rolesByScope.tenant.find(
           (t) => t.organizationId === organizationId
         )
-        return tenantRoles !== undefined && (
+        const hasAdmin = tenantRoles !== undefined && (
           tenantRoles.roles.includes('TENANT_OWNER') || 
           tenantRoles.roles.includes('TENANT_ADMIN')
         )
+        console.log('[usePermissions] canAdministerTenant', {
+          organizationId,
+          tenantRoles,
+          hasAdmin,
+          allTenantRoles: rolesByScope.tenant,
+        })
+        return hasAdmin
       }
 
       // If no organizationId, check if user has admin role in any organization
-      return rolesByScope.tenant.some(
+      const hasAnyAdmin = rolesByScope.tenant.some(
         (t) => t.roles.includes('TENANT_OWNER') || t.roles.includes('TENANT_ADMIN')
       )
+      console.log('[usePermissions] canAdministerTenant (any org)', {
+        hasAnyAdmin,
+        allTenantRoles: rolesByScope.tenant,
+      })
+      return hasAnyAdmin
     }
   }, [isSuperuser, rolesByScope])
 
@@ -268,6 +296,7 @@ export function usePermissions() {
   return {
     loading,
     isSuperuser,
+    rolesByScope,
     canEditOKR,
     canDeleteOKR,
     canInviteMembers,

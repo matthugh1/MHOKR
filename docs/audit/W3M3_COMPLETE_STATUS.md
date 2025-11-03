@@ -52,3 +52,4 @@ All pre-existing TypeScript compilation errors have been fixed. The smoke tests 
 3. Run smoke tests: `cd services/core-api && npm run smoke:test`
 4. Test rate limiting with authenticated requests
 
+
