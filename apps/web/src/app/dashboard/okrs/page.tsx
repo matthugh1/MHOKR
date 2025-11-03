@@ -40,7 +40,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Search, X, Bell } from 'lucide-react'
+import { Plus, Search, X, Bell, ChevronDown } from 'lucide-react'
 // W4.M1: Period utilities removed - Cycle is canonical
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
@@ -52,6 +52,12 @@ import { OKRPageContainer } from './OKRPageContainer'
 import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
 import { PublishLockWarningModal } from './components/PublishLockWarningModal'
 import { CycleSelector } from '@/components/ui/CycleSelector'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { NewObjectiveModal } from '@/components/okr/NewObjectiveModal'
 import { EditObjectiveModal } from '@/components/okr/EditObjectiveModal'
 import { NewKeyResultModal } from '@/components/okr/NewKeyResultModal'
@@ -110,6 +116,7 @@ export default function OKRsPage() {
   const [showNewObjective, setShowNewObjective] = useState(false)
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false)
   const [canCreateObjective, setCanCreateObjective] = useState<boolean>(false)
+  const [creationDrawerMode, setCreationDrawerMode] = useState<'objective' | 'kr' | 'initiative'>('objective')
   
   // Objective editing
   const [showEditObjective, setShowEditObjective] = useState(false)
@@ -862,23 +869,88 @@ export default function OKRsPage() {
                   )}
                 </Button>
 
-                {/* New Objective - Permission-gated */}
-                {canCreateObjective && (
-                  <Button 
-                    onClick={() => {
-                      setIsCreateDrawerOpen(true)
-                      console.log('[Telemetry] okr.create.open', {
-                        userId: user?.id,
-                        cycleId: selectedCycleId,
-                        timestamp: new Date().toISOString(),
-                      })
-                    }}
-                    aria-label="Create new objective"
-                    className="focus:ring-2 focus:ring-ring focus:outline-none"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Objective
-                  </Button>
+                {/* Add - RBAC-aware split-button */}
+                {(canCreateObjective || permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || null })) && (
+                  <DropdownMenu>
+                    <div className="flex items-center">
+                      <Button
+                        onClick={() => {
+                          setCreationDrawerMode('objective')
+                          setIsCreateDrawerOpen(true)
+                          console.log('[Telemetry] okr.create.menu.open', {
+                            userId: user?.id,
+                            cycleId: selectedCycleId,
+                            timestamp: new Date().toISOString(),
+                          })
+                        }}
+                        aria-label="Add"
+                        className="focus:ring-2 focus:ring-ring focus:outline-none rounded-r-none border-r-0"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add
+                      </Button>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="default"
+                          size="default"
+                          className="rounded-l-none px-2 focus:ring-2 focus:ring-ring focus:outline-none"
+                          aria-label="Add options"
+                        >
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                    </div>
+                    <DropdownMenuContent align="end">
+                      {canCreateObjective && (
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setCreationDrawerMode('objective')
+                            setIsCreateDrawerOpen(true)
+                            console.log('[Telemetry] okr.create.objective.click', {
+                              userId: user?.id,
+                              cycleId: selectedCycleId,
+                              timestamp: new Date().toISOString(),
+                            })
+                          }}
+                          role="menuitem"
+                        >
+                          Add Objective
+                        </DropdownMenuItem>
+                      )}
+                      {permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || null }) && (
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setCreationDrawerMode('kr')
+                            setIsCreateDrawerOpen(true)
+                            console.log('[Telemetry] okr.create.key_result.click', {
+                              userId: user?.id,
+                              cycleId: selectedCycleId,
+                              timestamp: new Date().toISOString(),
+                            })
+                          }}
+                          role="menuitem"
+                        >
+                          Add Key Result
+                        </DropdownMenuItem>
+                      )}
+                      {permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || null }) && (
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setCreationDrawerMode('initiative')
+                            setIsCreateDrawerOpen(true)
+                            console.log('[Telemetry] okr.create.initiative.click', {
+                              userId: user?.id,
+                              cycleId: selectedCycleId,
+                              timestamp: new Date().toISOString(),
+                            })
+                          }}
+                          role="menuitem"
+                        >
+                          Add Initiative
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
               </div>
             </div>
@@ -1180,12 +1252,17 @@ export default function OKRsPage() {
           {/* OKR Creation Drawer */}
           <OKRCreationDrawer
             isOpen={isCreateDrawerOpen}
-            onClose={() => setIsCreateDrawerOpen(false)}
+            mode={creationDrawerMode}
+            onClose={() => {
+              setIsCreateDrawerOpen(false)
+              setCreationDrawerMode('objective')
+            }}
             availableUsers={availableUsers}
             activeCycles={activeCycles}
             currentOrganization={currentOrganization}
             onSuccess={() => {
               setIsCreateDrawerOpen(false)
+              setCreationDrawerMode('objective')
               handleReloadOKRs()
             }}
           />

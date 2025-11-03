@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -26,14 +26,22 @@ import api from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 import { AlertCircle, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { trapFocus, returnFocus, getActiveElement } from '@/lib/focus-trap'
+import { mapErrorToMessage } from '@/lib/error-mapping'
+import { useUxTiming } from '@/hooks/useUxTiming'
+import { DrawerFormSkeleton } from '@/components/ui/skeletons'
 
 interface OKRCreationDrawerProps {
   isOpen: boolean
+  mode?: 'objective' | 'kr' | 'initiative'
   onClose: () => void
   availableUsers: Array<{ id: string; name: string; email?: string }>
   activeCycles: Array<{ id: string; name: string; status: string }>
   currentOrganization: { id: string } | null
   onSuccess: () => void
+  // Optional: preselect parent for KR or Initiative
+  preselectedObjectiveId?: string | null
+  preselectedKeyResultId?: string | null
 }
 
 type Step = 'basics' | 'visibility' | 'key-results' | 'review'
@@ -60,11 +68,14 @@ interface DraftKeyResult {
 
 export function OKRCreationDrawer({
   isOpen,
+  mode = 'objective',
   onClose,
   availableUsers,
   activeCycles,
   currentOrganization,
   onSuccess,
+  preselectedObjectiveId = null,
+  preselectedKeyResultId = null,
 }: OKRCreationDrawerProps) {
   const { user } = useAuth()
   const permissions = usePermissions()
@@ -79,21 +90,70 @@ export function OKRCreationDrawer({
     visibilityLevel: 'PUBLIC_TENANT',
   })
   const [draftKRs, setDraftKRs] = useState<DraftKeyResult[]>([])
+  // KR mode state
+  const [krData, setKrData] = useState<{
+    title: string
+    objectiveId: string
+    ownerId: string
+    cycleId: string
+    targetValue: number
+    startValue: number
+    unit: string
+    metricType: 'INCREASE' | 'DECREASE' | 'MAINTAIN' | 'PERCENTAGE' | 'CUSTOM'
+  }>({
+    title: '',
+    objectiveId: preselectedObjectiveId || '',
+    ownerId: user?.id || '',
+    cycleId: activeCycles.length > 0 ? activeCycles[0].id : '',
+    targetValue: 100,
+    startValue: 0,
+    unit: 'units',
+    metricType: 'INCREASE',
+  })
+  // Initiative mode state
+  const [initiativeData, setInitiativeData] = useState<{
+    title: string
+    objectiveId: string | null
+    keyResultId: string | null
+    ownerId: string
+    status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'BLOCKED'
+    dueDate: string
+  }>({
+    title: '',
+    objectiveId: preselectedObjectiveId || null,
+    keyResultId: preselectedKeyResultId || null,
+    ownerId: user?.id || '',
+    status: 'NOT_STARTED',
+    dueDate: '',
+  })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const drawerOpenTimeRef = React.useRef<number | null>(null)
+  const sheetContentRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+  const [showSkeleton, setShowSkeleton] = useState(true)
+  const publishTiming = useUxTiming('okr.create.publish')
 
   // Creation context (RBAC-aware options)
   const [allowedVisibilityLevels, setAllowedVisibilityLevels] = useState<string[]>(['PUBLIC_TENANT'])
   const [allowedOwners, setAllowedOwners] = useState<Array<{ id: string; name: string; email: string }>>([])
   const [canAssignOthers, setCanAssignOthers] = useState(false)
   const [availableCyclesForCreation, setAvailableCyclesForCreation] = useState<Array<{ id: string; name: string; status: string }>>([])
+  // Objectives and Key Results for parent selection (KR/Initiative modes)
+  const [availableObjectives, setAvailableObjectives] = useState<Array<{ id: string; title: string }>>([])
+  const [availableKeyResults, setAvailableKeyResults] = useState<Array<{ id: string; title: string; objectiveId: string }>>([])
 
   // Track drawer open time for telemetry
   useEffect(() => {
     if (isOpen) {
+      previousFocusRef.current = getActiveElement()
       drawerOpenTimeRef.current = Date.now()
+      setShowSkeleton(true)
+      
+      // Hide skeleton after initial render
+      setTimeout(() => setShowSkeleton(false), 50)
+      
       // Track drawer opened
-      console.log('[Telemetry] okr_drawer_opened', {
+      console.log('[Telemetry] okr.create.open', {
         userId: user?.id,
         organizationId: currentOrganization?.id,
         timestamp: new Date().toISOString(),
@@ -103,7 +163,7 @@ export function OKRCreationDrawer({
         const duration = Date.now() - drawerOpenTimeRef.current
         // Track drawer closed/abandoned (if not submitting)
         if (!isSubmitting) {
-          console.log('[Telemetry] okr_drawer_abandoned', {
+          console.log('[Telemetry] okr.create.abandon', {
             userId: user?.id,
             organizationId: currentOrganization?.id,
             duration,
@@ -113,13 +173,43 @@ export function OKRCreationDrawer({
         }
         drawerOpenTimeRef.current = null
       }
+      
+      // Return focus to opener
+      if (previousFocusRef.current) {
+        returnFocus(previousFocusRef.current)
+        previousFocusRef.current = null
+      }
     }
   }, [isOpen, isSubmitting, currentStep, user?.id, currentOrganization?.id])
+
+  // Focus trap when drawer opens
+  useEffect(() => {
+    if (isOpen && sheetContentRef.current) {
+      const cleanup = trapFocus(sheetContentRef.current)
+      return cleanup
+    }
+  }, [isOpen])
+
+  // Handle Esc key
+  useEffect(() => {
+    if (!isOpen) return
+
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (!isSubmitting) {
+          onClose()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [isOpen, isSubmitting, onClose])
 
   // Track step changes
   useEffect(() => {
     if (isOpen && drawerOpenTimeRef.current) {
-      console.log('[Telemetry] okr_drawer_step_viewed', {
+      console.log('[Telemetry] okr.create.step_viewed', {
         userId: user?.id,
         organizationId: currentOrganization?.id,
         step: currentStep,
@@ -154,8 +244,23 @@ export function OKRCreationDrawer({
           setAllowedOwners(availableUsers.map(u => ({ id: u.id, name: u.name || '', email: u.email || '' })))
           setAvailableCyclesForCreation(activeCycles)
         })
+
+      // Load objectives for KR/Initiative parent selection
+      if (mode === 'kr' || mode === 'initiative') {
+        api.get(`/okr/overview?organizationId=${currentOrganization.id}&pageSize=100`)
+          .then((res) => {
+            const objectives = res.data?.objectives || []
+            setAvailableObjectives(objectives.map((obj: any) => ({
+              id: obj.id || obj.objectiveId,
+              title: obj.title,
+            })))
+          })
+          .catch((err) => {
+            console.error('Failed to fetch objectives for parent selection', err)
+          })
+      }
     }
-  }, [isOpen, currentOrganization?.id, user?.id, availableUsers, activeCycles])
+  }, [isOpen, currentOrganization?.id, user?.id, availableUsers, activeCycles, mode])
 
   // Reset form when drawer closes
   useEffect(() => {
@@ -169,9 +274,27 @@ export function OKRCreationDrawer({
         visibilityLevel: 'PUBLIC_TENANT',
       })
       setDraftKRs([])
+      setKrData({
+        title: '',
+        objectiveId: preselectedObjectiveId || '',
+        ownerId: user?.id || '',
+        cycleId: activeCycles.length > 0 ? activeCycles[0].id : '',
+        targetValue: 100,
+        startValue: 0,
+        unit: 'units',
+        metricType: 'INCREASE',
+      })
+      setInitiativeData({
+        title: '',
+        objectiveId: preselectedObjectiveId || null,
+        keyResultId: preselectedKeyResultId || null,
+        ownerId: user?.id || '',
+        status: 'NOT_STARTED',
+        dueDate: '',
+      })
       setIsSubmitting(false)
     }
-  }, [isOpen, user?.id, activeCycles])
+  }, [isOpen, user?.id, activeCycles, preselectedObjectiveId, preselectedKeyResultId])
 
   // Validate Step A
   const canProceedFromBasics = () => {
@@ -261,11 +384,11 @@ export function OKRCreationDrawer({
       const selectedCycle = availableCyclesForCreation.find(c => c.id === draftObjective.cycleId) ||
         activeCycles.find(c => c.id === draftObjective.cycleId)
       
-      const startDate = selectedCycle && 'startDate' in selectedCycle && selectedCycle.startDate
+      const startDate = selectedCycle && 'startDate' in selectedCycle && selectedCycle.startDate && typeof selectedCycle.startDate === 'string'
         ? new Date(selectedCycle.startDate).toISOString()
         : new Date().toISOString()
       
-      const endDate = selectedCycle && 'endDate' in selectedCycle && selectedCycle.endDate
+      const endDate = selectedCycle && 'endDate' in selectedCycle && selectedCycle.endDate && typeof selectedCycle.endDate === 'string'
         ? new Date(selectedCycle.endDate).toISOString()
         : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString() // Default 90 days
 
@@ -349,59 +472,38 @@ export function OKRCreationDrawer({
     }
 
     setIsSubmitting(true)
-    const publishStartTime = Date.now()
+    publishTiming.start()
+    
     try {
-      // Get cycle dates
-      const selectedCycle = availableCyclesForCreation.find(c => c.id === draftObjective.cycleId) ||
-        activeCycles.find(c => c.id === draftObjective.cycleId)
-      
-      const startDate = selectedCycle && 'startDate' in selectedCycle && selectedCycle.startDate
-        ? new Date(selectedCycle.startDate).toISOString()
-        : new Date().toISOString()
-      
-      const endDate = selectedCycle && 'endDate' in selectedCycle && selectedCycle.endDate
-        ? new Date(selectedCycle.endDate).toISOString()
-        : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString() // Default 90 days
-
-      // Create Objective as published
-      console.log('[OKR CREATION] Creating objective with payload:', {
-        title: draftObjective.title,
-        ownerId: draftObjective.ownerId,
-        cycleId: draftObjective.cycleId,
-        organizationId: currentOrganization.id,
-        startDate,
-        endDate,
-        period: 'QUARTERLY',
-      })
-      const objectiveRes = await api.post('/objectives', {
-        title: draftObjective.title,
-        description: draftObjective.description || undefined,
-        ownerId: draftObjective.ownerId,
-        cycleId: draftObjective.cycleId,
-        organizationId: currentOrganization.id,
-        visibilityLevel: draftObjective.visibilityLevel,
-        parentId: draftObjective.parentId || undefined,
-      // W4.M1: period removed - not sent to backend
-      startDate,
-      endDate,
-      status: 'ON_TRACK',
-      })
-      console.log('[OKR CREATION] Objective created successfully:', objectiveRes.data)
-      
-      const objectiveId = objectiveRes.data.id
-      
-      // Create Key Results sequentially
-      for (const kr of draftKRs) {
-        await api.post('/key-results', {
+      // W5.M1: Use composite endpoint for atomic creation
+      const payload = {
+        objective: {
+          title: draftObjective.title,
+          description: draftObjective.description || undefined,
+          ownerUserId: draftObjective.ownerId,
+          cycleId: draftObjective.cycleId,
+          visibilityLevel: draftObjective.visibilityLevel as 'PUBLIC_TENANT' | 'PRIVATE',
+          whitelistUserIds: draftObjective.visibilityLevel === 'PRIVATE' 
+            ? (draftObjective.whitelist || [])
+            : undefined,
+        },
+        keyResults: draftKRs.map(kr => ({
           title: kr.title,
-          objectiveId: objectiveId,
-          ownerId: kr.ownerId,
+          metricType: kr.metricType as 'NUMERIC' | 'PERCENT' | 'BOOLEAN' | 'CUSTOM',
           targetValue: kr.targetValue,
+          ownerUserId: kr.ownerId,
           startValue: kr.startValue,
-          metricType: kr.metricType,
           unit: kr.unit,
-        })
+        })),
       }
+
+      console.log('[OKR CREATION] Creating OKR via composite endpoint:', payload)
+      
+      const response = await api.post('/okr/create-composite', payload)
+      
+      console.log('[OKR CREATION] OKR created successfully:', response.data)
+      
+      const publishDurationMs = publishTiming.end()
       
       toast({
         title: 'OKR published successfully',
@@ -409,14 +511,14 @@ export function OKRCreationDrawer({
       })
       
       // Track publish success
-      const publishDuration = Date.now() - publishStartTime
       const totalDuration = drawerOpenTimeRef.current ? Date.now() - drawerOpenTimeRef.current : null
-      console.log('[Telemetry] okr_published', {
+      console.log('[Telemetry] okr.create.publish.success', {
         userId: user?.id,
         organizationId: currentOrganization?.id,
-        publishDuration,
+        publishDurationMs,
         totalDuration,
         krCount: draftKRs.length,
+        objectiveId: response.data.objectiveId,
         timestamp: new Date().toISOString(),
       })
       
@@ -424,37 +526,34 @@ export function OKRCreationDrawer({
     } catch (err: any) {
       console.error('Failed to publish OKR', err)
       
+      const errorInfo = mapErrorToMessage(err)
+      
       // Track publish failure
-      const publishDuration = Date.now() - publishStartTime
+      const publishDurationMs = publishTiming.end()
       const categorizeError = (error: any): string => {
         if (error.response?.status === 403) return 'permission_denied'
         if (error.response?.status === 400) return 'validation_error'
         if (error.response?.status === 404) return 'not_found'
+        if (error.response?.status === 429) return 'rate_limit'
         return 'unknown_error'
       }
       
-      console.log('[Telemetry] okr_publish_failed', {
+      const errorReason = categorizeError(err)
+      
+      console.log('[Telemetry] okr.create.publish.forbidden', {
         userId: user?.id,
         organizationId: currentOrganization?.id,
         error: err.response?.data?.message,
-        reason: categorizeError(err),
-        publishDuration,
+        reason: errorReason,
+        publishDurationMs,
         timestamp: new Date().toISOString(),
       })
       
-      if (err.response?.status === 403) {
-        toast({
-          title: 'Permission denied',
-          description: err.response.data.message || 'You do not have permission to create OKRs.',
-          variant: 'destructive',
-        })
-      } else {
-        toast({
-          title: 'Failed to publish OKR',
-          description: err.response?.data?.message || 'Please try again.',
-          variant: 'destructive',
-        })
-      }
+      toast({
+        title: errorInfo.variant === 'warning' ? 'Cannot publish' : 'Failed to publish OKR',
+        description: errorInfo.message,
+        variant: errorInfo.variant === 'warning' ? 'default' : (errorInfo.variant || 'destructive'),
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -861,24 +960,417 @@ export function OKRCreationDrawer({
     )
   }
 
+  // Key Result submit handler
+  const canSubmitKR = () => {
+    return krData.title.trim() !== '' && 
+           krData.objectiveId !== '' && 
+           krData.ownerId !== '' &&
+           krData.cycleId !== ''
+  }
+
+  const handleSubmitKR = async () => {
+      if (!currentOrganization?.id || !canSubmitKR()) return
+
+      setIsSubmitting(true)
+      try {
+        const response = await api.post('/key-results', {
+          title: krData.title,
+          objectiveId: krData.objectiveId,
+          ownerId: krData.ownerId,
+          cycleId: krData.cycleId,
+          targetValue: krData.targetValue,
+          startValue: krData.startValue,
+          unit: krData.unit,
+          metricType: krData.metricType,
+        })
+
+        toast({
+          title: 'Key Result created',
+          description: `"${krData.title}" has been created successfully.`,
+        })
+
+        console.log('[Telemetry] okr.create.key_result.success', {
+          userId: user?.id,
+          organizationId: currentOrganization?.id,
+          keyResultId: response.data.id,
+          timestamp: new Date().toISOString(),
+        })
+
+        onSuccess()
+      } catch (err: any) {
+        console.error('Failed to create key result', err)
+        
+        if (err.response?.status === 403) {
+          console.log('[Telemetry] okr.create.kr.forbidden', {
+            userId: user?.id,
+            organizationId: currentOrganization?.id,
+            timestamp: new Date().toISOString(),
+          })
+        }
+
+        toast({
+          title: 'Failed to create Key Result',
+          description: err.response?.data?.message || 'Please try again.',
+          variant: 'destructive',
+        })
+      } finally {
+        setIsSubmitting(false)
+      }
+  }
+
+  // Render Key Result form (mode === 'kr')
+  const renderKeyResultForm = () => {
+    const usersForOwner = allowedOwners.length > 0 ? allowedOwners : availableUsers.map(u => ({ id: u.id, name: u.name || '', email: u.email || '' }))
+    const cyclesForSelection = availableCyclesForCreation.length > 0 ? availableCyclesForCreation : activeCycles
+
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Label htmlFor="kr-title">
+            Key Result Title <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="kr-title"
+            value={krData.title}
+            onChange={(e) => setKrData(prev => ({ ...prev, title: e.target.value }))}
+            placeholder="Enter key result title"
+            maxLength={200}
+            autoFocus
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="kr-objective">
+            Parent Objective <span className="text-red-500">*</span>
+          </Label>
+          <Select
+            value={krData.objectiveId}
+            onValueChange={(value) => setKrData(prev => ({ ...prev, objectiveId: value }))}
+          >
+            <SelectTrigger id="kr-objective">
+              <SelectValue placeholder="Select objective" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableObjectives.map((obj) => (
+                <SelectItem key={obj.id} value={obj.id}>
+                  {obj.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">Select the objective this key result measures.</p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="kr-owner">
+            Owner <span className="text-red-500">*</span>
+          </Label>
+          <Select
+            value={krData.ownerId}
+            onValueChange={(value) => setKrData(prev => ({ ...prev, ownerId: value }))}
+            disabled={!canAssignOthers}
+          >
+            <SelectTrigger id="kr-owner">
+              <SelectValue placeholder="Select owner" />
+            </SelectTrigger>
+            <SelectContent>
+              {usersForOwner.map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.name || u.email || u.id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="kr-cycle">
+            Cycle <span className="text-red-500">*</span>
+          </Label>
+          <Select
+            value={krData.cycleId}
+            onValueChange={(value) => setKrData(prev => ({ ...prev, cycleId: value }))}
+          >
+            <SelectTrigger id="kr-cycle">
+              <SelectValue placeholder="Select cycle" />
+            </SelectTrigger>
+            <SelectContent>
+              {cyclesForSelection.map((cycle) => (
+                <SelectItem key={cycle.id} value={cycle.id}>
+                  {cycle.name} {cycle.status !== 'ACTIVE' && cycle.status !== 'DRAFT' ? `(${cycle.status})` : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="kr-start">Start Value</Label>
+            <Input
+              id="kr-start"
+              type="number"
+              value={krData.startValue}
+              onChange={(e) => setKrData(prev => ({ ...prev, startValue: parseFloat(e.target.value) || 0 }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kr-target">
+              Target Value <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="kr-target"
+              type="number"
+              value={krData.targetValue}
+              onChange={(e) => setKrData(prev => ({ ...prev, targetValue: parseFloat(e.target.value) || 0 }))}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="kr-metric">Metric Type</Label>
+            <Select
+              value={krData.metricType}
+              onValueChange={(value: typeof krData.metricType) => setKrData(prev => ({ ...prev, metricType: value }))}
+            >
+              <SelectTrigger id="kr-metric">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="INCREASE">Increase</SelectItem>
+                <SelectItem value="DECREASE">Decrease</SelectItem>
+                <SelectItem value="MAINTAIN">Maintain</SelectItem>
+                <SelectItem value="PERCENTAGE">Percentage</SelectItem>
+                <SelectItem value="CUSTOM">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="kr-unit">Unit</Label>
+            <Input
+              id="kr-unit"
+              value={krData.unit}
+              onChange={(e) => setKrData(prev => ({ ...prev, unit: e.target.value }))}
+              placeholder="e.g., users, hours, %"
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Initiative submit handler
+  const canSubmitInitiative = () => {
+    return initiativeData.title.trim() !== '' && 
+           initiativeData.ownerId !== '' &&
+           (initiativeData.objectiveId !== null || initiativeData.keyResultId !== null)
+  }
+
+  const handleSubmitInitiative = async () => {
+      if (!currentOrganization?.id || !canSubmitInitiative()) return
+
+      setIsSubmitting(true)
+      try {
+        const payload: any = {
+          title: initiativeData.title,
+          ownerId: initiativeData.ownerId,
+          status: initiativeData.status,
+        }
+        if (initiativeData.objectiveId) payload.objectiveId = initiativeData.objectiveId
+        if (initiativeData.keyResultId) payload.keyResultId = initiativeData.keyResultId
+        if (initiativeData.dueDate) payload.dueDate = new Date(initiativeData.dueDate).toISOString()
+
+        const response = await api.post('/initiatives', payload)
+
+        toast({
+          title: 'Initiative created',
+          description: `"${initiativeData.title}" has been created successfully.`,
+        })
+
+        console.log('[Telemetry] okr.create.initiative.success', {
+          userId: user?.id,
+          organizationId: currentOrganization?.id,
+          initiativeId: response.data.id,
+          timestamp: new Date().toISOString(),
+        })
+
+        onSuccess()
+      } catch (err: any) {
+        console.error('Failed to create initiative', err)
+        
+        if (err.response?.status === 403) {
+          console.log('[Telemetry] okr.create.initiative.forbidden', {
+            userId: user?.id,
+            organizationId: currentOrganization?.id,
+            timestamp: new Date().toISOString(),
+          })
+        }
+
+        toast({
+          title: 'Failed to create Initiative',
+          description: err.response?.data?.message || 'Please try again.',
+          variant: 'destructive',
+        })
+      } finally {
+        setIsSubmitting(false)
+      }
+  }
+
+  // Render Initiative form (mode === 'initiative')
+  const renderInitiativeForm = () => {
+    const usersForOwner = allowedOwners.length > 0 ? allowedOwners : availableUsers.map(u => ({ id: u.id, name: u.name || '', email: u.email || '' }))
+    // Key Results are loaded when an objective is selected (could be enhanced in future)
+
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Label htmlFor="init-title">
+            Initiative Title <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="init-title"
+            value={initiativeData.title}
+            onChange={(e) => setInitiativeData(prev => ({ ...prev, title: e.target.value }))}
+            placeholder="Enter initiative title"
+            maxLength={200}
+            autoFocus
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="init-parent">
+            Parent (Objective or Key Result) <span className="text-red-500">*</span>
+          </Label>
+          <div className="space-y-3">
+            <Select
+              value={initiativeData.objectiveId || ''}
+              onValueChange={(value) => setInitiativeData(prev => ({ ...prev, objectiveId: value || null, keyResultId: null }))}
+            >
+              <SelectTrigger id="init-parent">
+                <SelectValue placeholder="Select objective (or key result below)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">None (select key result below)</SelectItem>
+                {availableObjectives.map((obj) => (
+                  <SelectItem key={obj.id} value={obj.id}>
+                    Objective: {obj.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={initiativeData.keyResultId || ''}
+              onValueChange={(value) => setInitiativeData(prev => ({ ...prev, keyResultId: value || null, objectiveId: null }))}
+            >
+              <SelectTrigger id="init-kr">
+                <SelectValue placeholder="Or select key result" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">None (select objective above)</SelectItem>
+                {availableKeyResults.map((kr) => (
+                  <SelectItem key={kr.id} value={kr.id}>
+                    Key Result: {kr.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground">Link this initiative to an objective or key result.</p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="init-owner">
+            Owner <span className="text-red-500">*</span>
+          </Label>
+          <Select
+            value={initiativeData.ownerId}
+            onValueChange={(value) => setInitiativeData(prev => ({ ...prev, ownerId: value }))}
+            disabled={!canAssignOthers}
+          >
+            <SelectTrigger id="init-owner">
+              <SelectValue placeholder="Select owner" />
+            </SelectTrigger>
+            <SelectContent>
+              {usersForOwner.map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.name || u.email || u.id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="init-status">Status</Label>
+          <Select
+            value={initiativeData.status}
+            onValueChange={(value: typeof initiativeData.status) => setInitiativeData(prev => ({ ...prev, status: value }))}
+          >
+            <SelectTrigger id="init-status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="NOT_STARTED">Not Started</SelectItem>
+              <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+              <SelectItem value="COMPLETED">Completed</SelectItem>
+              <SelectItem value="BLOCKED">Blocked</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="init-due-date">Due Date (Optional)</Label>
+          <Input
+            id="init-due-date"
+            type="date"
+            value={initiativeData.dueDate}
+            onChange={(e) => setInitiativeData(prev => ({ ...prev, dueDate: e.target.value }))}
+          />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <Sheet open={isOpen} onOpenChange={handleCancel}>
-      <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col">
+      <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col" ref={sheetContentRef} aria-labelledby="creation-drawer-title" aria-describedby="creation-drawer-description">
         <SheetHeader>
-          <SheetTitle>Create New Objective</SheetTitle>
-          <SheetDescription>
-            {currentStep === 'basics' && 'Define the basic details of your objective.'}
-            {currentStep === 'visibility' && 'Set who can see this objective.'}
-            {currentStep === 'key-results' && 'Add key results to measure progress.'}
-            {currentStep === 'review' && 'Review and publish your objective.'}
+          <SheetTitle id="creation-drawer-title">
+            {mode === 'objective' && 'New Objective'}
+            {mode === 'kr' && 'New Key Result'}
+            {mode === 'initiative' && 'New Initiative'}
+          </SheetTitle>
+          <SheetDescription id="creation-drawer-description">
+            {mode === 'objective' && (
+              <>
+                {currentStep === 'basics' && 'Define the basic details of your objective.'}
+                {currentStep === 'visibility' && 'Set who can see this objective.'}
+                {currentStep === 'key-results' && 'Add key results to measure progress.'}
+                {currentStep === 'review' && 'Review and publish your objective.'}
+              </>
+            )}
+            {mode === 'kr' && 'Create a measurable key result for tracking progress.'}
+            {mode === 'initiative' && 'Create an initiative to support your objectives and key results.'}
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto py-6">
-          {currentStep === 'basics' && renderStepA()}
-          {currentStep === 'visibility' && renderStepB()}
-          {currentStep === 'key-results' && renderStepC()}
-          {currentStep === 'review' && renderStepD()}
+        <div className="flex-1 overflow-y-auto py-6" aria-busy={isSubmitting}>
+          {showSkeleton && <DrawerFormSkeleton />}
+          {!showSkeleton && (
+            <>
+              {mode === 'objective' && (
+                <>
+                  {currentStep === 'basics' && renderStepA()}
+                  {currentStep === 'visibility' && renderStepB()}
+                  {currentStep === 'key-results' && renderStepC()}
+                  {currentStep === 'review' && renderStepD()}
+                </>
+              )}
+              {mode === 'kr' && renderKeyResultForm()}
+              {mode === 'initiative' && renderInitiativeForm()}
+            </>
+          )}
         </div>
 
         <SheetFooter className="flex-row justify-between gap-2 border-t pt-4">
@@ -906,8 +1398,8 @@ export function OKRCreationDrawer({
                 </p>
               </div>
             </>
-          )}
-            {currentStep === 'visibility' && (
+            )}
+          {mode === 'objective' && currentStep === 'visibility' && (
               <>
                 <Button
                   type="button"
@@ -936,7 +1428,7 @@ export function OKRCreationDrawer({
                 </Button>
               </>
             )}
-            {currentStep === 'key-results' && (
+          {mode === 'objective' && currentStep === 'key-results' && (
               <>
                 <Button
                   type="button"
@@ -965,7 +1457,7 @@ export function OKRCreationDrawer({
                 </Button>
               </>
             )}
-            {currentStep === 'review' && (
+          {mode === 'objective' && currentStep === 'review' && (
               <>
                 <Button
                   type="button"
@@ -1003,7 +1495,44 @@ export function OKRCreationDrawer({
                 </div>
               </>
             )}
-          </div>
+          {mode === 'kr' && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCancel}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSubmitKR}
+                disabled={isSubmitting || !canSubmitKR()}
+              >
+                {isSubmitting ? 'Creating...' : 'Create Key Result'}
+              </Button>
+            </>
+          )}
+          {mode === 'initiative' && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCancel}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSubmitInitiative}
+                disabled={isSubmitting || !canSubmitInitiative()}
+              >
+                {isSubmitting ? 'Creating...' : 'Create Initiative'}
+              </Button>
+            </>
+          )}
         </SheetFooter>
       </SheetContent>
     </Sheet>
