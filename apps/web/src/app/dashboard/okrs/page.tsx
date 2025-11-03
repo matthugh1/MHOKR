@@ -18,7 +18,6 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Button } from '@/components/ui/button'
@@ -50,7 +49,6 @@ import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import { useToast } from '@/hooks/use-toast'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { OKRPageContainer } from './OKRPageContainer'
-import Link from 'next/link'
 import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
 import { PublishLockWarningModal } from './components/PublishLockWarningModal'
 import { CycleSelector } from '@/components/ui/CycleSelector'
@@ -67,9 +65,7 @@ import { logTokenInfo } from '@/lib/jwt-debug'
 import { cn } from '@/lib/utils'
 
 // NOTE: This screen is now the system of record for CRUD on Objectives, Key Results, and Initiatives.
-// Visual Builder becomes an optional planning surface, not the source of truth.
 export default function OKRsPage() {
-  const router = useRouter()
   // [phase6-polish] Reintroduce compact multi-column grid view for exec scanning.
   const [_viewMode, _setViewMode] = useState<'grid' | 'list'>('list')
   // W4.M1: Period removed - Cycle is canonical
@@ -646,12 +642,6 @@ export default function OKRsPage() {
                 >
                   Needs attention
                 </Button>
-                <button
-                  className="text-[12px] font-medium text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
-                  onClick={() => router.push('/dashboard/builder')}
-                >
-                  Visual Builder
-                </button>
               </div>
             </div>
             {/* Cycle Health Strip */}
@@ -666,16 +656,6 @@ export default function OKRsPage() {
                 />
               </div>
             )}
-            <p className="text-[13px] text-neutral-500 leading-relaxed mt-2">
-              This view shows execution state. For planning or alignment storytelling, open the{' '}
-              <Link
-                href="/dashboard/builder"
-                className="text-violet-700 hover:text-violet-900 font-medium underline underline-offset-2 focus:ring-2 focus:ring-ring focus:outline-none"
-              >
-                Visual Builder
-              </Link>
-              .
-            </p>
           </header>
 
           {/* Sticky Filter and Pagination Header */}
