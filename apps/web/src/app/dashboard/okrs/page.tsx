@@ -1,6 +1,23 @@
+/**
+ * Performance Budgets (W5.M3)
+ * 
+ * Page-level budgets:
+ * - First list render: ≤ 150ms for 20 items (dev mode tolerance allowed)
+ * - Scroll frame: no long tasks > 50ms during windowed list scroll
+ * - Drawer open: content interactive ≤ 120ms
+ * - Objective insight fetch: show skeleton within 50ms; render < 16ms when data arrives
+ * 
+ * Bundle/RT budgets (non-failing warnings):
+ * - OKR page chunk ≤ 180 KB gz (if measurable with existing tooling)
+ * 
+ * Virtualisation tuning:
+ * - IntersectionObserver thresholds: rootMargin '200px', row prefetch buffer = 2 screenfuls
+ * - Avoid re-creating observers per row; centralise hook
+ */
+
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
@@ -24,7 +41,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Search, X, Lock, LockKeyhole } from 'lucide-react'
+import { Plus, Search, X } from 'lucide-react'
 // W4.M1: Period utilities removed - Cycle is canonical
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
@@ -43,6 +60,8 @@ import { NewKeyResultModal } from '@/components/okr/NewKeyResultModal'
 import { NewCheckInModal } from '@/components/okr/NewCheckInModal'
 import { NewInitiativeModal } from '@/components/okr/NewInitiativeModal'
 import { OKRCreationDrawer } from './components/OKRCreationDrawer'
+import { CycleHealthStrip } from '@/components/okr/CycleHealthStrip'
+import { AttentionDrawer } from '@/components/okr/AttentionDrawer'
 import api from '@/lib/api'
 import { logTokenInfo } from '@/lib/jwt-debug'
 import { cn } from '@/lib/utils'
@@ -78,6 +97,9 @@ export default function OKRsPage() {
   const [pendingDeleteOkr, setPendingDeleteOkr] = useState<{ id: string; title: string } | null>(null)
   const [expandedObjectiveId, setExpandedObjectiveId] = useState<string | null>(null)
   const [reloadTrigger, setReloadTrigger] = useState(0)
+  const [attentionDrawerOpen, setAttentionDrawerOpen] = useState(false)
+  const [liveRegionMessage, setLiveRegionMessage] = useState<string | null>(null)
+  const liveRegionRef = useRef<HTMLDivElement>(null)
   const [activeCycles, setActiveCycles] = useState<Array<{
     id: string
     name: string
@@ -199,6 +221,7 @@ export default function OKRsPage() {
       if (cycles.length > 0) {
         setSelectedTimeframeKey(cycles[0].id)
         setSelectedTimeframeLabel(cycles[0].name)
+        setSelectedCycleId(cycles[0].id) // Sync for CycleHealthStrip and AttentionDrawer
       }
     } catch (error: any) {
       // Cycles endpoint is optional - gracefully degrade if no permission
@@ -225,47 +248,6 @@ export default function OKRsPage() {
         console.error('Failed to load overdue check-ins:', error)
       }
       setOverdueCheckIns([])
-    }
-  }
-
-  const formatCycleDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
-  }
-
-  const getCycleStatusBadge = (status: string) => {
-    switch (status) {
-      case 'LOCKED':
-        return (
-          <Badge variant="secondary" className="bg-slate-600 text-white">
-            <LockKeyhole className="h-3 w-3 mr-1" />
-            Locked
-          </Badge>
-        )
-      case 'ACTIVE':
-        return (
-          <Badge variant="default" className="bg-green-600 text-white">
-            Active
-          </Badge>
-        )
-      case 'DRAFT':
-        return (
-          <Badge variant="outline" className="bg-slate-100 text-slate-700">
-            Draft (planning)
-          </Badge>
-        )
-      case 'ARCHIVED':
-        return (
-          <Badge variant="outline" className="bg-slate-100 text-slate-500">
-            Archived
-          </Badge>
-        )
-      default:
-        return (
-          <Badge variant="outline">
-            {status}
-          </Badge>
-        )
     }
   }
 
@@ -452,6 +434,10 @@ export default function OKRsPage() {
   const handleReloadOKRs = () => {
     // Increment reload trigger to force OKRPageContainer to reload
     setReloadTrigger(prev => prev + 1)
+    
+    // Announce to screen readers
+    setLiveRegionMessage('OKR list updated')
+    setTimeout(() => setLiveRegionMessage(null), 1000)
   }
 
   const handleOpenActivityDrawer = async (entityType: 'OBJECTIVE' | 'KEY_RESULT', entityId: string, entityTitle?: string) => {
@@ -619,7 +605,7 @@ export default function OKRsPage() {
     <ProtectedRoute>
       <DashboardLayout>
         <div className="p-8">
-          <div className="mb-8">
+          <header role="banner" className="mb-8">
             <div className="flex items-start justify-between flex-wrap gap-4">
               <div className="flex-1">
                 <PageHeader
@@ -632,14 +618,6 @@ export default function OKRsPage() {
                         tone: 'neutral' as const,
                       },
                     ] : []),
-                    ...(activeCycles.length > 0
-                      ? [
-                          {
-                            label: `Active Cycle: ${activeCycles[0].name}`,
-                            tone: 'neutral' as const,
-                          },
-                        ]
-                      : []),
                     ...(activeCycles.some((c) => c.status === 'LOCKED')
                       ? [{ label: 'Locked', tone: 'warning' as const }]
                       : []),
@@ -649,11 +627,25 @@ export default function OKRsPage() {
               <div className="flex items-center gap-4">
                 {/* W4.M1: Permission-gated New Objective button */}
                 {canCreateObjective && (
-                  <Button onClick={() => setIsCreateDrawerOpen(true)}>
+                  <Button 
+                    onClick={() => setIsCreateDrawerOpen(true)}
+                    data-focus-restorer
+                    aria-label="Create new objective"
+                    className="focus:ring-2 focus:ring-ring focus:outline-none"
+                  >
                     <Plus className="h-4 w-4 mr-2" />
                     New Objective
                   </Button>
                 )}
+                <Button
+                  variant="outline"
+                  onClick={() => setAttentionDrawerOpen(true)}
+                  data-focus-restorer
+                  aria-label="Open needs attention drawer"
+                  className="focus:ring-2 focus:ring-ring focus:outline-none"
+                >
+                  Needs attention
+                </Button>
                 <button
                   className="text-[12px] font-medium text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
                   onClick={() => router.push('/dashboard/builder')}
@@ -662,55 +654,37 @@ export default function OKRsPage() {
                 </button>
               </div>
             </div>
+            {/* Cycle Health Strip */}
+            {selectedCycleId && (
+              <div className="mt-4">
+                <CycleHealthStrip
+                  cycleId={selectedCycleId}
+                  onFilterClick={(filterType, value) => {
+                    // Handle filter clicks (simplified for now)
+                    console.log('[Cycle Health] Filter clicked:', filterType, value)
+                  }}
+                />
+              </div>
+            )}
             <p className="text-[13px] text-neutral-500 leading-relaxed mt-2">
               This view shows execution state. For planning or alignment storytelling, open the{' '}
               <Link
                 href="/dashboard/builder"
-                className="text-violet-700 hover:text-violet-900 font-medium underline underline-offset-2"
+                className="text-violet-700 hover:text-violet-900 font-medium underline underline-offset-2 focus:ring-2 focus:ring-ring focus:outline-none"
               >
                 Visual Builder
               </Link>
               .
             </p>
-          </div>
-
-          {/* Active Cycle Banner */}
-          {activeCycles.length > 0 && (
-            <div className="mb-6">
-              {activeCycles.map((cycle) => (
-                <div key={cycle.id} className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-semibold text-slate-900">{cycle.name}</h3>
-                          {getCycleStatusBadge(cycle.status)}
-                        </div>
-                        <p className="text-sm text-slate-600 mt-1">
-                          {formatCycleDate(cycle.startDate)} → {formatCycleDate(cycle.endDate)}
-                        </p>
-                        {cycle.status === 'LOCKED' && !permissions.isTenantAdminOrOwner(currentOrganization?.id) && (
-                          <p className="text-sm text-slate-500 mt-2 flex items-center gap-1">
-                            <Lock className="h-3 w-3" />
-                            This cycle is locked. You can't change targets in this cycle.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
-                </div>
-              ))}
-            </div>
-          )}
+          </header>
 
           {/* Sticky Filter and Pagination Header */}
           <div className="sticky top-0 z-10 bg-white border-b border-neutral-200 mb-4 pb-4 -mx-8 px-8 pt-4">
             {/* Quick Status Chips */}
-            <div className="mb-3 flex flex-wrap gap-2">
+            <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Status filters">
               <button
                 className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
                   selectedStatus === null
                     ? "bg-violet-100 text-violet-700 border border-violet-300"
                     : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
@@ -718,12 +692,14 @@ export default function OKRsPage() {
                 onClick={() => {
                   setSelectedStatus(null)
                 }}
+                aria-label="Show all statuses"
+                aria-pressed={selectedStatus === null}
               >
                 All statuses
               </button>
               <button
                 className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
                   selectedStatus === 'ON_TRACK'
                     ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
                     : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
@@ -731,12 +707,14 @@ export default function OKRsPage() {
                 onClick={() => {
                   setSelectedStatus('ON_TRACK')
                 }}
+                aria-label="Filter by status: On track"
+                aria-pressed={selectedStatus === 'ON_TRACK'}
               >
                 On track
               </button>
               <button
                 className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
                   selectedStatus === 'AT_RISK'
                     ? "bg-amber-100 text-amber-700 border border-amber-300"
                     : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
@@ -744,12 +722,14 @@ export default function OKRsPage() {
                 onClick={() => {
                   setSelectedStatus('AT_RISK')
                 }}
+                aria-label="Filter by status: At risk"
+                aria-pressed={selectedStatus === 'AT_RISK'}
               >
                 At risk
               </button>
               <button
                 className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
                   selectedStatus === 'BLOCKED'
                     ? "bg-rose-100 text-rose-700 border border-rose-300"
                     : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
@@ -757,12 +737,14 @@ export default function OKRsPage() {
                 onClick={() => {
                   setSelectedStatus('BLOCKED')
                 }}
+                aria-label="Filter by status: Blocked"
+                aria-pressed={selectedStatus === 'BLOCKED'}
               >
                 Blocked
               </button>
               <button
                 className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
                   selectedStatus === 'COMPLETED'
                     ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
                     : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
@@ -770,12 +752,14 @@ export default function OKRsPage() {
                 onClick={() => {
                   setSelectedStatus('COMPLETED')
                 }}
+                aria-label="Filter by status: Completed"
+                aria-pressed={selectedStatus === 'COMPLETED'}
               >
                 Completed
               </button>
               <button
                 className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
                   selectedStatus === 'CANCELLED'
                     ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
                     : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
@@ -783,31 +767,15 @@ export default function OKRsPage() {
                 onClick={() => {
                   setSelectedStatus('CANCELLED')
                 }}
+                aria-label="Filter by status: Cancelled"
+                aria-pressed={selectedStatus === 'CANCELLED'}
               >
                 Cancelled
               </button>
             </div>
 
             {/* Cycle Filter and Top Pagination */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex flex-wrap gap-3 text-sm text-neutral-700">
-                <select
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  value={selectedCycleId ?? ''}
-                  onChange={(e) => {
-                    setSelectedCycleId(e.target.value || null)
-                  }}
-                >
-                  <option value="">All cycles</option>
-                  {activeCycles.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-            </div>
+            {/* Removed duplicate cycle select - using CycleSelector in filters section below */}
           </div>
 
           {/* Filters and Search */}
@@ -867,6 +835,13 @@ export default function OKRsPage() {
                 onSelect={(opt: { key: string; label: string }) => {
                   setSelectedTimeframeKey(opt.key)
                   setSelectedTimeframeLabel(opt.label)
+                  // Sync selectedCycleId when a cycle is selected (for CycleHealthStrip and AttentionDrawer)
+                  // Only set if it's a valid cycle ID (not 'all' or 'unassigned')
+                  if (opt.key && opt.key !== 'all' && opt.key !== 'unassigned' && normalizedCycles.some(c => c.id === opt.key)) {
+                    setSelectedCycleId(opt.key)
+                  } else {
+                    setSelectedCycleId(null)
+                  }
                 }}
               />
               
@@ -901,32 +876,45 @@ export default function OKRsPage() {
             {/* [phase6-polish] Reintroduce compact multi-column grid view for exec scanning. */}
           </div>
 
+          {/* Live Region for Async Announcements */}
+          <div
+            ref={liveRegionRef}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className="sr-only"
+          >
+            {liveRegionMessage}
+          </div>
+
           {/* OKRs List with Pagination */}
-          <OKRPageContainer
-            key={reloadTrigger}
-            availableUsers={availableUsers}
-            activeCycles={activeCycles}
-            overdueCheckIns={overdueCheckIns}
-            filterWorkspaceId={filterWorkspaceId}
-            filterTeamId={filterTeamId}
-            filterOwnerId={filterOwnerId}
-            searchQuery={searchQuery}
-            selectedTimeframeKey={selectedTimeframeKey}
-            selectedStatus={selectedStatus}
-            selectedCycleId={selectedCycleId}
-            onAction={{
-              onEdit: handleEditOKR,
-              onDelete: handleDeleteOKR,
-              onAddKeyResult: handleAddKrClick,
-              onAddInitiativeToObjective: handleAddInitiativeToObjectiveClick,
-              onAddInitiativeToKr: handleAddInitiativeToKrClick,
-              onAddCheckIn: handleAddCheckIn,
-              onOpenHistory: handleOpenActivityDrawer,
-            }}
-            expandedObjectiveId={expandedObjectiveId}
-            onToggleObjective={handleToggleObjective}
-            onCanCreateChange={setCanCreateObjective}
-          />
+          <main role="main" aria-busy={false} aria-label="OKRs list">
+            <OKRPageContainer
+              key={reloadTrigger}
+              availableUsers={availableUsers}
+              activeCycles={activeCycles}
+              overdueCheckIns={overdueCheckIns}
+              filterWorkspaceId={filterWorkspaceId}
+              filterTeamId={filterTeamId}
+              filterOwnerId={filterOwnerId}
+              searchQuery={searchQuery}
+              selectedTimeframeKey={selectedTimeframeKey}
+              selectedStatus={selectedStatus}
+              selectedCycleId={selectedCycleId}
+              onAction={{
+                onEdit: handleEditOKR,
+                onDelete: handleDeleteOKR,
+                onAddKeyResult: handleAddKrClick,
+                onAddInitiativeToObjective: handleAddInitiativeToObjectiveClick,
+                onAddInitiativeToKr: handleAddInitiativeToKrClick,
+                onAddCheckIn: handleAddCheckIn,
+                onOpenHistory: handleOpenActivityDrawer,
+              }}
+              expandedObjectiveId={expandedObjectiveId}
+              onToggleObjective={handleToggleObjective}
+              onCanCreateChange={setCanCreateObjective}
+            />
+          </main>
 
           {/* Activity Timeline Drawer */}
           {/* TODO [phase7-performance]: pass pagination cursor + load handler once backend supports it. */}
@@ -1169,6 +1157,27 @@ export default function OKRsPage() {
             onSuccess={() => {
               setIsCreateDrawerOpen(false)
               handleReloadOKRs()
+            }}
+          />
+
+          {/* Attention Drawer */}
+          <AttentionDrawer
+            isOpen={attentionDrawerOpen}
+            onClose={() => setAttentionDrawerOpen(false)}
+            cycleId={selectedCycleId}
+            onNavigateToObjective={(objectiveId) => {
+              // Scroll to objective or expand it
+              setExpandedObjectiveId(objectiveId)
+              setAttentionDrawerOpen(false)
+            }}
+            onNavigateToKeyResult={(krId) => {
+              // Find and expand the objective containing this KR
+              console.log('[Attention Drawer] Navigate to KR:', krId)
+            }}
+            canRequestCheckIn={permissions.isTenantAdminOrOwner(currentOrganization?.id)}
+            onRequestCheckIn={(krId) => {
+              handleAddCheckIn(krId)
+              setAttentionDrawerOpen(false)
             }}
           />
         </div>
