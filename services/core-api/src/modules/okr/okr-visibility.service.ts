@@ -22,6 +22,8 @@ export class OkrVisibilityService {
   /**
    * Check if a user can see an objective.
    * 
+   * W4.M1: Taxonomy alignment - canonical visibility levels enforced.
+   * 
    * Rules:
    * 1. Tenant isolation: if objective.organizationId !== requesterOrgId, return false immediately.
    * 2. SUPERUSER: may see everything.
@@ -32,6 +34,8 @@ export class OkrVisibilityService {
    *    - allow if requester is owner,
    *    - otherwise false.
    * 5. All other visibility levels (PUBLIC_TENANT, EXEC_ONLY, etc.): allow true.
+   *    - Deprecated values (WORKSPACE_ONLY, TEAM_ONLY, MANAGER_CHAIN, EXEC_ONLY) 
+   *      are normalized to PUBLIC_TENANT in migration and treated as globally visible.
    * 6. Default deny.
    * 
    * @param params - { objective, requesterUserId, requesterOrgId }

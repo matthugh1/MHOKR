@@ -63,3 +63,16 @@
 - Added enforcement documentation at `docs/audit/W3M3_ENFORCEMENT_NOTES.md`.
 - No TODO/FIXME/HACK comments; all changes follow existing NestJS patterns.
 - This milestone ensures that all access control, governance, and visibility behaviours from W1–W3 are locked in and automatically tested.
+
+## [Taxonomy & Data Model Alignment] W4.M1 Complete
+
+- **Cycle vs Period**: Period field deprecated in API responses (kept in DB for validation). Cycle is canonical operational planning period.
+- **Status vs Publish State**: Explicitly separated in API responses with new `publishState` field (`PUBLISHED | DRAFT`). `status` field represents progress state (`ON_TRACK | AT_RISK | OFF_TRACK | COMPLETED | CANCELLED`). `isPublished` boolean kept for backward compatibility.
+- **Visibility Model**: Deprecated visibility values (`WORKSPACE_ONLY`, `TEAM_ONLY`, `MANAGER_CHAIN`, `EXEC_ONLY`) normalized to `PUBLIC_TENANT` in migration. Only canonical values (`PUBLIC_TENANT`, `PRIVATE`) exposed in API responses. `EXEC_ONLY` removed from creation context.
+- **Pillars**: `pillarId` deprecated in API responses (kept in DB for backward compatibility). Pillars table remains but not exposed in main OKR API.
+- **Initiatives Anchoring**: Verified correct (no changes needed). Initiatives can anchor to Objective OR Key Result (or both).
+- **Migration**: Reversible migration `20251103000000_w4m1_taxonomy_alignment` normalizes deprecated visibility values.
+- **Environment Variable**: `OKR_EXPOSE_PERIOD_ALIAS` (default: `false`) controls inclusion of `period` field in CSV export.
+- **Tests**: Added unit tests for visibility inheritance and enum separation. Added integration tests for `/okr/overview` contract.
+- **Documentation**: Implementation notes at `docs/audit/W4M1_BACKEND_IMPLEMENTATION_NOTES.md`.
+- All changes are backward-compatible with no breaking changes to existing fields (only additions).

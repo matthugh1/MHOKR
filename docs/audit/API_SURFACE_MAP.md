@@ -217,9 +217,17 @@ app.use('/api/reports', createProxyMiddleware({ ... })); // Line 204 (DUPLICATE)
 
 | Method | Route | Guards | @RequireAction | Notes |
 |--------|-------|--------|----------------|-------|
-| GET | `/okr/overview` | ✅ JwtAuthGuard, RBACGuard | ✅ `view_okr` | ✅ Complete |
+| GET | `/okr/overview` | ✅ JwtAuthGuard, RBACGuard | ✅ `view_okr` | ✅ Complete - W4.M1: Returns `status`, `publishState`, `visibilityLevel` (canonical only), `cycle` (no `period`), no `pillarId` |
+| GET | `/okr/creation-context` | ✅ JwtAuthGuard, RBACGuard | ✅ `view_okr` | ✅ Complete - W4.M1: Returns `allowedVisibilityLevels` with only `PUBLIC_TENANT` and `PRIVATE` |
 
 **Missing Guards:** None
+
+**W4.M1 Changes:**
+- Response includes `publishState` field (`PUBLISHED | DRAFT`) in addition to `isPublished` boolean
+- `visibilityLevel` returns only canonical values (`PUBLIC_TENANT | PRIVATE`)
+- `period` field removed from responses (deprecated)
+- `pillarId` field removed from responses (deprecated)
+- `allowedVisibilityLevels` in creation context excludes deprecated values (`EXEC_ONLY` removed)
 
 ---
 
@@ -426,5 +434,6 @@ app.use('/api/reports', createProxyMiddleware({ ... })); // Line 204 (DUPLICATE)
 ---
 
 **End of API Surface Map Report**
+
 
 

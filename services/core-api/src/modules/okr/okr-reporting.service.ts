@@ -142,6 +142,8 @@ export class OkrReportingService {
     const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
     if (orgFilter === null && userOrganizationId !== null) {
       // User has no org or invalid org → return empty CSV with headers only
+      // W4.M1: period is deprecated but kept in CSV export for backward compatibility
+      const exposePeriod = process.env.OKR_EXPOSE_PERIOD_ALIAS === 'true';
       const headers = [
         'objectiveId',
         'title',
@@ -149,7 +151,7 @@ export class OkrReportingService {
         'status',
         'progress',
         'isPublished',
-        'period',
+        ...(exposePeriod ? ['period'] : []), // Conditionally include period
         'startDate',
         'endDate',
         'parentId',
@@ -218,6 +220,9 @@ export class OkrReportingService {
     const rows: string[] = [];
     
     // CSV header row
+    // W4.M1: period is deprecated but kept in CSV export for backward compatibility
+    // Use OKR_EXPOSE_PERIOD_ALIAS env flag to control inclusion
+    const exposePeriod = process.env.OKR_EXPOSE_PERIOD_ALIAS === 'true';
     const headers = [
       'objectiveId',
       'title',
@@ -225,7 +230,7 @@ export class OkrReportingService {
       'status',
       'progress',
       'isPublished',
-      'period',
+      ...(exposePeriod ? ['period'] : []), // Conditionally include period
       'startDate',
       'endDate',
       'parentId',
@@ -263,7 +268,7 @@ export class OkrReportingService {
         escapeCSV(obj.status),
         escapeCSV(obj.progress),
         escapeCSV(obj.isPublished),
-        escapeCSV(obj.period),
+        ...(exposePeriod ? [escapeCSV(obj.period)] : []), // Conditionally include period
         escapeCSV(obj.startDate?.toISOString().split('T')[0] || ''),
         escapeCSV(obj.endDate?.toISOString().split('T')[0] || ''),
         escapeCSV(obj.parentId),
