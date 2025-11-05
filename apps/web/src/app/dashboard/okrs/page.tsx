@@ -363,13 +363,17 @@ export default function OKRsPage() {
       const count = response.data?.totalCount || 0
       setAttentionCount(count)
       
-      // Telemetry: fire once per successful load
-      track('attention_badge_loaded', {
-        scope: selectedScope,
-        cycle_id: selectedCycleId,
-        count,
-        ts: new Date().toISOString(),
-      })
+      // Telemetry: fire once per unique scope+cycle combination (per mount)
+      const telemetryKey = `${selectedScope}-${selectedCycleId}`
+      if (!attentionTelemetryFiredRef.current.has(telemetryKey)) {
+        track('attention_badge_loaded', {
+          scope: selectedScope,
+          cycle_id: selectedCycleId,
+          count,
+          ts: new Date().toISOString(),
+        })
+        attentionTelemetryFiredRef.current.add(telemetryKey)
+      }
     } catch (error: any) {
       // Attention endpoint is optional - gracefully degrade
       if (error.response?.status !== 403) {
