@@ -124,12 +124,20 @@ export class AuthService {
     // Normalize email to lowercase for case-insensitive login
     const normalizedEmail = email.toLowerCase().trim();
     
+    console.log(`[AUTH] Login attempt for email: ${normalizedEmail}`);
+    
     // Find user
     const user = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
     });
 
-    if (!user || !user.passwordHash) {
+    if (!user) {
+      console.warn(`[AUTH] Login failed: User not found for email: ${normalizedEmail}`);
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (!user.passwordHash) {
+      console.warn(`[AUTH] Login failed: User ${user.id} (${normalizedEmail}) has no password hash`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -137,8 +145,11 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
     if (!isPasswordValid) {
+      console.warn(`[AUTH] Login failed: Invalid password for user ${user.id} (${normalizedEmail})`);
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    console.log(`[AUTH] Login successful for user ${user.id} (${normalizedEmail})`);
 
     // Generate JWT
     const accessToken = this.jwtService.sign({

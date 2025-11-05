@@ -35,6 +35,7 @@
     "typecheck:all": "tsc --build --force --noEmit",
     "premerge:audit": "node scripts/pre-merge-audit.js",
     "todo:audit": "node scripts/todo-audit.js",
+    "audit:tenant-isolation": "ts-node scripts/audit-tenant-isolation.ts",
     "check-phase-commit": "ts-node scripts/check-phase-commit.ts",
     "check-commit-message": "ts-node scripts/check-commit-message.ts"
   },

@@ -18,6 +18,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { Button } from '@/components/ui/button'
@@ -47,8 +48,10 @@ import { useAuth } from '@/contexts/auth.context'
 import { usePermissions } from '@/hooks/usePermissions'
 import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import { useToast } from '@/hooks/use-toast'
+import { useFeatureFlags } from '@/hooks/useFeatureFlags'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { OKRPageContainer } from './OKRPageContainer'
+import { OKRTreeContainer } from './OKRTreeContainer'
 import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
 import { PublishLockWarningModal } from './components/PublishLockWarningModal'
 import { CycleSelector } from '@/components/ui/CycleSelector'
@@ -71,6 +74,36 @@ import { cn } from '@/lib/utils'
 
 // NOTE: This screen is now the system of record for CRUD on Objectives, Key Results, and Initiatives.
 export default function OKRsPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { okrTreeView } = useFeatureFlags()
+  
+  // Debug: Log feature flag status
+  useEffect(() => {
+    console.log('[OKR Page] Feature flag check:', {
+      okrTreeView,
+      envVar: process.env.NEXT_PUBLIC_OKR_TREE_VIEW,
+      urlView: searchParams.get('view'),
+    })
+  }, [okrTreeView, searchParams])
+  
+  // View mode: 'list' or 'tree' (only if feature flag enabled)
+  const viewMode = okrTreeView && searchParams.get('view') === 'tree' ? 'tree' : 'list'
+  
+  const setViewMode = (mode: 'list' | 'tree') => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (mode === 'tree') {
+      params.set('view', 'tree')
+      console.log('[Telemetry] okr.tree.toggle', {
+        view: 'tree',
+        timestamp: new Date().toISOString(),
+      })
+    } else {
+      params.delete('view')
+    }
+    router.push(`/dashboard/okrs?${params.toString()}`)
+  }
+  
   // [phase6-polish] Reintroduce compact multi-column grid view for exec scanning.
   const [_viewMode, _setViewMode] = useState<'grid' | 'list'>('list')
   // W4.M1: Period removed - Cycle is canonical
@@ -147,6 +180,9 @@ export default function OKRsPage() {
   const [attentionCount, setAttentionCount] = useState<number>(0)
   const [liveRegionMessage, setLiveRegionMessage] = useState<string | null>(null)
   const liveRegionRef = useRef<HTMLDivElement>(null)
+  // Tree view state
+  const [selectedTreeNodeId, setSelectedTreeNodeId] = useState<string | null>(null)
+  const [selectedTreeNodeType, setSelectedTreeNodeType] = useState<'objective' | 'keyResult' | 'initiative' | null>(null)
   const [activeCycles, setActiveCycles] = useState<Array<{
     id: string
     name: string
@@ -409,6 +445,21 @@ export default function OKRsPage() {
     setShowEditObjective(true)
   }
   
+  // Handler for tree node clicks - opens edit modal for objectives
+  const handleTreeNodeClick = (nodeId: string, nodeType: 'objective' | 'keyResult' | 'initiative') => {
+    setSelectedTreeNodeId(nodeId)
+    setSelectedTreeNodeType(nodeType)
+    
+    // For objectives, open edit modal
+    if (nodeType === 'objective') {
+      // Find the objective in the prepared objectives
+      // This is a simplified handler - in production, we'd fetch the objective or use a lookup
+      handleEditOKR({ id: nodeId } as any)
+    }
+    // For KRs and Initiatives, we could expand their parent objective
+    // For now, we'll just set the selection state
+  }
+  
   const handleAddKrClick = (objectiveId: string, objectiveName: string) => {
     setKrParentObjectiveId(objectiveId)
     setKrParentObjectiveName(objectiveName)
@@ -422,8 +473,8 @@ export default function OKRsPage() {
     setShowNewInitiative(true)
   }
   
-  const handleAddInitiativeToKrClick = (krId: string, krTitle: string) => {
-    setInitiativeParentObjectiveId(null)
+  const handleAddInitiativeToKrClick = (krId: string, krTitle: string, objectiveId: string) => {
+    setInitiativeParentObjectiveId(objectiveId)
     setInitiativeParentKeyResultId(krId)
     setInitiativeParentName(krTitle)
     setShowNewInitiative(true)
@@ -641,18 +692,55 @@ export default function OKRsPage() {
     
     // Map initiatives from unified response
     // Initiatives can be directly under objective or nested under key results
-    const allInitiatives = [
-      ...(rawObj.initiatives || []), // Direct objective initiatives
-      ...(rawObj.keyResults || []).flatMap((kr: any) => 
-        (kr.initiatives || []).map((init: any) => ({
-          ...init,
-          keyResultId: kr.id, // Ensure keyResultId is set
-          keyResultTitle: kr.title, // Add KR title for display
-        }))
-      )
-    ]
+    // If an initiative has both objectiveId and keyResultId, prioritize the KR-linked version
+      console.error(`🔍🔍🔍 [OKR MAPPING] STARTING MAPPING 🔍🔍🔍`);
+      console.error(`🔍 [OKR MAPPING] Raw objective data:`, {
+      objectiveId: rawObj.objectiveId || rawObj.id,
+      objectiveTitle: rawObj.title,
+      directInitiatives: rawObj.initiatives?.length || 0,
+      directInitiativesData: rawObj.initiatives,
+      keyResultsCount: rawObj.keyResults?.length || 0,
+      keyResultsWithInitiatives: rawObj.keyResults?.map((kr: any) => ({
+        id: kr.keyResultId || kr.id,
+        title: kr.title,
+        initiativesCount: kr.initiatives?.length || 0,
+        initiatives: kr.initiatives,
+      })),
+    });
     
-    // Deduplicate and map initiatives
+    // Collect KR-linked initiatives first (they have more context)
+    const seenInitIds = new Set<string>()
+    const allInitiatives: any[] = []
+    
+    // First, add initiatives from Key Results (they have KR context)
+    rawObj.keyResults?.forEach((kr: any) => {
+      (kr.initiatives || []).forEach((init: any) => {
+        if (!seenInitIds.has(init.id)) {
+          seenInitIds.add(init.id)
+          allInitiatives.push({
+            ...init,
+            keyResultId: kr.keyResultId || kr.id,
+            keyResultTitle: kr.title,
+          })
+        }
+      })
+    })
+    
+    // Then, add objective-only initiatives (skip if already seen from KR)
+    rawObj.initiatives?.forEach((init: any) => {
+      if (!seenInitIds.has(init.id)) {
+        seenInitIds.add(init.id)
+        allInitiatives.push({
+          ...init,
+          keyResultId: init.keyResultId,
+          keyResultTitle: init.keyResultTitle,
+        })
+      }
+    })
+    
+      console.error(`🔍 [OKR MAPPING] All initiatives mapped:`, allInitiatives.length, allInitiatives);
+    
+    // Map initiatives to final format
     const initiatives = allInitiatives.map((init: any) => ({
       id: init.id,
       title: init.title,
@@ -666,7 +754,7 @@ export default function OKRsPage() {
     const owner = rawObj.owner || availableUsers.find(u => u.id === rawObj.ownerId)
     
     return {
-      id: rawObj.id,
+      id: rawObj.objectiveId || rawObj.id,
       title: rawObj.title,
       status: rawObj.status || 'ON_TRACK',
       isPublished: rawObj.isPublished ?? false,
@@ -692,21 +780,53 @@ export default function OKRsPage() {
       <DashboardLayout>
         <div className="p-8">
           <header role="banner" className="mb-8">
-            <PageHeader
-              title="Objectives & Key Results"
-              subtitle="Aligned execution. Live progress. Governance state at a glance."
-              badges={[
-                ...(selectedTimeframeLabel ? [
-                  {
-                    label: `Viewing: ${selectedTimeframeLabel}`,
-                    tone: 'neutral' as const,
-                  },
-                ] : []),
-                ...(activeCycles.some((c) => c.status === 'LOCKED')
-                  ? [{ label: 'Locked', tone: 'warning' as const }]
-                  : []),
-              ]}
-            />
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <PageHeader
+                title="Objectives & Key Results"
+                subtitle="Aligned execution. Live progress. Governance state at a glance."
+                badges={[
+                  ...(selectedTimeframeLabel ? [
+                    {
+                      label: `Viewing: ${selectedTimeframeLabel}`,
+                      tone: 'neutral' as const,
+                    },
+                  ] : []),
+                  ...(activeCycles.some((c) => c.status === 'LOCKED')
+                    ? [{ label: 'Locked', tone: 'warning' as const }]
+                    : []),
+                ]}
+              />
+              
+              {/* View Toggle (List | Tree) - only show if feature flag enabled */}
+              {okrTreeView && (
+                <div className="flex items-center gap-1 rounded-lg border border-neutral-300 bg-neutral-50 p-1" role="group" aria-label="View mode">
+                  <button
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
+                      viewMode === 'list'
+                        ? "bg-white text-neutral-900 shadow-sm"
+                        : "text-neutral-600 hover:text-neutral-900"
+                    )}
+                    onClick={() => setViewMode('list')}
+                    aria-pressed={viewMode === 'list'}
+                  >
+                    List
+                  </button>
+                  <button
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
+                      viewMode === 'tree'
+                        ? "bg-white text-neutral-900 shadow-sm"
+                        : "text-neutral-600 hover:text-neutral-900"
+                    )}
+                    onClick={() => setViewMode('tree')}
+                    aria-pressed={viewMode === 'tree'}
+                  >
+                    Tree
+                  </button>
+                </div>
+              )}
+            </div>
             {/* Cycle Health Strip */}
             {selectedCycleId && (
               <div className="mt-4">
@@ -910,7 +1030,7 @@ export default function OKRsPage() {
                 </Button>
 
                 {/* Add - RBAC-aware split-button */}
-                {(canCreateObjective || permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || null })) && (
+                {(canCreateObjective || permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || null })) && !isSuperuser && (
                   <DropdownMenu>
                     <div className="flex items-center">
                       <Button
@@ -1009,38 +1129,70 @@ export default function OKRsPage() {
             {liveRegionMessage}
           </div>
 
-          {/* OKRs List with Pagination */}
-          <main role="main" aria-busy={false} aria-label="OKRs list">
-            <OKRPageContainer
-              key={reloadTrigger}
-              availableUsers={availableUsers}
-              activeCycles={activeCycles}
-              overdueCheckIns={overdueCheckIns}
-              filterWorkspaceId={filterWorkspaceId}
-              filterTeamId={filterTeamId}
-              filterOwnerId={filterOwnerId}
-              searchQuery={searchQuery}
-              selectedTimeframeKey={selectedTimeframeKey}
-              selectedStatus={selectedStatus}
-              selectedCycleId={selectedCycleId}
-              selectedScope={selectedScope}
-              onAction={{
-                onEdit: handleEditOKR,
-                onDelete: handleDeleteOKR,
-                onAddKeyResult: handleAddKrClick,
-                onAddInitiativeToObjective: handleAddInitiativeToObjectiveClick,
-                onAddInitiativeToKr: handleAddInitiativeToKrClick,
-                onAddCheckIn: handleAddCheckIn,
-                onOpenHistory: handleOpenActivityDrawer,
-                // Story 5: Contextual Add menu handlers
-                onOpenContextualAddMenu: handleOpenContextualAddMenu,
-                onContextualAddKeyResult: handleContextualAddKeyResult,
-                onContextualAddInitiative: handleContextualAddInitiative,
-              }}
-              expandedObjectiveId={expandedObjectiveId}
-              onToggleObjective={handleToggleObjective}
-              onCanCreateChange={setCanCreateObjective}
-            />
+          {/* OKRs List or Tree View */}
+          <main role="main" aria-busy={false} aria-label={viewMode === 'tree' ? 'OKRs tree' : 'OKRs list'}>
+            {viewMode === 'tree' ? (
+              <OKRTreeContainer
+                key={reloadTrigger}
+                availableUsers={availableUsers}
+                activeCycles={activeCycles}
+                overdueCheckIns={overdueCheckIns}
+                filterWorkspaceId={filterWorkspaceId}
+                filterTeamId={filterTeamId}
+                filterOwnerId={filterOwnerId}
+                searchQuery={searchQuery}
+                selectedTimeframeKey={selectedTimeframeKey}
+                selectedStatus={selectedStatus}
+                selectedCycleId={selectedCycleId}
+                selectedScope={selectedScope}
+                onAction={{
+                  onEdit: handleEditOKR,
+                  onDelete: handleDeleteOKR,
+                  onAddKeyResult: handleAddKrClick,
+                  onAddInitiativeToObjective: handleAddInitiativeToObjectiveClick,
+                  onAddInitiativeToKr: handleAddInitiativeToKrClick,
+                  onAddCheckIn: handleAddCheckIn,
+                  onOpenHistory: handleOpenActivityDrawer,
+                  onOpenContextualAddMenu: handleOpenContextualAddMenu,
+                  onContextualAddKeyResult: handleContextualAddKeyResult,
+                  onContextualAddInitiative: handleContextualAddInitiative,
+                }}
+                selectedNodeId={selectedTreeNodeId}
+                selectedNodeType={selectedTreeNodeType}
+                onNodeClick={handleTreeNodeClick}
+              />
+            ) : (
+              <OKRPageContainer
+                key={reloadTrigger}
+                availableUsers={availableUsers}
+                activeCycles={activeCycles}
+                overdueCheckIns={overdueCheckIns}
+                filterWorkspaceId={filterWorkspaceId}
+                filterTeamId={filterTeamId}
+                filterOwnerId={filterOwnerId}
+                searchQuery={searchQuery}
+                selectedTimeframeKey={selectedTimeframeKey}
+                selectedStatus={selectedStatus}
+                selectedCycleId={selectedCycleId}
+                selectedScope={selectedScope}
+                onAction={{
+                  onEdit: handleEditOKR,
+                  onDelete: handleDeleteOKR,
+                  onAddKeyResult: handleAddKrClick,
+                  onAddInitiativeToObjective: handleAddInitiativeToObjectiveClick,
+                  onAddInitiativeToKr: handleAddInitiativeToKrClick,
+                  onAddCheckIn: handleAddCheckIn,
+                  onOpenHistory: handleOpenActivityDrawer,
+                  // Story 5: Contextual Add menu handlers
+                  onOpenContextualAddMenu: handleOpenContextualAddMenu,
+                  onContextualAddKeyResult: handleContextualAddKeyResult,
+                  onContextualAddInitiative: handleContextualAddInitiative,
+                }}
+                expandedObjectiveId={expandedObjectiveId}
+                onToggleObjective={handleToggleObjective}
+                onCanCreateChange={setCanCreateObjective}
+              />
+            )}
           </main>
 
           {/* Activity Timeline Drawer */}
@@ -1240,9 +1392,26 @@ export default function OKRsPage() {
               try {
                 const payload = {
                   ...formData,
-                  objectiveId: initiativeParentObjectiveId ?? undefined,
+                  // Only send objectiveId if we DON'T have a keyResultId
+                  // If keyResultId is provided, the backend will auto-set objectiveId from the KR's objective
+                  objectiveId: initiativeParentKeyResultId ? undefined : (initiativeParentObjectiveId ?? undefined),
                   keyResultId: initiativeParentKeyResultId ?? undefined,
+                  // Include organizationId so RBAC guard can extract tenantId
+                  organizationId: currentOrganization?.id,
                 }
+                
+                // Convert dueDate from YYYY-MM-DD to ISO-8601 DateTime format if provided
+                if (payload.dueDate && typeof payload.dueDate === 'string') {
+                  // If it's already a full ISO string, use it; otherwise convert date-only to ISO DateTime
+                  if (payload.dueDate.includes('T')) {
+                    // Already ISO format
+                    payload.dueDate = payload.dueDate
+                  } else {
+                    // Convert YYYY-MM-DD to ISO-8601 DateTime (start of day in UTC)
+                    payload.dueDate = new Date(payload.dueDate + 'T00:00:00.000Z').toISOString()
+                  }
+                }
+                
                 const res = await api.post('/initiatives', payload)
                 const createdInit = res.data
                 
@@ -1255,8 +1424,13 @@ export default function OKRsPage() {
                 setInitiativeParentKeyResultId(null)
                 setInitiativeParentName(null)
                 handleReloadOKRs()
-              } catch (err) {
+              } catch (err: any) {
                 console.error('Failed to create initiative', err)
+                toast({
+                  title: 'Failed to create initiative',
+                  description: err.response?.data?.message || err.message || 'An error occurred while creating the initiative.',
+                  variant: 'destructive',
+                })
               }
             }}
             availableUsers={availableUsers}

@@ -37,7 +37,7 @@ interface OKRPageContainerProps {
     onDelete: (okr: any) => void
     onAddKeyResult: (objectiveId: string, objectiveName: string) => void
     onAddInitiativeToObjective: (objectiveId: string, objectiveName: string) => void
-    onAddInitiativeToKr: (krId: string, krTitle: string) => void
+    onAddInitiativeToKr: (krId: string, krTitle: string, objectiveId: string) => void
     onAddCheckIn: (krId: string) => void
     onOpenHistory: (entityType: 'OBJECTIVE' | 'KEY_RESULT', entityId: string, entityTitle?: string) => void
     // Story 5: Contextual Add menu handlers
@@ -125,16 +125,36 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
     ? rawObj.latestConfidencePct 
     : null
   
-  const allInitiatives = [
-    ...(rawObj.initiatives || []),
-    ...(rawObj.keyResults || []).flatMap((kr: any) => 
-      (kr.initiatives || []).map((init: any) => ({
+  // Collect initiatives from both sources and deduplicate by ID
+  // An initiative can be linked to both an Objective AND a Key Result, so it appears in both arrays
+  const seenInitIds = new Set<string>()
+  const allInitiatives: any[] = []
+  
+  // First, add initiatives from Key Results (they have KR context which is more useful)
+  ;(rawObj.keyResults || []).forEach((kr: any) => {
+    (kr.initiatives || []).forEach((init: any) => {
+      if (!seenInitIds.has(init.id)) {
+        seenInitIds.add(init.id)
+        allInitiatives.push({
+          ...init,
+          keyResultId: kr.keyResultId || kr.id,
+          keyResultTitle: kr.title,
+        })
+      }
+    })
+  })
+  
+  // Then, add objective-only initiatives (skip if already seen from KR)
+  ;(rawObj.initiatives || []).forEach((init: any) => {
+    if (!seenInitIds.has(init.id)) {
+      seenInitIds.add(init.id)
+      allInitiatives.push({
         ...init,
-        keyResultId: kr.keyResultId || kr.id,
-        keyResultTitle: kr.title,
-      }))
-    )
-  ]
+        keyResultId: init.keyResultId,
+        keyResultTitle: init.keyResultTitle,
+      })
+    }
+  })
   
   const initiatives = allInitiatives.map((init: any) => ({
     id: init.id,
@@ -145,7 +165,7 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
     keyResultTitle: init.keyResultTitle,
   }))
   
-  const owner = rawObj.owner || availableUsers.find(u => u.id === rawObj.ownerId)
+    const owner = rawObj.owner || availableUsers.find(u => u.id === rawObj.ownerId)
   
     // W4.M1: Map publishState from backend response (new field)
     // Falls back to isPublished boolean for backward compatibility

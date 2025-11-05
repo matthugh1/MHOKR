@@ -19,7 +19,11 @@ describe('OkrCycleController (Integration)', () => {
   };
 
   const mockJwtGuard = {
-    canActivate: jest.fn(() => true),
+    canActivate: jest.fn((context: any) => {
+      const req = context.switchToHttp().getRequest();
+      req.user = mockUser;
+      return true;
+    }),
   };
 
   const mockRBACGuard = {
@@ -41,13 +45,6 @@ describe('OkrCycleController (Integration)', () => {
 
     cycleService = moduleFixture.get<OkrCycleService>(OkrCycleService);
     prisma = moduleFixture.get<PrismaService>(PrismaService);
-
-    // Mock user context
-    mockJwtGuard.canActivate = jest.fn((context) => {
-      const req = context.switchToHttp().getRequest();
-      req.user = mockUser;
-      return true;
-    });
   });
 
   afterAll(async () => {

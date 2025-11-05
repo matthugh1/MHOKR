@@ -57,3 +57,4 @@ If you prefer to use local PostgreSQL:
 - ✅ 9 Test objectives in port 5432, 0 in port 5433
 - ⚠️ Need to migrate data or consolidate configuration
 
+

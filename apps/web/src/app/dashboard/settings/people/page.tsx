@@ -106,6 +106,7 @@ function PeopleSettings() {
   
   // User creation
   const [showCreateUser, setShowCreateUser] = useState(false)
+  const [devInspectorMode, setDevInspectorMode] = useState(false)
   const [newUserData, setNewUserData] = useState({ 
     name: '', 
     email: '', 
@@ -198,11 +199,12 @@ function PeopleSettings() {
       name: '', 
       email: '', 
       password: '',
-      organizationId: organization?.id || '',
+      organizationId: organization?.id || '', // Always set to current context for SUPERUSER
       workspaceId: workspace?.id || '',
       role: 'MEMBER' as 'ORG_ADMIN' | 'MEMBER' | 'VIEWER',
       workspaceRole: 'MEMBER' as 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER'
     })
+    setDevInspectorMode(false)
   }
 
   const handleCreateUser = async () => {
@@ -215,11 +217,22 @@ function PeopleSettings() {
       return
     }
 
-    if (!newUserData.organizationId || !newUserData.workspaceId) {
+    // Validate tenant context or explicit selection
+    if (!organization && !newUserData.organizationId && !devInspectorMode) {
       toast({
         variant: 'destructive',
-        title: 'Missing selection',
-        description: 'Please select both organization and workspace',
+        title: 'Missing tenant context',
+        description: 'No active tenant context available. Please select an organisation.',
+      })
+      return
+    }
+
+    // For dev inspector mode, require explicit organisation
+    if (devInspectorMode && !newUserData.organizationId) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing organisation',
+        description: 'Developer mode requires an organisation to be selected.',
       })
       return
     }
@@ -227,15 +240,44 @@ function PeopleSettings() {
     setActionLoading(true)
     const userName = newUserData.name
     try {
-      await api.post('/users', {
+      // Build payload - only include organisationId if dev inspector mode or explicitly set
+      const payload: any = {
         name: newUserData.name,
         email: newUserData.email,
         password: newUserData.password,
-        organizationId: newUserData.organizationId,
-        workspaceId: newUserData.workspaceId,
         role: newUserData.role,
-        workspaceRole: newUserData.workspaceRole,
-      })
+      }
+
+      // SUPERUSER always needs to send organisationId (backend has no tenant context)
+      // For regular users, only send if dev inspector mode or no context
+      if (isSuperuser) {
+        // SUPERUSER: Always send organizationId from form or current context
+        const orgId = newUserData.organizationId || organization?.id
+        if (!orgId) {
+          toast({
+            variant: 'destructive',
+            title: 'Missing organisation',
+            description: 'Please select an organisation to create the user in.',
+          })
+          setActionLoading(false)
+          return
+        }
+        payload.organizationId = orgId
+      } else if (devInspectorMode || !organization) {
+        // Regular user: Send only if dev inspector mode or no context
+        const orgId = newUserData.organizationId || organization?.id
+        if (orgId) {
+          payload.organizationId = orgId
+        }
+      }
+      // Otherwise, backend will auto-inject from req.user.organizationId
+      // Only send workspaceId if provided
+      if (newUserData.workspaceId) {
+        payload.workspaceId = newUserData.workspaceId
+        payload.workspaceRole = newUserData.workspaceRole
+      }
+
+      await api.post('/users', payload)
       resetUserForm()
       setShowCreateUser(false)
       await loadPeople()
@@ -246,7 +288,6 @@ function PeopleSettings() {
         description: `${userName} has been successfully added to the system.`,
       })
     } catch (error: any) {
-      console.error('Failed to create user:', error)
       const errorMessage = error.response?.data?.message || error.message || 'Failed to create user'
       toast({
         variant: 'destructive',
@@ -680,16 +721,28 @@ function PeopleSettings() {
         {/* Create User Dialog */}
         <Dialog open={showCreateUser} onOpenChange={(open) => {
           setShowCreateUser(open)
-          if (!open) {
+          if (open) {
+            // Initialize form with current context when dialog opens
+            setNewUserData({ 
+              name: '', 
+              email: '', 
+              password: '',
+              organizationId: organization?.id || '',
+              workspaceId: workspace?.id || '',
+              role: 'MEMBER' as 'ORG_ADMIN' | 'MEMBER' | 'VIEWER',
+              workspaceRole: 'MEMBER' as 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER'
+            })
+            setDevInspectorMode(false)
+          } else {
             // Reset form when dialog closes
             resetUserForm()
           }
         }}>
           <DialogContent className="max-w-2xl" aria-describedby="create-user-description">
             <DialogHeader>
-              <DialogTitle>Add User</DialogTitle>
+              <DialogTitle>Create User</DialogTitle>
               <DialogDescription id="create-user-description">
-                Create a new user account and assign them to an organization and workspace
+                Create a new user account. An invitation will be sent to this address if required by your configuration.
               </DialogDescription>
             </DialogHeader>
               <div className="space-y-4 py-4">
@@ -712,6 +765,9 @@ function PeopleSettings() {
                       onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
                       placeholder="john@example.com"
                     />
+                    <p className="text-xs text-slate-500 mt-1">
+                      An invitation will be sent to this address if required by your configuration.
+                    </p>
                   </div>
                 </div>
                 <div>
@@ -724,63 +780,132 @@ function PeopleSettings() {
                     placeholder="Enter initial password"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="organization">Organization *</Label>
-                    <Select 
-                      value={newUserData.organizationId} 
-                      onValueChange={async (v) => {
-                        setNewUserData({ 
-                          ...newUserData, 
-                          organizationId: v, 
-                          workspaceId: '',
-                          workspaceRole: 'MEMBER' // Reset workspace role when organization changes
-                        })
-                        // Load workspaces for selected organization
-                        if (isSuperuser && v) {
-                          try {
-                            const res = await api.get(`/workspaces?organizationId=${v}`)
-                            setAllWorkspaces(res.data || [])
-                          } catch (error) {
-                            console.error('Failed to load workspaces:', error)
-                          }
-                        }
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select organization" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {getAvailableOrganizations().map((org) => (
-                          <SelectItem key={org.id} value={org.id}>
-                            {org.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+
+                {/* Tenant Context - Auto-detected or Manual Selection */}
+                {organization && !devInspectorMode && !isSuperuser ? (
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-slate-600" />
+                      <div>
+                        <Label className="text-xs text-slate-600">Tenant (auto-detected)</Label>
+                        <p className="text-sm font-medium text-slate-900">{organization.name}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="workspace">Workspace *</Label>
-                    <Select 
-                      value={newUserData.workspaceId} 
-                      onValueChange={(v) => setNewUserData({ ...newUserData, workspaceId: v })}
-                      disabled={!newUserData.organizationId}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select workspace" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(isSuperuser ? allWorkspaces : workspaces)
-                          .filter(w => w.organizationId === newUserData.organizationId)
-                          .map((ws) => (
+                ) : (
+                  <div className="space-y-2">
+                    {!organization && !devInspectorMode && (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs text-amber-900">
+                          No active tenant context — please select a tenant.
+                        </p>
+                      </div>
+                    )}
+                    {organization && !devInspectorMode && isSuperuser && (
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-xs text-blue-900">
+                          Using current organisation: <strong>{organization.name}</strong>
+                        </p>
+                      </div>
+                    )}
+                    <div>
+                      <Label htmlFor="organization">Organisation *</Label>
+                      <Select 
+                        value={newUserData.organizationId || organization?.id || ''} 
+                        onValueChange={async (v) => {
+                          setNewUserData({ 
+                            ...newUserData, 
+                            organizationId: v, 
+                            workspaceId: '',
+                            workspaceRole: 'MEMBER'
+                          })
+                          // Load workspaces for selected organisation
+                          if (isSuperuser && v) {
+                            try {
+                              const res = await api.get(`/workspaces?organizationId=${v}`)
+                              setAllWorkspaces(res.data || [])
+                            } catch (error) {
+                              console.error('Failed to load workspaces:', error)
+                            }
+                          }
+                        }}
+                      >
+                        <SelectTrigger id="organization">
+                          <SelectValue placeholder="Select organisation" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getAvailableOrganizations().map((org) => (
+                            <SelectItem key={org.id} value={org.id}>
+                              {org.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Developer Inspector Toggle - Only for SUPERUSER with rbacInspector enabled */}
+                {isSuperuser && currentUser?.features?.rbacInspector && (
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <Label htmlFor="dev-inspector-toggle" className="font-normal cursor-pointer">
+                          Developer mode: cross-tenant creation
+                        </Label>
+                        <p className="text-xs text-purple-700 mt-1">
+                          Enable to create users in different tenants (requires Developer Inspector).
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        id="dev-inspector-toggle"
+                        checked={devInspectorMode}
+                        onChange={(e) => {
+                          setDevInspectorMode(e.target.checked)
+                          if (!e.target.checked) {
+                            // Reset to auto-context when disabling
+                            setNewUserData({ ...newUserData, organizationId: organization?.id || '' })
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Workspace Selection - Optional and Hidden if None */}
+                {(() => {
+                  const availableWorkspacesForTenant = isSuperuser 
+                    ? allWorkspaces.filter(w => w.organizationId === (devInspectorMode ? newUserData.organizationId : organization?.id))
+                    : workspaces.filter(w => w.organizationId === organization?.id)
+                  
+                  if (availableWorkspacesForTenant.length === 0) {
+                    return null // Hide workspace selector when none exist
+                  }
+                  
+                  return (
+                    <div>
+                      <Label htmlFor="workspace">Workspace (optional)</Label>
+                      <Select 
+                        value={newUserData.workspaceId} 
+                        onValueChange={(v) => setNewUserData({ ...newUserData, workspaceId: v })}
+                        disabled={!organization && !devInspectorMode ? !newUserData.organizationId : false}
+                      >
+                        <SelectTrigger id="workspace">
+                          <SelectValue placeholder="Select workspace (optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableWorkspacesForTenant.map((ws) => (
                             <SelectItem key={ws.id} value={ws.id}>
                               {ws.name}
                             </SelectItem>
                           ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )
+                })()}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
@@ -810,34 +935,36 @@ function PeopleSettings() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Label htmlFor="workspace-role">Workspace Role</Label>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="h-4 w-4 text-slate-400 cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="max-w-xs">{roleDescriptions[newUserData.workspaceRole as keyof typeof roleDescriptions] || 'Select a role to see description'}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                  {newUserData.workspaceId && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Label htmlFor="workspace-role">Workspace Role</Label>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-4 w-4 text-slate-400 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">{roleDescriptions[newUserData.workspaceRole as keyof typeof roleDescriptions] || 'Select a role to see description'}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <Select 
+                        value={newUserData.workspaceRole} 
+                        onValueChange={(v: any) => setNewUserData({ ...newUserData, workspaceRole: v })}
+                      >
+                        <SelectTrigger id="workspace-role">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="MEMBER">Member</SelectItem>
+                          <SelectItem value="WORKSPACE_OWNER">Owner</SelectItem>
+                          <SelectItem value="VIEWER">Viewer</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <Select 
-                      value={newUserData.workspaceRole} 
-                      onValueChange={(v: any) => setNewUserData({ ...newUserData, workspaceRole: v })}
-                    >
-                      <SelectTrigger id="workspace-role">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="MEMBER">Member</SelectItem>
-                        <SelectItem value="WORKSPACE_OWNER">Owner</SelectItem>
-                        <SelectItem value="VIEWER">Viewer</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  )}
                 </div>
               </div>
               <DialogFooter>

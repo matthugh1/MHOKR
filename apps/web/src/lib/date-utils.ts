@@ -159,3 +159,67 @@ export function getCurrentPeriodFilter(): string {
   
   return `quarterly-${year}-Q${quarter}`
 }
+
+/**
+ * Format a period for display (e.g., "Q4 2025", "2025", "Jan 2025")
+ * @param period - Period type (QUARTERLY, ANNUAL, MONTHLY, CUSTOM)
+ * @param startDate - Start date string or Date object
+ */
+export function formatPeriod(period: string, startDate: Date | string): string {
+  const date = typeof startDate === 'string' ? new Date(startDate) : startDate
+  const year = date.getFullYear()
+  
+  switch (period) {
+    case 'QUARTERLY': {
+      const quarter = getQuarterFromDate(date)
+      return `Q${quarter} ${year}`
+    }
+    case 'ANNUAL': {
+      return year.toString()
+    }
+    case 'MONTHLY': {
+      const monthName = getMonthName(date.getMonth())
+      return `${monthName} ${year}`
+    }
+    case 'CUSTOM': {
+      return `${date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+    }
+    default:
+      return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+  }
+}
+
+/**
+ * Calculate end date based on start date and period type
+ * @param startDate - Start date
+ * @param period - Period type (QUARTERLY, ANNUAL, MONTHLY, CUSTOM)
+ * @returns End date
+ */
+export function calculateEndDate(startDate: Date | string, period: string): Date {
+  const start = typeof startDate === 'string' ? new Date(startDate) : startDate
+  const year = start.getFullYear()
+  
+  switch (period) {
+    case 'QUARTERLY': {
+      const quarter = getQuarterFromDate(start)
+      const { endDate } = getQuarterDates(quarter, year)
+      return endDate
+    }
+    case 'ANNUAL': {
+      const { endDate } = getYearDates(year)
+      return endDate
+    }
+    case 'MONTHLY': {
+      const month = start.getMonth()
+      const { endDate } = getMonthDates(month, year)
+      return endDate
+    }
+    case 'CUSTOM':
+    default: {
+      // Default to 90 days (quarterly-like)
+      const end = new Date(start)
+      end.setDate(end.getDate() + 90)
+      return end
+    }
+  }
+}

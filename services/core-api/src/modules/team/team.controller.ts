@@ -13,16 +13,16 @@ export class TeamController {
 
   @Get()
   @RequireAction('manage_teams')
-  @ApiOperation({ summary: 'Get all teams, optionally filtered by workspace' })
-  async getAll(@Query('workspaceId') workspaceId?: string) {
-    return this.teamService.findAll(workspaceId);
+  @ApiOperation({ summary: 'Get all teams, optionally filtered by workspace (tenant-isolated)' })
+  async getAll(@Query('workspaceId') workspaceId?: string, @Req() req?: any) {
+    return this.teamService.findAll(req.user.organizationId, workspaceId);
   }
 
   @Get(':id')
   @RequireAction('manage_teams')
-  @ApiOperation({ summary: 'Get team by ID' })
-  async getById(@Param('id') id: string) {
-    return this.teamService.findById(id);
+  @ApiOperation({ summary: 'Get team by ID (tenant-isolated)' })
+  async getById(@Param('id') id: string, @Req() req: any) {
+    return this.teamService.findById(id, req.user.organizationId);
   }
 
   @Post()

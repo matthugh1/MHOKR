@@ -54,6 +54,7 @@ interface Cycle {
   startDate: string
   endDate: string
   status: 'DRAFT' | 'ACTIVE' | 'LOCKED' | 'ARCHIVED'
+  isStandard?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -139,7 +140,9 @@ function CyclesManagement() {
     setLoading(true)
     try {
       const res = await api.get('/okr/cycles')
-      setCycles(res.data || [])
+      // Only show custom cycles (filter out standard cycles)
+      const customCycles = (res.data || []).filter((cycle: any) => !cycle.isStandard)
+      setCycles(customCycles as Cycle[])
 
       // Load summaries for each cycle
       const summaryPromises = res.data.map((cycle: Cycle) =>
@@ -362,13 +365,15 @@ function CyclesManagement() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Cycle Management</h1>
             <p className="text-slate-600 mt-1">
-              Define, lock, and archive cycles for OKR tracking.
+              Manage custom cycles for special periods (sprints, programs, etc.). Standard cycles (months, quarters, years) are created automatically when selecting them in OKR forms.
             </p>
           </div>
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Cycle
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowCreate(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Custom Cycle
+            </Button>
+          </div>
         </div>
 
         {loading && cycles.length === 0 ? (
@@ -381,8 +386,9 @@ function CyclesManagement() {
           <Card>
             <CardContent className="p-6 text-center text-slate-500">
               <Calendar className="h-12 w-12 mx-auto mb-3 text-slate-300" />
-              <p>No cycles yet.</p>
-              <p className="text-sm mt-1">Create your first cycle to organise OKRs by time period.</p>
+              <p>No custom cycles yet.</p>
+              <p className="text-sm mt-1">Create a custom cycle for special periods (sprints, programs, etc.).</p>
+              <p className="text-xs mt-2 text-slate-400">Standard cycles (months, quarters, years) are managed automatically when creating OKRs.</p>
             </CardContent>
           </Card>
         ) : (

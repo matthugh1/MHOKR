@@ -14,9 +14,47 @@ export class WorkspaceService {
     private rbacService: RBACService,
   ) {}
 
-  async findAll(organizationId?: string) {
+  async findAll(userOrganizationId: string | null | undefined, filterOrganizationId?: string) {
+    // Tenant isolation: enforce tenant filtering
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      // User has no organisation - return empty array
+      return [];
+    }
+
+    // If filterOrganizationId provided, validate it matches caller's tenant
+    if (filterOrganizationId) {
+      if (userOrganizationId !== null) {
+        // Normal user: must match their tenant
+        OkrTenantGuard.assertSameTenant(filterOrganizationId, userOrganizationId);
+      }
+      // SUPERUSER: can filter by any organisation
+      return this.prisma.workspace.findMany({
+        where: { organizationId: filterOrganizationId },
+        include: {
+          organization: true,
+          parentWorkspace: true,
+          childWorkspaces: true,
+          teams: true,
+        },
+      });
+    }
+
+    // No filter provided: return workspaces for caller's tenant
+    if (userOrganizationId === null) {
+      // SUPERUSER: no filter means return all (but this is unusual - usually they'd provide orgId)
+      return this.prisma.workspace.findMany({
+        include: {
+          organization: true,
+          parentWorkspace: true,
+          childWorkspaces: true,
+          teams: true,
+        },
+      });
+    }
+
+    // Normal user: return workspaces in their tenant
     return this.prisma.workspace.findMany({
-      where: organizationId ? { organizationId } : undefined,
+      where: { organizationId: userOrganizationId },
       include: {
         organization: true,
         parentWorkspace: true,
@@ -26,7 +64,7 @@ export class WorkspaceService {
     });
   }
 
-  async findById(id: string) {
+  async findById(id: string, userOrganizationId: string | null | undefined) {
     const workspace = await this.prisma.workspace.findUnique({
       where: { id },
       include: {
@@ -43,6 +81,23 @@ export class WorkspaceService {
     });
 
     if (!workspace) {
+      throw new NotFoundException(`Workspace with ID ${id} not found`);
+    }
+
+    // Tenant isolation: verify workspace belongs to caller's tenant
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      // Caller has no organisation - cannot access any workspace
+      throw new NotFoundException(`Workspace with ID ${id} not found`);
+    }
+
+    if (userOrganizationId === null) {
+      // SUPERUSER: can see any workspace (read-only)
+      return workspace;
+    }
+
+    // Normal user: verify workspace belongs to caller's tenant
+    if (workspace.organizationId !== userOrganizationId) {
+      // Don't leak existence - return not found
       throw new NotFoundException(`Workspace with ID ${id} not found`);
     }
 
@@ -308,7 +363,7 @@ export class WorkspaceService {
     OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
 
     // Get existing workspace to check tenant isolation
-    const workspace = await this.findById(id);
+    const workspace = await this.findById(id, userOrganizationId);
     OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
 
     await this.auditLogService.record({
@@ -545,7 +600,7 @@ export class WorkspaceService {
     OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
 
     // Verify workspace exists and tenant match
-    const workspace = await this.findById(workspaceId);
+    const workspace = await this.findById(workspaceId, userOrganizationId);
     OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
     
     // Verify user exists
@@ -635,7 +690,7 @@ export class WorkspaceService {
     OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
 
     // Verify workspace exists and tenant match
-    const workspace = await this.findById(workspaceId);
+    const workspace = await this.findById(workspaceId, userOrganizationId);
     OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
 
     // Check if user has role assignments (Phase 3: RBAC only)

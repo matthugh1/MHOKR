@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
+import { OkrTenantGuard } from '../okr/tenant-guard';
 
 @ApiTags('Organizations')
 @Controller('organizations')
@@ -14,21 +15,21 @@ export class OrganizationController {
   @Get('current')
   @ApiOperation({ summary: 'Get current user\'s organization' })
   async getCurrentOrganization(@Req() req: any) {
-    return this.organizationService.getCurrentOrganization(req.user.id);
+    return this.organizationService.getCurrentOrganization(req.user.id, req.user.organizationId);
   }
 
   @Get()
   @RequireAction('manage_tenant_settings')
-  @ApiOperation({ summary: 'Get user\'s organizations' })
-  async getAll() {
-    return this.organizationService.findAll();
+  @ApiOperation({ summary: 'Get user\'s organizations (tenant-isolated)' })
+  async getAll(@Req() req: any) {
+    return this.organizationService.findAll(req.user.organizationId);
   }
 
   @Get(':id')
   @RequireAction('manage_tenant_settings')
-  @ApiOperation({ summary: 'Get organization by ID' })
-  async getById(@Param('id') id: string) {
-    return this.organizationService.findById(id);
+  @ApiOperation({ summary: 'Get organization by ID (tenant-isolated)' })
+  async getById(@Param('id') id: string, @Req() req: any) {
+    return this.organizationService.findById(id, req.user.organizationId);
   }
 
   @Post()
@@ -54,8 +55,13 @@ export class OrganizationController {
 
   @Get(':id/members')
   @RequireAction('manage_users')
-  @ApiOperation({ summary: 'Get all members of organization' })
-  async getMembers(@Param('id') id: string) {
+  @ApiOperation({ summary: 'Get all members of organization (tenant-isolated)' })
+  async getMembers(@Param('id') id: string, @Req() req: any) {
+    // Tenant isolation: verify organisation belongs to caller's tenant
+    // SUPERUSER (null) can view members of any organization
+    if (req.user.organizationId !== null) {
+      OkrTenantGuard.assertSameTenant(id, req.user.organizationId);
+    }
     return this.organizationService.getMembers(id);
   }
 

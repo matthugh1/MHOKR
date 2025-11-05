@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Req,
   BadRequestException,
@@ -44,9 +45,17 @@ export class OkrCycleController {
     return this.cycleService.findAll(organizationId);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get cycle by ID' })
-  async getById(@Param('id') id: string, @Req() req: any) {
+  // IMPORTANT: Specific routes must come before parameterized routes in NestJS
+  // This route must come before @Get(':id') to avoid route matching conflicts
+  @Get('get-or-create-standard')
+  @ApiOperation({ summary: 'Get or create a standard cycle (month/quarter/year) for a specific date' })
+  async getOrCreateStandard(
+    @Query('type') type: 'MONTH' | 'QUARTER' | 'YEAR',
+    @Query('date') date: string,
+    @Req() req: any,
+  ) {
+    console.log('[CYCLE CONTROLLER] get-or-create-standard endpoint hit', { type, date });
+    
     await this.checkCycleManagementPermission(req);
     
     const organizationId = req.user.organizationId;
@@ -55,12 +64,34 @@ export class OkrCycleController {
       throw new BadRequestException('User must belong to an organization');
     }
 
-    return this.cycleService.findById(id, organizationId);
+    if (!type || !date) {
+      throw new BadRequestException('type and date query parameters are required');
+    }
+
+    if (!['MONTH', 'QUARTER', 'YEAR'].includes(type)) {
+      throw new BadRequestException('type must be MONTH, QUARTER, or YEAR');
+    }
+
+    const dateObj = new Date(date);
+    if (isNaN(dateObj.getTime())) {
+      throw new BadRequestException('Invalid date format');
+    }
+
+    // Access cycleGenerator through the service
+    const result = await this.cycleService.cycleGenerator.getOrCreateStandardCycle(organizationId, type, dateObj);
+    console.log('[CYCLE CONTROLLER] get-or-create-standard result', { cycleId: result?.id, cycleName: result?.name });
+    return result;
   }
 
+  // This route must come after get-or-create-standard to avoid matching conflicts
   @Get(':id/summary')
   @ApiOperation({ summary: 'Get cycle summary (objectives count, published count, etc.)' })
   async getSummary(@Param('id') id: string, @Req() req: any) {
+    // Guard: Don't allow 'get-or-create-standard' as an ID
+    if (id === 'get-or-create-standard') {
+      throw new BadRequestException('Invalid cycle ID');
+    }
+    
     await this.checkCycleManagementPermission(req);
     
     const organizationId = req.user.organizationId;
@@ -70,6 +101,29 @@ export class OkrCycleController {
     }
 
     return this.cycleService.getSummary(id, organizationId);
+  }
+
+  // This route must come last to avoid matching conflicts with specific routes
+  @Get(':id')
+  @ApiOperation({ summary: 'Get cycle by ID' })
+  async getById(@Param('id') id: string, @Req() req: any) {
+    console.log('[CYCLE CONTROLLER] getById endpoint hit', { id });
+    
+    // Guard: Don't allow 'get-or-create-standard' as an ID
+    if (id === 'get-or-create-standard') {
+      console.error('[CYCLE CONTROLLER] Route matching error: get-or-create-standard matched :id route instead of specific route');
+      throw new BadRequestException('Invalid cycle ID. Use the get-or-create-standard endpoint instead.');
+    }
+    
+    await this.checkCycleManagementPermission(req);
+    
+    const organizationId = req.user.organizationId;
+    
+    if (organizationId === undefined) {
+      throw new BadRequestException('User must belong to an organization');
+    }
+
+    return this.cycleService.findById(id, organizationId);
   }
 
   @Post()

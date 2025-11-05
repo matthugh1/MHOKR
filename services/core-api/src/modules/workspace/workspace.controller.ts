@@ -13,10 +13,10 @@ export class WorkspaceController {
 
   @Get()
   @RequireAction('manage_workspaces')
-  @ApiOperation({ summary: 'Get all workspaces for user or organization' })
+  @ApiOperation({ summary: 'Get all workspaces for user or organization (tenant-isolated)' })
   async getAll(@Query('organizationId') organizationId?: string, @Req() req?: any) {
     if (organizationId) {
-      return this.workspaceService.findAll(organizationId);
+      return this.workspaceService.findAll(req.user.organizationId, organizationId);
     }
     // Return workspaces the user has access to
     return this.workspaceService.findByUserId(req.user.id);
@@ -30,9 +30,9 @@ export class WorkspaceController {
 
   @Get(':id')
   @RequireAction('manage_workspaces')
-  @ApiOperation({ summary: 'Get workspace by ID' })
-  async getById(@Param('id') id: string) {
-    return this.workspaceService.findById(id);
+  @ApiOperation({ summary: 'Get workspace by ID (tenant-isolated)' })
+  async getById(@Param('id') id: string, @Req() req: any) {
+    return this.workspaceService.findById(id, req.user.organizationId);
   }
 
   @Post()
@@ -58,8 +58,10 @@ export class WorkspaceController {
 
   @Get(':id/members')
   @RequireAction('manage_users')
-  @ApiOperation({ summary: 'Get all members of workspace' })
-  async getMembers(@Param('id') id: string) {
+  @ApiOperation({ summary: 'Get all members of workspace (tenant-isolated)' })
+  async getMembers(@Param('id') id: string, @Req() req: any) {
+    // Tenant isolation: verify workspace belongs to caller's tenant
+    await this.workspaceService.findById(id, req.user.organizationId);
     return this.workspaceService.getMembers(id);
   }
 

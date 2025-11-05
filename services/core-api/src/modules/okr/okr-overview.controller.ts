@@ -55,7 +55,6 @@ export class OkrOverviewController {
     @Query('pageSize') pageSize: string | undefined,
     @Req() req: any,
   ) {
-    console.log('[OKR OVERVIEW] Request received:', { organizationId, cycleId, status, page, pageSize });
     try {
       // Require organizationId query parameter
       if (!organizationId) {
@@ -109,8 +108,6 @@ export class OkrOverviewController {
       }
 
       // Fetch ALL objectives matching filters (before visibility filtering)
-      console.log('[OKR OVERVIEW] Fetching objectives with where clause:', JSON.stringify(where, null, 2));
-      console.log('[OKR OVERVIEW] userOrganizationId:', userOrganizationId, 'type:', typeof userOrganizationId);
       let allObjectives;
       try {
         allObjectives = await this.prisma.objective.findMany({
@@ -130,6 +127,7 @@ export class OkrOverviewController {
                   unit: true,
                   ownerId: true,
                   cycleId: true, // Include cycleId scalar field (but not the cycle relation)
+                  checkInCadence: true,
                 },
               },
             },
@@ -389,7 +387,7 @@ export class OkrOverviewController {
         // - isPublished: governance state (true = Published, false = Draft)
         // - visibilityLevel: canonical enum (PUBLIC_TENANT, PRIVATE)
         // - pillarId: deprecated (not used in UI, kept for backward compatibility)
-        return {
+        const result = {
           objectiveId: o.id,
           title: o.title,
           status: o.status, // Progress state: ON_TRACK | AT_RISK | OFF_TRACK | COMPLETED | CANCELLED
@@ -399,6 +397,7 @@ export class OkrOverviewController {
           isPublished: o.isPublished, // Boolean kept for backward compatibility
           progress: o.progress,
           ownerId: o.ownerId,
+          parentId: o.parentId || null, // Include parentId for hierarchical tree view
           owner: o.owner
             ? {
                 id: o.owner.id,
@@ -416,14 +415,33 @@ export class OkrOverviewController {
           canEdit,
           canDelete,
           keyResults: visibleKeyResults,
-          initiatives: o.initiatives.map((i) => ({
-            id: i.id,
-            title: i.title,
-            status: i.status,
-            dueDate: i.dueDate,
-            keyResultId: i.keyResultId,
-          })),
+          // Merge initiatives: both direct objective initiatives AND initiatives from Key Results
+          // Initiatives linked to KRs don't have objectiveId, so we need to include them here
+          initiatives: [
+            // Direct objective initiatives (have objectiveId)
+            ...o.initiatives.map((i) => ({
+              id: i.id,
+              title: i.title,
+              status: i.status,
+              dueDate: i.dueDate,
+              keyResultId: i.keyResultId,
+            })),
+            // Initiatives from Key Results (may not have objectiveId, but belong to this objective via KR)
+            ...visibleKeyResults.flatMap((kr) =>
+              (kr.initiatives || []).map((i) => ({
+                id: i.id,
+                title: i.title,
+                status: i.status,
+                dueDate: i.dueDate,
+                keyResultId: i.keyResultId,
+              }))
+            ),
+          ].filter((init, index, self) =>
+            // Deduplicate by ID (in case an initiative has both objectiveId and keyResultId)
+            index === self.findIndex((i) => i.id === init.id)
+          ),
         };
+        return result;
       })
     );
 
@@ -735,6 +753,7 @@ export class OkrOverviewController {
         cycleId: string;
         visibilityLevel: 'PUBLIC_TENANT' | 'PRIVATE';
         whitelistUserIds?: string[];
+        parentId?: string;
       };
       keyResults: Array<{
         title: string;

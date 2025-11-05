@@ -18,6 +18,7 @@ import { OkrVisibilityService } from './okr-visibility.service';
 import { OkrInsightsService } from './okr-insights.service';
 import { CheckInRequestService } from './checkin-request.service';
 import { OkrCycleService } from './okr-cycle.service';
+import { CycleGeneratorService } from './cycle-generator.service';
 import { RBACModule } from '../rbac/rbac.module';
 import { ActivityModule } from '../activity/activity.module';
 import { AuditModule } from '../audit/audit.module';
@@ -25,8 +26,8 @@ import { AuditModule } from '../audit/audit.module';
 @Module({
   imports: [RBACModule, forwardRef(() => ActivityModule), AuditModule],
   controllers: [ObjectiveController, KeyResultController, InitiativeController, MeController, OkrReportingController, OkrOverviewController, CheckInRequestController, OkrInsightsController, OkrCycleController],
-  providers: [ObjectiveService, KeyResultService, InitiativeService, OkrProgressService, OkrGovernanceService, OkrReportingService, OkrVisibilityService, OkrInsightsService, CheckInRequestService, OkrCycleService],
-  exports: [ObjectiveService, KeyResultService, InitiativeService, OkrProgressService, OkrGovernanceService, OkrReportingService, OkrVisibilityService, OkrInsightsService, CheckInRequestService, OkrCycleService],
+  providers: [ObjectiveService, KeyResultService, InitiativeService, OkrProgressService, OkrGovernanceService, OkrReportingService, OkrVisibilityService, OkrInsightsService, CheckInRequestService, OkrCycleService, CycleGeneratorService],
+  exports: [ObjectiveService, KeyResultService, InitiativeService, OkrProgressService, OkrGovernanceService, OkrReportingService, OkrVisibilityService, OkrInsightsService, CheckInRequestService, OkrCycleService, CycleGeneratorService],
 })
 export class OkrModule {}
 

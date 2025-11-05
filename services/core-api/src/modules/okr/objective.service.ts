@@ -86,7 +86,7 @@ export class ObjectiveService {
     });
   }
 
-  async findById(id: string) {
+  async findById(id: string, userOrganizationId?: string | null | undefined) {
     const objective = await this.prisma.objective.findUnique({
       where: { id },
       include: {
@@ -133,6 +133,21 @@ export class ObjectiveService {
 
     if (!objective) {
       throw new NotFoundException(`Objective with ID ${id} not found`);
+    }
+
+    // Tenant isolation: verify objective belongs to caller's tenant (defense-in-depth)
+    // Note: This is in addition to RBAC permission checks (canView) in the controller
+    if (userOrganizationId !== undefined) {
+      if (userOrganizationId === null) {
+        // SUPERUSER: can see any objective (read-only)
+        return objective;
+      }
+
+      if (userOrganizationId === '' || objective.organizationId !== userOrganizationId) {
+        // Normal user: verify objective belongs to caller's tenant
+        // Don't leak existence - return not found
+        throw new NotFoundException(`Objective with ID ${id} not found`);
+      }
     }
 
     return objective;
@@ -448,6 +463,7 @@ export class ObjectiveService {
       cycleId: string;
       visibilityLevel: 'PUBLIC_TENANT' | 'PRIVATE';
       whitelistUserIds?: string[];
+      parentId?: string;
     },
     keyResultsData: Array<{
       title: string;
@@ -570,6 +586,21 @@ export class ObjectiveService {
       }
     }
 
+    // Validate parent objective if provided
+    if (objectiveData.parentId) {
+      const parentObjective = await this.prisma.objective.findUnique({
+        where: { id: objectiveData.parentId },
+        select: { id: true, organizationId: true },
+      });
+
+      if (!parentObjective) {
+        throw new NotFoundException(`Parent objective with ID ${objectiveData.parentId} not found`);
+      }
+
+      // Enforce tenant isolation for parent
+      OkrTenantGuard.assertSameTenant(parentObjective.organizationId, userOrganizationId);
+    }
+
     // Validate Key Results
     // Minimum: at least one KR required for publish (allow draft with zero KRs)
     // For now, we'll require at least one KR (draft mode can be added later)
@@ -617,6 +648,7 @@ export class ObjectiveService {
       cycleId: objectiveData.cycleId,
       organizationId: userOrganizationId,
       visibilityLevel: objectiveData.visibilityLevel,
+      parentId: objectiveData.parentId || null,
       status: 'ON_TRACK',
       isPublished: true, // For now, always publish (draft mode can be added later)
       startDate: cycle.startDate || new Date(),

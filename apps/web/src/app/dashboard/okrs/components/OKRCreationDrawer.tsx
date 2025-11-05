@@ -25,6 +25,7 @@ import { usePermissions } from '@/hooks/usePermissions'
 import api from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 import { AlertCircle, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { StandardCycleSelector } from '@/components/okr/StandardCycleSelector'
 import { Badge } from '@/components/ui/badge'
 import { trapFocus, returnFocus, getActiveElement } from '@/lib/focus-trap'
 import { mapErrorToMessage } from '@/lib/error-mapping'
@@ -261,10 +262,8 @@ export function OKRCreationDrawer({
             setDraftObjective((prev) => ({ ...prev, ownerId: user.id }))
           }
           
-          // Pre-fill cycle if available
-          if (res.data.availableCycles && res.data.availableCycles.length > 0) {
-            setDraftObjective((prev) => ({ ...prev, cycleId: res.data.availableCycles[0].id }))
-          }
+          // Note: Cycle selection is now handled by StandardCycleSelector component
+          // No need to pre-fill cycle here
         })
         .catch((err) => {
           console.error('Failed to fetch creation context', err)
@@ -273,9 +272,9 @@ export function OKRCreationDrawer({
           setAvailableCyclesForCreation(activeCycles)
         })
 
-      // Load objectives for KR/Initiative parent selection
-      if (mode === 'kr' || mode === 'initiative') {
-        api.get(`/okr/overview?organizationId=${currentOrganization.id}&pageSize=100`)
+      // Load objectives for parent selection (objective mode) or KR/Initiative parent selection
+      if (mode === 'objective' || mode === 'kr' || mode === 'initiative') {
+        api.get(`/okr/overview?organizationId=${currentOrganization.id}&pageSize=50`)
           .then((res) => {
             const objectives = res.data?.objectives || []
             setAvailableObjectives(objectives.map((obj: any) => ({
@@ -289,6 +288,7 @@ export function OKRCreationDrawer({
       }
     }
   }, [isOpen, currentOrganization?.id, user?.id, availableUsers, activeCycles, mode])
+
 
   // Story 5: Sync KR data when parentContext changes
   useEffect(() => {
@@ -351,14 +351,9 @@ export function OKRCreationDrawer({
     if (!draftObjective.ownerId) return false
     if (!draftObjective.cycleId) return false
 
-    // Check cycle lock
-    const selectedCycle = availableCyclesForCreation.find(c => c.id === draftObjective.cycleId)
-    if (selectedCycle && (selectedCycle.status === 'LOCKED' || selectedCycle.status === 'ARCHIVED')) {
-      // Only allow if user is admin
-      if (!permissions.isTenantAdminOrOwner(currentOrganization?.id)) {
-        return false
-      }
-    }
+    // Cycle validation - cycle lock check will be handled when cycle is selected
+    // Standard cycles are created on-demand, so we can't check status here
+    // This validation passes as long as a cycleId is set
 
     return true
   }
@@ -380,13 +375,9 @@ export function OKRCreationDrawer({
   }
 
   // Get cycle lock warning
+  // Note: With StandardCycleSelector creating cycles on-demand, we can't check lock status here
+  // Lock checks should be handled server-side when creating OKRs
   const getCycleLockWarning = () => {
-    const selectedCycle = availableCyclesForCreation.find(c => c.id === draftObjective.cycleId)
-    if (selectedCycle && (selectedCycle.status === 'LOCKED' || selectedCycle.status === 'ARCHIVED')) {
-      if (!permissions.isTenantAdminOrOwner(currentOrganization?.id)) {
-        return 'This cycle is locked or archived. Only tenant administrators can create OKRs in locked cycles.'
-      }
-    }
     return null
   }
 
@@ -429,9 +420,31 @@ export function OKRCreationDrawer({
 
     setIsSubmitting(true)
     try {
-      // Get cycle dates
-      const selectedCycle = availableCyclesForCreation.find(c => c.id === draftObjective.cycleId) ||
+      // Validate cycleId is set and is a valid format (not a route path)
+      if (!draftObjective.cycleId || draftObjective.cycleId.includes('/') || draftObjective.cycleId.includes('get-or-create')) {
+        toast({
+          title: 'Validation Error',
+          description: 'Please select a valid cycle (month, quarter, or year)',
+          variant: 'destructive',
+        })
+        setIsSubmitting(false)
+        return
+      }
+
+      // Get cycle dates - try to fetch cycle details if not in local lists
+      let selectedCycle = availableCyclesForCreation.find(c => c.id === draftObjective.cycleId) ||
         activeCycles.find(c => c.id === draftObjective.cycleId)
+      
+      // If cycle not found locally, fetch it (cycle was created on-demand)
+      if (!selectedCycle && draftObjective.cycleId) {
+        try {
+          const cycleRes = await api.get(`/okr/cycles/${draftObjective.cycleId}`)
+          selectedCycle = cycleRes.data
+        } catch (error: any) {
+          console.error('Failed to fetch cycle details:', error)
+          // Continue with default dates if cycle fetch fails
+        }
+      }
       
       const startDate = selectedCycle && 'startDate' in selectedCycle && selectedCycle.startDate && typeof selectedCycle.startDate === 'string'
         ? new Date(selectedCycle.startDate).toISOString()
@@ -535,6 +548,7 @@ export function OKRCreationDrawer({
           whitelistUserIds: draftObjective.visibilityLevel === 'PRIVATE' 
             ? (draftObjective.whitelist || [])
             : undefined,
+          parentId: draftObjective.parentId || undefined,
         },
         keyResults: draftKRs.map(kr => ({
           title: kr.title,
@@ -673,21 +687,12 @@ export function OKRCreationDrawer({
           <Label htmlFor="cycle">
             Cycle <span className="text-red-500">*</span>
           </Label>
-          <Select
+          <StandardCycleSelector
             value={draftObjective.cycleId}
-            onValueChange={(value) => setDraftObjective((prev) => ({ ...prev, cycleId: value }))}
-          >
-            <SelectTrigger id="cycle">
-              <SelectValue placeholder="Select cycle" />
-            </SelectTrigger>
-            <SelectContent>
-              {cyclesForSelection.map((cycle) => (
-                <SelectItem key={cycle.id} value={cycle.id}>
-                  {cycle.name} {cycle.status !== 'ACTIVE' && cycle.status !== 'DRAFT' ? `(${cycle.status})` : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onValueChange={(cycleId) => setDraftObjective((prev) => ({ ...prev, cycleId }))}
+            currentOrganizationId={currentOrganization?.id}
+            disabled={isSubmitting}
+          />
           {cycleWarning && (
             <div className="mt-2 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
               <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
@@ -700,13 +705,23 @@ export function OKRCreationDrawer({
           <Label htmlFor="parent">
             Alignment / Parent (Optional)
           </Label>
-          <Input
-            id="parent"
-            disabled
-            placeholder="None (top-level objective) - Coming soon"
-            className="cursor-not-allowed"
-          />
-          <p className="text-xs text-muted-foreground">Link this objective to a strategic pillar or parent objective. (Feature coming soon)</p>
+          <Select
+            value={draftObjective.parentId || '__none__'}
+            onValueChange={(value) => setDraftObjective((prev) => ({ ...prev, parentId: value === '__none__' ? undefined : value }))}
+          >
+            <SelectTrigger id="parent">
+              <SelectValue placeholder="None (top-level objective)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">None (top-level objective)</SelectItem>
+              {availableObjectives.map((obj) => (
+                <SelectItem key={obj.id} value={obj.id}>
+                  {obj.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">Link this objective to a parent objective to create a hierarchy.</p>
         </div>
       </div>
     )
@@ -950,6 +965,11 @@ export function OKRCreationDrawer({
                   <Badge variant="secondary" className="ml-2">{selectedCycle.status}</Badge>
                 )}
               </div>
+              {draftObjective.parentId && (
+                <div>
+                  <strong>Parent Objective:</strong> {availableObjectives.find(obj => obj.id === draftObjective.parentId)?.title || 'Unknown'}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1267,7 +1287,16 @@ export function OKRCreationDrawer({
         }
         if (objectiveIdToUse) payload.objectiveId = objectiveIdToUse
         if (keyResultIdToUse) payload.keyResultId = keyResultIdToUse
-        if (initiativeData.dueDate) payload.dueDate = new Date(initiativeData.dueDate).toISOString()
+        if (initiativeData.dueDate) {
+          // Convert date string to ISO-8601 DateTime format
+          // If it's already a full ISO string, use it; otherwise convert date-only to ISO DateTime
+          if (typeof initiativeData.dueDate === 'string' && initiativeData.dueDate.includes('T')) {
+            payload.dueDate = initiativeData.dueDate
+          } else {
+            // Convert YYYY-MM-DD to ISO-8601 DateTime (start of day in UTC)
+            payload.dueDate = new Date(initiativeData.dueDate + 'T00:00:00.000Z').toISOString()
+          }
+        }
 
         const response = await api.post('/initiatives', payload)
 
@@ -1351,14 +1380,14 @@ export function OKRCreationDrawer({
             <>
               <div className="space-y-3">
                 <Select
-                  value={initiativeData.objectiveId || ''}
-                  onValueChange={(value) => setInitiativeData(prev => ({ ...prev, objectiveId: value || null, keyResultId: null }))}
+                  value={initiativeData.objectiveId || '__none__'}
+                  onValueChange={(value) => setInitiativeData(prev => ({ ...prev, objectiveId: value === '__none__' ? null : value, keyResultId: null }))}
                 >
                   <SelectTrigger id="init-parent">
                     <SelectValue placeholder="Select objective (or key result below)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None (select key result below)</SelectItem>
+                    <SelectItem value="__none__">None (select key result below)</SelectItem>
                     {availableObjectives.map((obj) => (
                       <SelectItem key={obj.id} value={obj.id}>
                         Objective: {obj.title}
@@ -1367,14 +1396,14 @@ export function OKRCreationDrawer({
                   </SelectContent>
                 </Select>
                 <Select
-                  value={initiativeData.keyResultId || ''}
-                  onValueChange={(value) => setInitiativeData(prev => ({ ...prev, keyResultId: value || null, objectiveId: null }))}
+                  value={initiativeData.keyResultId || '__none__'}
+                  onValueChange={(value) => setInitiativeData(prev => ({ ...prev, keyResultId: value === '__none__' ? null : value, objectiveId: null }))}
                 >
                   <SelectTrigger id="init-kr">
                     <SelectValue placeholder="Or select key result" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None (select objective above)</SelectItem>
+                    <SelectItem value="__none__">None (select objective above)</SelectItem>
                     {availableKeyResults.map((kr) => (
                       <SelectItem key={kr.id} value={kr.id}>
                         Key Result: {kr.title}
@@ -1441,26 +1470,43 @@ export function OKRCreationDrawer({
     )
   }
 
+  // Get title text - memoized to ensure stable reference
+  const titleText = useMemo(() => {
+    if (mode === 'objective') return 'New Objective'
+    if (mode === 'kr') return parentContext ? `New Key Result for '${parentContext.title}'` : 'New Key Result'
+    if (mode === 'initiative') return parentContext ? `New Initiative for '${parentContext.title}'` : 'New Initiative'
+    return 'Create'
+  }, [mode, parentContext])
+
+  // Get description text - memoized to ensure stable reference
+  const descriptionText = useMemo(() => {
+    if (mode === 'objective') {
+      if (currentStep === 'basics') return 'Define the basic details of your objective.'
+      if (currentStep === 'visibility') return 'Set who can see this objective.'
+      if (currentStep === 'key-results') return 'Add key results to measure progress.'
+      if (currentStep === 'review') return 'Review and publish your objective.'
+      return 'Create a new objective.'
+    }
+    if (mode === 'kr') return 'Create a measurable key result for tracking progress.'
+    if (mode === 'initiative') return 'Create an initiative to support your objectives and key results.'
+    return 'Create a new item.'
+  }, [mode, currentStep])
+
   return (
     <Sheet open={isOpen} onOpenChange={handleCancel}>
-      <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col" ref={sheetContentRef} aria-labelledby="creation-drawer-title" aria-describedby="creation-drawer-description">
+      <SheetContent 
+        side="right" 
+        className="w-full sm:max-w-lg flex flex-col" 
+        ref={sheetContentRef}
+        aria-labelledby="creation-drawer-title"
+        aria-describedby="creation-drawer-description"
+      >
         <SheetHeader>
           <SheetTitle id="creation-drawer-title">
-            {mode === 'objective' && 'New Objective'}
-            {mode === 'kr' && (parentContext ? `New Key Result for '${parentContext.title}'` : 'New Key Result')}
-            {mode === 'initiative' && (parentContext ? `New Initiative for '${parentContext.title}'` : 'New Initiative')}
+            {titleText}
           </SheetTitle>
           <SheetDescription id="creation-drawer-description">
-            {mode === 'objective' && (
-              <>
-                {currentStep === 'basics' && 'Define the basic details of your objective.'}
-                {currentStep === 'visibility' && 'Set who can see this objective.'}
-                {currentStep === 'key-results' && 'Add key results to measure progress.'}
-                {currentStep === 'review' && 'Review and publish your objective.'}
-              </>
-            )}
-            {mode === 'kr' && 'Create a measurable key result for tracking progress.'}
-            {mode === 'initiative' && 'Create an initiative to support your objectives and key results.'}
+            {descriptionText}
           </SheetDescription>
         </SheetHeader>
 

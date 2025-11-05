@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
-import { Building2, Users, Briefcase, Edit2, Shield, Plus } from 'lucide-react'
+import { Building2, Users, Briefcase, Edit2, Shield, Plus, Trash2 } from 'lucide-react'
 import api from '@/lib/api'
 
 export default function OrganizationSettingsPage() {
@@ -41,12 +41,15 @@ function OrganizationSettings() {
   const [loading, setLoading] = useState(true)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [organizationToDelete, setOrganizationToDelete] = useState<any>(null)
   const [editName, setEditName] = useState('')
   const [editSlug, setEditSlug] = useState('')
   const [createName, setCreateName] = useState('')
   const [createSlug, setCreateSlug] = useState('')
   const [saving, setSaving] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   
   // Private whitelist settings
   const [privateWhitelist, setPrivateWhitelist] = useState<string[]>([])
@@ -267,7 +270,7 @@ function OrganizationSettings() {
 
     setCreating(true)
     try {
-      await api.post('/superuser/organizations', {
+      await api.post('/organizations', {
         name: createName.trim(),
         slug: createSlug.trim().toLowerCase(),
       })
@@ -282,6 +285,31 @@ function OrganizationSettings() {
       alert(errorMessage)
     } finally {
       setCreating(false)
+    }
+  }
+
+  const handleDeleteOrganization = (org: any) => {
+    setOrganizationToDelete(org)
+    setShowDeleteDialog(true)
+  }
+
+  const confirmDeleteOrganization = async () => {
+    if (!organizationToDelete) return
+
+    setDeleting(true)
+    try {
+      await api.delete(`/organizations/${organizationToDelete.id}`)
+      setShowDeleteDialog(false)
+      setOrganizationToDelete(null)
+      await refreshContext()
+      await loadOrganizationData()
+      alert('Organization deleted successfully')
+    } catch (error: any) {
+      console.error('Failed to delete organization:', error)
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to delete organization'
+      alert(errorMessage)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -343,6 +371,15 @@ function OrganizationSettings() {
                           {org.slug}
                         </Badge>
                       </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteOrganization(org)}
+                        className="text-red-600 border-red-300 hover:text-red-700 hover:bg-red-50 hover:border-red-400"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Delete
+                      </Button>
                     </div>
                     <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
                       <div>
@@ -410,6 +447,41 @@ function OrganizationSettings() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Delete Organization Confirmation Dialog */}
+          <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete Organization</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete <strong>{organizationToDelete?.name}</strong>? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
+                <p className="text-sm text-red-900 font-semibold mb-2">Warning: This will permanently delete:</p>
+                <ul className="text-sm text-red-800 list-disc list-inside space-y-1">
+                  <li>The organization and all its data</li>
+                  <li>All workspaces within this organization</li>
+                  <li>All teams within those workspaces</li>
+                  <li>All OKRs, objectives, and key results</li>
+                  <li>All role assignments and permissions</li>
+                  <li>All cycles, strategic pillars, and check-ins</li>
+                </ul>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => {
+                  setShowDeleteDialog(false)
+                  setOrganizationToDelete(null)
+                }} disabled={deleting}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={confirmDeleteOrganization} disabled={deleting}>
+                  {deleting ? 'Deleting...' : 'Delete Organization'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
         </div>
       </div>
     )
@@ -554,10 +626,21 @@ function OrganizationSettings() {
                 <Building2 className="h-5 w-5" />
                 {organization.name}
               </CardTitle>
-              <Button variant="outline" size="sm" onClick={handleEditOrganization}>
-                <Edit2 className="h-4 w-4 mr-2" />
-                Edit
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={handleEditOrganization}>
+                  <Edit2 className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDeleteOrganization(organization)}
+                  className="text-red-600 border-red-300 hover:text-red-700 hover:bg-red-50 hover:border-red-400"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -614,6 +697,40 @@ function OrganizationSettings() {
               </Button>
               <Button onClick={handleSaveOrganization} disabled={saving}>
                 {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Organization Confirmation Dialog */}
+        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Organization</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete <strong>{organizationToDelete?.name}</strong>? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
+              <p className="text-sm text-red-900 font-semibold mb-2">Warning: This will permanently delete:</p>
+              <ul className="text-sm text-red-800 list-disc list-inside space-y-1">
+                <li>The organization and all its data</li>
+                <li>All workspaces within this organization</li>
+                <li>All teams within those workspaces</li>
+                <li>All OKRs, objectives, and key results</li>
+                <li>All role assignments and permissions</li>
+                <li>All cycles, strategic pillars, and check-ins</li>
+              </ul>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setShowDeleteDialog(false)
+                setOrganizationToDelete(null)
+              }} disabled={deleting}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDeleteOrganization} disabled={deleting}>
+                {deleting ? 'Deleting...' : 'Delete Organization'}
               </Button>
             </DialogFooter>
           </DialogContent>

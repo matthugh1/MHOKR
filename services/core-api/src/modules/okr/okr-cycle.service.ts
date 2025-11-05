@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OkrTenantGuard } from './tenant-guard';
+import { CycleGeneratorService } from './cycle-generator.service';
 
 export interface CreateCycleDto {
   name: string;
@@ -27,10 +28,12 @@ export interface CycleSummaryDto {
 export class OkrCycleService {
   constructor(
     private prisma: PrismaService,
+    public cycleGenerator: CycleGeneratorService, // Made public for controller access
   ) {}
 
   /**
    * Get all cycles for a tenant, ordered by startDate DESC
+   * Returns both standard and custom cycles
    */
   async findAll(organizationId: string): Promise<any[]> {
     OkrTenantGuard.assertCanMutateTenant(organizationId);
@@ -101,7 +104,7 @@ export class OkrCycleService {
     // Check for overlapping cycles
     await this.validateNoOverlap(organizationId, startDate, endDate, null);
 
-    // Create cycle
+    // Create cycle (mark as custom since it's manually created)
     return this.prisma.cycle.create({
       data: {
         organizationId,
@@ -109,7 +112,8 @@ export class OkrCycleService {
         startDate,
         endDate,
         status: data.status || 'DRAFT',
-      },
+        isStandard: false, // Manually created cycles are custom
+      } as any, // Type assertion needed until Prisma client is regenerated
     });
   }
 

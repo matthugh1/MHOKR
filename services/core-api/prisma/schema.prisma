@@ -157,10 +157,11 @@ model Cycle {
   id             String      @id @default(cuid())
   organizationId String      // Tenant scoping: cycle belongs to one organization
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name           String      // e.g. "Q1 2025"
+  name           String      // e.g. "Q1 2025" or "January 2026" or "2026"
   status         CycleStatus @default(DRAFT)
   startDate      DateTime
   endDate        DateTime
+  isStandard     Boolean     @default(false) // true for auto-generated standard cycles (months/quarters/years), false for custom
   objectives     Objective[]
   keyResults     KeyResult[]
   initiatives    Initiative[]
@@ -169,6 +170,7 @@ model Cycle {
 
   @@index([organizationId])
   @@index([status])
+  @@index([isStandard])
   @@map("cycles")
 }
 

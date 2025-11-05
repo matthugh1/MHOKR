@@ -62,3 +62,4 @@ See `SCREENSHOTS.md` for instructions on capturing and adding screenshots to the
 - [ ] Add keyboard shortcuts reference
 - [ ] Add API documentation (if applicable)
 
+

@@ -15,23 +15,93 @@ export class TeamService {
     private rbacService: RBACService,
   ) {}
 
-  async findAll(workspaceId?: string) {
+  async findAll(userOrganizationId: string | null | undefined, filterWorkspaceId?: string) {
+    // Tenant isolation: enforce tenant filtering
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      // User has no organisation - return empty array
+      return [];
+    }
+
+    // If filterWorkspaceId provided, validate workspace belongs to caller's tenant
+    if (filterWorkspaceId) {
+      const workspace = await this.prisma.workspace.findUnique({
+        where: { id: filterWorkspaceId },
+        select: { organizationId: true },
+      });
+
+      if (!workspace) {
+        // Workspace doesn't exist - return empty (don't leak existence)
+        return [];
+      }
+
+      if (userOrganizationId !== null) {
+        // Normal user: verify workspace belongs to their tenant
+        OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
+      }
+      // SUPERUSER: can filter by any workspace
+
+      return this.prisma.team.findMany({
+        where: { workspaceId: filterWorkspaceId },
+        include: {
+          workspace: true,
+        },
+      });
+    }
+
+    // No filter provided: return teams for caller's tenant
+    if (userOrganizationId === null) {
+      // SUPERUSER: return all teams (but this is unusual - usually they'd provide workspaceId)
+      return this.prisma.team.findMany({
+        include: {
+          workspace: true,
+        },
+      });
+    }
+
+    // Normal user: return teams in workspaces belonging to their tenant
     return this.prisma.team.findMany({
-      where: workspaceId ? { workspaceId } : undefined,
+      where: {
+        workspace: {
+          organizationId: userOrganizationId,
+        },
+      },
       include: {
         workspace: true,
       },
     });
   }
 
-  async findById(id: string) {
-    return this.prisma.team.findUnique({
+  async findById(id: string, userOrganizationId: string | null | undefined) {
+    const team = await this.prisma.team.findUnique({
       where: { id },
       include: {
         workspace: true,
         objectives: true,
       },
     });
+
+    if (!team) {
+      throw new NotFoundException(`Team with ID ${id} not found`);
+    }
+
+    // Tenant isolation: verify team's workspace belongs to caller's tenant
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      // Caller has no organisation - cannot access any team
+      throw new NotFoundException(`Team with ID ${id} not found`);
+    }
+
+    if (userOrganizationId === null) {
+      // SUPERUSER: can see any team (read-only)
+      return team;
+    }
+
+    // Normal user: verify team's workspace belongs to caller's tenant
+    if (team.workspace.organizationId !== userOrganizationId) {
+      // Don't leak existence - return not found
+      throw new NotFoundException(`Team with ID ${id} not found`);
+    }
+
+    return team;
   }
 
   async create(data: { name: string; workspaceId: string }, userOrganizationId: string | null | undefined, actorUserId: string) {

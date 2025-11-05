@@ -267,6 +267,7 @@ export function ObjectiveRow({
 }: ObjectiveRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
+  const [expandedKeyResults, setExpandedKeyResults] = useState<Set<string>>(new Set())
   const menuRef = useRef<HTMLDivElement>(null)
   const addMenuRef = useRef<HTMLDivElement>(null)
   
@@ -287,8 +288,85 @@ export function ObjectiveRow({
   
   const statusBadge = getStatusBadge(optimisticObjective.status)
   const publishStateBadge = getPublishStateBadge(optimisticObjective.publishState, optimisticObjective.isPublished)
-  const keyResults = optimisticObjective.keyResults || []
-  const initiatives = optimisticObjective.initiatives || []
+  
+  // Deduplicate arrays by ID to prevent duplicate key warnings
+  // Directly use array references - React will handle memoization
+  const keyResults = React.useMemo(() => {
+    const keyResultsArray = optimisticObjective.keyResults || []
+    const seen = new Set<string>()
+    return keyResultsArray.filter(kr => {
+      if (seen.has(kr.id)) {
+        console.warn(`Duplicate Key Result ID detected: ${kr.id}`)
+        return false
+      }
+      seen.add(kr.id)
+      return true
+    })
+  }, [optimisticObjective.keyResults])
+  
+  // Deduplicate and organize initiatives
+  const initiatives = React.useMemo(() => {
+    const initiativesArray = Array.isArray(optimisticObjective.initiatives) 
+      ? optimisticObjective.initiatives 
+      : []
+    const seen = new Set<string>()
+    // Prioritize KR-linked initiatives (they have more context)
+    
+    const krInitiatives: Array<{
+      id: string
+      title: string
+      status?: string
+      dueDate?: string
+      keyResultId?: string
+      keyResultTitle?: string
+    }> = []
+    const objectiveInitiatives: Array<{
+      id: string
+      title: string
+      status?: string
+      dueDate?: string
+      keyResultId?: string
+      keyResultTitle?: string
+    }> = []
+    
+    // Separate initiatives by source
+    initiativesArray.forEach(init => {
+      if (init.keyResultId) {
+        krInitiatives.push(init)
+      } else {
+        objectiveInitiatives.push(init)
+      }
+    })
+    
+    // Add KR initiatives first (with context), then objective-only initiatives
+    const deduplicated: Array<{
+      id: string
+      title: string
+      status?: string
+      dueDate?: string
+      keyResultId?: string
+      keyResultTitle?: string
+    }> = []
+    
+    // Add KR-linked initiatives first
+    krInitiatives.forEach(init => {
+      if (!seen.has(init.id)) {
+        seen.add(init.id)
+        deduplicated.push(init)
+      }
+    })
+    
+    // Add objective-only initiatives (skip if already seen from KR)
+    objectiveInitiatives.forEach(init => {
+      if (!seen.has(init.id)) {
+        seen.add(init.id)
+        deduplicated.push(init)
+      }
+    })
+    
+    return deduplicated
+  }, [optimisticObjective.initiatives])
+  
   const overdueCount = optimisticObjective.overdueCountForObjective ?? 0
   
   // Build objective context for permission checks
@@ -620,6 +698,25 @@ export function ObjectiveRow({
     }
   }
 
+  const handleToggleKeyResult = (krId: string) => {
+    setExpandedKeyResults(prev => {
+      const next = new Set(prev)
+      if (next.has(krId)) {
+        next.delete(krId)
+      } else {
+        next.add(krId)
+      }
+      return next
+    })
+  }
+
+  const handleKeyResultKeyDown = (e: React.KeyboardEvent, krId: string) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      handleToggleKeyResult(krId)
+    }
+  }
+
   const progressBarColor = getProgressBarColor(objective.status)
   const cyclePill = getCyclePill(
     objective.cycleLabel || objective.cycleName || 'Unassigned',
@@ -630,6 +727,7 @@ export function ObjectiveRow({
     <section 
       className="border border-neutral-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-all duration-200"
       aria-expanded={isExpanded}
+      style={{ overflow: 'visible' }}
     >
       {/* Collapsed header (always visible) */}
       <div
@@ -642,37 +740,39 @@ export function ObjectiveRow({
       >
         <div className="flex items-center justify-between gap-4">
           {/* Left block: Title, status, publication, cycle, owner */}
-          <div className="flex flex-col md:flex-row md:items-center gap-2 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+          <div className="flex flex-col md:flex-row md:items-center gap-2 flex-1 min-w-0">
             {/* Title - Inline Editor */}
-            <div className="flex-1 min-w-0">
-              <InlineTitleEditor
-                value={optimisticObjective.title}
-                onSave={handleUpdateObjectiveTitle}
-                canEdit={canEditInline}
-                lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                ariaLabel="Edit objective title"
-                resource={objectiveForHook}
-                disabled={isSuperuserReadOnly}
-              />
-            </div>
-            
-            {/* Badges row - W4.M1: Separate Status and Publish State chips */}
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+                <InlineTitleEditor
+                  value={optimisticObjective.title}
+                  onSave={handleUpdateObjectiveTitle}
+                  canEdit={canEditInline}
+                  lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                  ariaLabel="Edit objective title"
+                  resource={objectiveForHook}
+                  disabled={isSuperuserReadOnly}
+                />
+              </div>
+              
+              {/* Badges row - W4.M1: Separate Status and Publish State chips */}
+              <div className="flex items-center gap-2 flex-wrap">
               {/* Status chip - Progress state - Inline Editor */}
-              <InlineStatusEditor
-                currentStatus={optimisticObjective.status}
-                onSave={handleUpdateObjectiveStatus}
-                canEdit={canEditInline}
-                lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                ariaLabel="Edit objective status"
-                resource={objectiveForHook}
-                disabled={isSuperuserReadOnly}
-                renderBadge={(status, label, tone) => (
-                  <OkrBadge tone={tone === 'success' ? 'good' : tone === 'warning' ? 'warn' : 'bad'}>
-                    {label}
-                  </OkrBadge>
-                )}
-              />
+              <div onClick={(e) => e.stopPropagation()}>
+                <InlineStatusEditor
+                  currentStatus={optimisticObjective.status}
+                  onSave={handleUpdateObjectiveStatus}
+                  canEdit={canEditInline}
+                  lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                  ariaLabel="Edit objective status"
+                  resource={objectiveForHook}
+                  disabled={isSuperuserReadOnly}
+                  renderBadge={(status, label, tone) => (
+                    <OkrBadge tone={tone === 'success' ? 'good' : tone === 'warning' ? 'warn' : 'bad'}>
+                      {label}
+                    </OkrBadge>
+                  )}
+                />
+              </div>
               
               {/* Publish State chip - Governance state */}
               <OkrBadge tone={publishStateBadge.tone}>
@@ -694,22 +794,24 @@ export function ObjectiveRow({
               )}
               
               {/* Owner chip - Inline Editor */}
-              <InlineOwnerEditor
-                currentOwner={optimisticObjective.owner}
-                availableUsers={availableUsers}
-                onSave={handleUpdateObjectiveOwner}
-                canEdit={canEditInline}
-                lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                ariaLabel="Edit objective owner"
-                resource={objectiveForHook}
-                disabled={isSuperuserReadOnly}
-                size="sm"
-              />
+              <div onClick={(e) => e.stopPropagation()}>
+                <InlineOwnerEditor
+                  currentOwner={optimisticObjective.owner}
+                  availableUsers={availableUsers}
+                  onSave={handleUpdateObjectiveOwner}
+                  canEdit={canEditInline}
+                  lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                  ariaLabel="Edit objective owner"
+                  resource={objectiveForHook}
+                  disabled={isSuperuserReadOnly}
+                  size="sm"
+                />
+              </div>
             </div>
           </div>
 
           {/* Middle block: Progress bar and micro-metrics (hidden on mobile) */}
-          <div className="hidden md:flex items-center gap-3 flex-1 max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="hidden md:flex items-center gap-3 flex-1 max-w-md">
             {/* Progress bar */}
             <div className="flex-1 h-1 rounded-full bg-neutral-200 overflow-hidden" style={{ height: '4px' }}>
               <motion.div
@@ -762,10 +864,10 @@ export function ObjectiveRow({
           </div>
 
           {/* Right block: Action buttons */}
-          <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-1 flex-shrink-0">
             {/* Story 5: Contextual Add menu (replaces individual + KR and + Initiative buttons) */}
             {(canCreateKeyResult || canCreateInitiative) && (
-              <div className="relative" ref={addMenuRef}>
+              <div className="relative" ref={addMenuRef} onClick={(e) => e.stopPropagation()}>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -821,46 +923,52 @@ export function ObjectiveRow({
             
             {/* Fallback: Legacy + KR button (if contextual menu not available but onAddKeyResult provided) */}
             {canCreateKeyResult === false && canCreateInitiative === false && onAddKeyResult && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2 text-[12px] font-medium"
-                onClick={() => onAddKeyResult(objective.id, objective.title)}
-                aria-label="Add Key Result"
-              >
-                + KR
-              </Button>
+              <div onClick={(e) => e.stopPropagation()}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-[12px] font-medium"
+                  onClick={() => onAddKeyResult(objective.id, objective.title)}
+                  aria-label="Add Key Result"
+                >
+                  + KR
+                </Button>
+              </div>
             )}
             
             {/* Fallback: Legacy + Initiative button (if contextual menu not available but onAddInitiative provided) */}
             {canCreateKeyResult === false && canCreateInitiative === false && onAddInitiative && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2 text-[12px] font-medium"
-                onClick={() => onAddInitiative(objective.id, objective.title)}
-                aria-label="Add Initiative"
-              >
-                + Initiative
-              </Button>
+              <div onClick={(e) => e.stopPropagation()}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-[12px] font-medium"
+                  onClick={() => onAddInitiative(objective.id, objective.title)}
+                  aria-label="Add Initiative"
+                >
+                  + Initiative
+                </Button>
+              </div>
             )}
             
             {/* Edit button - hidden if not permitted */}
             {onEdit && canEdit && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2 text-[12px] font-medium"
-                onClick={() => onEdit(objective.id)}
-                aria-label="Edit objective"
-              >
-                Edit
-              </Button>
+              <div onClick={(e) => e.stopPropagation()}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-[12px] font-medium"
+                  onClick={() => onEdit(objective.id)}
+                  aria-label="Edit objective"
+                >
+                  Edit
+                </Button>
+              </div>
             )}
             
             {/* Menu button - only show if at least one action is available */}
             {((onDelete && canDelete) || (typeof onOpenHistory === 'function')) ? (
-              <div className="relative" ref={menuRef}>
+              <div className="relative" ref={menuRef} onClick={(e) => e.stopPropagation()}>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -917,157 +1025,247 @@ export function ObjectiveRow({
       <AnimatePresence>
         {isExpanded && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
+            layout // Use layout animation for better height calculation
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="overflow-hidden"
+            style={{ overflow: 'visible' }} // Ensure content is not clipped during animation
+            className="bg-neutral-50/80 border-t border-neutral-200 px-4 py-4 rounded-b-xl"
           >
-            <div className="bg-neutral-50/80 border-t border-neutral-200 px-4 py-4 rounded-b-xl">
-              {/* Key Results block */}
-              <div className="mb-4">
-                <h4 className="text-[13px] font-medium text-neutral-700 mb-2">
-                  Key Results
-                </h4>
-                {keyResults.length > 0 ? (
-                  <div className="space-y-3">
-                    {keyResults.map((kr) => {
-                      const krStatusBadge = getStatusBadge(kr.status || 'ON_TRACK')
-                      const cadenceLabel = getCadenceLabel(kr.checkInCadence)
-                      const progressLabel = formatProgressLabel(kr)
-                      const krProgressBarColor = getProgressBarColor(kr.status || 'ON_TRACK')
-                      
-                      return (
+            {/* Key Results block */}
+            <div className="mb-4">
+              <h4 className="text-[13px] font-medium text-neutral-700 mb-2">
+                Key Results
+              </h4>
+              {keyResults.length > 0 ? (
+                <div className="space-y-3">
+                  {keyResults.map((kr) => {
+                    const krStatusBadge = getStatusBadge(kr.status || 'ON_TRACK')
+                    const cadenceLabel = getCadenceLabel(kr.checkInCadence)
+                    const progressLabel = formatProgressLabel(kr)
+                    const krProgressBarColor = getProgressBarColor(kr.status || 'ON_TRACK')
+                    const isKrExpanded = expandedKeyResults.has(kr.id)
+                    
+                    return (
                         <div
-                          key={kr.id}
-                          className="rounded-lg border border-neutral-200 bg-white p-3 hover:bg-neutral-50 transition-colors"
+                          key={`kr-${kr.id}`}
+                          className="rounded-lg border border-neutral-200 bg-white overflow-hidden"
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex flex-col gap-2 flex-1 min-w-0">
-                              {/* Title - Inline Editor */}
-                              <InlineTitleEditor
-                                value={kr.title}
-                                onSave={(newTitle) => handleUpdateKeyResultTitle(kr.id, newTitle)}
-                                canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
-                                lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                                ariaLabel="Edit key result title"
-                                resource={objectiveForHook}
-                                disabled={isSuperuserReadOnly}
-                                className="text-[13px] font-medium text-neutral-900"
-                              />
-                              
-                              {/* Badges row */}
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <OkrBadge tone={krStatusBadge.tone}>
-                                  {krStatusBadge.label}
-                                </OkrBadge>
-                                {kr.checkInCadence && kr.checkInCadence !== 'NONE' && (
-                                  <OkrBadge tone="neutral">
-                                    {cadenceLabel}
-                                  </OkrBadge>
-                                )}
-                                {kr.isOverdue && (
-                                  <OkrBadge tone="bad">
-                                    Overdue
-                                  </OkrBadge>
-                                )}
-                              </div>
-                              
-                              {/* Progress bar */}
-                              {kr.progress !== undefined && (
-                                <div className="w-full h-1 rounded-full bg-neutral-200 overflow-hidden">
-                                  <motion.div
-                                    className={cn("h-full rounded-full", krProgressBarColor)}
-                                    initial={false}
-                                    animate={{ width: `${Math.min(100, Math.max(0, kr.progress))}%` }}
-                                    transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                          {/* Key Result collapsed header (always visible) */}
+                          <div
+                            className="p-3 cursor-pointer hover:bg-neutral-50 transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2"
+                            onClick={() => handleToggleKeyResult(kr.id)}
+                            onKeyDown={(e) => handleKeyResultKeyDown(e, kr.id)}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`${isKrExpanded ? 'Collapse' : 'Expand'} key result: ${kr.title}`}
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex flex-col gap-2 flex-1 min-w-0">
+                                {/* Title - Inline Editor */}
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <InlineTitleEditor
+                                    value={kr.title}
+                                    onSave={(newTitle) => handleUpdateKeyResultTitle(kr.id, newTitle)}
+                                    canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                    lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                    ariaLabel="Edit key result title"
+                                    resource={objectiveForHook}
+                                    disabled={isSuperuserReadOnly}
+                                    className="text-[13px] font-medium text-neutral-900"
                                   />
                                 </div>
-                              )}
-                              
-                              {/* Progress label with inline editors for current/target */}
-                              <div className="flex items-center gap-3 flex-wrap">
+                                
+                                {/* Badges row */}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <OkrBadge tone={krStatusBadge.tone}>
+                                    {krStatusBadge.label}
+                                  </OkrBadge>
+                                  {kr.checkInCadence && kr.checkInCadence !== 'NONE' && (
+                                    <OkrBadge tone="neutral">
+                                      {cadenceLabel}
+                                    </OkrBadge>
+                                  )}
+                                  {kr.isOverdue && (
+                                    <OkrBadge tone="bad">
+                                      Overdue
+                                    </OkrBadge>
+                                  )}
+                                </div>
+                                
+                                {/* Progress bar */}
+                                {kr.progress !== undefined && (
+                                  <div className="w-full h-1 rounded-full bg-neutral-200 overflow-hidden">
+                                    <motion.div
+                                      className={cn("h-full rounded-full", krProgressBarColor)}
+                                      initial={false}
+                                      animate={{ width: `${Math.min(100, Math.max(0, kr.progress))}%` }}
+                                      transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                                    />
+                                  </div>
+                                )}
+                                
+                                {/* Progress label */}
                                 <div className="text-[12px] text-neutral-600">
                                   {progressLabel}
                                 </div>
-                                {/* Inline editors for numeric values (only show if KR has numeric values) */}
-                                {kr.currentValue !== undefined || kr.targetValue !== undefined ? (
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    {kr.currentValue !== undefined || kr.targetValue !== undefined ? (
-                                      <>
-                                        <InlineNumericEditor
-                                          label="Current"
-                                          value={kr.currentValue}
-                                          onSave={(value) => handleUpdateKeyResultCurrent(kr.id, value)}
-                                          canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
-                                          lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                                          ariaLabel="Edit key result current value"
-                                          resource={objectiveForHook}
-                                          disabled={isSuperuserReadOnly}
-                                          unit={kr.unit || ''}
-                                          allowEmpty={false}
-                                        />
-                                        <span className="text-[12px] text-neutral-400">/</span>
-                                        <InlineNumericEditor
-                                          label="Target"
-                                          value={kr.targetValue}
-                                          onSave={(value) => handleUpdateKeyResultTarget(kr.id, value)}
-                                          canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
-                                          lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                                          ariaLabel="Edit key result target value"
-                                          resource={objectiveForHook}
-                                          disabled={isSuperuserReadOnly}
-                                          unit={kr.unit || ''}
-                                          allowEmpty={false}
-                                        />
-                                      </>
-                                    ) : null}
-                                  </div>
-                                ) : null}
                               </div>
                               
-                              {/* Owner - Inline Editor (if available) */}
-                              {kr.ownerId && availableUsers.length > 0 && (
-                                <div className="flex items-center gap-1.5">
-                                  <InlineOwnerEditor
-                                    currentOwner={availableUsers.find(u => u.id === kr.ownerId) || { id: kr.ownerId, name: 'Unknown' }}
-                                    availableUsers={availableUsers}
-                                    onSave={(userId) => handleUpdateKeyResultOwner(kr.id, userId)}
-                                    canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
-                                    lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                                    ariaLabel="Edit key result owner"
-                                    resource={objectiveForHook}
-                                    disabled={isSuperuserReadOnly}
-                                    size="sm"
-                                  />
-                                </div>
-                              )}
-                            </div>
-                            
-                            {/* Action buttons */}
-                            <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                              {onAddCheckIn && canCheckInOnKeyResult && canCheckInOnKeyResult(kr.id) && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 px-2 text-[11px] font-medium"
-                                  onClick={() => onAddCheckIn(kr.id)}
-                                >
-                                  Check in
-                                </Button>
-                              )}
-                              {onAddInitiativeToKr && canEditKeyResult && canEditKeyResult(kr.id) && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 px-2 text-[11px] font-medium"
-                                  onClick={() => onAddInitiativeToKr(kr.id)}
-                                >
-                                  + Initiative
-                                </Button>
-                              )}
+                              {/* Chevron */}
+                              <motion.div
+                                animate={{ rotate: isKrExpanded ? 180 : 0 }}
+                                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                                className="ml-1 flex-shrink-0"
+                              >
+                                <ChevronDown className="h-4 w-4 text-neutral-400" />
+                              </motion.div>
                             </div>
                           </div>
+
+                          {/* Key Result expanded body */}
+                          <AnimatePresence>
+                            {isKrExpanded && (
+                              <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                                className="border-t border-neutral-200 bg-neutral-50/50"
+                              >
+                                <div className="p-3 pt-3">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex flex-col gap-2 flex-1 min-w-0">
+                                      {/* Progress label with inline editors for current/target */}
+                                      <div className="flex items-center gap-3 flex-wrap">
+                                        {/* Inline editors for numeric values (only show if KR has numeric values) */}
+                                        {kr.currentValue !== undefined || kr.targetValue !== undefined ? (
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            {kr.currentValue !== undefined || kr.targetValue !== undefined ? (
+                                              <>
+                                                <InlineNumericEditor
+                                                  label="Current"
+                                                  value={kr.currentValue}
+                                                  onSave={(value) => handleUpdateKeyResultCurrent(kr.id, value)}
+                                                  canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                                  lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                                  ariaLabel="Edit key result current value"
+                                                  resource={objectiveForHook}
+                                                  disabled={isSuperuserReadOnly}
+                                                  unit={kr.unit || ''}
+                                                  allowEmpty={false}
+                                                />
+                                                <span className="text-[12px] text-neutral-400">/</span>
+                                                <InlineNumericEditor
+                                                  label="Target"
+                                                  value={kr.targetValue}
+                                                  onSave={(value) => handleUpdateKeyResultTarget(kr.id, value)}
+                                                  canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                                  lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                                  ariaLabel="Edit key result target value"
+                                                  resource={objectiveForHook}
+                                                  disabled={isSuperuserReadOnly}
+                                                  unit={kr.unit || ''}
+                                                  allowEmpty={false}
+                                                />
+                                              </>
+                                            ) : null}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                      
+                                      {/* Owner - Inline Editor (if available) */}
+                                      {kr.ownerId && availableUsers.length > 0 && (
+                                        <div className="flex items-center gap-1.5">
+                                          <InlineOwnerEditor
+                                            currentOwner={availableUsers.find(u => u.id === kr.ownerId) || { id: kr.ownerId, name: 'Unknown' }}
+                                            availableUsers={availableUsers}
+                                            onSave={(userId) => handleUpdateKeyResultOwner(kr.id, userId)}
+                                            canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                            lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                            ariaLabel="Edit key result owner"
+                                            resource={objectiveForHook}
+                                            disabled={isSuperuserReadOnly}
+                                            size="sm"
+                                          />
+                                        </div>
+                                      )}
+                                      
+                                      {/* Initiatives linked to this KR */}
+                                      {(() => {
+                                        const krInitiatives = initiatives.filter(init => init.keyResultId === kr.id)
+                                        return krInitiatives.length > 0 ? (
+                                          <div className="mt-3 pt-3 border-t border-neutral-200">
+                                            <h5 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 mb-2">
+                                              Initiatives ({krInitiatives.length})
+                                            </h5>
+                                            <div className="space-y-2">
+                                              {krInitiatives.map((init) => {
+                                                const initStatusBadge = getInitiativeStatusBadge(init.status)
+                                                const dueDateInfo = formatDueDate(init.dueDate)
+                                                
+                                                return (
+                                                  <div
+                                                    key={`init-${init.id}`}
+                                                    className="rounded-md border border-neutral-200 bg-neutral-50/50 p-2.5 hover:bg-neutral-100 transition-colors"
+                                                  >
+                                                    <div className="flex items-start justify-between gap-2">
+                                                      <div className="flex flex-col gap-1 flex-1 min-w-0">
+                                                        <div className="text-[12px] text-neutral-900 font-medium">
+                                                          {init.title}
+                                                        </div>
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                          <OkrBadge tone={initStatusBadge.tone}>
+                                                            {initStatusBadge.label}
+                                                          </OkrBadge>
+                                                          {dueDateInfo && (
+                                                            <span className={cn(
+                                                              "text-[11px]",
+                                                              dueDateInfo.isOverdue ? "text-rose-600" : "text-neutral-600"
+                                                            )}>
+                                                              {dueDateInfo.text}
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                )
+                                              })}
+                                            </div>
+                                          </div>
+                                        ) : null
+                                      })()}
+                                    </div>
+                                    
+                                    {/* Action buttons */}
+                                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                                      {onAddCheckIn && canCheckInOnKeyResult && canCheckInOnKeyResult(kr.id) && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-7 px-2 text-[11px] font-medium"
+                                          onClick={() => onAddCheckIn(kr.id)}
+                                        >
+                                          Check in
+                                        </Button>
+                                      )}
+                                      {onAddInitiativeToKr && canEditKeyResult && canEditKeyResult(kr.id) && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-7 px-2 text-[11px] font-medium"
+                                          onClick={() => onAddInitiativeToKr(kr.id)}
+                                        >
+                                          + Initiative
+                                        </Button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
                       )
                     })}
@@ -1085,26 +1283,28 @@ export function ObjectiveRow({
                     </Button>
                   </div>
                 )}
-              </div>
+            </div>
 
-              {/* Initiatives block */}
-              <div className="mt-4">
-                <h4 className="text-[13px] font-medium text-neutral-700 mb-2">
-                  Initiatives
-                </h4>
-                {initiatives.length > 0 ? (
+            {/* Initiatives block - only show initiatives NOT linked to any KR (directly linked to Objective) */}
+            {(() => {
+              const objectiveLevelInitiatives = initiatives.filter(init => !init.keyResultId)
+              return objectiveLevelInitiatives.length > 0 ? (
+                <div className="mt-4">
+                  <h4 className="text-[13px] font-medium text-neutral-700 mb-2">
+                    Initiatives {objectiveLevelInitiatives.length > 0 && `(${objectiveLevelInitiatives.length})`}
+                  </h4>
                   <div className="space-y-3">
-                    {initiatives.map((init) => {
+                    {objectiveLevelInitiatives.map((init) => {
                       const initStatusBadge = getInitiativeStatusBadge(init.status)
                       const dueDateInfo = formatDueDate(init.dueDate)
                       
                       return (
                         <div
-                          key={init.id}
+                          key={`init-${init.id}`}
                           className="rounded-lg border border-neutral-200 bg-white p-3 hover:bg-neutral-50 transition-colors"
                         >
                           <div className="flex items-start justify-between gap-3">
-                            <div className="flex flex-col gap-1 flex-1 min-w-0">
+                            <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                               {/* Title */}
                               <div className="text-[13px] text-neutral-900 font-medium">
                                 {init.title}
@@ -1124,50 +1324,54 @@ export function ObjectiveRow({
                                   </span>
                                 )}
                               </div>
-                              
-                              {/* Linked KR indicator */}
-                              {init.keyResultId && init.keyResultTitle && (
-                                <div className="text-[12px] text-neutral-500">
-                                  supports: {init.keyResultTitle}
-                                </div>
-                              )}
                             </div>
                           </div>
                         </div>
                       )
                     })}
                   </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed border-neutral-300 bg-white/60 p-4 text-center">
-                    <p className="text-[13px] text-neutral-600 mb-2">No initiatives yet</p>
-                    {canCreateInitiative && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-[11px] font-medium"
-                        onClick={() => onAddInitiative(objective.id, objective.title)}
-                      >
-                        + New Initiative
-                      </Button>
-                    )}
-                  </div>
-                )}
-                
-                {/* Always show + New Initiative button at the end if permitted */}
-                {initiatives.length > 0 && canCreateInitiative && (
-                  <div className="mt-3">
+                </div>
+              ) : null
+            })()}
+            
+            {/* Show "No initiatives" message only if there are no initiatives at all */}
+            {initiatives.length === 0 && (
+              <div className="mt-4">
+                <h4 className="text-[13px] font-medium text-neutral-700 mb-2">
+                  Initiatives
+                </h4>
+                <div className="rounded-lg border border-dashed border-neutral-300 bg-white/60 p-4 text-center">
+                  <p className="text-[13px] text-neutral-600 mb-2">No initiatives yet</p>
+                  {canCreateInitiative && (
                     <Button
                       variant="outline"
                       size="sm"
                       className="h-7 px-2 text-[11px] font-medium"
                       onClick={() => onAddInitiative(objective.id, objective.title)}
                     >
-                      + New Initiative
+                      + Initiative
                     </Button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
+            )}
+            
+            {/* Show "Add Initiative" button if there are objective-level initiatives but user can create more */}
+            {(() => {
+              const objectiveLevelInitiatives = initiatives.filter(init => !init.keyResultId)
+              return objectiveLevelInitiatives.length > 0 && canCreateInitiative ? (
+                <div className="mt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px] font-medium"
+                    onClick={() => onAddInitiative(objective.id, objective.title)}
+                  >
+                    + Initiative
+                  </Button>
+                </div>
+              ) : null
+            })()}
           </motion.div>
         )}
       </AnimatePresence>

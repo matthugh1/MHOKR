@@ -14,8 +14,34 @@ export class OrganizationService {
     private rbacService: RBACService,
   ) {}
 
-  async findAll() {
+  async findAll(userOrganizationId: string | null | undefined) {
+    // Tenant isolation: enforce tenant filtering for all organisations
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      // User has no organisation - return empty array
+      return [];
+    }
+
+    if (userOrganizationId === null) {
+      // SUPERUSER: can see all organisations (read-only access)
+      return this.prisma.organization.findMany({
+        include: {
+          workspaces: {
+            include: {
+              teams: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+    }
+
+    // Normal user: only return their organisation(s)
+    // For now, userOrganizationId is the primary organisation ID
+    // TODO: Support multi-org users by fetching from role assignments
     return this.prisma.organization.findMany({
+      where: {
+        id: userOrganizationId,
+      },
       include: {
         workspaces: {
           include: {
@@ -47,7 +73,7 @@ export class OrganizationService {
     });
   }
 
-  async findById(id: string) {
+  async findById(id: string, userOrganizationId: string | null | undefined) {
     const organization = await this.prisma.organization.findUnique({
       where: { id },
       include: {
@@ -60,6 +86,23 @@ export class OrganizationService {
     });
 
     if (!organization) {
+      throw new NotFoundException(`Organization with ID ${id} not found`);
+    }
+
+    // Tenant isolation: verify organisation belongs to caller's tenant
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      // Caller has no organisation - cannot access any organisation
+      throw new NotFoundException(`Organization with ID ${id} not found`);
+    }
+
+    if (userOrganizationId === null) {
+      // SUPERUSER: can see any organisation (read-only)
+      return organization;
+    }
+
+    // Normal user: verify organisation matches caller's tenant
+    if (organization.id !== userOrganizationId) {
+      // Don't leak existence - return not found
       throw new NotFoundException(`Organization with ID ${id} not found`);
     }
 
@@ -130,7 +173,7 @@ export class OrganizationService {
     return organizations;
   }
 
-  async getCurrentOrganization(userId: string) {
+  async getCurrentOrganization(userId: string, userOrganizationId?: string | null | undefined) {
     const organizations = await this.findByUserId(userId);
     
     // For now, return the first organization (users belong to one org)
@@ -138,12 +181,28 @@ export class OrganizationService {
       throw new NotFoundException('User is not a member of any organization');
     }
 
-    return this.findById(organizations[0].id);
+    return this.findById(organizations[0].id, userOrganizationId);
   }
 
   async create(data: { name: string; slug: string }, userOrganizationId: string | null | undefined, actorUserId: string) {
-    // Tenant isolation: enforce mutation rules
-    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+    // Check if user is superuser from database (source of truth)
+    const user = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { isSuperuser: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${actorUserId} not found`);
+    }
+
+    // Explicitly check for true (handle null, undefined, false cases)
+    const isSuperuser = Boolean(user.isSuperuser === true);
+
+    // Tenant isolation: enforce mutation rules (unless superuser)
+    // Superusers can create any organization (they have manage_tenant_settings permission)
+    if (!isSuperuser) {
+      OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+    }
 
     const created = await this.prisma.organization.create({
       data,
@@ -164,12 +223,31 @@ export class OrganizationService {
   }
 
   async update(id: string, data: { name?: string; slug?: string }, userOrganizationId: string | null | undefined, actorUserId: string) {
-    // Tenant isolation: enforce mutation rules
-    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+    // Check if user is superuser from database (source of truth)
+    const user = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { isSuperuser: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${actorUserId} not found`);
+    }
+
+    const isSuperuser = user.isSuperuser || false;
+
+    // Tenant isolation: enforce mutation rules (unless superuser)
+    // Superusers can update any organization (they have manage_tenant_settings permission)
+    if (!isSuperuser) {
+      OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+    }
 
     // Get existing organization to check tenant isolation
-    const existing = await this.findById(id);
-    OkrTenantGuard.assertSameTenant(existing.id, userOrganizationId);
+    const existing = await this.findById(id, userOrganizationId);
+    
+    // Skip tenant match check for superusers
+    if (!isSuperuser) {
+      OkrTenantGuard.assertSameTenant(existing.id, userOrganizationId);
+    }
 
     const updated = await this.prisma.organization.update({
       where: { id },
@@ -191,12 +269,78 @@ export class OrganizationService {
   }
 
   async delete(id: string, userOrganizationId: string | null | undefined, actorUserId: string) {
-    // Tenant isolation: enforce mutation rules
-    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+    // Check if user is superuser from database (source of truth)
+    const user = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { isSuperuser: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${actorUserId} not found`);
+    }
+
+    // Explicitly check for true (handle null, undefined, false cases)
+    const isSuperuser = Boolean(user.isSuperuser === true);
+    
+    // Log for debugging
+    console.log(`[OrganizationService.delete] User ${actorUserId}: isSuperuser=${user.isSuperuser} (type: ${typeof user.isSuperuser}), userOrganizationId=${userOrganizationId}, isSuperuser flag=${isSuperuser}`);
+
+    // Tenant isolation: enforce mutation rules (unless superuser)
+    // Superusers can delete any organization (they have manage_tenant_settings permission)
+    // IMPORTANT: We skip the tenant guard check for superusers because they have manage_tenant_settings permission
+    if (isSuperuser) {
+      console.log(`[OrganizationService.delete] Superuser detected - bypassing all tenant guard checks`);
+      // Skip all tenant isolation checks for superusers
+    } else {
+      console.log(`[OrganizationService.delete] Non-superuser - enforcing tenant isolation`);
+      OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+    }
 
     // Get existing organization to check tenant isolation
-    const existing = await this.findById(id);
-    OkrTenantGuard.assertSameTenant(existing.id, userOrganizationId);
+    const existing = await this.findById(id, userOrganizationId);
+    
+    // Skip tenant match check for superusers
+    if (!isSuperuser) {
+      OkrTenantGuard.assertSameTenant(existing.id, userOrganizationId);
+    }
+
+    // Get all workspaces in this organization to find related RoleAssignments
+    const workspaces = await this.prisma.workspace.findMany({
+      where: { organizationId: id },
+      select: { id: true },
+    });
+    const workspaceIds = workspaces.map(w => w.id);
+
+    // Get all teams in workspaces of this organization
+    const teams = workspaceIds.length > 0
+      ? await this.prisma.team.findMany({
+          where: { workspaceId: { in: workspaceIds } },
+          select: { id: true },
+        })
+      : [];
+    const teamIds = teams.map(t => t.id);
+
+    // Delete all RoleAssignments related to this organization
+    // 1. TENANT scope assignments for this organization
+    // 2. WORKSPACE scope assignments for workspaces in this organization
+    // 3. TEAM scope assignments for teams in workspaces of this organization
+    const deleteConditions: any[] = [
+      { scopeType: 'TENANT' as const, scopeId: id },
+    ];
+    
+    if (workspaceIds.length > 0) {
+      deleteConditions.push({ scopeType: 'WORKSPACE' as const, scopeId: { in: workspaceIds } });
+    }
+    
+    if (teamIds.length > 0) {
+      deleteConditions.push({ scopeType: 'TEAM' as const, scopeId: { in: teamIds } });
+    }
+    
+    await this.prisma.roleAssignment.deleteMany({
+      where: {
+        OR: deleteConditions,
+      },
+    });
 
     await this.auditLogService.record({
       action: 'DELETE_ORG',
@@ -206,6 +350,7 @@ export class OrganizationService {
       organizationId: id,
     });
 
+    // Delete organization (cascades will handle workspaces, teams, objectives, cycles, etc.)
     return this.prisma.organization.delete({
       where: { id },
     });
@@ -359,7 +504,7 @@ export class OrganizationService {
     OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
 
     // Verify organization exists and tenant match
-    const org = await this.findById(organizationId);
+    const org = await this.findById(organizationId, userOrganizationId);
     OkrTenantGuard.assertSameTenant(org.id, userOrganizationId);
     
     // Verify user exists
@@ -449,7 +594,7 @@ export class OrganizationService {
     OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
 
     // Verify organization exists and tenant match
-    const org = await this.findById(organizationId);
+    const org = await this.findById(organizationId, userOrganizationId);
     OkrTenantGuard.assertSameTenant(org.id, userOrganizationId);
 
     // Check if user has role assignments (Phase 3: RBAC only)

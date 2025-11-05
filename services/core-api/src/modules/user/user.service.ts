@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { OkrTenantGuard } from '../okr/tenant-guard';
@@ -15,8 +15,50 @@ export class UserService {
     private rbacService: RBACService,
   ) {}
 
-  async findAll() {
+  async findAll(userOrganizationId: string | null | undefined) {
+    // Tenant isolation: enforce tenant filtering for all users
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      // User has no organisation - return empty array
+      return [];
+    }
+
+    if (userOrganizationId === null) {
+      // SUPERUSER: can see all users (read-only access)
+      return this.prisma.user.findMany({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          createdAt: true,
+        },
+        orderBy: {
+          name: 'asc',
+        },
+      });
+    }
+
+    // Normal user: only return users in their tenant
+    // Get all users who have a tenant role assignment for this organisation
+    const tenantAssignments = await this.prisma.roleAssignment.findMany({
+      where: {
+        scopeType: 'TENANT',
+        scopeId: userOrganizationId,
+      },
+      select: {
+        userId: true,
+      },
+    });
+
+    const userIds = tenantAssignments.map(ta => ta.userId);
+
+    if (userIds.length === 0) {
+      return [];
+    }
+
     return this.prisma.user.findMany({
+      where: {
+        id: { in: userIds },
+      },
       select: {
         id: true,
         name: true,
@@ -29,10 +71,41 @@ export class UserService {
     });
   }
 
-  async findById(id: string) {
-    return this.prisma.user.findUnique({
+  async findById(id: string, userOrganizationId: string | null | undefined) {
+    const user = await this.prisma.user.findUnique({
       where: { id },
     });
+
+    if (!user) {
+      return null;
+    }
+
+    // Tenant isolation: verify user belongs to caller's tenant
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      // Caller has no organisation - cannot access any user
+      return null;
+    }
+
+    if (userOrganizationId === null) {
+      // SUPERUSER: can see any user (read-only)
+      return user;
+    }
+
+    // Normal user: verify target user is in same tenant
+    const tenantAssignment = await this.prisma.roleAssignment.findFirst({
+      where: {
+        userId: id,
+        scopeType: 'TENANT',
+        scopeId: userOrganizationId,
+      },
+    });
+
+    if (!tenantAssignment) {
+      // User not in caller's tenant - return null (don't leak existence)
+      return null;
+    }
+
+    return user;
   }
 
   async findByEmail(email: string) {
@@ -297,19 +370,27 @@ export class UserService {
       email: string; 
       name: string; 
       password: string; 
-      organizationId: string; // REQUIRED - all users must belong to an organization
-      workspaceId: string; // REQUIRED - all users must belong to a workspace
+      organizationId: string; // Required - all users must belong to an organization (auto-injected if not provided)
+      workspaceId?: string; // Optional - only required if workspace role assignment needed
       role?: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER';
       workspaceRole?: 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER';
     },
     userOrganizationId: string | null | undefined,
     actorUserId: string,
   ) {
-    // Tenant isolation: enforce mutation rules
-    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+    const isSuperuser = userOrganizationId === null;
+    
+    // Tenant isolation: enforce mutation rules (skip for SUPERUSER who can create users)
+    if (!isSuperuser) {
+      OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+    }
 
     // Tenant isolation: verify caller's org matches the org being created in
-    OkrTenantGuard.assertSameTenant(data.organizationId, userOrganizationId);
+    // SUPERUSER can create in any tenant (controller handles dev inspector check for cross-tenant)
+    // Regular users must create within their own tenant
+    if (!isSuperuser) {
+      OkrTenantGuard.assertSameTenant(data.organizationId, userOrganizationId);
+    }
 
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
@@ -329,25 +410,34 @@ export class UserService {
       throw new NotFoundException(`Organization with ID ${data.organizationId} not found`);
     }
 
-    // Verify workspace exists and belongs to the organization
-    const workspace = await this.prisma.workspace.findUnique({
-      where: { id: data.workspaceId },
-    });
+    // Verify workspace exists and belongs to the organization (if provided)
+    let workspace = null;
+    if (data.workspaceId) {
+      workspace = await this.prisma.workspace.findUnique({
+        where: { id: data.workspaceId },
+      });
 
-    if (!workspace) {
-      throw new NotFoundException(`Workspace with ID ${data.workspaceId} not found`);
-    }
+      if (!workspace) {
+        throw new NotFoundException(`Workspace with ID ${data.workspaceId} not found`);
+      }
 
-    if (workspace.organizationId !== data.organizationId) {
-      throw new ConflictException(`Workspace ${data.workspaceId} does not belong to organization ${data.organizationId}`);
+      if (workspace.organizationId !== data.organizationId) {
+        throw new ConflictException(`Workspace ${data.workspaceId} does not belong to organization ${data.organizationId}`);
+      }
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    // Create user (Phase 3: RBAC only - no legacy membership writes)
+    // Map legacy roles to RBAC roles (do this before transaction)
+    const orgRBACRole = this.mapLegacyOrgRoleToRBAC(data.role || 'MEMBER');
+    const workspaceRBACRole = data.workspaceId && data.workspaceRole
+      ? this.mapLegacyWorkspaceRoleToRBAC(data.workspaceRole)
+      : null;
+
+    // Create user and role assignments atomically in a single transaction
     const user = await this.prisma.$transaction(async (tx) => {
-      // Create user only - no legacy membership writes
+      // Create user
       const newUser = await tx.user.create({
         data: {
           email: data.email,
@@ -363,41 +453,82 @@ export class UserService {
         },
       });
 
+      // Create tenant role assignment (always required)
+      // For SUPERUSER creating users, we skip tenant validation by passing null
+      // The assignRole method will handle SUPERUSER case appropriately
+      await tx.roleAssignment.create({
+        data: {
+          userId: newUser.id,
+          role: orgRBACRole,
+          scopeType: 'TENANT',
+          scopeId: data.organizationId,
+        },
+      });
+
+      // Create workspace role assignment (if provided)
+      if (data.workspaceId && workspaceRBACRole) {
+        // Verify workspace belongs to the organization
+        const workspace = await tx.workspace.findUnique({
+          where: { id: data.workspaceId },
+          select: { organizationId: true },
+        });
+
+        if (!workspace) {
+          throw new NotFoundException(`Workspace with ID ${data.workspaceId} not found`);
+        }
+
+        if (workspace.organizationId !== data.organizationId) {
+          throw new ForbiddenException('Workspace does not belong to the specified organization');
+        }
+
+        await tx.roleAssignment.create({
+          data: {
+            userId: newUser.id,
+            role: workspaceRBACRole,
+            scopeType: 'WORKSPACE',
+            scopeId: data.workspaceId,
+          },
+        });
+      }
+
       return newUser;
     });
 
-    // Create RBAC role assignments after transaction (Phase 3: RBAC only)
+    // Audit log for role assignments
+    // Note: We create role assignments directly in the transaction above to ensure atomicity
+    // The RBAC service's assignRole method does validation, but we need to bypass it for SUPERUSER
+    // and ensure atomicity. We'll record audit logs directly here.
     try {
-      // Map legacy roles to RBAC roles
-      const orgRBACRole = this.mapLegacyOrgRoleToRBAC(data.role || 'MEMBER');
-      const workspaceRBACRole = this.mapLegacyWorkspaceRoleToRBAC(data.workspaceRole || 'MEMBER');
-
-      // Assign organization role
-      await this.rbacService.assignRole(
-        user.id,
-        orgRBACRole,
-        'TENANT',
-        data.organizationId,
+      await this.auditLogService.record({
+        action: 'GRANT_ROLE',
         actorUserId,
-        userOrganizationId || undefined,
-      );
-
-      // Assign workspace role
-      await this.rbacService.assignRole(
-        user.id,
-        workspaceRBACRole,
-        'WORKSPACE',
-        data.workspaceId,
-        actorUserId,
-        userOrganizationId || undefined,
-      );
+        targetUserId: user.id,
+        targetId: user.id,
+        targetType: AuditTargetType.ROLE_ASSIGNMENT,
+        newRole: orgRBACRole as any,
+        organizationId: data.organizationId,
+        metadata: { scopeType: 'TENANT', scopeId: data.organizationId },
+      });
     } catch (error) {
-      // If RBAC assignment fails, log error but don't rollback user creation
-      // User exists but may not have proper role assignments
-      console.error(`Failed to assign RBAC roles for new user ${user.id}:`, error);
-      // Consider throwing error if you want to enforce RBAC assignment success
-      // For now, we'll allow user creation to succeed even if RBAC assignment fails
-      // This allows manual recovery if needed
+      // If audit logging fails, log but don't fail user creation
+      console.warn(`Failed to record audit log for tenant role assignment:`, error);
+    }
+
+    // Record workspace role assignment audit log if applicable
+    if (data.workspaceId && workspaceRBACRole) {
+      try {
+        await this.auditLogService.record({
+          action: 'GRANT_ROLE',
+          actorUserId,
+          targetUserId: user.id,
+          targetId: user.id,
+          targetType: AuditTargetType.ROLE_ASSIGNMENT,
+          newRole: workspaceRBACRole as any,
+          metadata: { scopeType: 'WORKSPACE', scopeId: data.workspaceId },
+        });
+      } catch (error) {
+        console.warn(`Failed to record audit log for workspace role assignment:`, error);
+      }
     }
 
     await this.auditLogService.record({
@@ -407,6 +538,11 @@ export class UserService {
       targetId: user.id,
       targetType: AuditTargetType.USER,
       organizationId: data.organizationId,
+      metadata: {
+        role: data.role || 'MEMBER',
+        workspaceId: data.workspaceId || null,
+        workspaceRole: data.workspaceRole || null,
+      },
     });
 
     return user;

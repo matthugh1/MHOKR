@@ -4,6 +4,7 @@ const nextConfig = {
   transpilePackages: ['@okr-nexus/types', '@okr-nexus/utils'],
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NEXT_PUBLIC_OKR_TREE_VIEW: process.env.NEXT_PUBLIC_OKR_TREE_VIEW,
   },
   eslint: {
     // Ignore ESLint warnings during build (console.log statements are intentional for debugging)

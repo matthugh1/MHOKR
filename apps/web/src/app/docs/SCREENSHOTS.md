@@ -120,3 +120,4 @@ Once screenshots are captured, add them to guide pages like this:
 
 Store screenshots in: `/apps/web/public/screenshots/`
 
+

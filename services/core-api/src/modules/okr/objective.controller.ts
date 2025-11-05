@@ -34,14 +34,15 @@ export class ObjectiveController {
 
   @Get(':id')
   @RequireAction('view_okr')
-  @ApiOperation({ summary: 'Get objective by ID' })
+  @ApiOperation({ summary: 'Get objective by ID (tenant-isolated)' })
   async getById(@Param('id') id: string, @Req() req: any) {
-    // Check if user can view this OKR
+    // Check if user can view this OKR (RBAC permission check)
     const canView = await this.objectiveService.canView(req.user.id, id);
     if (!canView) {
       throw new ForbiddenException('You do not have permission to view this OKR');
     }
-    return this.objectiveService.findById(id);
+    // Tenant isolation validation (defense-in-depth)
+    return this.objectiveService.findById(id, req.user.organizationId);
   }
 
   @Post()

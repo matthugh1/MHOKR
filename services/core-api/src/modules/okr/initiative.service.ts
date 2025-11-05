@@ -210,26 +210,58 @@ export class InitiativeService {
       parentCycleId = objective.cycleId;
     }
     
-    // If linked to KeyResult (but not Objective), get cycleId via KR's objective
-    if (!parentCycleId && data.keyResultId) {
+    // If linked to KeyResult, validate it exists and optionally belongs to the Objective
+    if (data.keyResultId) {
       const keyResult = await this.prisma.keyResult.findUnique({
         where: { id: data.keyResultId },
         select: {
+          id: true,
           objectives: {
             select: {
+              objectiveId: true,
               objective: {
                 select: {
+                  id: true,
+                  organizationId: true,
                   cycleId: true,
                 },
               },
             },
-            take: 1,
           },
         },
       });
-      
-      if (keyResult?.objectives[0]?.objective?.cycleId) {
-        parentCycleId = keyResult.objectives[0].objective.cycleId;
+
+      if (!keyResult) {
+        throw new NotFoundException(`Key Result with ID ${data.keyResultId} not found`);
+      }
+
+      // IMPORTANT: If keyResultId is provided, do NOT also set objectiveId
+      // The Objective relationship can be inferred from the KR's relationship
+      // This avoids data redundancy and prevents confusion in rollups
+      if (data.objectiveId) {
+        // Remove objectiveId to avoid redundancy
+        delete data.objectiveId;
+      }
+
+      // Tenant isolation: verify Key Result belongs to same tenant
+      if (keyResult.objectives.length > 0) {
+        const krObjective = keyResult.objectives[0].objective;
+        if (krObjective) {
+          OkrTenantGuard.assertSameTenant(krObjective.organizationId, userOrganizationId);
+          // Use cycleId from KR's objective if we don't have one yet
+          if (!parentCycleId && krObjective.cycleId) {
+            parentCycleId = krObjective.cycleId;
+          }
+          // If we don't have an objective yet, use the KR's objective for organizationId
+          if (!objective && krObjective.organizationId) {
+            objective = { organizationId: krObjective.organizationId, cycleId: krObjective.cycleId };
+          }
+        }
+      } else {
+        // KeyResult has no linked objectives - this shouldn't happen in normal flow
+        throw new BadRequestException(
+          `Key Result ${data.keyResultId} is not linked to any Objective`
+        );
       }
     }
     
@@ -238,8 +270,12 @@ export class InitiativeService {
       data.cycleId = parentCycleId;
     }
 
+    // Remove fields that don't exist on the Initiative model
+    // organizationId is inferred from the Objective relationship, not stored directly
+    const { organizationId, ...prismaData } = data;
+
     const created = await this.prisma.initiative.create({
-      data,
+      data: prismaData,
     });
 
     await this.auditLogService.record({
