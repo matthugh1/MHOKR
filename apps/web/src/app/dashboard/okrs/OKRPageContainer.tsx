@@ -48,6 +48,7 @@ interface OKRPageContainerProps {
   expandedObjectiveId: string | null
   onToggleObjective: (id: string) => void
   onCanCreateChange?: (canCreate: boolean) => void
+  onCreateObjective?: () => void
 }
 
 function mapObjectiveToViewModel(rawObjective: any): any {
@@ -217,9 +218,10 @@ export function OKRPageContainer({
   expandedObjectiveId,
   onToggleObjective,
   onCanCreateChange,
+  onCreateObjective,
 }: OKRPageContainerProps) {
   const { currentOrganization } = useWorkspace()
-  const { user } = useAuth()
+  const { user, isSuperuser } = useAuth()
   const tenantPermissions = useTenantPermissions()
   const { toast } = useToast()
   
@@ -228,6 +230,7 @@ export function OKRPageContainer({
   const [permissionError, setPermissionError] = useState<string | null>(null)
   const [totalCount, setTotalCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
+  const [canCreateObjective, setCanCreateObjective] = useState<boolean>(false)
   const pageSize = 20
   
   useEffect(() => {
@@ -256,17 +259,9 @@ export function OKRPageContainer({
         params.set('status', selectedStatus)
       }
       
-      // Apply scope-based filtering
-      if (selectedScope === 'my' && user?.id) {
-        // My scope: filter by ownerId
-        // Note: backend visibility filtering handles this, but we can add explicit filter if needed
-        // For now, rely on backend visibility
-      } else if (selectedScope === 'team-workspace') {
-        // Team/Workspace scope: use managed workspace/team IDs
-        // Backend visibility filtering will handle this
-      } else if (selectedScope === 'tenant') {
-        // Tenant scope: show all visible OKRs in tenant
-        // Backend visibility filtering handles this
+      // Pass scope to backend
+      if (selectedScope) {
+        params.set('scope', selectedScope)
       }
       
       const response = await api.get(`/okr/overview?${params.toString()}`)
@@ -280,12 +275,18 @@ export function OKRPageContainer({
       // Extract canCreateObjective flag and notify parent
       if (onCanCreateChange) {
         if (envelope.canCreateObjective !== undefined) {
-          onCanCreateChange(envelope.canCreateObjective)
+          const canCreate = envelope.canCreateObjective
+          setCanCreateObjective(canCreate)
+          onCanCreateChange(canCreate)
         } else {
           // Fallback: if backend doesn't return flag, default to false
           // This is conservative - button won't show until backend explicitly allows it
+          setCanCreateObjective(false)
           onCanCreateChange(false)
         }
+      } else {
+        // If no callback, still track locally
+        setCanCreateObjective(envelope.canCreateObjective || false)
       }
       
       const mapped = Array.isArray(objectives) ? objectives.map((obj: any) => 
@@ -469,15 +470,46 @@ export function OKRPageContainer({
   }
   
   if (totalCount === 0 || filteredOKRs.length === 0) {
+    // Determine empty state message and actions based on role
+    let emptyMessage = 'No OKRs found'
+    let showCreateButton = false
+    
+    if (isSuperuser) {
+      // SUPERUSER: read-only, no button
+      emptyMessage = 'No OKRs found'
+      showCreateButton = false
+    } else if (canCreateObjective) {
+      // TENANT_ADMIN / TENANT_OWNER: show create button
+      emptyMessage = 'No OKRs found. Create your first objective to get started.'
+      showCreateButton = true
+    } else {
+      // CONTRIBUTOR or other roles without create permission: no button
+      emptyMessage = 'No OKRs found'
+      showCreateButton = false
+    }
+    
+    // Override message for specific filter cases
+    if (selectedTimeframeKey === 'unassigned') {
+      emptyMessage = 'No objectives are currently unassigned to a planning cycle.'
+    } else if (selectedTimeframeKey && selectedTimeframeKey !== 'all') {
+      emptyMessage = 'No objectives found for the selected filters.'
+    }
+    
     return (
       <div className="text-center py-12">
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm text-neutral-600">
-          {selectedTimeframeKey === 'unassigned' ? (
-            <p>No objectives are currently unassigned to a planning cycle.</p>
-          ) : selectedTimeframeKey && selectedTimeframeKey !== 'all' ? (
-            <p>No objectives found for the selected filters.</p>
-          ) : (
-            <p>No OKRs found</p>
+        <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+          <p className="text-sm text-neutral-600 mb-4">{emptyMessage}</p>
+          {showCreateButton && (
+            <Button
+              onClick={() => {
+                if (onCreateObjective) {
+                  onCreateObjective()
+                }
+              }}
+              className="focus:ring-2 focus:ring-ring focus:outline-none"
+            >
+              New Objective
+            </Button>
           )}
         </div>
       </div>

@@ -69,8 +69,7 @@ import { NewInitiativeModal } from '@/components/okr/NewInitiativeModal'
 import { OKRCreationDrawer } from './components/OKRCreationDrawer'
 import { CycleHealthStrip } from '@/components/okr/CycleHealthStrip'
 import { AttentionDrawer } from '@/components/okr/AttentionDrawer'
-import api from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { track } from '@/lib/analytics'
 
 // NOTE: This screen is now the system of record for CRUD on Objectives, Key Results, and Initiatives.
 export default function OKRsPage() {
@@ -78,14 +77,6 @@ export default function OKRsPage() {
   const searchParams = useSearchParams()
   const { okrTreeView } = useFeatureFlags()
   
-  // Debug: Log feature flag status
-  useEffect(() => {
-    console.log('[OKR Page] Feature flag check:', {
-      okrTreeView,
-      envVar: process.env.NEXT_PUBLIC_OKR_TREE_VIEW,
-      urlView: searchParams.get('view'),
-    })
-  }, [okrTreeView, searchParams])
   
   // View mode: 'list' or 'tree' (only if feature flag enabled)
   const viewMode = okrTreeView && searchParams.get('view') === 'tree' ? 'tree' : 'list'
@@ -94,7 +85,7 @@ export default function OKRsPage() {
     const params = new URLSearchParams(searchParams.toString())
     if (mode === 'tree') {
       params.set('view', 'tree')
-      console.log('[Telemetry] okr.tree.toggle', {
+      track('okr.tree.toggle', {
         view: 'tree',
         timestamp: new Date().toISOString(),
       })
@@ -147,10 +138,14 @@ export default function OKRsPage() {
     return scopes
   }, [permissions, currentOrganization?.id, isSuperuser])
   
-  // Determine default scope
+  // Read scope from URL or determine default
+  const scopeFromUrl = searchParams.get('scope') as 'my' | 'team-workspace' | 'tenant' | null
   const defaultScope = useMemo(() => {
-    // Check if user has personal OKRs (we'll check this after data loads)
-    // For now, default based on available scopes
+    // If URL has scope and it's valid, use it
+    if (scopeFromUrl && availableScopes.includes(scopeFromUrl)) {
+      return scopeFromUrl
+    }
+    // Otherwise, default based on available scopes
     if (availableScopes.includes('my')) {
       return 'my'
     } else if (availableScopes.includes('team-workspace')) {
@@ -159,9 +154,33 @@ export default function OKRsPage() {
       return 'tenant'
     }
     return 'my' // fallback
-  }, [availableScopes])
+  }, [availableScopes, scopeFromUrl])
   
   const [selectedScope, setSelectedScope] = useState<'my' | 'team-workspace' | 'tenant'>(defaultScope)
+  
+  // Sync scope from URL on mount/change
+  useEffect(() => {
+    if (scopeFromUrl && availableScopes.includes(scopeFromUrl)) {
+      setSelectedScope(scopeFromUrl)
+    }
+  }, [scopeFromUrl, availableScopes])
+  
+  // Handler to update scope and URL
+  const handleScopeChange = (newScope: 'my' | 'team-workspace' | 'tenant') => {
+    const previousScope = selectedScope
+    setSelectedScope(newScope)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('scope', newScope)
+    router.push(`/dashboard/okrs?${params.toString()}`)
+    
+    // Telemetry: scope toggle
+    track('scope_toggle', {
+      scope: newScope,
+      prev_scope: previousScope,
+      cycle_id: selectedCycleId,
+      ts: new Date().toISOString(),
+    })
+  }
   const { canSeeObjective, ...tenantPermissions } = useTenantPermissions()
   const { toast } = useToast()
   const [availableUsers, setAvailableUsers] = useState<any[]>([])
@@ -846,7 +865,17 @@ export default function OKRsPage() {
                     placeholder="Search OKRs..." 
                     className="pl-10"
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value)
+                      // Telemetry: filter applied (search)
+                      track('filter_applied', {
+                        scope: selectedScope,
+                        q: e.target.value,
+                        status: selectedStatus,
+                        cycle_id: selectedCycleId,
+                        ts: new Date().toISOString(),
+                      })
+                    }}
                   />
                 </div>
                 
@@ -859,7 +888,17 @@ export default function OKRsPage() {
                         ? "bg-violet-100 text-violet-700 border border-violet-300"
                         : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
                     )}
-                    onClick={() => setSelectedStatus(null)}
+                    onClick={() => {
+                      setSelectedStatus(null)
+                      // Telemetry: filter applied (status)
+                      track('filter_applied', {
+                        scope: selectedScope,
+                        status: null,
+                        q: searchQuery,
+                        cycle_id: selectedCycleId,
+                        ts: new Date().toISOString(),
+                      })
+                    }}
                     aria-label="Show all statuses"
                     aria-pressed={selectedStatus === null}
                   >
@@ -872,7 +911,17 @@ export default function OKRsPage() {
                         ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
                         : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
                     )}
-                    onClick={() => setSelectedStatus('ON_TRACK')}
+                    onClick={() => {
+                      setSelectedStatus('ON_TRACK')
+                      // Telemetry: filter applied (status)
+                      track('filter_applied', {
+                        scope: selectedScope,
+                        status: 'ON_TRACK',
+                        q: searchQuery,
+                        cycle_id: selectedCycleId,
+                        ts: new Date().toISOString(),
+                      })
+                    }}
                     aria-label="Filter by status: On track"
                     aria-pressed={selectedStatus === 'ON_TRACK'}
                   >
@@ -885,7 +934,17 @@ export default function OKRsPage() {
                         ? "bg-amber-100 text-amber-700 border border-amber-300"
                         : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
                     )}
-                    onClick={() => setSelectedStatus('AT_RISK')}
+                    onClick={() => {
+                      setSelectedStatus('AT_RISK')
+                      // Telemetry: filter applied (status)
+                      track('filter_applied', {
+                        scope: selectedScope,
+                        status: 'AT_RISK',
+                        q: searchQuery,
+                        cycle_id: selectedCycleId,
+                        ts: new Date().toISOString(),
+                      })
+                    }}
                     aria-label="Filter by status: At risk"
                     aria-pressed={selectedStatus === 'AT_RISK'}
                   >
@@ -898,7 +957,17 @@ export default function OKRsPage() {
                         ? "bg-rose-100 text-rose-700 border border-rose-300"
                         : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
                     )}
-                    onClick={() => setSelectedStatus('BLOCKED')}
+                    onClick={() => {
+                      setSelectedStatus('BLOCKED')
+                      // Telemetry: filter applied (status)
+                      track('filter_applied', {
+                        scope: selectedScope,
+                        status: 'BLOCKED',
+                        q: searchQuery,
+                        cycle_id: selectedCycleId,
+                        ts: new Date().toISOString(),
+                      })
+                    }}
                     aria-label="Filter by status: Blocked"
                     aria-pressed={selectedStatus === 'BLOCKED'}
                   >
@@ -911,7 +980,17 @@ export default function OKRsPage() {
                         ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
                         : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
                     )}
-                    onClick={() => setSelectedStatus('COMPLETED')}
+                    onClick={() => {
+                      setSelectedStatus('COMPLETED')
+                      // Telemetry: filter applied (status)
+                      track('filter_applied', {
+                        scope: selectedScope,
+                        status: 'COMPLETED',
+                        q: searchQuery,
+                        cycle_id: selectedCycleId,
+                        ts: new Date().toISOString(),
+                      })
+                    }}
                     aria-label="Filter by status: Completed"
                     aria-pressed={selectedStatus === 'COMPLETED'}
                   >
@@ -924,7 +1003,17 @@ export default function OKRsPage() {
                         ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
                         : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
                     )}
-                    onClick={() => setSelectedStatus('CANCELLED')}
+                    onClick={() => {
+                      setSelectedStatus('CANCELLED')
+                      // Telemetry: filter applied (status)
+                      track('filter_applied', {
+                        scope: selectedScope,
+                        status: 'CANCELLED',
+                        q: searchQuery,
+                        cycle_id: selectedCycleId,
+                        ts: new Date().toISOString(),
+                      })
+                    }}
                     aria-label="Filter by status: Cancelled"
                     aria-pressed={selectedStatus === 'CANCELLED'}
                   >
@@ -938,12 +1027,27 @@ export default function OKRsPage() {
                   legacyPeriods={legacyPeriods}
                   selectedId={selectedTimeframeKey}
                   onSelect={(opt: { key: string; label: string }) => {
+                    const previousCycleId = selectedCycleId
                     setSelectedTimeframeKey(opt.key)
                     setSelectedTimeframeLabel(opt.label)
                     if (opt.key && opt.key !== 'all' && opt.key !== 'unassigned' && normalizedCycles.some(c => c.id === opt.key)) {
                       setSelectedCycleId(opt.key)
+                      // Telemetry: cycle changed
+                      track('cycle_changed', {
+                        scope: selectedScope,
+                        cycle_id_prev: previousCycleId,
+                        cycle_id: opt.key,
+                        ts: new Date().toISOString(),
+                      })
                     } else {
                       setSelectedCycleId(null)
+                      // Telemetry: cycle changed (cleared)
+                      track('cycle_changed', {
+                        scope: selectedScope,
+                        cycle_id_prev: previousCycleId,
+                        cycle_id: null,
+                        ts: new Date().toISOString(),
+                      })
                     }
                   }}
                 />
@@ -969,7 +1073,7 @@ export default function OKRsPage() {
                             ? "bg-white text-neutral-900 shadow-sm"
                             : "text-neutral-600 hover:text-neutral-900"
                         )}
-                        onClick={() => setSelectedScope('my')}
+                        onClick={() => handleScopeChange('my')}
                         aria-pressed={selectedScope === 'my'}
                       >
                         My
@@ -983,7 +1087,7 @@ export default function OKRsPage() {
                             ? "bg-white text-neutral-900 shadow-sm"
                             : "text-neutral-600 hover:text-neutral-900"
                         )}
-                        onClick={() => setSelectedScope('team-workspace')}
+                        onClick={() => handleScopeChange('team-workspace')}
                         aria-pressed={selectedScope === 'team-workspace'}
                       >
                         Team/Workspace
@@ -997,7 +1101,7 @@ export default function OKRsPage() {
                             ? "bg-white text-neutral-900 shadow-sm"
                             : "text-neutral-600 hover:text-neutral-900"
                         )}
-                        onClick={() => setSelectedScope('tenant')}
+                        onClick={() => handleScopeChange('tenant')}
                         aria-pressed={selectedScope === 'tenant'}
                       >
                         Tenant
@@ -1191,6 +1295,10 @@ export default function OKRsPage() {
                 expandedObjectiveId={expandedObjectiveId}
                 onToggleObjective={handleToggleObjective}
                 onCanCreateChange={setCanCreateObjective}
+                onCreateObjective={() => {
+                  setCreationDrawerMode('objective')
+                  setIsCreateDrawerOpen(true)
+                }}
               />
             )}
           </main>

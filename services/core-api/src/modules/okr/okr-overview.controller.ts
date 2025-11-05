@@ -45,12 +45,14 @@ export class OkrOverviewController {
   @ApiQuery({ name: 'organizationId', required: true, description: 'Organization ID for tenant filtering' })
   @ApiQuery({ name: 'cycleId', required: false, description: 'Filter by cycle ID' })
   @ApiQuery({ name: 'status', required: false, enum: ['ON_TRACK', 'AT_RISK', 'BLOCKED', 'COMPLETED', 'CANCELLED'], description: 'Filter by objective status' })
+  @ApiQuery({ name: 'scope', required: false, enum: ['my', 'team-workspace', 'tenant'], description: 'Filter by scope: my (owned by user), team-workspace (user manages), tenant (all tenant OKRs)' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
   @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Items per page (default: 20, max: 50)' })
   async getOverview(
     @Query('organizationId') organizationId: string | undefined,
     @Query('cycleId') cycleId: string | undefined,
     @Query('status') status: string | undefined,
+    @Query('scope') scope: string | undefined,
     @Query('page') page: string | undefined,
     @Query('pageSize') pageSize: string | undefined,
     @Req() req: any,
@@ -92,6 +94,71 @@ export class OkrOverviewController {
 
       // Build where clause for objectives (tenant isolation already enforced)
       const where: any = { organizationId };
+      
+      // Apply scope-based filtering before other filters
+      if (scope) {
+        const validScopes = ['my', 'team-workspace', 'tenant'];
+        if (!validScopes.includes(scope)) {
+          throw new BadRequestException(`Invalid scope. Must be one of: ${validScopes.join(', ')}`);
+        }
+        
+        if (scope === 'my') {
+          // Filter by owner: only OKRs owned by the requester
+          where.ownerId = requesterUserId;
+        } else if (scope === 'team-workspace') {
+          // Filter by workspace/team IDs the user manages or belongs to
+          // Prefer lead roles (WORKSPACE_LEAD, TEAM_LEAD) over member roles
+          const userContext = await this.rbacService.buildUserContext(requesterUserId, false);
+          
+          // Collect workspace IDs where user has lead roles
+          const workspaceIds: string[] = [];
+          for (const [workspaceId, roles] of userContext.workspaceRoles.entries()) {
+            // Check if user has lead role (WORKSPACE_LEAD, WORKSPACE_OWNER)
+            if (roles.some(r => r.startsWith('WORKSPACE_LEAD') || r.startsWith('WORKSPACE_OWNER'))) {
+              workspaceIds.push(workspaceId);
+            }
+          }
+          
+          // Collect team IDs where user has lead roles
+          const teamIds: string[] = [];
+          for (const [teamId, roles] of userContext.teamRoles.entries()) {
+            // Check if user has lead role (TEAM_LEAD, TEAM_OWNER)
+            if (roles.some(r => r.startsWith('TEAM_LEAD') || r.startsWith('TEAM_OWNER'))) {
+              teamIds.push(teamId);
+            }
+          }
+          
+          // Fallback: if no lead roles, use member roles
+          if (workspaceIds.length === 0 && teamIds.length === 0) {
+            for (const [workspaceId] of userContext.workspaceRoles.entries()) {
+              workspaceIds.push(workspaceId);
+            }
+            for (const [teamId] of userContext.teamRoles.entries()) {
+              teamIds.push(teamId);
+            }
+          }
+          
+          // Apply filters: OKRs must belong to one of these workspaces or teams
+          if (workspaceIds.length > 0 || teamIds.length > 0) {
+            const orConditions: any[] = [];
+            if (workspaceIds.length > 0) {
+              orConditions.push({ workspaceId: { in: workspaceIds } });
+            }
+            if (teamIds.length > 0) {
+              orConditions.push({ teamId: { in: teamIds } });
+            }
+            if (orConditions.length > 0) {
+              where.OR = orConditions;
+            }
+          } else {
+            // If user has no workspace/team roles, return empty result
+            where.id = 'never-match-this-id';
+          }
+        } else if (scope === 'tenant') {
+          // Tenant scope: no additional filter needed (organizationId already set)
+          // Show all tenant OKRs (visibility filtering will still apply)
+        }
+      }
       
       // Apply optional filters
       if (cycleId) {
@@ -151,10 +218,11 @@ export class OkrOverviewController {
         orderBy: { createdAt: 'desc' },
       });
       } catch (queryError: any) {
+        // Error logging kept for debugging
         console.error('[OKR OVERVIEW] Database query error:', queryError?.message, queryError?.stack);
         throw queryError;
       }
-      console.log('[OKR OVERVIEW] Fetched', allObjectives.length, 'objectives from database');
+      // Removed debug logging - use structured logging service in production
 
     // Filter objectives by visibility
     const visibleObjectives = [];
@@ -174,20 +242,7 @@ export class OkrOverviewController {
           requesterOrgId: userOrganizationId,
         });
 
-        // Debug logging for visibility checks
-        if (objective.title === 'Test' && objective.createdAt && new Date(objective.createdAt) > new Date('2025-11-03T10:00:00Z')) {
-          console.log('[OKR OVERVIEW] Visibility check for Test objective:', {
-            objectiveId: objective.id,
-            title: objective.title,
-            ownerId: objective.ownerId,
-            requesterUserId,
-            isOwner: objective.ownerId === requesterUserId,
-            organizationId: objective.organizationId,
-            requesterOrgId: userOrganizationId,
-            visibilityLevel: objective.visibilityLevel,
-            canSee,
-          });
-        }
+        // Removed debug logging for visibility checks - use structured logging service in production
 
         if (canSee) {
           visibleObjectives.push(objective);
@@ -202,36 +257,7 @@ export class OkrOverviewController {
     // Calculate total count AFTER visibility filtering
     const totalCount = visibleObjectives.length;
     
-    // Debug: Log summary
-    console.log('[OKR OVERVIEW] Visibility filtering summary:', {
-      totalObjectives: allObjectives.length,
-      visibleObjectives: visibleObjectives.length,
-      filteredOut: allObjectives.length - visibleObjectives.length,
-      organizationId,
-      cycleId: cycleId || 'all',
-      requesterUserId,
-      requesterOrgId: userOrganizationId,
-    });
-    
-    // Debug: Log Test objectives specifically
-    const testObjs = allObjectives.filter(o => o.title === 'Test')
-    const visibleTestObjs = visibleObjectives.filter(o => o.title === 'Test')
-    if (testObjs.length > 0) {
-      console.log('[OKR OVERVIEW] Test objectives:', {
-        totalInQuery: testObjs.length,
-        visibleAfterFilter: visibleTestObjs.length,
-        testObjectives: testObjs.map(o => ({
-          id: o.id.substring(0, 15),
-          title: o.title,
-          ownerId: o.ownerId,
-          requesterUserId,
-          isOwner: o.ownerId === requesterUserId,
-          visibilityLevel: o.visibilityLevel,
-          organizationId: o.organizationId,
-          requesterOrgId: userOrganizationId,
-        })),
-      })
-    }
+    // Removed debug logging - use structured logging service in production
 
     // Apply pagination to filtered results
     const skip = (pageNum - 1) * pageSizeNum;
@@ -471,33 +497,7 @@ export class OkrOverviewController {
         canCreateObjective = false;
       }
 
-      // Debug logging (remove in production)
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[OKR OVERVIEW] canCreateObjective check:', {
-          userId: requesterUserId,
-          userOrganizationId,
-          organizationIdFromQuery: organizationId,
-          tenantIdForRBAC,
-          canCreate: canCreateObjective,
-        });
-        
-        // Additional debug: log what roles user has for this tenant
-        if (!canCreateObjective) {
-          try {
-            const userContext = await this.rbacService.buildUserContext(requesterUserId, false);
-            const tenantRoles = userContext.tenantRoles.get(tenantIdForRBAC) || [];
-            console.warn('[OKR OVERVIEW] ⚠️ canCreateObjective is FALSE. User context:', {
-              tenantIdForRBAC,
-              tenantRolesForThisTenant: tenantRoles,
-              allTenantRoles: Array.from(userContext.tenantRoles.entries()),
-              'Expected tenantId (from role assignment)': 'cmhesnyvx00004xhjjxs272gs',
-              'Does tenantIdForRBAC match expected?': tenantIdForRBAC === 'cmhesnyvx00004xhjjxs272gs',
-            });
-          } catch (error) {
-            console.error('[OKR OVERVIEW] Failed to build user context for debug:', error);
-          }
-        }
-      }
+      // Removed debug logging - use structured logging service in production
 
       // If user has create permission, check cycle governance if cycleId is provided
       if (canCreateObjective && cycleId) {
@@ -547,17 +547,7 @@ export class OkrOverviewController {
       canCreateObjective: canCreateObjective || false, // Explicitly ensure it's always included
     };
 
-    // Debug logging (remove in production)
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[OKR OVERVIEW] Returning response:', {
-        page: responsePayload.page,
-        pageSize: responsePayload.pageSize,
-        totalCount: responsePayload.totalCount,
-        objectivesCount: responsePayload.objectives.length,
-        hasCanCreateObjective: 'canCreateObjective' in responsePayload,
-        canCreateObjective: responsePayload.canCreateObjective,
-      });
-    }
+    // Removed debug logging - use structured logging service in production
 
     return responsePayload;
     } catch (error: any) {
