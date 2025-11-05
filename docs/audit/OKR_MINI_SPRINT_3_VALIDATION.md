@@ -252,6 +252,44 @@ window.addEventListener('analytics', e => console.log('ANA', e.detail))
 
 ---
 
+## 8. Validation Helper Results
+
+### Helper Output (JSON)
+```json
+{
+  "governanceStatusBar": {
+    "found": true,
+    "nonInteractive": true,
+    "scopes": ["tenant", "my", "team-workspace"]
+  },
+  "whyInspector": {
+    "linksFound": 0,
+    "popoversFound": 0,
+    "featureFlagEnabled": false
+  },
+  "inlineHealthSignals": {
+    "total": 0,
+    "atRisk": 0,
+    "overdue": 0,
+    "noProgress": 0
+  },
+  "performance": {
+    "longTasks": [],
+    "initialRender": null
+  },
+  "filters": {
+    "total": 0,
+    "unique": 0,
+    "okrFilterBarFound": false,
+    "governanceStatusBarFound": false
+  }
+}
+```
+
+*Note: Run helper in browser console and paste actual results here*
+
+---
+
 ## 8. Role × Behaviour Matrix
 
 | Role | Governance Status Bar | Why Inspector | Inline Health Signals |
@@ -315,6 +353,27 @@ window.addEventListener('analytics', e => console.log('ANA', e.detail))
 - [ ] No regressions observed
 - [ ] Screenshots captured
 - [ ] Role matrix completed
+
+---
+
+## 12. Lint & Test Results
+
+### Lint Checks
+| Check | Status | Notes |
+|-------|--------|-------|
+| ESLint (no-console) | ✅ PASS | No violations in OKR code paths |
+| TypeScript | `[ ] PASS` / `[ ] FAIL` | `npm run typecheck` |
+| Prettier | `[ ] PASS` / `[ ] FAIL` | `npm run format --check` |
+
+### Test Results
+| Suite | Status | Passed | Failed | Skipped | Notes |
+|-------|--------|--------|--------|---------|-------|
+| Frontend Unit | `[ ] PASS` / `[ ] FAIL` | `[ ]` | `[ ]` | `[ ]` | `npm run test` |
+| Backend Unit | `[ ] PASS` / `[ ] FAIL` | `[ ]` | `[ ]` | `[ ]` | `npm run test:unit` |
+| E2E | `[ ] PASS` / `[ ] FAIL` | `[ ]` | `[ ]` | `[ ]` | `npm run test:e2e` |
+
+### Known Unrelated Failures
+- `[ ] None` / `[ ] List failures below`
 
 ---
 
