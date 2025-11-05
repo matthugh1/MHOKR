@@ -2,22 +2,22 @@
  * RBAC Inspector Service
  * 
  * Service layer for managing RBAC Inspector feature flag (per-user toggle).
+ * Now uses FeatureFlagService internally for consistency.
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../common/prisma/prisma.service';
 import { RBACService } from './rbac.service';
-import { AuditLogService } from '../audit/audit-log.service';
-import { AuditTargetType } from '@prisma/client';
+import { FeatureFlagService } from './feature-flag.service';
+import { PrismaService } from '../../common/prisma/prisma.service';
 
 @Injectable()
 export class RBACInspectorService {
   private readonly logger = new Logger(RBACInspectorService.name);
 
   constructor(
-    private prisma: PrismaService,
     private rbacService: RBACService,
-    private auditLogService: AuditLogService,
+    private featureFlagService: FeatureFlagService,
+    private prisma: PrismaService,
   ) {}
 
   /**
@@ -54,23 +54,15 @@ export class RBACInspectorService {
 
   /**
    * Get RBAC Inspector enabled state for a user
+   * Delegates to FeatureFlagService for consistency
    */
   async getInspectorEnabled(userId: string): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { settings: true },
-    });
-
-    if (!user || !user.settings) {
-      return false;
-    }
-
-    const settings = user.settings as any;
-    return settings?.debug?.rbacInspectorEnabled === true;
+    return await this.featureFlagService.getFeatureFlag(userId, 'rbacInspector');
   }
 
   /**
    * Set RBAC Inspector enabled state for a user
+   * Delegates to FeatureFlagService for consistency
    */
   async setInspectorEnabled(
     userId: string,
@@ -78,47 +70,13 @@ export class RBACInspectorService {
     actorUserId: string,
     organizationId: string | null,
   ): Promise<void> {
-    // Get current state for audit log
-    const currentState = await this.getInspectorEnabled(userId);
-
-    // Get current settings and merge
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { settings: true },
-    });
-
-    const currentSettings = (user?.settings as any) || {};
-    const updatedSettings = {
-      ...currentSettings,
-      debug: {
-        ...currentSettings.debug,
-        rbacInspectorEnabled: enabled,
-      },
-    };
-
-    // Update user settings (Prisma handles JSONB automatically)
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        settings: updatedSettings as any, // Prisma Json type
-      },
-    });
-
-    // Audit log
-    await this.auditLogService.record({
-      action: 'toggle_rbac_inspector',
+    return await this.featureFlagService.setFeatureFlag(
+      userId,
+      'rbacInspector',
+      enabled,
       actorUserId,
-      targetUserId: userId,
-      targetId: userId,
-      targetType: AuditTargetType.USER,
       organizationId,
-      metadata: {
-        enabled,
-        previousState: currentState,
-      },
-    });
-
-    this.logger.log(`RBAC Inspector ${enabled ? 'enabled' : 'disabled'} for user ${userId} by ${actorUserId}`);
+    );
   }
 }
 

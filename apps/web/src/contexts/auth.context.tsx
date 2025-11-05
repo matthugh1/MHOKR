@@ -13,7 +13,8 @@ interface User {
   isSuperuser?: boolean
   features?: {
     rbacInspector?: boolean
-  [key: string]: any
+    okrTreeView?: boolean
+    [key: string]: any
   }
 }
 

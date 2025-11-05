@@ -4,7 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from '../auth.service';
 import { PrismaService } from '../../../common/prisma/prisma.service';
-import { RBACInspectorService } from '../../rbac/rbac-inspector.service';
+import { FeatureFlagService } from '../../rbac/feature-flag.service';
 
 /**
  * JWT Strategy with proper token verification
@@ -25,7 +25,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     configService: ConfigService,
     private authService: AuthService,
     private prisma: PrismaService,
-    private inspectorService: RBACInspectorService,
+    private featureFlagService: FeatureFlagService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -101,8 +101,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       orderBy: { createdAt: 'asc' },  // Get first membership (primary org)
     });
     
-    // Get RBAC Inspector feature flag
-    const rbacInspectorEnabled = await this.inspectorService.getInspectorEnabled(user.id);
+    // Get all feature flags for user
+    const featureFlags = await this.featureFlagService.getAllFeatureFlags(user.id);
 
     // organizationId rules:
     // - null        => superuser (global read-only; can view all organisations)
@@ -117,9 +117,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       ...user,
       organizationId: orgAssignment?.scopeId || undefined,  // Normal user: string or undefined (not null)
       features: {
-        rbacInspector: rbacInspectorEnabled,
+        rbacInspector: featureFlags.rbacInspector,
+        okrTreeView: featureFlags.okrTreeView,
       },
     };
   }
 }
-

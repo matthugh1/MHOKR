@@ -1,14 +1,15 @@
 import { useAuth } from '@/contexts/auth.context'
 
 /**
- * Hook to access feature flags from the current user session and environment variables
+ * Hook to access feature flags from the current user session.
+ * All feature flags are now stored in the database (users.settings.features.*).
  */
 export function useFeatureFlags() {
   const { user } = useAuth()
 
   return {
     rbacInspector: user?.features?.rbacInspector === true,
-    okrTreeView: process.env.NEXT_PUBLIC_OKR_TREE_VIEW === 'true',
+    okrTreeView: user?.features?.okrTreeView === true,
   }
 }
 
