@@ -36,7 +36,7 @@ export function WhyCantIInspector({ action, resource, className }: WhyCantIInspe
   // Get lock info based on action type
   let lockInfo: { isLocked: boolean; reason: 'published' | 'cycle_locked' | null; message: string } | null = null
   let reasonCode: string | null = null
-  let effectiveRoles: string[] = []
+  const effectiveRoles: string[] = []
 
   if (action === 'edit_okr' || action === 'delete_okr' || action === 'publish_okr') {
     lockInfo = resource ? getLockInfoForObjective(resource) : null
