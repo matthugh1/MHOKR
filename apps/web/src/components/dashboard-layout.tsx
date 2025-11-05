@@ -25,8 +25,10 @@ import {
   Shield,
   Calendar,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  SearchCheck
 } from 'lucide-react'
+import { useFeatureFlags } from '@/hooks/useFeatureFlags'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -48,9 +50,13 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
   const { isSuperuser, currentOrganization } = useWorkspace()
   const permissions = usePermissions()
+  const featureFlags = useFeatureFlags()
   
   // Check if user can access governance features
   const canAccessGovernance = permissions.isTenantAdminOrOwner(currentOrganization?.id)
+  
+  // Check if superuser tools are available
+  const canAccessSuperuserTools = isSuperuser && featureFlags.rbacInspector
 
   // Collapsible sidebar state
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -219,6 +225,33 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 >
                   <Calendar className="h-5 w-5 flex-shrink-0" />
                   {!isCollapsed && <span>Cycles</span>}
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* Superuser Tools Section */}
+          {canAccessSuperuserTools && (
+            <div>
+              {!isCollapsed && (
+                <h3 className="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Superuser Tools
+                </h3>
+              )}
+              <div className="space-y-1">
+                <Link
+                  href="/superuser/policy"
+                  className={cn(
+                    'flex items-center rounded-lg text-sm font-medium transition-colors',
+                    isCollapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2',
+                    pathname === '/superuser/policy' || pathname?.startsWith('/superuser/policy/')
+                      ? 'bg-purple-100 text-purple-900 border border-purple-300'
+                      : 'text-slate-700 hover:bg-purple-50'
+                  )}
+                  title={isCollapsed ? 'Policy Explorer' : undefined}
+                >
+                  <SearchCheck className="h-5 w-5 flex-shrink-0" />
+                  {!isCollapsed && <span>Policy Explorer</span>}
                 </Link>
               </div>
             </div>

@@ -1,3 +1,64 @@
+## [Superuser Policy Decision Explorer] 2025-01-27
+
+### Feature
+
+- **Policy Decision Explorer**: Read-only, superuser-only tool for inspecting live permission decisions
+  - Backend endpoint: `POST /policy/decide` (requires `RBAC_INSPECTOR` flag and `SUPERUSER` role)
+  - Frontend page: `/superuser/policy` (feature-flagged, superuser-only)
+  - Integrates with centralised `AuthorisationService` for consistent permission evaluation
+  - No mutations performed; all decisions are read-only
+  - Telemetry events: `policy_decide_submitted`, `policy_decide_result` (frontend); deny logging (backend)
+
+### Components
+
+- **Backend**: `services/core-api/src/policy/policy.controller.ts` - Policy decision endpoint
+- **Frontend**: `apps/web/src/app/superuser/policy/page.tsx` - Main explorer page
+  - `UserPicker.tsx` - User autocomplete component
+  - `ActionPicker.tsx` - Action dropdown (all 14 actions)
+  - `ResourcePicker.tsx` - Resource context inputs (tenant/workspace/team/objective/keyResult/cycle)
+  - `JsonContextEditor.tsx` - Collapsible JSON context editor
+  - `DecisionViewer.tsx` - Result display with colour-coded badges and details
+
+### Feature Flag
+
+- **Name**: `RBAC_INSPECTOR`
+- **Default**: `off` (disabled)
+- **Backend**: `process.env.RBAC_INSPECTOR === 'true'`
+- **Frontend**: Exposed via `GET /system/status` → `flags.rbacInspector`
+- **Security**: Both route and endpoint gated by flag and superuser check
+
+### Navigation
+
+- Added "Superuser Tools" section to dashboard sidebar (only visible when superuser and flag enabled)
+- Link: "Policy Explorer" with purple-themed styling
+
+### Tests
+
+- **Backend**: `services/core-api/src/policy/test/policy.controller.spec.ts`
+  - 403 for non-superuser
+  - 404 if flag disabled
+  - Happy ALLOW and DENY paths
+  - Response shape validation
+  - Different user evaluation
+  - OKR entity loading
+- **Frontend**: `apps/web/src/app/superuser/policy/__tests__/superuser.policy.page.spec.tsx`
+  - Page hides if not superuser or flag false
+  - Submits form and renders DecisionViewer
+  - Reason badge rendering
+
+### Documentation
+
+- **RBAC_INSPECTOR_NOTES.md**: Purpose, route, flag, role restriction, telemetry events, example payloads, reason codes, security notes
+
+### Technical Notes
+
+- No application behaviour changes (read-only endpoint)
+- British English throughout
+- No TODO/FIXME/HACK comments
+- Production-safe (disabled by default, superuser-only)
+
+---
+
 ## [RBAC Audit & Hardening] 2025-01-27
 
 ### Audit & Documentation

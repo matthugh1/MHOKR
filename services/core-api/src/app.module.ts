@@ -14,6 +14,7 @@ import { RBACModule } from './modules/rbac/rbac.module';
 import { SuperuserModule } from './modules/superuser/superuser.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { SystemModule } from './modules/system/system.module';
+import { PolicyModule } from './policy/policy.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { SystemModule } from './modules/system/system.module';
     LayoutModule,
     SuperuserModule,
     SystemModule,
+    PolicyModule, // Policy decision centre
   ],
 })
 export class AppModule {}
