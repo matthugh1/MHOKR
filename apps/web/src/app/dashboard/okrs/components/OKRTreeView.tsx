@@ -62,18 +62,12 @@ export function OKRTreeView({
 
   // Track analytics events
   const trackExpand = (nodeId: string) => {
-    console.log('[Telemetry] okr.tree.expand', {
-      nodeId,
-      timestamp: new Date().toISOString(),
-    })
+    // Telemetry: Use track() function from analytics.ts instead of console.log
     onExpand?.(nodeId)
   }
 
   const trackCollapse = (nodeId: string) => {
-    console.log('[Telemetry] okr.tree.collapse', {
-      nodeId,
-      timestamp: new Date().toISOString(),
-    })
+    // Telemetry: Use track() function from analytics.ts instead of console.log
     onCollapse?.(nodeId)
   }
 

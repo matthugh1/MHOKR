@@ -41,7 +41,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Search, X, Bell, ChevronDown } from 'lucide-react'
+import { Plus } from 'lucide-react'
 // W4.M1: Period utilities removed - Cycle is canonical
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
@@ -54,13 +54,6 @@ import { OKRPageContainer } from './OKRPageContainer'
 import { OKRTreeContainer } from './OKRTreeContainer'
 import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
 import { PublishLockWarningModal } from './components/PublishLockWarningModal'
-import { CycleSelector } from '@/components/ui/CycleSelector'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { NewObjectiveModal } from '@/components/okr/NewObjectiveModal'
 import { EditObjectiveModal } from '@/components/okr/EditObjectiveModal'
 import { NewKeyResultModal } from '@/components/okr/NewKeyResultModal'
@@ -71,6 +64,8 @@ import { CycleHealthStrip } from '@/components/okr/CycleHealthStrip'
 import { AttentionDrawer } from '@/components/okr/AttentionDrawer'
 import { track } from '@/lib/analytics'
 import { cn } from '@/lib/utils'
+import { OKRFilterBar } from './components/OKRFilterBar'
+import { OKRToolbar } from './components/OKRToolbar'
 
 // NOTE: This screen is now the system of record for CRUD on Objectives, Key Results, and Initiatives.
 export default function OKRsPage() {
@@ -860,174 +855,17 @@ export default function OKRsPage() {
             <div className="flex items-center justify-between gap-3 flex-wrap">
               {/* Left: Filters */}
               <div className="flex items-center gap-4 flex-wrap flex-1 min-w-0">
-                <div className="flex-1 relative min-w-[200px]">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input 
-                    placeholder="Search OKRs..." 
-                    className="pl-10"
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value)
-                      // Telemetry: filter applied (search)
-                      track('filter_applied', {
-                        scope: selectedScope,
-                        q: e.target.value,
-                        status: selectedStatus,
-                        cycle_id: selectedCycleId,
-                        ts: new Date().toISOString(),
-                      })
-                    }}
-                  />
-                </div>
-                
-                {/* Status Filter */}
-                <div className="flex items-center gap-2 flex-wrap" role="group" aria-label="Status filters">
-                  <button
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                      selectedStatus === null
-                        ? "bg-violet-100 text-violet-700 border border-violet-300"
-                        : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                    )}
-                    onClick={() => {
-                      setSelectedStatus(null)
-                      // Telemetry: filter applied (status)
-                      track('filter_applied', {
-                        scope: selectedScope,
-                        status: null,
-                        q: searchQuery,
-                        cycle_id: selectedCycleId,
-                        ts: new Date().toISOString(),
-                      })
-                    }}
-                    aria-label="Show all statuses"
-                    aria-pressed={selectedStatus === null}
-                  >
-                    All statuses
-                  </button>
-                  <button
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                      selectedStatus === 'ON_TRACK'
-                        ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
-                        : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                    )}
-                    onClick={() => {
-                      setSelectedStatus('ON_TRACK')
-                      // Telemetry: filter applied (status)
-                      track('filter_applied', {
-                        scope: selectedScope,
-                        status: 'ON_TRACK',
-                        q: searchQuery,
-                        cycle_id: selectedCycleId,
-                        ts: new Date().toISOString(),
-                      })
-                    }}
-                    aria-label="Filter by status: On track"
-                    aria-pressed={selectedStatus === 'ON_TRACK'}
-                  >
-                    On track
-                  </button>
-                  <button
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                      selectedStatus === 'AT_RISK'
-                        ? "bg-amber-100 text-amber-700 border border-amber-300"
-                        : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                    )}
-                    onClick={() => {
-                      setSelectedStatus('AT_RISK')
-                      // Telemetry: filter applied (status)
-                      track('filter_applied', {
-                        scope: selectedScope,
-                        status: 'AT_RISK',
-                        q: searchQuery,
-                        cycle_id: selectedCycleId,
-                        ts: new Date().toISOString(),
-                      })
-                    }}
-                    aria-label="Filter by status: At risk"
-                    aria-pressed={selectedStatus === 'AT_RISK'}
-                  >
-                    At risk
-                  </button>
-                  <button
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                      selectedStatus === 'BLOCKED'
-                        ? "bg-rose-100 text-rose-700 border border-rose-300"
-                        : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                    )}
-                    onClick={() => {
-                      setSelectedStatus('BLOCKED')
-                      // Telemetry: filter applied (status)
-                      track('filter_applied', {
-                        scope: selectedScope,
-                        status: 'BLOCKED',
-                        q: searchQuery,
-                        cycle_id: selectedCycleId,
-                        ts: new Date().toISOString(),
-                      })
-                    }}
-                    aria-label="Filter by status: Blocked"
-                    aria-pressed={selectedStatus === 'BLOCKED'}
-                  >
-                    Blocked
-                  </button>
-                  <button
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                      selectedStatus === 'COMPLETED'
-                        ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
-                        : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                    )}
-                    onClick={() => {
-                      setSelectedStatus('COMPLETED')
-                      // Telemetry: filter applied (status)
-                      track('filter_applied', {
-                        scope: selectedScope,
-                        status: 'COMPLETED',
-                        q: searchQuery,
-                        cycle_id: selectedCycleId,
-                        ts: new Date().toISOString(),
-                      })
-                    }}
-                    aria-label="Filter by status: Completed"
-                    aria-pressed={selectedStatus === 'COMPLETED'}
-                  >
-                    Completed
-                  </button>
-                  <button
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                      selectedStatus === 'CANCELLED'
-                        ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
-                        : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                    )}
-                    onClick={() => {
-                      setSelectedStatus('CANCELLED')
-                      // Telemetry: filter applied (status)
-                      track('filter_applied', {
-                        scope: selectedScope,
-                        status: 'CANCELLED',
-                        q: searchQuery,
-                        cycle_id: selectedCycleId,
-                        ts: new Date().toISOString(),
-                      })
-                    }}
-                    aria-label="Filter by status: Cancelled"
-                    aria-pressed={selectedStatus === 'CANCELLED'}
-                  >
-                    Cancelled
-                  </button>
-                </div>
-
-                {/* W4.M1: Cycle selector only (periods removed) */}
-                <CycleSelector
-                  cycles={normalizedCycles}
+                <OKRFilterBar
+                  searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
+                  selectedStatus={selectedStatus}
+                  onStatusChange={setSelectedStatus}
+                  selectedScope={selectedScope}
+                  selectedCycleId={selectedCycleId}
+                  normalizedCycles={normalizedCycles}
                   legacyPeriods={legacyPeriods}
-                  selectedId={selectedTimeframeKey}
-                  onSelect={(opt: { key: string; label: string }) => {
+                  selectedTimeframeKey={selectedTimeframeKey}
+                  onCycleSelect={(opt: { key: string; label: string }) => {
                     const previousCycleId = selectedCycleId
                     setSelectedTimeframeKey(opt.key)
                     setSelectedTimeframeLabel(opt.label)
@@ -1051,153 +889,34 @@ export default function OKRsPage() {
                       })
                     }
                   }}
+                  hasActiveFilters={hasActiveFilters}
+                  onClearFilters={clearFilters}
                 />
-                
-                {hasActiveFilters && (
-                  <Button variant="outline" size="sm" onClick={clearFilters}>
-                    <X className="h-4 w-4 mr-1" />
-                    Clear Filters
-                  </Button>
-                )}
               </div>
 
               {/* Right: Scope Toggle + Actions */}
-              <div className="flex items-center gap-3 flex-shrink-0">
-                {/* Scope Toggle */}
-                {availableScopes.length > 1 && (
-                  <div className="flex items-center gap-1 rounded-lg border border-neutral-300 bg-neutral-50 p-1" role="group" aria-label="Scope filter">
-                    {availableScopes.includes('my') && (
-                      <button
-                        className={cn(
-                          "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                          selectedScope === 'my'
-                            ? "bg-white text-neutral-900 shadow-sm"
-                            : "text-neutral-600 hover:text-neutral-900"
-                        )}
-                        onClick={() => handleScopeChange('my')}
-                        aria-pressed={selectedScope === 'my'}
-                      >
-                        My
-                      </button>
-                    )}
-                    {availableScopes.includes('team-workspace') && (
-                      <button
-                        className={cn(
-                          "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                          selectedScope === 'team-workspace'
-                            ? "bg-white text-neutral-900 shadow-sm"
-                            : "text-neutral-600 hover:text-neutral-900"
-                        )}
-                        onClick={() => handleScopeChange('team-workspace')}
-                        aria-pressed={selectedScope === 'team-workspace'}
-                      >
-                        Team/Workspace
-                      </button>
-                    )}
-                    {availableScopes.includes('tenant') && (
-                      <button
-                        className={cn(
-                          "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                          selectedScope === 'tenant'
-                            ? "bg-white text-neutral-900 shadow-sm"
-                            : "text-neutral-600 hover:text-neutral-900"
-                        )}
-                        onClick={() => handleScopeChange('tenant')}
-                        aria-pressed={selectedScope === 'tenant'}
-                      >
-                        Tenant
-                      </button>
-                    )}
-                  </div>
-                )}
-                
-                {/* Actions */}
-                {/* Needs Attention - Icon button with badge */}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => {
-                    setAttentionDrawerOpen(true)
-                  }}
-                  aria-label="Open attention drawer"
-                  className="relative focus:ring-2 focus:ring-ring focus:outline-none"
-                >
-                  <Bell className="h-4 w-4" />
-                  {attentionCount > 0 && (
-                    <Badge 
-                      variant="destructive" 
-                      className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
-                      aria-label={`${attentionCount} items need attention`}
-                    >
-                      {attentionCount > 99 ? '99+' : attentionCount}
-                    </Badge>
-                  )}
-                </Button>
-
-                {/* Add - RBAC-aware split-button */}
-                {(canCreateObjective || permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || null })) && !isSuperuser && (
-                  <DropdownMenu>
-                    <div className="flex items-center">
-                      <Button
-                        onClick={() => {
-                          setCreationDrawerMode('objective')
-                          setIsCreateDrawerOpen(true)
-                        }}
-                        aria-label="Add"
-                        className="focus:ring-2 focus:ring-ring focus:outline-none rounded-r-none border-r-0"
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add
-                      </Button>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="default"
-                          size="default"
-                          className="rounded-l-none px-2 focus:ring-2 focus:ring-ring focus:outline-none"
-                          aria-label="Add options"
-                        >
-                          <ChevronDown className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                    </div>
-                    <DropdownMenuContent align="end">
-                      {canCreateObjective && (
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setCreationDrawerMode('objective')
-                            setIsCreateDrawerOpen(true)
-                          }}
-                          role="menuitem"
-                        >
-                          Add Objective
-                        </DropdownMenuItem>
-                      )}
-                      {permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || null }) && (
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setCreationDrawerMode('kr')
-                            setIsCreateDrawerOpen(true)
-                          }}
-                          role="menuitem"
-                        >
-                          Add Key Result
-                        </DropdownMenuItem>
-                      )}
-                      {permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || null }) && (
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setCreationDrawerMode('initiative')
-                            setIsCreateDrawerOpen(true)
-                          }}
-                          role="menuitem"
-                        >
-                          Add Initiative
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </div>
+              <OKRToolbar
+                availableScopes={availableScopes}
+                selectedScope={selectedScope}
+                onScopeChange={handleScopeChange}
+                attentionCount={attentionCount}
+                onOpenAttentionDrawer={() => setAttentionDrawerOpen(true)}
+                canCreateObjective={canCreateObjective}
+                canEditOKR={permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || null })}
+                isSuperuser={isSuperuser}
+                onCreateObjective={() => {
+                  setCreationDrawerMode('objective')
+                  setIsCreateDrawerOpen(true)
+                }}
+                onCreateKeyResult={() => {
+                  setCreationDrawerMode('kr')
+                  setIsCreateDrawerOpen(true)
+                }}
+                onCreateInitiative={() => {
+                  setCreationDrawerMode('initiative')
+                  setIsCreateDrawerOpen(true)
+                }}
+              />
             </div>
             
             {/* Active Filters Display */}

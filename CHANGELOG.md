@@ -1,3 +1,25 @@
+## [OKR Scope Mini Sprint 2] 2025-11-05
+
+### Improvements
+- **Enhanced Lock Messages**: Clarified distinction between publish lock and cycle lock with improved British English copy
+  - Publish lock: "This item is published. Only Tenant Admins or Owners can change published OKRs for this cycle."
+  - Cycle lock: "This cycle is locked. Changes are disabled until the cycle is reopened."
+  - SUPERUSER: "Platform administrator (read-only). You can view, but not change OKR content."
+- **Console Guard**: Upgraded ESLint `no-console` rule from `'warn'` to `'error'` and removed console.log statements from OKR list code paths
+- **Page Decomposition**: Split large `page.tsx` (1597 lines) into smaller components:
+  - `OKRFilterBar.tsx` (186 lines) - Search, status filters, cycle selector
+  - `OKRToolbar.tsx` (154 lines) - Scope toggle, attention button, add dropdown
+  - `page.tsx` reduced to 1316 lines (~280 lines extracted)
+- **Data Test IDs**: Added `tip-publish-lock`, `tip-cycle-lock`, `tip-superuser-readonly` for automated testing
+
+### Technical
+- No behaviour changes - pure refactoring and messaging improvements
+- Public API of `OKRPageContainer` unchanged
+- All telemetry events still fire correctly
+- RBAC/visibility logic not altered
+
+---
+
 ## [Production-Gated RBAC Inspector] 2025-11-03
 
 ### Features

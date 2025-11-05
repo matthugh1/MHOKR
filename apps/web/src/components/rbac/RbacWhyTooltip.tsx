@@ -70,6 +70,20 @@ export function RbacWhyTooltip({ action, resource, children, allowed }: RbacWhyT
     if (lockInfo?.isLocked) {
       reasons.publishLock = true
       denyMessage = lockInfo.message || 'Published OKRs can only be edited by Tenant Owner/Admin.'
+      
+      // Add data-testid based on lock reason
+      const testId = lockInfo.reason === 'published' 
+        ? 'tip-publish-lock'
+        : lockInfo.reason === 'cycle_locked'
+        ? 'tip-cycle-lock'
+        : lockInfo.message?.includes('Platform administrator')
+        ? 'tip-superuser-readonly'
+        : null
+      
+      if (testId) {
+        // Store testId for later use in tooltip
+        ;(resource as any)._lockTestId = testId
+      }
     }
 
     // Check if can edit (combines RBAC + locks)
@@ -90,6 +104,11 @@ export function RbacWhyTooltip({ action, resource, children, allowed }: RbacWhyT
       if (!denyMessage) {
         denyMessage = 'EXEC_ONLY published OKRs require tenant admin with allowTenantAdminExecVisibility flag.'
       }
+    }
+    
+    // SUPERUSER read-only check
+    if (lockInfo?.message?.includes('Platform administrator')) {
+      ;(resource as any)._lockTestId = 'tip-superuser-readonly'
     }
   }
 
@@ -150,7 +169,7 @@ export function RbacWhyTooltip({ action, resource, children, allowed }: RbacWhyT
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div className="inline-flex items-center gap-1">
+          <div className="inline-flex items-center gap-1" data-testid={(resource as any)?._lockTestId}>
             {children}
             <Info className="h-3 w-3 text-slate-400" />
           </div>

@@ -337,6 +337,15 @@ export function useTenantPermissions(): PermissionChecks {
       // Backend is source of truth for publish lock and cycle lock.
       // Frontend mirrors that logic only for UX messaging, not for enforcement.
       
+      // SUPERUSER read-only check
+      if (permissions.isSuperuser) {
+        return {
+          isLocked: true,
+          reason: null,
+          message: 'Platform administrator (read-only). You can view, but not change OKR content.',
+        }
+      }
+      
       const isPublished = objective.isPublished === true
       const canOverride = canOverrideLocks(objective.organizationId)
       const cycleStatus = getCycleStatus(objective)
@@ -347,7 +356,7 @@ export function useTenantPermissions(): PermissionChecks {
         return {
           isLocked: true,
           reason: 'published',
-          message: 'This OKR is published and locked. You cannot change targets after publish. Only tenant administrators can edit or delete published OKRs.',
+          message: 'This item is published. Only Tenant Admins or Owners can change published OKRs for this cycle.',
         }
       }
 
@@ -356,7 +365,7 @@ export function useTenantPermissions(): PermissionChecks {
         return {
           isLocked: true,
           reason: 'cycle_locked',
-          message: 'This OKR is locked because its cycle is locked. You cannot change targets during a locked cycle. Only tenant administrators can edit or delete OKRs in locked cycles.',
+          message: 'This cycle is locked. Changes are disabled until the cycle is reopened.',
         }
       }
 
@@ -366,7 +375,7 @@ export function useTenantPermissions(): PermissionChecks {
         message: '',
       }
     }
-  }, [canOverrideLocks, isCycleLocked, getCycleStatus])
+  }, [canOverrideLocks, isCycleLocked, getCycleStatus, permissions.isSuperuser])
 
   const getLockInfoForKeyResult = useMemo(() => {
     return (keyResult: KeyResult): LockInfo => {
@@ -374,6 +383,15 @@ export function useTenantPermissions(): PermissionChecks {
       // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
       // Backend is source of truth for publish lock and cycle lock.
       // Frontend mirrors that logic only for UX messaging, not for enforcement.
+      
+      // SUPERUSER read-only check
+      if (permissions.isSuperuser) {
+        return {
+          isLocked: true,
+          reason: null,
+          message: 'Platform administrator (read-only). You can view, but not change OKR content.',
+        }
+      }
       
       const parentObjective = keyResult.parentObjective
       if (!parentObjective) {
@@ -395,7 +413,7 @@ export function useTenantPermissions(): PermissionChecks {
         return {
           isLocked: true,
           reason: 'published',
-          message: 'This Key Result is locked because its parent OKR is published. You cannot change targets after publish. Only tenant administrators can edit or delete published Key Results.',
+          message: 'This item is published. Only Tenant Admins or Owners can change published OKRs for this cycle.',
         }
       }
 
@@ -404,7 +422,7 @@ export function useTenantPermissions(): PermissionChecks {
         return {
           isLocked: true,
           reason: 'cycle_locked',
-          message: 'This Key Result is locked because its parent OKR\'s cycle is locked. You cannot change targets during a locked cycle. Only tenant administrators can edit or delete Key Results in locked cycles.',
+          message: 'This cycle is locked. Changes are disabled until the cycle is reopened.',
         }
       }
 
@@ -414,7 +432,7 @@ export function useTenantPermissions(): PermissionChecks {
         message: '',
       }
     }
-  }, [canOverrideLocks, isCycleLocked])
+  }, [canOverrideLocks, isCycleLocked, permissions.isSuperuser])
 
   return {
     canViewObjective,
