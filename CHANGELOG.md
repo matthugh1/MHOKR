@@ -1,3 +1,20 @@
+## [OKR Mini Sprint 3.1] 2025-11-05
+
+### Enhancements
+- **Attention Badge Count (Scope-Aware)**: Badge count now updates when scope changes (my/team-workspace/tenant)
+  - Added `data-testid="attention-badge"` for testing
+  - Telemetry: `attention_badge_loaded` event fired once per scope+cycle combination
+- **Governance Status Bar Hover Hint**: Added tooltip explaining "Summary only — use the filters below to refine what you see."
+  - Non-interactive clarification (no click handlers)
+  - Added `data-testid="gov-status-hint"` and `aria-describedby` for accessibility
+
+### Technical
+- Updated `loadAttentionCount()` to include scope parameter (future-proofing)
+- Updated useEffect dependency array to include `selectedScope`
+- Added tooltip wrapper to GovernanceStatusBar using existing Radix UI component
+
+---
+
 ## [OKR Mini Sprint 3] 2025-11-05
 
 ### Features

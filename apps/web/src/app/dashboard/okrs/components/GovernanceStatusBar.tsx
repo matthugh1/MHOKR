@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import api from '@/lib/api'
 import { track } from '@/lib/analytics'
 import { GovernanceStatusSkeleton } from '@/components/ui/skeletons'
@@ -74,44 +80,54 @@ export function GovernanceStatusBar({ cycleId, scope }: GovernanceStatusBarProps
   }
 
   return (
-    <div 
-      className="mb-4 px-4 py-2 bg-muted/30 rounded-md border border-border flex items-center gap-3 flex-wrap" 
-      role="region" 
-      aria-label="Governance status summary"
-      data-testid="gov-status-bar"
-    >
-      <span className="text-xs font-medium text-muted-foreground">Governance:</span>
-      
-      {/* Published vs Draft */}
-      <div className="flex items-center gap-1">
-        {summary.objectives.published > 0 && (
-          <Badge variant="outline" className="text-xs" aria-label={`${summary.objectives.published} published objectives`}>
-            {summary.objectives.published} Published
-          </Badge>
-        )}
-        {summary.objectives.draft > 0 && (
-          <Badge variant="outline" className="text-xs" aria-label={`${summary.objectives.draft} draft objectives`}>
-            {summary.objectives.draft} Draft
-          </Badge>
-        )}
-      </div>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div 
+            className="mb-4 px-4 py-2 bg-muted/30 rounded-md border border-border flex items-center gap-3 flex-wrap cursor-default" 
+            role="region" 
+            aria-label="Governance status summary"
+            aria-describedby="gov-status-description"
+            data-testid="gov-status-bar"
+          >
+            <span className="text-xs font-medium text-muted-foreground">Governance:</span>
+            
+            {/* Published vs Draft */}
+            <div className="flex items-center gap-1">
+              {summary.objectives.published > 0 && (
+                <Badge variant="outline" className="text-xs" aria-label={`${summary.objectives.published} published objectives`}>
+                  {summary.objectives.published} Published
+                </Badge>
+              )}
+              {summary.objectives.draft > 0 && (
+                <Badge variant="outline" className="text-xs" aria-label={`${summary.objectives.draft} draft objectives`}>
+                  {summary.objectives.draft} Draft
+                </Badge>
+              )}
+            </div>
 
-      {/* At Risk / Off Track */}
-      {(summary.krs.atRisk > 0 || summary.krs.blocked > 0) && (
-        <div className="flex items-center gap-1">
-          {summary.krs.atRisk > 0 && (
-            <Badge variant="outline" className="text-xs text-amber-600" aria-label={`${summary.krs.atRisk} key results at risk`}>
-              {summary.krs.atRisk} At Risk
-            </Badge>
-          )}
-          {summary.krs.blocked > 0 && (
-            <Badge variant="outline" className="text-xs text-rose-600" aria-label={`${summary.krs.blocked} key results blocked`}>
-              {summary.krs.blocked} Off Track
-            </Badge>
-          )}
-        </div>
-      )}
-    </div>
+            {/* At Risk / Off Track */}
+            {(summary.krs.atRisk > 0 || summary.krs.blocked > 0) && (
+              <div className="flex items-center gap-1">
+                {summary.krs.atRisk > 0 && (
+                  <Badge variant="outline" className="text-xs text-amber-600" aria-label={`${summary.krs.atRisk} key results at risk`}>
+                    {summary.krs.atRisk} At Risk
+                  </Badge>
+                )}
+                {summary.krs.blocked > 0 && (
+                  <Badge variant="outline" className="text-xs text-rose-600" aria-label={`${summary.krs.blocked} key results blocked`}>
+                    {summary.krs.blocked} Off Track
+                  </Badge>
+                )}
+              </div>
+            )}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent id="gov-status-description" data-testid="gov-status-hint">
+          <p className="text-xs">Summary only — use the filters below to refine what you see.</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }
 

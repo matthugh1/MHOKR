@@ -194,6 +194,7 @@ export default function OKRsPage() {
   const [reloadTrigger, setReloadTrigger] = useState(0)
   const [attentionDrawerOpen, setAttentionDrawerOpen] = useState(false)
   const [attentionCount, setAttentionCount] = useState<number>(0)
+  const attentionTelemetryFiredRef = useRef<Set<string>>(new Set())
   const [liveRegionMessage, setLiveRegionMessage] = useState<string | null>(null)
   const liveRegionRef = useRef<HTMLDivElement>(null)
   // Tree view state
@@ -284,7 +285,7 @@ export default function OKRsPage() {
     loadActiveCycles()
     loadOverdueCheckIns()
     loadAttentionCount()
-  }, [currentOrganization?.id, user, selectedCycleId])
+  }, [currentOrganization?.id, user, selectedCycleId, selectedScope])
   
   
   const loadUsers = async () => {
@@ -352,9 +353,23 @@ export default function OKRsPage() {
         pageSize: '1', // We only need the totalCount
       })
       params.append('cycleId', selectedCycleId)
+      // Note: Backend filters by scope automatically via user context
+      // Including scope param for clarity and future-proofing
+      if (selectedScope) {
+        params.append('scope', selectedScope)
+      }
       
       const response = await api.get(`/okr/insights/attention?${params.toString()}`)
-      setAttentionCount(response.data?.totalCount || 0)
+      const count = response.data?.totalCount || 0
+      setAttentionCount(count)
+      
+      // Telemetry: fire once per successful load
+      track('attention_badge_loaded', {
+        scope: selectedScope,
+        cycle_id: selectedCycleId,
+        count,
+        ts: new Date().toISOString(),
+      })
     } catch (error: any) {
       // Attention endpoint is optional - gracefully degrade
       if (error.response?.status !== 403) {

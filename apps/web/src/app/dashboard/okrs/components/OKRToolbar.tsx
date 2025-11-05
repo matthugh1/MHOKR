@@ -94,7 +94,7 @@ export function OKRToolbar({
         variant="outline"
         size="icon"
         onClick={onOpenAttentionDrawer}
-        aria-label="Open attention drawer"
+        aria-label="Attention items"
         className="relative focus:ring-2 focus:ring-ring focus:outline-none"
       >
         <Bell className="h-4 w-4" />
@@ -103,6 +103,7 @@ export function OKRToolbar({
             variant="destructive" 
             className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
             aria-label={`${attentionCount} items need attention`}
+            data-testid="attention-badge"
           >
             {attentionCount > 99 ? '99+' : attentionCount}
           </Badge>
