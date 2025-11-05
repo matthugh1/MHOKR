@@ -18,6 +18,7 @@ import { Action, ResourceContext } from './types';
 import { RBAC_ACTION_KEY, RBAC_RESOURCE_CONTEXT_KEY } from './rbac.decorator';
 import { buildResourceContextFromRequest } from './helpers';
 import { withTenantContext } from '../../common/prisma/tenant-isolation.middleware';
+import { recordDeny } from './rbac.telemetry';
 
 @Injectable()
 export class RBACGuard implements CanActivate {
@@ -240,6 +241,17 @@ export class RBACGuard implements CanActivate {
       };
       
       this.logger.error('RBAC Authorization Failed', JSON.stringify(debugInfo, null, 2));
+      
+      // Record telemetry for deny event
+      const route = request.url || request.path || 'unknown';
+      recordDeny({
+        action,
+        role: tenantRoles.length > 0 ? tenantRoles[0] : 'UNKNOWN',
+        route,
+        reasonCode: 'PERMISSION_DENIED',
+        userId: user.id,
+        tenantId: resourceContext.tenantId,
+      });
       
       throw new ForbiddenException(
         `User does not have permission to ${action}. TenantId: ${resourceContext.tenantId}, UserOrganizationId: ${user.organizationId}, TenantRoles: ${JSON.stringify(tenantRoles)}`,

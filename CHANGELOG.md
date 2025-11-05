@@ -1,3 +1,51 @@
+## [RBAC Audit & Hardening] 2025-01-27
+
+### Audit & Documentation
+
+- **RBAC Permissions Audit**: Complete code-true map of permission model and enforcement points
+  - Static code scanner (`scripts/rbac/audit-scan.ts`) maps all controller endpoints with guards, tenant checks, audit logging
+  - Dynamic trace script (`scripts/rbac/audit-trace.ts`) for runtime verification with different roles
+  - Spec vs code diff (`scripts/rbac/audit-spec-diff.ts`) compares auto-generated matrix with enforcement
+  - Generated reports: `RBAC_ENFORCEMENT_MAP.md/.csv`, `RBAC_GUARD_CONSISTENCY_REPORT.md`, `RBAC_SPEC_DRIFT.md`, `RBAC_CALLGRAPH_MERMAID.md`
+  - All documentation in British English with file:line citations
+
+### Hardening
+
+- **ESLint Rule**: `local-rbac/no-unguarded-mutation` blocks mutations without `@RequireAction` and `RBACGuard`
+  - Rule location: `scripts/rbac/eslint-no-unguarded-mutation.js`
+  - Configuration: `services/core-api/.eslintrc.custom-rules.js`
+- **CI Check**: `scripts/rbac/ci-enforcement-check.ts` fails CI on CRITICAL/HIGH gaps (configurable via `RBAC_AUDIT_STRICT`)
+- **RBAC Telemetry**: Lightweight deny event logging (`services/core-api/src/modules/rbac/rbac.telemetry.ts`)
+  - Integrated into `RBACGuard` catch path
+  - No-op if `RBAC_TELEMETRY=off`
+  - Records action, role, route, reason code for monitoring
+
+### Tests
+
+- **RBAC Guard Enforcement Tests**: `services/core-api/src/modules/rbac/test/rbac.guard.enforcement.spec.ts`
+  - SUPERUSER read-only enforcement (deny for create/edit/delete/publish)
+  - Publish lock deny for non-admin roles
+  - Tenant boundary deny (cross-tenant attempts)
+- **Visibility Enforcement Tests**: `services/core-api/src/modules/rbac/test/visibility.enforcement.spec.ts`
+  - PRIVATE objective invisibility for non-whitelisted users
+  - TENANT_OWNER access to PRIVATE OKRs
+  - TENANT_ADMIN whitelist handling
+
+### Documentation
+
+- **RBAC_AUDIT_SUMMARY.md**: Index linking to all generated artefacts
+- **RBAC_GUARDRAILS.md**: Lint rule, CI check, telemetry hook documentation
+- **FR_rbac-hardening-fixes.md**: Actionable backlog with file:line references and suggested fixes
+
+### Technical Notes
+
+- No application behaviour changes (except optional telemetry logging)
+- All scripts use British English spelling
+- No TODO/FIXME/HACK comments
+- Preserves SUPERUSER read-only, tenant isolation, and visibility rules
+
+---
+
 ## Seeds
 
 ### Large-Organisation Seed Suite
