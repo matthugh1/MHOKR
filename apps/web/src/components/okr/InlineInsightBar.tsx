@@ -9,6 +9,7 @@ import { ArrowUp, ArrowDown, ArrowRight, Clock, AlertCircle } from 'lucide-react
 import { useRowVisibilityObserver } from '@/hooks/useRowVisibilityObserver'
 import { InlineInsightSkeleton } from '@/components/ui/skeletons'
 import { useUxTiming } from '@/hooks/useUxTiming'
+import { track } from '@/lib/analytics'
 
 interface ObjectiveInsights {
   objectiveId: string
@@ -60,16 +61,22 @@ export function InlineInsightBar({ objectiveId, isVisible, onCheckInClick }: Inl
     
     try {
       const response = await api.get(`/okr/insights/objective/${objectiveId}`)
-      setInsights(response.data)
+      const insightsData = response.data
+      setInsights(insightsData)
       
       const loadTimeMs = timing.end()
       
       // Track telemetry with timing
-      console.log('[Telemetry] okr.insights.objective.loaded', {
-        userId: user?.id,
-        objectiveId,
-        loadTimeMs,
-        timestamp: new Date().toISOString(),
+      track('inline_insight_loaded', {
+        objective_id: objectiveId,
+        signals: [
+          insightsData.statusTrend !== 'UNKNOWN' ? `trend_${insightsData.statusTrend.toLowerCase()}` : null,
+          insightsData.krs.atRisk > 0 ? `krs_at_risk_${insightsData.krs.atRisk}` : null,
+          insightsData.krs.blocked > 0 ? `krs_blocked_${insightsData.krs.blocked}` : null,
+          insightsData.overdueCheckins > 0 ? `overdue_checkins_${insightsData.overdueCheckins}` : null,
+          insightsData.lastUpdateAgeHours > 336 ? 'no_progress_14d' : null,
+        ].filter(Boolean),
+        ts: new Date().toISOString(),
       })
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load insights')
@@ -159,7 +166,7 @@ export function InlineInsightBar({ objectiveId, isVisible, onCheckInClick }: Inl
           className="text-xs px-1 py-0 text-rose-600 cursor-pointer hover:bg-muted focus:ring-2 focus:ring-ring focus:outline-none"
           onClick={() => {
             if (onCheckInClick) {
-              console.log('[Inline Insight] Overdue check-ins clicked')
+              onCheckInClick(objectiveId)
             }
           }}
           role="button"
@@ -173,7 +180,7 @@ export function InlineInsightBar({ objectiveId, isVisible, onCheckInClick }: Inl
           }}
         >
           <AlertCircle className="w-3 h-3 mr-1" />
-          {insights.overdueCheckins} overdue
+          Overdue check-ins
         </Badge>
       )}
       {insights.upcomingCheckins > 0 && (
@@ -181,6 +188,13 @@ export function InlineInsightBar({ objectiveId, isVisible, onCheckInClick }: Inl
           <Clock className="w-3 h-3 mr-1" />
           {insights.upcomingCheckins} upcoming
         </Badge>
+      )}
+      
+      {/* No progress hint (14+ days) */}
+      {insights.lastUpdateAgeHours > 336 && (
+        <span className="text-xs text-muted-foreground">
+          No progress 14 days
+        </span>
       )}
     </div>
   )

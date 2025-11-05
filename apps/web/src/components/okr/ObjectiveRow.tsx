@@ -10,6 +10,7 @@ import { Edit2, Trash2, History, Plus, ChevronDown, ChevronUp, MoreVertical } fr
 import { cn } from "@/lib/utils"
 import { InlineInsightBar } from "./InlineInsightBar"
 import { RbacWhyTooltip } from "@/components/rbac/RbacWhyTooltip"
+import { WhyCantIInspector } from "./WhyCantIInspector"
 import { InlineTitleEditor } from "./inline-editors/InlineTitleEditor"
 import { InlineOwnerEditor } from "./inline-editors/InlineOwnerEditor"
 import { InlineStatusEditor } from "./inline-editors/InlineStatusEditor"
@@ -965,6 +966,16 @@ export function ObjectiveRow({
                 </Button>
               </div>
             )}
+            {/* Why? inspector for blocked edit */}
+            {onEdit && !canEdit && (
+              <div onClick={(e) => e.stopPropagation()}>
+                <WhyCantIInspector
+                  action="edit_okr"
+                  resource={objectiveForHook}
+                  className="ml-1"
+                />
+              </div>
+            )}
             
             {/* Menu button - only show if at least one action is available */}
             {((onDelete && canDelete) || (typeof onOpenHistory === 'function')) ? (
@@ -1008,6 +1019,16 @@ export function ObjectiveRow({
                 )}
               </div>
             ) : null}
+            {/* Why? inspector for blocked delete */}
+            {onDelete && !canDelete && (
+              <div onClick={(e) => e.stopPropagation()}>
+                <WhyCantIInspector
+                  action="delete_okr"
+                  resource={objectiveForHook}
+                  className="ml-1"
+                />
+              </div>
+            )}
             
             {/* Chevron */}
             <motion.div
@@ -1249,6 +1270,17 @@ export function ObjectiveRow({
                                         >
                                           Check in
                                         </Button>
+                                      )}
+                                      {/* Why? inspector for blocked check-in */}
+                                      {onAddCheckIn && canCheckInOnKeyResult && !canCheckInOnKeyResult(kr.id) && (
+                                        <WhyCantIInspector
+                                          action="check_in_kr"
+                                          resource={{
+                                            id: kr.id,
+                                            parentObjective: objectiveForHook,
+                                          }}
+                                          className="text-[10px]"
+                                        />
                                       )}
                                       {onAddInitiativeToKr && canEditKeyResult && canEditKeyResult(kr.id) && (
                                         <Button

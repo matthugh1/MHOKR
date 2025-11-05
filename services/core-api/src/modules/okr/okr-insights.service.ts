@@ -273,7 +273,7 @@ export class OkrInsightsService {
 
     // Calculate status trend (compare current status with previous status from history)
     // For now, use UNKNOWN (can be enhanced with check-in history later)
-    let statusTrend: 'IMPROVING' | 'DECLINING' | 'FLAT' | 'UNKNOWN' = 'UNKNOWN';
+    const statusTrend: 'IMPROVING' | 'DECLINING' | 'FLAT' | 'UNKNOWN' = 'UNKNOWN';
 
     // TODO: Enhance with historical status changes from audit logs or check-ins
     // For now, we'll use UNKNOWN

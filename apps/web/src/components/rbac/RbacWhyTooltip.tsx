@@ -82,7 +82,7 @@ export function RbacWhyTooltip({ action, resource, children, allowed }: RbacWhyT
       
       if (testId) {
         // Store testId for later use in tooltip
-        ;(resource as any)._lockTestId = testId
+        (resource as any)._lockTestId = testId
       }
     }
 
@@ -108,7 +108,7 @@ export function RbacWhyTooltip({ action, resource, children, allowed }: RbacWhyT
     
     // SUPERUSER read-only check
     if (lockInfo?.message?.includes('Platform administrator')) {
-      ;(resource as any)._lockTestId = 'tip-superuser-readonly'
+      (resource as any)._lockTestId = 'tip-superuser-readonly'
     }
   }
 

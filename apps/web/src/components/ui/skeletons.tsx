@@ -56,20 +56,17 @@ export function CycleHealthSkeleton() {
   )
 }
 
-export function DrawerFormSkeleton() {
+export function GovernanceStatusSkeleton() {
   return (
-    <div className="space-y-4 animate-pulse">
-      <div className="space-y-2">
-        <div className="h-4 bg-muted rounded w-24" />
-        <div className="h-10 bg-muted rounded w-full" />
+    <div className="mb-4 px-4 py-2 bg-muted/30 rounded-md border border-border flex items-center gap-3 animate-pulse">
+      <div className="h-4 bg-muted rounded w-24" />
+      <div className="flex items-center gap-1">
+        <div className="h-5 bg-muted rounded w-16" />
+        <div className="h-5 bg-muted rounded w-12" />
       </div>
-      <div className="space-y-2">
-        <div className="h-4 bg-muted rounded w-32" />
-        <div className="h-10 bg-muted rounded w-full" />
-      </div>
-      <div className="space-y-2">
-        <div className="h-4 bg-muted rounded w-28" />
-        <div className="h-24 bg-muted rounded w-full" />
+      <div className="flex items-center gap-1">
+        <div className="h-5 bg-muted rounded w-16" />
+        <div className="h-5 bg-muted rounded w-12" />
       </div>
     </div>
   )

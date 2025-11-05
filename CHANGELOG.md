@@ -1,3 +1,31 @@
+## [OKR Mini Sprint 3] 2025-11-05
+
+### Features
+- **Governance Status Bar**: Non-interactive summary strip showing cycle health metrics (Published/Draft counts, At Risk/Off Track KRs)
+  - Fetches from `/okr/insights/cycle-summary` with scope parameter
+  - Positioned above filter bar, below page title
+  - Telemetry: `governance_status_viewed` event fired once per mount
+- **Why Can't I Inspector**: Production-safe "Why?" links for blocked actions (user-flag gated)
+  - Only visible when `rbacInspector` feature flag is enabled
+  - Shows on blocked edit/delete actions and blocked check-ins
+  - Popover displays reason code and human-readable message
+  - Data-testids: `why-link`, `why-popover`
+- **Inline Health Signals**: Enhanced row-level health hints
+  - Shows "2 KRs at risk", "Overdue check-ins", "No progress 14 days" hints
+  - Lazy-loaded via IntersectionObserver when row visible (≥50% threshold)
+  - Telemetry: `inline_insight_loaded` event with signals array
+  - Respects visibility: backend endpoint filters automatically
+
+### Technical
+- **GovernanceStatusBar**: New component `apps/web/src/app/dashboard/okrs/components/GovernanceStatusBar.tsx`
+- **WhyCantIInspector**: New component `apps/web/src/components/okr/WhyCantIInspector.tsx`
+- **InlineInsightBar**: Enhanced with "No progress 14 days" hint and telemetry
+- No new filters added - GovernanceStatusBar is summary-only
+- RBAC, tenant isolation, and visibility unchanged
+- SUPERUSER remains read-only
+
+---
+
 ## [OKR Scope Mini Sprint 2] 2025-11-05
 
 ### Improvements

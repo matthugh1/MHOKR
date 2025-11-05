@@ -66,6 +66,7 @@ import { track } from '@/lib/analytics'
 import { cn } from '@/lib/utils'
 import { OKRFilterBar } from './components/OKRFilterBar'
 import { OKRToolbar } from './components/OKRToolbar'
+import { GovernanceStatusBar } from './components/GovernanceStatusBar'
 
 // NOTE: This screen is now the system of record for CRUD on Objectives, Key Results, and Initiatives.
 export default function OKRsPage() {
@@ -849,6 +850,11 @@ export default function OKRsPage() {
               </div>
             )}
           </header>
+
+          {/* Governance Status Bar */}
+          {selectedCycleId && (
+            <GovernanceStatusBar cycleId={selectedCycleId} scope={selectedScope} />
+          )}
 
           {/* Filters and Search Toolbar */}
           <div className="mb-6">
