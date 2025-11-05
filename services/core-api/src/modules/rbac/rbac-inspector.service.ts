@@ -5,14 +5,13 @@
  * Now uses FeatureFlagService internally for consistency.
  */
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { RBACService } from './rbac.service';
 import { FeatureFlagService } from './feature-flag.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 @Injectable()
 export class RBACInspectorService {
-  private readonly logger = new Logger(RBACInspectorService.name);
 
   constructor(
     private rbacService: RBACService,

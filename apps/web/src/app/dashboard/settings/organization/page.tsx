@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { PageContainer } from '@/components/ui/PageContainer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -315,34 +317,32 @@ function OrganizationSettings() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-2xl font-bold text-slate-900 mb-6">Organization Settings</h1>
-          <div className="text-slate-600">Loading...</div>
-        </div>
-      </div>
+      <PageContainer variant="form">
+        <PageHeader
+          title="Organization Settings"
+          subtitle="Manage organization settings and structure"
+        />
+        <div className="text-slate-600">Loading...</div>
+      </PageContainer>
     )
   }
 
   // Superuser view - show all organizations
   if (isSuperuser && allOrganizations.length > 0) {
     return (
-      <div className="p-6">
-        <div className="max-w-7xl mx-auto space-y-6">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-2xl font-bold text-slate-900">Organization Settings</h1>
-              <Badge className="bg-purple-600 text-white flex items-center gap-1">
-                <Shield className="h-3 w-3" />
-                Superuser
-              </Badge>
-            </div>
-            <p className="text-slate-600 mt-1">System-wide organization management</p>
-            <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-              <p className="text-sm text-purple-900">
-                <strong>Superuser Mode:</strong> You have access to all organizations in the system.
-              </p>
-            </div>
+      <PageContainer variant="form">
+        <PageHeader
+          title="Organization Settings"
+          subtitle="System-wide organization management"
+          badges={[
+            { label: 'Superuser', tone: 'warning' }
+          ]}
+        />
+        <div className="space-y-6">
+          <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+            <p className="text-sm text-purple-900">
+              <strong>Superuser Mode:</strong> You have access to all organizations in the system.
+            </p>
           </div>
 
           {/* All Organizations List */}
@@ -481,55 +481,54 @@ function OrganizationSettings() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-
         </div>
-      </div>
+      </PageContainer>
     )
   }
 
   // Regular user - no organization
   if (!organization && !isSuperuser) {
     return (
-      <div className="p-6">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-2xl font-bold text-slate-900 mb-6">Organization Settings</h1>
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-slate-600">
-                You are not a member of any organization yet. Please contact your administrator.
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      <PageContainer variant="form">
+        <PageHeader
+          title="Organization Settings"
+          subtitle="Manage organization settings and structure"
+        />
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-slate-600">
+              You are not a member of any organization yet. Please contact your administrator.
+            </div>
+          </CardContent>
+        </Card>
+      </PageContainer>
     )
   }
 
   // Regular user - has organization OR superuser viewing specific org
   if (!organization && isSuperuser && allOrganizations.length === 0) {
     return (
-      <div className="p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center gap-3 mb-6">
-            <h1 className="text-2xl font-bold text-slate-900">Organization Settings</h1>
-            <Badge className="bg-purple-600 text-white flex items-center gap-1">
-              <Shield className="h-3 w-3" />
-              Superuser
-            </Badge>
-          </div>
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-center space-y-4">
-                <div className="text-slate-600">
-                  No organizations exist yet. Create your first organization to get started.
-                </div>
-                <Button onClick={() => setShowCreateDialog(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Organization
-                </Button>
+      <PageContainer variant="form">
+        <PageHeader
+          title="Organization Settings"
+          subtitle="System-wide organization management"
+          badges={[
+            { label: 'Superuser', tone: 'warning' }
+          ]}
+        />
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center space-y-4">
+              <div className="text-slate-600">
+                No organizations exist yet. Create your first organization to get started.
               </div>
-            </CardContent>
-          </Card>
+              <Button onClick={() => setShowCreateDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Organization
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
           {/* Create Organization Dialog */}
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
@@ -577,45 +576,35 @@ function OrganizationSettings() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
+      </PageContainer>
     )
   }
 
   return (
-    <div className="p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-2xl font-bold text-slate-900">Organization Settings</h1>
-            {isSuperuser && (
-              <Badge className="bg-purple-600 text-white flex items-center gap-1">
-                <Shield className="h-3 w-3" />
-                Superuser
-              </Badge>
-            )}
+    <PageContainer variant="form">
+      <PageHeader
+        title="Organization Settings"
+        subtitle={isSuperuser ? 'System-wide organization management' : 'Your company-wide settings and structure'}
+        badges={isSuperuser ? [{ label: 'Superuser', tone: 'warning' }] : []}
+      />
+      <div className="space-y-6">
+        {isSuperuser && (
+          <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+            <p className="text-sm text-purple-900">
+              <strong>Superuser Mode:</strong> You have system-wide access to all organizations.
+            </p>
           </div>
-          <p className="text-slate-600 mt-1">
-            {isSuperuser ? 'System-wide organization management' : 'Your company-wide settings and structure'}
-          </p>
-          {isSuperuser && (
-            <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-              <p className="text-sm text-purple-900">
-                <strong>Superuser Mode:</strong> You have system-wide access to all organizations.
-              </p>
-            </div>
-          )}
-          {!isSuperuser && (
-            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-900">
-                <strong>Hierarchy:</strong> Organization → Workspaces → Teams → People
-              </p>
-              <p className="text-xs text-blue-700 mt-1">
-                Your organization contains multiple workspaces (departments). Each workspace has teams, and each team has members.
-              </p>
-            </div>
-          )}
-        </div>
+        )}
+        {!isSuperuser && (
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-900">
+              <strong>Hierarchy:</strong> Organization → Workspaces → Teams → People
+            </p>
+            <p className="text-xs text-blue-700 mt-1">
+              Your organization contains multiple workspaces (departments). Each workspace has teams, and each team has members.
+            </p>
+          </div>
+        )}
 
         {/* Organization Overview */}
         {organization && (
@@ -875,7 +864,7 @@ function OrganizationSettings() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageContainer>
   )
 }
 

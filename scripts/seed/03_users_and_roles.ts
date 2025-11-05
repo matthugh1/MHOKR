@@ -73,6 +73,7 @@ async function createUsersAndRoles(
     const workspaceId = workspaceIds.get(workspace.name)!;
     const workspaceSlug = workspace.name.toLowerCase();
 
+    let firstWorkspaceLeadEmail: string | null = null;
     for (let i = 0; i < 4; i++) {
       const email = `workspace-lead-${workspaceSlug}-${i + 1}@puzzelcx.local`;
       const userId = await createUser(prisma, {
@@ -85,6 +86,9 @@ async function createUsersAndRoles(
       });
       userIds.set(email, userId);
       userEmails.push(email);
+      if (i === 0) {
+        firstWorkspaceLeadEmail = email;
+      }
 
       await prisma.roleAssignment.upsert({
         where: {
@@ -116,7 +120,7 @@ async function createUsersAndRoles(
         role: 'TEAM_LEAD',
         scopeType: 'TEAM',
         scopeId: teamId,
-        managerEmail: userEmails[userEmails.length - 1],
+        managerEmail: firstWorkspaceLeadEmail || adminEmails[0],
       });
       userIds.set(leadEmail, leadId);
       userEmails.push(leadEmail);

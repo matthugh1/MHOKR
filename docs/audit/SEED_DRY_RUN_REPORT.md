@@ -1,7 +1,7 @@
 # Seed Dry Run Report
 
-**Generated:** 2025-11-05T14:40:41.452Z
-**Size:** demo
+**Generated:** 2025-11-05T14:44:49.592Z
+**Size:** full
 
 ## Planned Counts
 
@@ -10,18 +10,18 @@
 - **teams**: 20
 - **users**: 200
 - **cycles**: 4
-- **objectives**: 256
-- **keyResults**: 768
-- **initiatives**: 512
-- **checkIns**: 3840
+- **objectives**: 392
+- **keyResults**: 1176
+- **initiatives**: 784
+- **checkIns**: 5880
 - **checkInRequests**: 30
 - **roleAssignments**: 250
 
 ## Configuration
 
-- Tenant objectives per cycle: 6
-- Workspace objectives per cycle: 3
-- Team objectives per cycle: 2
+- Tenant objectives per cycle: 8
+- Workspace objectives per cycle: 5
+- Team objectives per cycle: 3
 
 ## Notes
 

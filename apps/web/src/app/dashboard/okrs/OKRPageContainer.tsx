@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
@@ -102,6 +102,35 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
   const keyResults = (rawObj.keyResults || []).map((kr: any): any => {
     const isOverdue = overdueCheckIns.some(item => item.krId === kr.keyResultId || item.krId === kr.id)
     
+    // Calculate last check-in date and next check-in due from check-ins if available
+    let lastCheckInDate: string | null = null
+    let nextCheckInDue: string | null = null
+    
+    if (kr.checkIns && Array.isArray(kr.checkIns) && kr.checkIns.length > 0) {
+      // Get the most recent check-in
+      const latestCheckIn = kr.checkIns[0]
+      lastCheckInDate = latestCheckIn.createdAt || null
+      
+      // Calculate next check-in due based on cadence
+      if (kr.cadence && kr.cadence !== 'NONE' && lastCheckInDate) {
+        const lastCheckIn = new Date(lastCheckInDate)
+        let daysBetween = 7
+        switch (kr.cadence) {
+          case 'WEEKLY':
+            daysBetween = 7
+            break
+          case 'BIWEEKLY':
+            daysBetween = 14
+            break
+          case 'MONTHLY':
+            daysBetween = 31
+            break
+        }
+        const nextDue = new Date(lastCheckIn.getTime() + daysBetween * 24 * 60 * 60 * 1000)
+        nextCheckInDue = nextDue.toISOString()
+      }
+    }
+    
     return {
       id: kr.keyResultId || kr.id,
       title: kr.title,
@@ -114,6 +143,8 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
       checkInCadence: kr.cadence,
       isOverdue,
       ownerId: kr.ownerId,
+      lastCheckInDate,
+      nextCheckInDue,
       canCheckIn: kr.canCheckIn !== undefined ? kr.canCheckIn : false,
     }
   })
@@ -160,10 +191,14 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
   const initiatives = allInitiatives.map((init: any) => ({
     id: init.id,
     title: init.title,
+    description: init.description || undefined,
     status: init.status,
     dueDate: init.dueDate,
     keyResultId: init.keyResultId,
     keyResultTitle: init.keyResultTitle,
+    ownerId: init.ownerId || undefined,
+    createdAt: init.createdAt || undefined,
+    updatedAt: init.updatedAt || undefined,
   }))
   
     const owner = rawObj.owner || availableUsers.find(u => u.id === rawObj.ownerId)
@@ -233,14 +268,12 @@ export function OKRPageContainer({
   const [canCreateObjective, setCanCreateObjective] = useState<boolean>(false)
   const pageSize = 20
   
-  useEffect(() => {
-    if (currentOrganization?.id) {
-      loadOKRs()
+  const loadOKRs = useCallback(async () => {
+    if (!currentOrganization?.id) {
+      console.log('[OKR PAGE CONTAINER] Skipping loadOKRs - no organization ID')
+      return
     }
-  }, [currentOrganization?.id, selectedCycleId, selectedStatus, currentPage, filterWorkspaceId, filterTeamId, filterOwnerId, searchQuery, selectedTimeframeKey])
-  
-  const loadOKRs = async () => {
-    if (!currentOrganization?.id) return
+    console.log('[OKR PAGE CONTAINER] Loading OKRs for organization:', currentOrganization.id, 'scope:', selectedScope)
     try {
       setLoading(true)
       setPermissionError(null)
@@ -264,11 +297,18 @@ export function OKRPageContainer({
         params.set('scope', selectedScope)
       }
       
+      console.log('[OKR PAGE CONTAINER] Fetching from:', `/okr/overview?${params.toString()}`)
       const response = await api.get(`/okr/overview?${params.toString()}`)
       
       // Backend now returns paginated envelope
       const envelope = response.data || {}
       const objectives = envelope.objectives || []
+      
+      console.log('[OKR PAGE CONTAINER] Received response:', {
+        totalCount: envelope.totalCount,
+        objectivesCount: objectives.length,
+        canCreateObjective: envelope.canCreateObjective
+      })
       
       setTotalCount(envelope.totalCount || 0)
       
@@ -289,10 +329,40 @@ export function OKRPageContainer({
         setCanCreateObjective(envelope.canCreateObjective || false)
       }
       
-      const mapped = Array.isArray(objectives) ? objectives.map((obj: any) => 
-        mapObjectiveData(obj, availableUsers, activeCycles, overdueCheckIns)
-      ) : []
+      const mapped = Array.isArray(objectives) ? objectives.map((obj: any) => {
+        try {
+          return mapObjectiveData(obj, availableUsers, activeCycles, overdueCheckIns)
+        } catch (error) {
+          console.error('[OKR PAGE CONTAINER] Error mapping objective:', obj.id, error)
+          // Return a minimal valid objective structure to prevent crashes
+          return {
+            id: obj.objectiveId || obj.id,
+            title: obj.title || 'Untitled Objective',
+            status: obj.status || 'ON_TRACK',
+            publishState: obj.publishState || (obj.isPublished ? 'PUBLISHED' : 'DRAFT'),
+            isPublished: obj.isPublished ?? false,
+            visibilityLevel: obj.visibilityLevel,
+            cycleName: obj.cycle?.name || obj.cycleName,
+            cycleLabel: obj.cycle?.name || obj.cycleName || 'Unassigned',
+            cycleStatus: obj.cycleStatus || obj.cycle?.status || 'ACTIVE',
+            owner: obj.owner || availableUsers.find(u => u.id === obj.ownerId) || { id: obj.ownerId || '', name: 'Unassigned', email: null },
+            progress: obj.progress ?? 0,
+            keyResults: [],
+            initiatives: [],
+            overdueCountForObjective: 0,
+            lowestConfidence: null,
+            ownerId: obj.ownerId,
+            organizationId: obj.organizationId,
+            workspaceId: obj.workspaceId,
+            teamId: obj.teamId,
+            cycleId: obj.cycle?.id || obj.cycleId,
+            canEdit: obj.canEdit !== undefined ? obj.canEdit : false,
+            canDelete: obj.canDelete !== undefined ? obj.canDelete : false,
+          }
+        }
+      }) : []
       
+      console.log('[OKR PAGE CONTAINER] Loaded objectives:', mapped.length, 'from', objectives.length, 'raw objectives')
       setObjectivesPage(mapped)
     } catch (error: any) {
       console.error('[OKR PAGE CONTAINER] Failed to load OKRs', error)
@@ -308,7 +378,23 @@ export function OKRPageContainer({
     } finally {
       setLoading(false)
     }
-  }
+  }, [currentOrganization?.id, selectedCycleId, selectedStatus, currentPage, filterWorkspaceId, filterTeamId, filterOwnerId, searchQuery, selectedTimeframeKey, selectedScope])
+  
+  useEffect(() => {
+    console.log('[OKR PAGE CONTAINER] useEffect triggered:', {
+      hasOrgId: !!currentOrganization?.id,
+      orgId: currentOrganization?.id,
+      loadOKRsReady: !!loadOKRs
+    })
+    if (currentOrganization?.id) {
+      loadOKRs()
+    } else {
+      // Reset state when organization is not available
+      setObjectivesPage([])
+      setLoading(false)
+      setTotalCount(0)
+    }
+  }, [currentOrganization?.id, loadOKRs])
   
   const objectivesViewModel = useMemo(() => {
     const safeObjectives = Array.isArray(objectivesPage) ? objectivesPage : []

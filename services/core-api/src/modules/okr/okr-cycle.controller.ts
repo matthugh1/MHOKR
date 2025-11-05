@@ -15,7 +15,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { OkrCycleService, CreateCycleDto, UpdateCycleDto } from './okr-cycle.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RBACGuard } from '../rbac';
+import { RBACGuard, RequireAction } from '../rbac';
 import { RBACService } from '../rbac/rbac.service';
 import { OkrTenantGuard } from './tenant-guard';
 
@@ -127,6 +127,7 @@ export class OkrCycleController {
   }
 
   @Post()
+  @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Create new cycle' })
   async create(@Body() data: CreateCycleDto, @Req() req: any) {
     await this.checkCycleManagementPermission(req);
@@ -141,6 +142,7 @@ export class OkrCycleController {
   }
 
   @Patch(':id')
+  @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Update cycle' })
   async update(
     @Param('id') id: string,
@@ -159,6 +161,7 @@ export class OkrCycleController {
   }
 
   @Patch(':id/status')
+  @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Update cycle status' })
   async updateStatus(
     @Param('id') id: string,
@@ -181,6 +184,7 @@ export class OkrCycleController {
   }
 
   @Delete(':id')
+  @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Delete cycle (only if no linked OKRs)' })
   async delete(@Param('id') id: string, @Req() req: any) {
     await this.checkCycleManagementPermission(req);

@@ -6,6 +6,8 @@ import { Sparkles, ArrowRight, BarChart3, Target } from 'lucide-react'
 import Link from 'next/link'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { PageContainer } from '@/components/ui/PageContainer'
 import { useWorkspace } from '@/contexts/workspace.context'
 import { usePermissions } from '@/hooks/usePermissions'
 import { useAuth } from '@/contexts/auth.context'
@@ -255,338 +257,321 @@ export default function DashboardPage() {
   return (
     <ProtectedRoute>
       <DashboardLayout>
-        <div className="bg-neutral-50 min-h-screen relative">
-          <div className="absolute top-0 left-0 w-full h-[160px] bg-gradient-to-b from-white/60 to-transparent pointer-events-none" />
-          <div className="max-w-[1400px] mx-auto px-6 py-6 relative">
-            {/* Header */}
-            <motion.header
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-              className="mb-6"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h1 className="text-xl font-semibold text-neutral-900 flex items-center gap-2">
-                    My Dashboard
-                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gradient-to-r from-violet-600/10 to-fuchsia-400/10 text-violet-700 border border-violet-300/40">
-                      AI-assisted
-                    </span>
-                    {userRoles.isSuperuser && (
-                      <Badge variant="outline" className="text-xs">
-                        Read-only
-                      </Badge>
-                    )}
-                  </h1>
-                  <p className="text-sm text-neutral-500 mt-1">
-                    {userRoles.isSuperuser
-                      ? 'System-wide overview with read-only access.'
-                      : userRoles.isAdmin
-                      ? 'Organisation-wide OKR performance and cross-workspace insights.'
-                      : userRoles.isManager
-                      ? 'Your OKRs, team performance, and cycle overview.'
-                      : 'Your OKRs and progress tracking.'}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Link href="/dashboard/okrs">
-                    {renderReadOnlyTooltip(
-                      <Button variant="outline" size="sm" className="gap-2" disabled={userRoles.isSuperuser}>
-                        <Target className="w-4 h-4" />
-                        View All OKRs
-                        <ArrowRight className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </Link>
-                  <Link href="/dashboard/analytics">
-                    <Button variant="outline" size="sm" className="gap-2">
-                      <BarChart3 className="w-4 h-4" />
-                      See Analytics
-                      <ArrowRight className="w-4 h-4" />
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </motion.header>
+        <PageContainer variant="dashboard" withGradient>
+          <div className="mb-8">
+            <PageHeader
+              title="My Dashboard"
+              subtitle={userRoles.isSuperuser
+                ? 'System-wide overview with read-only access.'
+                : userRoles.isAdmin
+                ? 'Organisation-wide OKR performance and cross-workspace insights.'
+                : userRoles.isManager
+                ? 'Your OKRs, team performance, and cycle overview.'
+                : 'Your OKRs and progress tracking.'}
+              badges={[
+                { label: 'AI-assisted', tone: 'neutral' },
+                ...(userRoles.isSuperuser ? [{ label: 'Read-only', tone: 'warning' }] : [])
+              ]}
+            />
+          </div>
 
-            <div className="h-[2px] w-full bg-gradient-to-r from-violet-600 via-fuchsia-400 to-transparent rounded-full mb-6" />
+          <div className="h-[2px] w-full bg-gradient-to-r from-violet-600 via-fuchsia-400 to-transparent rounded-full mb-6" />
 
-            {loading ? (
-              <div className="text-center py-12">
-                <p className="text-neutral-500">Loading dashboard...</p>
-              </div>
-            ) : (
-              <>
-                {/* SECTION 1: My OKRs - Always first if user has personal OKRs */}
-                {myOkrsCount > 0 && (
-                  <motion.section
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.1 }}
-                    className="mb-10"
-                  >
-                    <Card>
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <CardTitle>My OKRs</CardTitle>
-                            <CardDescription>
-                              Your personal objectives and key results
-                            </CardDescription>
-                          </div>
-                          {!userRoles.isSuperuser && canCreateObjective && (
-                            <Link href="/dashboard/okrs?action=create">
-                              <Button variant="outline" size="sm">
-                                Create OKR
-                              </Button>
-                            </Link>
-                          )}
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        {myOkrsLoading ? (
-                          <div className="text-sm text-neutral-500 py-4">Loading your OKRs...</div>
-                        ) : (
-                          <>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                              <div className="text-sm">
-                                <div className="font-medium text-neutral-900 mb-1">Objectives</div>
-                                <div className="text-2xl font-semibold">{myOkrsCount}</div>
-                              </div>
-                              <div className="text-sm">
-                                <div className="font-medium text-neutral-900 mb-1">At Risk</div>
-                                <div className={`text-2xl font-semibold ${myOkrsAtRisk > 0 ? 'text-rose-600' : 'text-neutral-700'}`}>
-                                  {myOkrsAtRisk}
-                                </div>
-                              </div>
-                              <div className="text-sm">
-                                <div className="font-medium text-neutral-900 mb-1">Key Results</div>
-                                <div className="text-2xl font-semibold">
-                                  {myOkrs.reduce((sum, obj) => sum + (obj.keyResults?.length || 0), 0)}
-                                </div>
-                              </div>
-                            </div>
-                            {myOkrs.length > 0 && (
-                              <Link href="/dashboard/okrs?ownerId=self">
-                                <Button variant="ghost" size="sm" className="w-full">
-                                  View all my OKRs
-                                  <ArrowRight className="w-3 h-3 ml-2" />
-                                </Button>
-                              </Link>
-                            )}
-                          </>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </motion.section>
-                )}
+          {/* Quick Actions Toolbar */}
+          <div className="flex items-center justify-end gap-3 mb-6">
+            <Link href="/dashboard/okrs">
+              {renderReadOnlyTooltip(
+                <Button variant="outline" size="sm" className="gap-2" disabled={userRoles.isSuperuser}>
+                  <Target className="w-4 h-4" />
+                  View All OKRs
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              )}
+            </Link>
+            <Link href="/dashboard/analytics">
+              <Button variant="outline" size="sm" className="gap-2">
+                <BarChart3 className="w-4 h-4" />
+                See Analytics
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </Link>
+          </div>
 
-                {/* SECTION 2: My Team/Workspace OKRs - For managers */}
-                {userRoles.isManager && (userRoles.managedTeams.length > 0 || userRoles.managedWorkspaces.length > 0) && (
-                  <motion.section
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.2 }}
-                    className="mb-10"
-                  >
-                    <Card>
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <CardTitle>
-                              {userRoles.managedTeams.length > 0 && userRoles.managedWorkspaces.length > 0
-                                ? "My Team & Workspace OKRs"
-                                : userRoles.managedTeams.length > 0
-                                ? "My Team's OKRs"
-                                : "My Workspace OKRs"}
-                            </CardTitle>
-                            <CardDescription>
-                              {userRoles.managedTeams.length > 0 && userRoles.managedWorkspaces.length > 0
-                                ? 'Objectives and key results for your team and workspace'
-                                : userRoles.managedTeams.length > 0
-                                ? 'Objectives and key results for your team'
-                                : 'Objectives and key results for your workspace'}
-                            </CardDescription>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-sm text-neutral-600 mb-4">
-                          {userRoles.managedTeams.length > 0 && (
-                            <p className="mb-2">
-                              Managing {userRoles.managedTeams.length} team{userRoles.managedTeams.length !== 1 ? 's' : ''}
-                            </p>
-                          )}
-                          {userRoles.managedWorkspaces.length > 0 && (
-                            <p>
-                              Managing {userRoles.managedWorkspaces.length} workspace{userRoles.managedWorkspaces.length !== 1 ? 's' : ''}
-                            </p>
-                          )}
-                        </div>
-                        <Link href="/dashboard/okrs">
-                          <Button variant="ghost" size="sm" className="w-full">
-                            View team and workspace OKRs
-                            <ArrowRight className="w-3 h-3 ml-2" />
-                          </Button>
-                        </Link>
-                      </CardContent>
-                    </Card>
-                  </motion.section>
-                )}
-
-                {/* SECTION 4: Cycle Overview - For managers and admins */}
-                {(userRoles.isManager || userRoles.isAdmin || userRoles.isSuperuser) && activeCycleId && (
-                  <motion.section
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.3 }}
-                    className="mb-10"
-                  >
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>
-                          {userRoles.isAdmin ? 'Cycle Overview' : 'Cycle Health'}
-                        </CardTitle>
-                        <CardDescription>
-                          {userRoles.isAdmin
-                            ? 'Organisation-wide cycle summary'
-                            : 'Team and workspace cycle health'}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        {cycleHealthSummary ? (
-                          <CycleHealthStrip
-                            cycleId={activeCycleId}
-                            onFilterClick={(filterType, value) => {
-                              window.location.href = `/dashboard/okrs?filter=${filterType}${value ? `&value=${value}` : ''}`
-                            }}
-                          />
-                        ) : (
-                          <div className="text-sm text-neutral-500 py-4">
-                            Loading cycle health data...
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </motion.section>
-                )}
-
-                {/* SECTION 5: Attention Feed - For all users */}
+          {loading ? (
+            <div className="text-center py-12">
+              <p className="text-neutral-500">Loading dashboard...</p>
+            </div>
+          ) : (
+            <>
+              {/* SECTION 1: My OKRs - Always first if user has personal OKRs */}
+              {myOkrsCount > 0 && (
                 <motion.section
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: 0.35 }}
-                  className="mt-10"
+                  transition={{ duration: 0.3, delay: 0.1 }}
+                  className="mb-10"
                 >
-                  <div className="mb-4">
-                    <h2 className="text-lg font-semibold text-neutral-900 flex items-center gap-2">
-                      Attention Feed
-                    </h2>
-                    <p className="text-sm text-neutral-500 mt-1">
-                      Items requiring your attention
-                    </p>
-                  </div>
-
                   <Card>
                     <CardHeader>
                       <div className="flex items-center justify-between">
-                        <CardTitle>Items Requiring Attention</CardTitle>
-                        {attentionItems.length > 0 && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setAttentionDrawerOpen(true)}
-                            className="text-xs"
-                          >
-                            View all
-                            <ArrowRight className="w-3 h-3 ml-1" />
-                          </Button>
+                        <div>
+                          <CardTitle>My OKRs</CardTitle>
+                          <CardDescription>
+                            Your personal objectives and key results
+                          </CardDescription>
+                        </div>
+                        {!userRoles.isSuperuser && canCreateObjective && (
+                          <Link href="/dashboard/okrs?action=create">
+                            <Button variant="outline" size="sm">
+                              Create OKR
+                            </Button>
+                          </Link>
                         )}
                       </div>
+                    </CardHeader>
+                    <CardContent>
+                      {myOkrsLoading ? (
+                        <div className="text-sm text-neutral-500 py-4">Loading your OKRs...</div>
+                      ) : (
+                        <>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                            <div className="text-sm">
+                              <div className="font-medium text-neutral-900 mb-1">Objectives</div>
+                              <div className="text-2xl font-semibold">{myOkrsCount}</div>
+                            </div>
+                            <div className="text-sm">
+                              <div className="font-medium text-neutral-900 mb-1">At Risk</div>
+                              <div className={`text-2xl font-semibold ${myOkrsAtRisk > 0 ? 'text-rose-600' : 'text-neutral-700'}`}>
+                                {myOkrsAtRisk}
+                              </div>
+                            </div>
+                            <div className="text-sm">
+                              <div className="font-medium text-neutral-900 mb-1">Key Results</div>
+                              <div className="text-2xl font-semibold">
+                                {myOkrs.reduce((sum, obj) => sum + (obj.keyResults?.length || 0), 0)}
+                              </div>
+                            </div>
+                          </div>
+                          {myOkrs.length > 0 && (
+                            <Link href="/dashboard/okrs?ownerId=self">
+                              <Button variant="ghost" size="sm" className="w-full">
+                                View all my OKRs
+                                <ArrowRight className="w-3 h-3 ml-2" />
+                              </Button>
+                            </Link>
+                          )}
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                </motion.section>
+              )}
+
+              {/* SECTION 2: My Team/Workspace OKRs - For managers */}
+              {userRoles.isManager && (userRoles.managedTeams.length > 0 || userRoles.managedWorkspaces.length > 0) && (
+                <motion.section
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: 0.2 }}
+                  className="mb-10"
+                >
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle>
+                            {userRoles.managedTeams.length > 0 && userRoles.managedWorkspaces.length > 0
+                              ? "My Team & Workspace OKRs"
+                              : userRoles.managedTeams.length > 0
+                              ? "My Team's OKRs"
+                              : "My Workspace OKRs"}
+                          </CardTitle>
+                          <CardDescription>
+                            {userRoles.managedTeams.length > 0 && userRoles.managedWorkspaces.length > 0
+                              ? 'Objectives and key results for your team and workspace'
+                              : userRoles.managedTeams.length > 0
+                              ? 'Objectives and key results for your team'
+                              : 'Objectives and key results for your workspace'}
+                          </CardDescription>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-sm text-neutral-600 mb-4">
+                        {userRoles.managedTeams.length > 0 && (
+                          <p className="mb-2">
+                            Managing {userRoles.managedTeams.length} team{userRoles.managedTeams.length !== 1 ? 's' : ''}
+                          </p>
+                        )}
+                        {userRoles.managedWorkspaces.length > 0 && (
+                          <p>
+                            Managing {userRoles.managedWorkspaces.length} workspace{userRoles.managedWorkspaces.length !== 1 ? 's' : ''}
+                          </p>
+                        )}
+                      </div>
+                      <Link href="/dashboard/okrs">
+                        <Button variant="ghost" size="sm" className="w-full">
+                          View team and workspace OKRs
+                          <ArrowRight className="w-3 h-3 ml-2" />
+                        </Button>
+                      </Link>
+                    </CardContent>
+                  </Card>
+                </motion.section>
+              )}
+
+              {/* SECTION 4: Cycle Overview - For managers and admins */}
+              {(userRoles.isManager || userRoles.isAdmin || userRoles.isSuperuser) && activeCycleId && (
+                <motion.section
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: 0.3 }}
+                  className="mb-10"
+                >
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>
+                        {userRoles.isAdmin ? 'Cycle Overview' : 'Cycle Health'}
+                      </CardTitle>
                       <CardDescription>
-                        Overdue check-ins, status changes, and items needing follow-up
+                        {userRoles.isAdmin
+                          ? 'Organisation-wide cycle summary'
+                          : 'Team and workspace cycle health'}
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      {attentionItems.length > 0 ? (
-                        <div className="space-y-3">
-                          {attentionItems.slice(0, 5).map((item, index) => (
-                            <div
-                              key={`${item.type}-${item.objectiveId}-${item.keyResultId || ''}-${index}`}
-                              className="flex items-start gap-3 p-3 rounded-md border border-neutral-200 hover:bg-neutral-50 transition-colors"
-                            >
-                              <div className="mt-0.5">{getAttentionItemIcon(item.type)}</div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <Badge variant="outline" className="text-xs">
-                                    {item.type.replace(/_/g, ' ')}
-                                  </Badge>
-                                </div>
-                                <p className="text-sm text-neutral-700">
-                                  {getAttentionItemLabel(item)}
-                                </p>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-xs h-6 mt-2"
-                                  onClick={() => {
-                                    if (item.keyResultId) {
-                                      window.location.href = `/dashboard/okrs?krId=${item.keyResultId}`
-                                    } else {
-                                      window.location.href = `/dashboard/okrs?objectiveId=${item.objectiveId}`
-                                    }
-                                  }}
-                                >
-                                  View in OKRs
-                                  <ArrowRight className="w-3 h-3 ml-1" />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                      {cycleHealthSummary ? (
+                        <CycleHealthStrip
+                          cycleId={activeCycleId}
+                          onFilterClick={(filterType, value) => {
+                            window.location.href = `/dashboard/okrs?filter=${filterType}${value ? `&value=${value}` : ''}`
+                          }}
+                        />
                       ) : (
-                        <div className="text-sm text-neutral-500 text-center py-6">
-                          No items need attention at this time.
+                        <div className="text-sm text-neutral-500 py-4">
+                          Loading cycle health data...
                         </div>
                       )}
                     </CardContent>
                   </Card>
                 </motion.section>
+              )}
 
-                {/* AI Summary Bar */}
-                {aiSummary && (
-                  <motion.section
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.4 }}
-                    className="mt-6"
-                  >
-                    <div className="text-sm bg-gradient-to-r from-violet-50 via-fuchsia-50 to-violet-50 border border-neutral-200 rounded-lg p-3 shadow-sm flex items-start gap-2">
-                      <div className="flex items-center justify-center h-6 w-6 rounded-full bg-violet-100 text-violet-700 flex-shrink-0">
-                        <Sparkles size={14} />
-                      </div>
-                      <p className="text-sm leading-5">{aiSummary}</p>
+              {/* SECTION 5: Attention Feed - For all users */}
+              <motion.section
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.35 }}
+                className="mt-10"
+              >
+                <div className="mb-4">
+                  <h2 className="text-lg font-semibold text-neutral-900 flex items-center gap-2">
+                    Attention Feed
+                  </h2>
+                  <p className="text-sm text-neutral-500 mt-1">
+                    Items requiring your attention
+                  </p>
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle>Items Requiring Attention</CardTitle>
+                      {attentionItems.length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setAttentionDrawerOpen(true)}
+                          className="text-xs"
+                        >
+                          View all
+                          <ArrowRight className="w-3 h-3 ml-1" />
+                        </Button>
+                      )}
                     </div>
-                  </motion.section>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+                    <CardDescription>
+                      Overdue check-ins, status changes, and items needing follow-up
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {attentionItems.length > 0 ? (
+                      <div className="space-y-3">
+                        {attentionItems.slice(0, 5).map((item, index) => (
+                          <div
+                            key={`${item.type}-${item.objectiveId}-${item.keyResultId || ''}-${index}`}
+                            className="flex items-start gap-3 p-3 rounded-md border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                          >
+                            <div className="mt-0.5">{getAttentionItemIcon(item.type)}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge variant="outline" className="text-xs">
+                                  {item.type.replace(/_/g, ' ')}
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-neutral-700">
+                                {getAttentionItemLabel(item)}
+                              </p>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-xs h-6 mt-2"
+                                onClick={() => {
+                                  if (item.keyResultId) {
+                                    window.location.href = `/dashboard/okrs?krId=${item.keyResultId}`
+                                  } else {
+                                    window.location.href = `/dashboard/okrs?objectiveId=${item.objectiveId}`
+                                  }
+                                }}
+                              >
+                                View in OKRs
+                                <ArrowRight className="w-3 h-3 ml-1" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-neutral-500 text-center py-6">
+                        No items need attention at this time.
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </motion.section>
 
-        {/* Attention Drawer */}
-        <AttentionDrawer
-          isOpen={attentionDrawerOpen}
-          onClose={() => setAttentionDrawerOpen(false)}
-          cycleId={activeCycleId}
-          onNavigateToObjective={(objectiveId) => {
-            window.location.href = `/dashboard/okrs?objectiveId=${objectiveId}`
-          }}
-          onNavigateToKeyResult={(krId) => {
-            window.location.href = `/dashboard/okrs?krId=${krId}`
-          }}
-          canRequestCheckIn={!userRoles.isSuperuser && permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || undefined })}
-        />
+              {/* AI Summary Bar */}
+              {aiSummary && (
+                <motion.section
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: 0.4 }}
+                  className="mt-6"
+                >
+                  <div className="text-sm bg-gradient-to-r from-violet-50 via-fuchsia-50 to-violet-50 border border-neutral-200 rounded-lg p-3 shadow-sm flex items-start gap-2">
+                    <div className="flex items-center justify-center h-6 w-6 rounded-full bg-violet-100 text-violet-700 flex-shrink-0">
+                      <Sparkles size={14} />
+                    </div>
+                    <p className="text-sm leading-5">{aiSummary}</p>
+                  </div>
+                </motion.section>
+              )}
+            </>
+          )}
+
+          {/* Attention Drawer */}
+          <AttentionDrawer
+            isOpen={attentionDrawerOpen}
+            onClose={() => setAttentionDrawerOpen(false)}
+            cycleId={activeCycleId}
+            onNavigateToObjective={(objectiveId) => {
+              window.location.href = `/dashboard/okrs?objectiveId=${objectiveId}`
+            }}
+            onNavigateToKeyResult={(krId) => {
+              window.location.href = `/dashboard/okrs?krId=${krId}`
+            }}
+            canRequestCheckIn={!userRoles.isSuperuser && permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || undefined })}
+          />
+        </PageContainer>
       </DashboardLayout>
     </ProtectedRoute>
   )

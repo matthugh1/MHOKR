@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { PageContainer } from '@/components/ui/PageContainer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -639,40 +641,26 @@ function PeopleSettings() {
 
   if (!workspace && !organization) {
     return (
-      <div className="p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center py-12">
-            <h1 className="text-2xl font-bold text-slate-900 mb-2">People</h1>
-            <p className="text-slate-600">Please select a workspace or organization to view people.</p>
-          </div>
+      <PageContainer variant="form">
+        <PageHeader
+          title="People"
+          subtitle="Manage users and their roles"
+        />
+        <div className="text-center py-12">
+          <p className="text-slate-600">Please select a workspace or organization to view people.</p>
         </div>
-      </div>
+      </PageContainer>
     )
   }
 
   return (
-    <div className="p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">People</h1>
-            <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
-              {organization && (
-                <>
-                  <Building2 className="h-4 w-4" />
-                  <span>{organization.name}</span>
-                </>
-              )}
-              {workspace && (
-                <>
-                  <span>→</span>
-                  <Briefcase className="h-4 w-4" />
-                  <span>{workspace.name}</span>
-                </>
-              )}
-            </div>
-          </div>
+    <PageContainer variant="form">
+      <PageHeader
+        title="People"
+        subtitle={workspace ? `Manage users in ${workspace.name}` : organization ? `Manage users in ${organization.name}` : 'Manage users and their roles'}
+      />
+      <div className="space-y-6">
+        <div className="flex items-center justify-end">
           <Button onClick={() => setShowCreateUser(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add User
@@ -1788,6 +1776,6 @@ function PeopleSettings() {
           </DialogContent>
         </Dialog>
       </div>
-    </div>
+    </PageContainer>
   )
 }

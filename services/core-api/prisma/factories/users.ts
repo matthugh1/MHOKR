@@ -36,6 +36,17 @@ export async function createUser(
     where: { email: data.email },
   });
 
+  // Look up manager if managerEmail is provided
+  let managerId: string | null = null;
+  if (data.managerEmail) {
+    const manager = await prisma.user.findUnique({
+      where: { email: data.managerEmail },
+    });
+    if (manager) {
+      managerId = manager.id;
+    }
+  }
+
   if (existing) {
     await prisma.user.update({
       where: { id: existing.id },
@@ -43,9 +54,7 @@ export async function createUser(
         name: data.name,
         isSuperuser: data.isSuperuser || false,
         settings: settings,
-        managerId: data.managerEmail
-          ? generateUserId(data.managerEmail)
-          : null,
+        managerId: managerId,
       },
     });
     return existing.id;
@@ -59,9 +68,7 @@ export async function createUser(
       passwordHash: passwordHash,
       isSuperuser: data.isSuperuser || false,
       settings: settings,
-      managerId: data.managerEmail
-        ? generateUserId(data.managerEmail)
-        : null,
+      managerId: managerId,
     },
   });
 

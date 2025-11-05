@@ -1,16 +1,53 @@
-# RBAC Audit Summary
+## [Centralised Permissions] 2025-01-27
 
-**Date:** 2025-01-27  
-**Branch:** feat/seed/large-org-demo  
-**Status:** Complete
+### Centralisation
+
+- **AuthorisationService**: Single decision centre for all permission checks
+  - Location: `services/core-api/src/policy/authorisation.service.ts`
+  - Combines RBAC, tenant isolation, publish/cycle locks, and visibility decisions
+  - Used by RBACGuard when `RBAC_AUTHZ_CENTRE=on` (default)
+- **Tenant Boundary Helper**: Centralised tenant isolation checks
+  - Location: `services/core-api/src/policy/tenant-boundary.ts`
+  - Used by AuthorisationService ONLY for mutation actions
+- **PolicyModule**: NestJS module providing AuthorisationService
+  - Location: `services/core-api/src/policy/policy.module.ts`
+  - Wired into RBACModule via forwardRef
+
+### Route Fixes
+
+- **okr-cycle.controller.ts**: Added `@RequireAction('manage_tenant_settings')` to POST, PATCH, DELETE endpoints
+  - Fixed CRITICAL issues: missing decorators on cycle management endpoints
+
+### Guard Updates
+
+- **RBACGuard**: Updated to delegate to AuthorisationService
+  - Feature flag: `RBAC_AUTHZ_CENTRE` (default: on)
+  - Fallback to legacy path if disabled
+  - Includes reason codes in deny responses
+
+### Tests
+
+- **authorisation.service.spec.ts**: Unit tests for AuthorisationService
+  - SUPERUSER read-only enforcement
+  - Publish lock denies
+  - Tenant boundary denies
+  - PRIVATE visibility enforcement
+
+### Documentation
+
+- **RBAC_ROLLBACK_NOTES.md**: Emergency rollback instructions
+- **RBAC_GUARDRAILS.md**: Updated with AuthorisationService details
+
+### Technical Notes
+
+- No application behaviour changes (business logic preserved)
+- All existing RBAC rules respected
+- Rollback available via environment variable
+- Telemetry hook records reason codes from AuthorisationService
 
 ---
 
-## Overview
-
-Complete RBAC permissions audit and hardening implementation. Produced code-true map of permission model, detected gaps/duplication, and added lightweight guardrails (lint/test) to prevent future RBAC bypasses.
-
-**No application behaviour changes** (except optional deny telemetry logging).
+## [RBAC Audit & Hardening] 2025-01-27
 
 ---
 

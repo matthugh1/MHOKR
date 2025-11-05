@@ -21,6 +21,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { PageContainer } from '@/components/ui/PageContainer'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -49,7 +51,6 @@ import { usePermissions } from '@/hooks/usePermissions'
 import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import { useToast } from '@/hooks/use-toast'
 import { useFeatureFlags } from '@/hooks/useFeatureFlags'
-import { PageHeader } from '@/components/ui/PageHeader'
 import { OKRPageContainer } from './OKRPageContainer'
 import { OKRTreeContainer } from './OKRTreeContainer'
 import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
@@ -108,6 +109,21 @@ export default function OKRsPage() {
   const { user } = useAuth()
   const permissions = usePermissions()
   
+  // Memoize the tenant admin check for the current organization to avoid repeated calls
+  const isTenantAdminForCurrentOrg = useMemo(() => {
+    if (!currentOrganization?.id) return false
+    if (isSuperuser || permissions.isSuperuser) return true
+    
+    // Check if user has TENANT_OWNER or TENANT_ADMIN role for this organization
+    const tenantRoles = permissions.rolesByScope?.tenant?.find(
+      (t) => t.organizationId === currentOrganization.id
+    )
+    return tenantRoles !== undefined && (
+      tenantRoles.roles.includes('TENANT_OWNER') || 
+      tenantRoles.roles.includes('TENANT_ADMIN')
+    )
+  }, [permissions.rolesByScope, permissions.isSuperuser, currentOrganization?.id, isSuperuser])
+  
   // Scope toggle: My | Team/Workspace | Tenant
   const availableScopes = useMemo(() => {
     const scopes: Array<'my' | 'team-workspace' | 'tenant'> = []
@@ -127,15 +143,12 @@ export default function OKRsPage() {
     }
     
     // "Tenant" if user has TENANT_ADMIN / TENANT_OWNER / SUPERUSER
-    if (
-      currentOrganization?.id &&
-      (permissions.isTenantAdminOrOwner(currentOrganization.id) || isSuperuser)
-    ) {
+    if (isTenantAdminForCurrentOrg) {
       scopes.push('tenant')
     }
     
     return scopes
-  }, [permissions, currentOrganization?.id, isSuperuser])
+  }, [permissions.rolesByScope, isTenantAdminForCurrentOrg])
   
   // Read scope from URL or determine default
   const scopeFromUrl = searchParams.get('scope') as 'my' | 'team-workspace' | 'tenant' | null
@@ -281,11 +294,27 @@ export default function OKRsPage() {
     }
   }
   
+  // Track if we've initialized the cycle selection (only set default once per org)
+  const cycleInitializedRef = useRef(false)
+  const lastOrgIdRef = useRef<string | null>(null)
+
   useEffect(() => {
-    // Initialization
-    
+    // Reset cycle initialization when organization changes
+    if (currentOrganization?.id !== lastOrgIdRef.current) {
+      cycleInitializedRef.current = false
+      lastOrgIdRef.current = currentOrganization?.id || null
+      // Reset cycle selection when org changes
+      setSelectedCycleId(null)
+      setSelectedTimeframeKey('all')
+      setSelectedTimeframeLabel('All cycles')
+    }
+    // Initialization - only run when org/user changes, not when cycle/scope changes
     loadUsers()
     loadActiveCycles()
+  }, [currentOrganization?.id, user])
+
+  useEffect(() => {
+    // Load data that depends on cycle/scope selection
     loadOverdueCheckIns()
     loadAttentionCount()
   }, [currentOrganization?.id, user, selectedCycleId, selectedScope])
@@ -307,22 +336,40 @@ export default function OKRsPage() {
 
   const loadActiveCycles = async () => {
     try {
-      const response = await api.get('/reports/cycles/active')
+      // First try to load all cycles (includes ACTIVE, DRAFT, ARCHIVED)
+      const response = await api.get('/reports/cycles')
       const cycles = response.data || []
       setActiveCycles(cycles)
-      // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
-      // Set default selected cycle to first active cycle if available
-      if (cycles.length > 0) {
-        setSelectedTimeframeKey(cycles[0].id)
-        setSelectedTimeframeLabel(cycles[0].name)
-        setSelectedCycleId(cycles[0].id) // Sync for CycleHealthStrip and AttentionDrawer
+      // NOTE: Only set default cycle selection on initial load (when no cycle is selected yet)
+      // This prevents resetting the user's selection when they choose "All Cycles"
+      if (!cycleInitializedRef.current && (selectedCycleId === null || selectedTimeframeKey === 'all')) {
+        const activeCycle = cycles.find((c: any) => c.status === 'ACTIVE') || cycles[0]
+        if (activeCycle) {
+          setSelectedTimeframeKey(activeCycle.id)
+          setSelectedTimeframeLabel(activeCycle.name)
+          setSelectedCycleId(activeCycle.id) // Sync for CycleHealthStrip and AttentionDrawer
+          cycleInitializedRef.current = true
+        }
       }
     } catch (error: any) {
-      // Cycles endpoint is optional - gracefully degrade if no permission
-      if (error.response?.status !== 403) {
-        console.error('Failed to load active cycles:', error)
+      // If /reports/cycles fails, fallback to /reports/cycles/active for backward compatibility
+      try {
+        const response = await api.get('/reports/cycles/active')
+        const cycles = response.data || []
+        setActiveCycles(cycles)
+        if (cycles.length > 0 && !cycleInitializedRef.current && (selectedCycleId === null || selectedTimeframeKey === 'all')) {
+          setSelectedTimeframeKey(cycles[0].id)
+          setSelectedTimeframeLabel(cycles[0].name)
+          setSelectedCycleId(cycles[0].id)
+          cycleInitializedRef.current = true
+        }
+      } catch (fallbackError: any) {
+        // Cycles endpoint is optional - gracefully degrade if no permission
+        if (fallbackError.response?.status !== 403) {
+          console.error('Failed to load cycles:', fallbackError)
+        }
+        setActiveCycles([])
       }
-      setActiveCycles([])
     }
   }
 
@@ -464,9 +511,21 @@ export default function OKRsPage() {
     const canEdit = tenantPermissions.canEditObjective(objectiveForHook)
     
     if (!canEdit) {
-      tenantPermissions.getLockInfoForObjective(objectiveForHook)
-      setSelectedObjectiveForLock(okr)
-      setPublishLockDialogOpen(true)
+      const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
+      // Only show lock modal if actually locked - tenant admins should not see this
+      if (lockInfo.isLocked) {
+        setSelectedObjectiveForLock(okr)
+        setPublishLockDialogOpen(true)
+        return
+      }
+      // If not locked but can't edit, it's an RBAC or visibility issue - skip modal
+      console.warn('[handleEditOKR] Cannot edit but not locked:', {
+        objectiveId: okr.id,
+        isPublished: okr.isPublished,
+        visibilityLevel: okr.visibilityLevel,
+        organizationId: okr.organizationId,
+        lockInfo
+      })
       return
     }
     
@@ -816,24 +875,26 @@ export default function OKRsPage() {
   return (
     <ProtectedRoute>
       <DashboardLayout>
-        <div className="p-8">
-          <header role="banner" className="mb-8">
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <PageHeader
-                title="Objectives & Key Results"
-                subtitle="Aligned execution. Live progress. Governance state at a glance."
-                badges={[
-                  ...(selectedTimeframeLabel ? [
-                    {
-                      label: `Viewing: ${selectedTimeframeLabel}`,
-                      tone: 'neutral' as const,
-                    },
-                  ] : []),
-                  ...(activeCycles.some((c) => c.status === 'LOCKED')
-                    ? [{ label: 'Locked', tone: 'warning' as const }]
-                    : []),
-                ]}
-              />
+        <PageContainer variant="content">
+          <div className="mb-8">
+            <div className="flex items-start justify-between flex-wrap gap-4">
+              <div className="flex-1">
+                <PageHeader
+                  title="Objectives & Key Results"
+                  subtitle="Aligned execution. Live progress. Governance state at a glance."
+                  badges={[
+                    ...(selectedTimeframeLabel ? [
+                      {
+                        label: `Viewing: ${selectedTimeframeLabel}`,
+                        tone: 'neutral' as const,
+                      },
+                    ] : []),
+                    ...(activeCycles.some((c) => c.status === 'LOCKED')
+                      ? [{ label: 'Locked', tone: 'warning' as const }]
+                      : []),
+                  ]}
+                />
+              </div>
               
               {/* View Toggle (List | Tree) - only show if feature flag enabled */}
               {okrTreeView && (
@@ -871,7 +932,7 @@ export default function OKRsPage() {
                 <CycleHealthStrip cycleId={selectedCycleId} />
               </div>
             )}
-          </header>
+          </div>
 
           {/* Governance Status Bar */}
           {selectedCycleId && (
@@ -907,7 +968,10 @@ export default function OKRsPage() {
                         ts: new Date().toISOString(),
                       })
                     } else {
+                      // User selected "All Cycles" or "Unassigned" - clear cycle filter
                       setSelectedCycleId(null)
+                      // Mark as initialized so loadActiveCycles doesn't reset it
+                      cycleInitializedRef.current = true
                       // Telemetry: cycle changed (cleared)
                       track('cycle_changed', {
                         scope: selectedScope,
@@ -917,7 +981,7 @@ export default function OKRsPage() {
                       })
                     }
                   }}
-                  onManageCycles={permissions.isTenantAdminOrOwner(currentOrganization?.id) ? () => setCycleManagementDrawerOpen(true) : undefined}
+                  onManageCycles={isTenantAdminForCurrentOrg ? () => setCycleManagementDrawerOpen(true) : undefined}
                   hasActiveFilters={hasActiveFilters}
                   onClearFilters={clearFilters}
                 />
@@ -946,7 +1010,7 @@ export default function OKRsPage() {
                   setIsCreateDrawerOpen(true)
                 }}
                 onOpenCycleManagement={() => setCycleManagementDrawerOpen(true)}
-                canManageCycles={permissions.isTenantAdminOrOwner(currentOrganization?.id)}
+                canManageCycles={isTenantAdminForCurrentOrg}
               />
             </div>
             
@@ -1345,13 +1409,13 @@ export default function OKRsPage() {
             onNavigateToKeyResult={(krId) => {
               // Find and expand the objective containing this KR
             }}
-            canRequestCheckIn={permissions.isTenantAdminOrOwner(currentOrganization?.id)}
+            canRequestCheckIn={isTenantAdminForCurrentOrg}
             onRequestCheckIn={(krId) => {
               handleAddCheckIn(krId)
               setAttentionDrawerOpen(false)
             }}
           />
-        </div>
+        </PageContainer>
       </DashboardLayout>
     </ProtectedRoute>
   )

@@ -168,8 +168,8 @@ export function TreeNode({
       >
         <div
           className={cn(
-            'flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-neutral-50 transition-colors cursor-pointer',
-            isSelected && 'bg-violet-50'
+            'flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50/50 transition-colors cursor-pointer bg-blue-50/20',
+            isSelected && 'bg-blue-100'
           )}
           style={{ paddingLeft: `${indent + 12}px` }}
           onClick={handleClick}
@@ -290,8 +290,8 @@ export function TreeNode({
       >
         <div
           className={cn(
-            'flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-neutral-50 transition-colors cursor-pointer',
-            isSelected && 'bg-violet-50'
+            'flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-violet-50/50 transition-colors cursor-pointer bg-violet-50/20',
+            isSelected && 'bg-violet-100'
           )}
           style={{ paddingLeft: `${indent + 12}px` }}
           onClick={handleClick}
@@ -383,8 +383,8 @@ export function TreeNode({
       >
         <div
           className={cn(
-            'flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-neutral-50 transition-colors cursor-pointer',
-            isSelected && 'bg-violet-50'
+            'flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-emerald-50/50 transition-colors cursor-pointer bg-emerald-50/20',
+            isSelected && 'bg-emerald-100'
           )}
           style={{ paddingLeft: `${indent + 12}px` }}
           onClick={handleClick}

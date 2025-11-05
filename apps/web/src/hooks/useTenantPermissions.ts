@@ -85,7 +85,7 @@ export function useTenantPermissions(): PermissionChecks {
     return (organizationId?: string | null): boolean => {
       return permissions.isTenantAdminOrOwner(organizationId || undefined)
     }
-  }, [permissions])
+  }, [permissions.isTenantAdminOrOwner])
 
   // Helper: Check if cycle is locked (status === 'LOCKED' or 'ARCHIVED')
   const isCycleLocked = useMemo(() => {
@@ -215,7 +215,47 @@ export function useTenantPermissions(): PermissionChecks {
 
   const canEditObjective = useMemo(() => {
     return (objective: Objective): boolean => {
-      // Check basic RBAC edit permission
+      // First check if user can VIEW the objective (visibility check)
+      // Tenant admins can view PRIVATE OKRs, but regular users cannot
+      const canView = canViewObjective(objective)
+      if (!canView) {
+        console.log('[canEditObjective] Cannot view objective:', {
+          objectiveId: objective.id,
+          visibilityLevel: objective.visibilityLevel,
+          organizationId: objective.organizationId,
+        })
+        return false
+      }
+
+      // Tenant admins/owners can override locks, so check that first
+      const canOverride = canOverrideLocks(objective.organizationId)
+      console.log('[canEditObjective] Permission check:', {
+        objectiveId: objective.id,
+        canOverride,
+        organizationId: objective.organizationId,
+        isPublished: objective.isPublished,
+      })
+      
+      // Check publish lock: if published, only tenant admin/owner can edit
+      const isPublished = objective.isPublished === true
+      if (isPublished && !canOverride) {
+        return false
+      }
+
+      // Check cycle lock: if cycle is locked, only tenant admin/owner can edit
+      const cycleStatus = getCycleStatus(objective)
+      if (isCycleLocked(cycleStatus) && !canOverride) {
+        return false
+      }
+
+      // If tenant admin can override locks, allow edit regardless of RBAC
+      // This allows tenant admins to edit PRIVATE OKRs (they can view them, so they can edit them)
+      if (canOverride) {
+        console.log('[canEditObjective] Allowing edit - tenant admin can override')
+        return true
+      }
+
+      // Otherwise, check basic RBAC edit permission
       const canEditRBAC = permissions.canEditOKR({
         ownerId: objective.ownerId,
         organizationId: objective.organizationId || undefined,
@@ -223,29 +263,41 @@ export function useTenantPermissions(): PermissionChecks {
         teamId: objective.teamId || undefined,
       })
 
-      if (!canEditRBAC) {
-        return false
-      }
-
-      // Check publish lock: if published, only tenant admin/owner can edit
-      const isPublished = objective.isPublished === true
-      if (isPublished && !canOverrideLocks(objective.organizationId)) {
-        return false
-      }
-
-      // Check cycle lock: if cycle is locked, only tenant admin/owner can edit
-      const cycleStatus = getCycleStatus(objective)
-      if (isCycleLocked(cycleStatus) && !canOverrideLocks(objective.organizationId)) {
-        return false
-      }
-
-      return true
+      console.log('[canEditObjective] RBAC check result:', canEditRBAC)
+      return canEditRBAC
     }
-  }, [permissions, canOverrideLocks, isCycleLocked, getCycleStatus])
+  }, [permissions, canOverrideLocks, isCycleLocked, getCycleStatus, canViewObjective])
 
   const canDeleteObjective = useMemo(() => {
     return (objective: Objective): boolean => {
-      // Check basic RBAC delete permission
+      // First check if user can VIEW the objective (visibility check)
+      // Tenant admins can view PRIVATE OKRs, but regular users cannot
+      if (!canViewObjective(objective)) {
+        return false
+      }
+
+      // Tenant admins/owners can override locks, so check that first
+      const canOverride = canOverrideLocks(objective.organizationId)
+      
+      // Check publish lock: if published, only tenant admin/owner can delete
+      const isPublished = objective.isPublished === true
+      if (isPublished && !canOverride) {
+        return false
+      }
+
+      // Check cycle lock: if cycle is locked, only tenant admin/owner can delete
+      const cycleStatus = getCycleStatus(objective)
+      if (isCycleLocked(cycleStatus) && !canOverride) {
+        return false
+      }
+
+      // If tenant admin can override locks, allow delete regardless of RBAC
+      // This allows tenant admins to delete PRIVATE OKRs (they can view them, so they can delete them)
+      if (canOverride) {
+        return true
+      }
+
+      // Otherwise, check basic RBAC delete permission
       const canDeleteRBAC = permissions.canDeleteOKR({
         ownerId: objective.ownerId,
         organizationId: objective.organizationId || undefined,
@@ -253,29 +305,37 @@ export function useTenantPermissions(): PermissionChecks {
         teamId: objective.teamId || undefined,
       })
 
-      if (!canDeleteRBAC) {
-        return false
-      }
-
-      // Check publish lock: if published, only tenant admin/owner can delete
-      const isPublished = objective.isPublished === true
-      if (isPublished && !canOverrideLocks(objective.organizationId)) {
-        return false
-      }
-
-      // Check cycle lock: if cycle is locked, only tenant admin/owner can delete
-      const cycleStatus = getCycleStatus(objective)
-      if (isCycleLocked(cycleStatus) && !canOverrideLocks(objective.organizationId)) {
-        return false
-      }
-
-      return true
+      return canDeleteRBAC
     }
-  }, [permissions, canOverrideLocks, isCycleLocked, getCycleStatus])
+  }, [permissions, canOverrideLocks, isCycleLocked, getCycleStatus, canViewObjective])
 
   const canEditKeyResult = useMemo(() => {
     return (keyResult: KeyResult): boolean => {
-      // Check basic RBAC edit permission for the KR
+      // Tenant admins/owners can override locks, so check that first
+      const canOverride = canOverrideLocks(keyResult.organizationId || keyResult.parentObjective?.organizationId)
+      
+      // Check publish/cycle lock from parent objective
+      const parentObjective = keyResult.parentObjective
+      if (parentObjective) {
+        // Check publish lock from parent objective
+        const isPublished = parentObjective.isPublished === true
+        if (isPublished && !canOverride) {
+          return false
+        }
+
+        // Check cycle lock from parent objective
+        const cycleStatus = parentObjective.cycle?.status || parentObjective.cycleStatus || null
+        if (isCycleLocked(cycleStatus) && !canOverride) {
+          return false
+        }
+      }
+
+      // If tenant admin can override locks, allow edit regardless of RBAC
+      if (canOverride) {
+        return true
+      }
+
+      // Otherwise, check basic RBAC edit permission for the KR
       const canEditRBAC = permissions.canEditOKR({
         ownerId: keyResult.ownerId,
         organizationId: keyResult.organizationId || undefined,
@@ -283,32 +343,7 @@ export function useTenantPermissions(): PermissionChecks {
         teamId: keyResult.teamId || undefined,
       })
 
-      if (!canEditRBAC) {
-        return false
-      }
-
-      // Check publish/cycle lock from parent objective
-      const parentObjective = keyResult.parentObjective
-      if (!parentObjective) {
-        // TODO [phase7-hardening]: parent objective should always be available
-        // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
-        // For now, allow if RBAC passes
-        return true
-      }
-
-      // Check publish lock from parent objective
-      const isPublished = parentObjective.isPublished === true
-      if (isPublished && !canOverrideLocks(parentObjective.organizationId || keyResult.organizationId)) {
-        return false
-      }
-
-      // Check cycle lock from parent objective
-      const cycleStatus = parentObjective.cycle?.status || parentObjective.cycleStatus || null
-      if (isCycleLocked(cycleStatus) && !canOverrideLocks(parentObjective.organizationId || keyResult.organizationId)) {
-        return false
-      }
-
-      return true
+      return canEditRBAC
     }
   }, [permissions, canOverrideLocks, isCycleLocked])
 

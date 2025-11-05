@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { PageContainer } from '@/components/ui/PageContainer'
 import { useAuth } from '@/contexts/auth.context'
 import { useWorkspace } from '@/contexts/workspace.context'
 import api from '@/lib/api'
@@ -178,15 +180,17 @@ export default function CheckInsPage() {
     return (
       <ProtectedRoute>
         <DashboardLayout>
-          <div className="bg-neutral-50 min-h-screen relative">
-            <div className="max-w-[1400px] mx-auto px-6 py-6 relative">
-              <div className="text-center py-12">
-                <p className="text-neutral-500">
-                  Loading team check-in summary...
-                </p>
-              </div>
+          <PageContainer variant="dashboard">
+            <PageHeader
+              title="Team check-in summary"
+              subtitle="Summary of async updates from your team members"
+            />
+            <div className="text-center py-12">
+              <p className="text-neutral-500">
+                Loading team check-in summary...
+              </p>
             </div>
-          </div>
+          </PageContainer>
         </DashboardLayout>
       </ProtectedRoute>
     )
@@ -195,50 +199,45 @@ export default function CheckInsPage() {
   return (
     <ProtectedRoute>
       <DashboardLayout>
-        <div className="bg-neutral-50 min-h-screen relative">
-          <div className="max-w-[1400px] mx-auto px-6 py-6 relative">
-            {/* Header */}
-            <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-              <div className="flex-1">
-                <h1 className="text-xl font-semibold text-neutral-900 mb-1">
-                  Team check-in summary
-                </h1>
-                <p className="text-sm text-neutral-500">
-                  Summary of async updates from your team members
-                </p>
-              </div>
-
-              {/* Meeting Mode toggle */}
-              <div className="flex items-center gap-2">
-                <label
-                  htmlFor="meeting-mode-toggle"
-                  className="text-sm font-medium text-neutral-700"
-                >
-                  Meeting Mode
-                </label>
-                <button
-                  id="meeting-mode-toggle"
-                  type="button"
-                  onClick={() => {
-                    setIsMeetingMode((prev) => !prev)
-                    // TODO [phase7-hardening]: return focus to the toggle when we exit Meeting Mode (accessibility focus management)
-                  }}
-                  aria-pressed={isMeetingMode}
-                  aria-label={
-                    isMeetingMode ? 'Exit Meeting Mode' : 'Enter Meeting Mode'
-                  }
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 ${
-                    isMeetingMode ? 'bg-violet-600' : 'bg-neutral-300'
+        <PageContainer variant="dashboard">
+          <PageHeader
+            title="Team check-in summary"
+            subtitle="Review team check-ins and capture meeting notes"
+            badges={isMeetingMode ? [{ label: 'Meeting Mode', tone: 'warning' }] : []}
+          />
+          
+          {/* Meeting Mode toggle toolbar */}
+          <div className="flex items-center justify-end mb-6">
+            <div className="flex items-center gap-2">
+              <label
+                htmlFor="meeting-mode-toggle"
+                className="text-sm font-medium text-neutral-700"
+              >
+                Meeting Mode
+              </label>
+              <button
+                id="meeting-mode-toggle"
+                type="button"
+                onClick={() => {
+                  setIsMeetingMode((prev) => !prev)
+                  // TODO [phase7-hardening]: return focus to the toggle when we exit Meeting Mode (accessibility focus management)
+                }}
+                aria-pressed={isMeetingMode}
+                aria-label={
+                  isMeetingMode ? 'Exit Meeting Mode' : 'Enter Meeting Mode'
+                }
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 ${
+                  isMeetingMode ? 'bg-violet-600' : 'bg-neutral-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    isMeetingMode ? 'translate-x-6' : 'translate-x-1'
                   }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      isMeetingMode ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
+                />
+              </button>
             </div>
+          </div>
 
             {/* Conditional render: Normal Mode */}
             {!isMeetingMode && (
@@ -623,8 +622,7 @@ export default function CheckInsPage() {
                 )}
               </>
             )}
-          </div>
-        </div>
+        </PageContainer>
       </DashboardLayout>
     </ProtectedRoute>
   )

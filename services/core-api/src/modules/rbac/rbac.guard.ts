@@ -18,16 +18,21 @@ import { Action, ResourceContext } from './types';
 import { RBAC_ACTION_KEY, RBAC_RESOURCE_CONTEXT_KEY } from './rbac.decorator';
 import { buildResourceContextFromRequest } from './helpers';
 import { withTenantContext } from '../../common/prisma/tenant-isolation.middleware';
-import { recordDeny } from './rbac.telemetry';
+import { AuthorisationService } from '../../policy/authorisation.service';
+import { Inject, forwardRef } from '@nestjs/common';
 
 @Injectable()
 export class RBACGuard implements CanActivate {
   private readonly logger = new Logger(RBACGuard.name);
 
+  private readonly useAuthCentre = process.env.RBAC_AUTHZ_CENTRE !== 'off';
+
   constructor(
     private rbacService: RBACService,
     private reflector: Reflector,
     private prisma: PrismaService,
+    @Inject(forwardRef(() => AuthorisationService))
+    private authorisationService: AuthorisationService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -214,7 +219,53 @@ export class RBACGuard implements CanActivate {
       }
     }
 
-    // Check authorization
+    // Use centralised authorisation service if enabled
+    if (this.useAuthCentre) {
+      const decision = await this.authorisationService.can(
+        userContext,
+        action,
+        resourceContext,
+        user.organizationId,
+      );
+
+      if (!decision.allow) {
+        const tenantRoles = resourceContext.tenantId 
+          ? userContext.tenantRoles.get(resourceContext.tenantId) || []
+          : [];
+        
+        const debugInfo = {
+          userId: user.id,
+          userEmail: user.email,
+          userOrganizationId: user.organizationId,
+          action,
+          resourceContext,
+          tenantRoles,
+          isSuperuser: userContext.isSuperuser,
+          reason: decision.reason,
+        };
+        
+        this.logger.error('RBAC Authorization Failed', JSON.stringify(debugInfo, null, 2));
+        
+        // Record telemetry for deny event
+        const route = request.url || request.path || 'unknown';
+        recordDeny({
+          action,
+          role: tenantRoles.length > 0 ? tenantRoles[0] : 'UNKNOWN',
+          route,
+          reasonCode: decision.reason,
+          userId: user.id,
+          tenantId: resourceContext.tenantId,
+        });
+        
+        throw new ForbiddenException(
+          `User does not have permission to ${action}. Reason: ${decision.reason}`,
+        );
+      }
+
+      return true;
+    }
+
+    // Legacy path (fallback if centre disabled)
     const authorized = await this.rbacService.canPerformAction(
       user.id,
       action,
@@ -223,9 +274,9 @@ export class RBACGuard implements CanActivate {
 
     if (!authorized) {
       // Debug logging
-      const userContext = await this.rbacService.buildUserContext(user.id, false);
+      const userContextForDebug = await this.rbacService.buildUserContext(user.id, false);
       const tenantRoles = resourceContext.tenantId 
-        ? userContext.tenantRoles.get(resourceContext.tenantId) || []
+        ? userContextForDebug.tenantRoles.get(resourceContext.tenantId) || []
         : [];
       
       // Additional debug info
@@ -236,8 +287,8 @@ export class RBACGuard implements CanActivate {
         action,
         resourceContext,
         tenantRoles,
-        allTenantRoles: Array.from(userContext.tenantRoles.entries()),
-        isSuperuser: userContext.isSuperuser,
+        allTenantRoles: Array.from(userContextForDebug.tenantRoles.entries()),
+        isSuperuser: userContextForDebug.isSuperuser,
       };
       
       this.logger.error('RBAC Authorization Failed', JSON.stringify(debugInfo, null, 2));

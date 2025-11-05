@@ -515,6 +515,58 @@ export class OkrReportingService {
   }
 
   /**
+   * Get all cycles for an organization (ACTIVE, DRAFT, ARCHIVED, etc.).
+   * 
+   * Returns all cycles for filtering dropdowns and cycle selection.
+   * 
+   * Tenant isolation:
+   * - If userOrganizationId === null (superuser): returns all cycles across all orgs
+   * - Else if userOrganizationId is a non-empty string: return all cycles for that org
+   * - Else (undefined/falsy): return []
+   * 
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @returns Array of cycles with id, name, status, startDate, endDate, organizationId
+   */
+  async getAllCyclesForOrg(userOrganizationId: string | null | undefined): Promise<Array<{
+    id: string;
+    name: string;
+    status: string;
+    startDate: Date;
+    endDate: Date;
+    organizationId: string;
+  }>> {
+    const where: any = {};
+
+    // Tenant isolation: use OkrTenantGuard to build where clause
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (orgFilter === null && userOrganizationId !== null) {
+      // User has no org or invalid org → return empty array
+      return [];
+    }
+    if (orgFilter) {
+      where.organizationId = orgFilter.organizationId;
+    }
+    // Superuser (null): no org filter, return all cycles across all orgs
+
+    const cycles = await this.prisma.cycle.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        organizationId: true,
+      },
+      orderBy: {
+        startDate: 'desc',
+      },
+    });
+
+    return cycles;
+  }
+
+  /**
    * Get active cycles for an organization.
    * 
    * Moved from ObjectiveService.getActiveCycleForOrg() in Phase 4.

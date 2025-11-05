@@ -55,10 +55,8 @@ export function PublishLockWarningModal({
       <AlertDialogContent data-testid={lockReason === 'published' ? 'tip-publish-lock' : lockReason === 'cycle_locked' ? 'tip-cycle-lock' : undefined}>
         <AlertDialogHeader>
           <AlertDialogTitle>{getTitle()}</AlertDialogTitle>
-          <AlertDialogDescription>
-            <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm text-neutral-800">
-              {getDescription()}
-            </div>
+          <AlertDialogDescription className="block rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm text-neutral-800">
+            {getDescription()}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

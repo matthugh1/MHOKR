@@ -118,6 +118,8 @@ export class OkrReportingController {
    * 
    * Moved from ObjectiveController in Phase 4.
    * TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
+   * 
+   * NOTE: This route must come BEFORE @Get('cycles') to avoid route matching conflicts in NestJS.
    */
   @Get('cycles/active')
   @RequireAction('view_okr')
@@ -125,6 +127,21 @@ export class OkrReportingController {
   async getActiveCycles(@Req() req: any) {
     const userOrganizationId = req.user?.organizationId ?? null;
     return this.reportingService.getActiveCycleForOrg(userOrganizationId);
+  }
+
+  /**
+   * Get all cycles for the organization (ACTIVE, DRAFT, ARCHIVED, etc.).
+   * 
+   * Returns all cycles for filtering dropdowns and cycle selection.
+   * 
+   * NOTE: This route must come AFTER @Get('cycles/active') to avoid route matching conflicts in NestJS.
+   */
+  @Get('cycles')
+  @RequireAction('view_okr')
+  @ApiOperation({ summary: 'Get all cycles for the organization' })
+  async getAllCycles(@Req() req: any) {
+    const userOrganizationId = req.user?.organizationId ?? null;
+    return this.reportingService.getAllCyclesForOrg(userOrganizationId);
   }
 
   /**

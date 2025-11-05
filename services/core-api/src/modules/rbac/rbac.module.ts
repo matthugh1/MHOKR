@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { RBACService } from './rbac.service';
 import { RBACGuard } from './rbac.guard';
 import { RBACMigrationService } from './migration.service';
@@ -8,12 +8,14 @@ import { RBACInspectorController } from './rbac-inspector.controller';
 import { RBACCacheService } from './rbac-cache.service';
 import { ExecWhitelistService } from './exec-whitelist.service';
 import { RBACInspectorService } from './rbac-inspector.service';
+import { FeatureFlagService } from './feature-flag.service';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { UserService } from '../user/user.service';
 import { AuditLogService } from '../audit/audit-log.service';
+import { PolicyModule } from '../../policy/policy.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, forwardRef(() => PolicyModule)],
   controllers: [
     RBACMigrationController,
     RBACAssignmentController,
@@ -27,6 +29,7 @@ import { AuditLogService } from '../audit/audit-log.service';
     RBACCacheService,
     ExecWhitelistService,
     RBACInspectorService,
+    FeatureFlagService,
     UserService,
     AuditLogService,
   ],
@@ -37,6 +40,7 @@ import { AuditLogService } from '../audit/audit-log.service';
     RBACCacheService,
     ExecWhitelistService,
     RBACInspectorService,
+    FeatureFlagService,
   ],
 })
 export class RBACModule {}
