@@ -29,6 +29,7 @@ interface OKRFilterBarProps {
   }>
   selectedTimeframeKey: string
   onCycleSelect: (opt: { key: string; label: string }) => void
+  onManageCycles?: () => void
   hasActiveFilters: boolean
   onClearFilters: () => void
 }
@@ -44,6 +45,7 @@ export function OKRFilterBar({
   legacyPeriods,
   selectedTimeframeKey,
   onCycleSelect,
+  onManageCycles,
   hasActiveFilters,
   onClearFilters,
 }: OKRFilterBarProps) {
@@ -172,6 +174,7 @@ export function OKRFilterBar({
         legacyPeriods={legacyPeriods}
         selectedId={selectedTimeframeKey}
         onSelect={onCycleSelect}
+        onManageCycles={onManageCycles}
       />
       
       {hasActiveFilters && (

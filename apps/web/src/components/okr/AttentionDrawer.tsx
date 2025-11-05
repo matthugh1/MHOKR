@@ -14,8 +14,10 @@ import { AlertCircle, Clock, TrendingDown, ChevronLeft, ChevronRight } from 'luc
 import { cn } from '@/lib/utils'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/auth.context'
+import { usePermissions } from '@/hooks/usePermissions'
 import { trapFocus, returnFocus, getActiveElement } from '@/lib/focus-trap'
 import { mapErrorToMessage } from '@/lib/error-mapping'
+import { track } from '@/lib/analytics'
 
 interface AttentionItem {
   type: 'OVERDUE_CHECKIN' | 'NO_UPDATE_14D' | 'STATUS_DOWNGRADE'
@@ -37,6 +39,7 @@ interface AttentionDrawerProps {
   isOpen: boolean
   onClose: () => void
   cycleId: string | null
+  scope?: 'my' | 'team-workspace' | 'tenant'
   onNavigateToObjective?: (objectiveId: string) => void
   onNavigateToKeyResult?: (krId: string) => void
   canRequestCheckIn?: boolean
@@ -47,12 +50,14 @@ export function AttentionDrawer({
   isOpen,
   onClose,
   cycleId,
+  scope,
   onNavigateToObjective,
   onNavigateToKeyResult,
   canRequestCheckIn = false,
   onRequestCheckIn,
 }: AttentionDrawerProps) {
   const { user } = useAuth()
+  const permissions = usePermissions()
   const [feed, setFeed] = useState<AttentionFeed | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -60,16 +65,21 @@ export function AttentionDrawer({
   const pageSize = 20
   const sheetContentRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
+  const emptyStateTelemetryFiredRef = useRef(false)
 
   useEffect(() => {
     if (isOpen) {
       // Store previous focus
       previousFocusRef.current = getActiveElement()
       
+      // Reset empty state telemetry flag
+      emptyStateTelemetryFiredRef.current = false
+      
       // Track telemetry
-      console.log('[Telemetry] okr.insights.attention.open', {
+      track('attention_drawer_opened', {
         userId: user?.id,
         cycleId,
+        scope,
         timestamp: new Date().toISOString(),
       })
       
@@ -84,7 +94,7 @@ export function AttentionDrawer({
         previousFocusRef.current = null
       }
     }
-  }, [isOpen, cycleId])
+  }, [isOpen, cycleId, scope, user?.id])
 
   // Focus trap when drawer opens
   useEffect(() => {
@@ -119,10 +129,26 @@ export function AttentionDrawer({
       if (cycleId) {
         params.append('cycleId', cycleId)
       }
+      if (scope) {
+        params.append('scope', scope)
+      }
 
       const response = await api.get(`/okr/insights/attention?${params.toString()}`)
       setFeed(response.data)
       setCurrentPage(page)
+      
+      // Track empty state telemetry if no items
+      if (response.data.items.length === 0 && !emptyStateTelemetryFiredRef.current) {
+        emptyStateTelemetryFiredRef.current = true
+        const userRole = getUserRole()
+        track('attention_empty_state_viewed', {
+          userId: user?.id,
+          cycleId,
+          scope,
+          role: userRole,
+          timestamp: new Date().toISOString(),
+        })
+      }
     } catch (err: any) {
       const errorInfo = mapErrorToMessage(err)
       setError(errorInfo.message)
@@ -130,6 +156,54 @@ export function AttentionDrawer({
     } finally {
       setLoading(false)
     }
+  }
+  
+  const getUserRole = (): string => {
+    if (permissions.isSuperuser) {
+      return 'SUPERUSER'
+    }
+    
+    // Check tenant roles
+    const tenantRoles = permissions.rolesByScope?.tenant || []
+    for (const tenant of tenantRoles) {
+      if (tenant.roles.includes('TENANT_OWNER')) {
+        return 'TENANT_OWNER'
+      }
+      if (tenant.roles.includes('TENANT_ADMIN')) {
+        return 'TENANT_ADMIN'
+      }
+    }
+    
+    // Check workspace/team roles
+    const workspaceRoles = permissions.rolesByScope?.workspace || []
+    const teamRoles = permissions.rolesByScope?.team || []
+    
+    if (workspaceRoles.length > 0 || teamRoles.length > 0) {
+      // Check if they have LEAD roles
+      const hasWorkspaceLead = workspaceRoles.some(w => w.roles.includes('WORKSPACE_LEAD'))
+      const hasTeamLead = teamRoles.some(t => t.roles.includes('TEAM_LEAD'))
+      if (hasWorkspaceLead || hasTeamLead) {
+        return 'MANAGER_LEAD'
+      }
+      // Otherwise contributor
+      return 'CONTRIBUTOR'
+    }
+    
+    return 'CONTRIBUTOR'
+  }
+  
+  const getEmptyStateMessage = (): string => {
+    const userRole = getUserRole()
+    
+    if (userRole === 'TENANT_OWNER' || userRole === 'TENANT_ADMIN') {
+      return 'No items need your attention. All OKRs are on track.'
+    }
+    
+    if (userRole === 'MANAGER_LEAD') {
+      return 'No team items need attention right now.'
+    }
+    
+    return 'Nothing needs your attention.'
   }
 
   const handlePageChange = (newPage: number) => {
@@ -166,7 +240,7 @@ export function AttentionDrawer({
 
   const handleRequestCheckIn = (krId: string) => {
     if (onRequestCheckIn) {
-      console.log('[Telemetry] okr.insights.request_checkin.click', {
+      track('okr.insights.request_checkin.click', {
         userId: user?.id,
         keyResultId: krId,
         timestamp: new Date().toISOString(),
@@ -199,8 +273,12 @@ export function AttentionDrawer({
           )}
 
           {feed && feed.items.length === 0 && (
-            <div className="text-center text-sm text-muted-foreground py-8" role="status">
-              No items need attention at this time.
+            <div 
+              className="text-center text-sm text-muted-foreground py-8" 
+              role="status"
+              data-testid="attention-empty"
+            >
+              {getEmptyStateMessage()}
             </div>
           )}
 

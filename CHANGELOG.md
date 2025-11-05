@@ -1,3 +1,43 @@
+## [OKR Mini Sprint 4.0] 2025-01-XX
+
+### Features
+- **Attention Drawer Polish**: Enhanced attention drawer with role-aware empty states and badge count in button title
+  - Badge count displayed in button title (e.g., "Attention (4)")
+  - Drawer filters by current scope and cycleId
+  - Role-aware empty state messages:
+    - Tenant Admin/Owner: "No items need your attention. All OKRs are on track."
+    - Manager/Lead: "No team items need attention right now."
+    - Contributor: "Nothing needs your attention."
+  - Telemetry: `attention_drawer_opened` and `attention_empty_state_viewed` events
+- **Cycle Management Drawer**: New drawer for managing OKR cycles (admin/owner only)
+  - List all cycles with name, dates, and status
+  - Create new cycles with inline form
+  - Edit existing cycles
+  - Set cycle as active
+  - Archive cycles
+  - Delete cycles (if no linked OKRs)
+  - Accessible from toolbar button or CycleSelector footer link
+  - State updates immediately without page reload
+  - Telemetry: `cycle_drawer_opened`, `cycle_created`, `cycle_archived`, `cycle_set_active` events
+
+### Technical
+- **AttentionDrawer**: Added `scope` prop and role detection logic
+- **OKRToolbar**: Updated attention button to show count in title
+- **CycleManagementDrawer**: New component `apps/web/src/app/dashboard/okrs/components/CycleManagementDrawer.tsx`
+- **CycleSelector**: Added optional footer link for cycle management
+- **OKRFilterBar**: Added `onManageCycles` prop support
+- All drawer titles and messages use British English
+- RBAC enforced: cycle management requires TENANT_OWNER or TENANT_ADMIN role
+- Backend endpoints already exist: GET/POST/PATCH/DELETE `/okr/cycles`
+
+### Accessibility
+- All buttons have `aria-label` attributes
+- Drawer titles use `aria-labelledby` and `aria-describedby`
+- Focus trap implemented for drawer accessibility
+- Keyboard navigation support (ESC to close)
+
+---
+
 ## [OKR Mini Sprint 3.1] 2025-11-05
 
 ### Enhancements

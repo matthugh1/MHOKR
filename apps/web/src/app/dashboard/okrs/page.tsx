@@ -67,6 +67,7 @@ import { cn } from '@/lib/utils'
 import { OKRFilterBar } from './components/OKRFilterBar'
 import { OKRToolbar } from './components/OKRToolbar'
 import { GovernanceStatusBar } from './components/GovernanceStatusBar'
+import { CycleManagementDrawer } from './components/CycleManagementDrawer'
 
 // NOTE: This screen is now the system of record for CRUD on Objectives, Key Results, and Initiatives.
 export default function OKRsPage() {
@@ -197,6 +198,7 @@ export default function OKRsPage() {
   const attentionTelemetryFiredRef = useRef<Set<string>>(new Set())
   const [liveRegionMessage, setLiveRegionMessage] = useState<string | null>(null)
   const liveRegionRef = useRef<HTMLDivElement>(null)
+  const [cycleManagementDrawerOpen, setCycleManagementDrawerOpen] = useState(false)
   // Tree view state
   const [selectedTreeNodeId, setSelectedTreeNodeId] = useState<string | null>(null)
   const [selectedTreeNodeType, setSelectedTreeNodeType] = useState<'objective' | 'keyResult' | 'initiative' | null>(null)
@@ -914,6 +916,7 @@ export default function OKRsPage() {
                       })
                     }
                   }}
+                  onManageCycles={permissions.isTenantAdminOrOwner(currentOrganization?.id) ? () => setCycleManagementDrawerOpen(true) : undefined}
                   hasActiveFilters={hasActiveFilters}
                   onClearFilters={clearFilters}
                 />
@@ -941,6 +944,8 @@ export default function OKRsPage() {
                   setCreationDrawerMode('initiative')
                   setIsCreateDrawerOpen(true)
                 }}
+                onOpenCycleManagement={() => setCycleManagementDrawerOpen(true)}
+                canManageCycles={permissions.isTenantAdminOrOwner(currentOrganization?.id)}
               />
             </div>
             
@@ -1310,6 +1315,17 @@ export default function OKRsPage() {
             }}
           />
 
+          {/* Cycle Management Drawer */}
+          <CycleManagementDrawer
+            isOpen={cycleManagementDrawerOpen}
+            onClose={() => setCycleManagementDrawerOpen(false)}
+            currentOrganizationId={currentOrganization?.id || null}
+            onCyclesUpdated={() => {
+              loadActiveCycles()
+              setCycleManagementDrawerOpen(false)
+            }}
+          />
+
           {/* Attention Drawer */}
           <AttentionDrawer
             isOpen={attentionDrawerOpen}
@@ -1319,6 +1335,7 @@ export default function OKRsPage() {
               loadAttentionCount()
             }}
             cycleId={selectedCycleId}
+            scope={selectedScope}
             onNavigateToObjective={(objectiveId) => {
               // Scroll to objective or expand it
               setExpandedObjectiveId(objectiveId)

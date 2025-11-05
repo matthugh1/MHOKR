@@ -23,6 +23,8 @@ interface OKRToolbarProps {
   onCreateObjective: () => void
   onCreateKeyResult: () => void
   onCreateInitiative: () => void
+  onOpenCycleManagement?: () => void
+  canManageCycles?: boolean
 }
 
 export function OKRToolbar({
@@ -37,6 +39,8 @@ export function OKRToolbar({
   onCreateObjective,
   onCreateKeyResult,
   onCreateInitiative,
+  onOpenCycleManagement,
+  canManageCycles = false,
 }: OKRToolbarProps) {
   return (
     <div className="flex items-center gap-3 flex-shrink-0">
@@ -92,16 +96,17 @@ export function OKRToolbar({
       {/* Needs Attention - Icon button with badge */}
       <Button
         variant="outline"
-        size="icon"
+        size="default"
         onClick={onOpenAttentionDrawer}
-        aria-label="Attention items"
+        aria-label={attentionCount > 0 ? `Attention (${attentionCount})` : 'Attention items'}
         className="relative focus:ring-2 focus:ring-ring focus:outline-none"
       >
-        <Bell className="h-4 w-4" />
+        <Bell className="h-4 w-4 mr-2" />
+        {attentionCount > 0 ? `Attention (${attentionCount})` : 'Attention'}
         {attentionCount > 0 && (
           <Badge 
             variant="destructive" 
-            className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+            className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs ml-1"
             aria-label={`${attentionCount} items need attention`}
             data-testid="attention-badge"
           >
@@ -109,6 +114,19 @@ export function OKRToolbar({
           </Badge>
         )}
       </Button>
+
+      {/* Manage Cycles - Only visible to TENANT_OWNER / TENANT_ADMIN */}
+      {canManageCycles && onOpenCycleManagement && (
+        <Button
+          variant="outline"
+          size="default"
+          onClick={onOpenCycleManagement}
+          aria-label="Manage cycles"
+          className="focus:ring-2 focus:ring-ring focus:outline-none"
+        >
+          Manage Cycles
+        </Button>
+      )}
 
       {/* Add - RBAC-aware split-button */}
       {(canCreateObjective || canEditOKR) && !isSuperuser && (

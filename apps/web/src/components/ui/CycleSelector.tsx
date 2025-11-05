@@ -20,6 +20,8 @@ export interface CycleSelectorProps {
   /** currently selected cycle id */
   selectedId: string | null
   onSelect: (opt: { key: string; label: string }) => void
+  /** Optional callback to open cycle management drawer */
+  onManageCycles?: () => void
 }
 
 const getStatusLabel = (status: string): string => {
@@ -57,7 +59,7 @@ const getStatusLabel = (status: string): string => {
  * />
  * ```
  */
-export function CycleSelector({ cycles, legacyPeriods = [], selectedId, onSelect }: CycleSelectorProps) {
+export function CycleSelector({ cycles, legacyPeriods = [], selectedId, onSelect, onManageCycles }: CycleSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -216,6 +218,22 @@ export function CycleSelector({ cycles, legacyPeriods = [], selectedId, onSelect
               </div>
             </div>
           </div>
+
+          {/* Footer: Manage Cycles Link */}
+          {onManageCycles && (
+            <div className="mt-4 pt-4 border-t border-neutral-200">
+              <button
+                onClick={() => {
+                  setIsOpen(false)
+                  onManageCycles()
+                }}
+                className="w-full text-left text-sm text-neutral-600 hover:text-neutral-900 px-3 py-2 rounded-md hover:bg-neutral-100 transition-colors"
+                aria-label="Manage cycles"
+              >
+                Manage cycles…
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

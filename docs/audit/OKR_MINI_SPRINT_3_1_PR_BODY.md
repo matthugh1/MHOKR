@@ -17,23 +17,34 @@ This PR adds scope-aware attention badge count and a non-interactive hover hint 
 - Non-interactive clarification (no click handlers, cursor-default)
 - Added `data-testid="gov-status-hint"` and `aria-describedby` for accessibility
 
+### Bonus: Feature Flag Consolidation
+
+**Note:** This PR also includes a feature flag consolidation improvement (migrating `okrTreeView` from environment variable to database storage). This ensures all feature flags are managed consistently in the database.
+
 ### Technical Details
 
 - **Files Modified:**
   - `apps/web/src/app/dashboard/okrs/page.tsx` - Enhanced attention count loading with scope awareness
   - `apps/web/src/app/dashboard/okrs/components/OKRToolbar.tsx` - Added test ID and updated aria-label
   - `apps/web/src/app/dashboard/okrs/components/GovernanceStatusBar.tsx` - Added tooltip wrapper
+  - `apps/web/src/hooks/useFeatureFlags.ts` - Migrated `okrTreeView` to read from database
+  - `services/core-api/src/modules/rbac/feature-flag.service.ts` - New generic feature flag service
+  - `services/core-api/src/modules/rbac/rbac-inspector.service.ts` - Now uses FeatureFlagService
+  - `services/core-api/src/modules/auth/strategies/jwt.strategy.ts` - Exposes all flags via JWT
 
 - **No Breaking Changes:**
   - Props flow unchanged
   - No new pages or routes
   - Backward compatible with existing attention endpoint
+  - Feature flag migration is backward compatible
 
 ### Documentation
 
 - **Audit:** [`docs/audit/OKR_MINI_SPRINT_3_1_AUDIT.md`](./OKR_MINI_SPRINT_3_1_AUDIT.md)
 - **Implementation Notes:** [`docs/audit/OKR_MINI_SPRINT_3_1_NOTES.md`](./OKR_MINI_SPRINT_3_1_NOTES.md)
 - **Validation:** [`docs/audit/OKR_MINI_SPRINT_3_1_VALIDATION.md`](./OKR_MINI_SPRINT_3_1_VALIDATION.md)
+- **Feature Flags:** [`docs/audit/FEATURE_FLAGS.md`](./FEATURE_FLAGS.md)
+- **Feature Flag Migration:** [`docs/audit/FEATURE_FLAG_MIGRATION.md`](./FEATURE_FLAG_MIGRATION.md)
 
 ### Screenshots
 
@@ -47,12 +58,13 @@ This PR adds scope-aware attention badge count and a non-interactive hover hint 
 - Small, surgical changes to existing components
 - No logic changes beyond adding scope parameter to existing API call
 - Backward compatible (backend filters automatically)
+- Feature flag migration is backward compatible
 - No new dependencies or routes
 
 ### Rollback Plan
 
-1. Revert commit `f927eff` and `59b8ab9`
-2. Or manually revert changes in the three modified files
+1. Revert commits `f927eff` and `59b8ab9` (and any subsequent commits)
+2. Or manually revert changes in the modified files
 3. No database migrations required
 
 ### Testing
@@ -62,6 +74,7 @@ This PR adds scope-aware attention badge count and a non-interactive hover hint 
 - ✅ Tooltip appears on hover and is non-interactive
 - ✅ Telemetry events fire correctly
 - ✅ Lint/typecheck passed (pre-existing errors unrelated)
+- ✅ Feature flag migration verified (backward compatible)
 
 ### Merge Checklist
 
@@ -72,8 +85,8 @@ This PR adds scope-aware attention badge count and a non-interactive hover hint 
 - [x] CHANGELOG updated
 - [x] No console.log violations
 - [x] British English copy verified
+- [x] Feature flags consolidated to database
 
 ---
 
 **Ready for review and merge.**
-
