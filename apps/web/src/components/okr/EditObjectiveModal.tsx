@@ -166,12 +166,12 @@ export function EditObjectiveModal({
           {availableWorkspaces.length > 0 && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="edit-workspace">Workspace</Label>
-              <Select value={workspaceId} onValueChange={setWorkspaceId}>
+              <Select value={workspaceId || "none"} onValueChange={(value) => setWorkspaceId(value === "none" ? "" : value)}>
                 <SelectTrigger id="edit-workspace">
                   <SelectValue placeholder="Select workspace" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {availableWorkspaces.map((workspace) => (
                     <SelectItem key={workspace.id} value={workspace.id}>
                       {workspace.name}
@@ -185,12 +185,12 @@ export function EditObjectiveModal({
           {availableCycles.length > 0 && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="edit-cycle">Cycle / Period</Label>
-              <Select value={cycleId} onValueChange={setCycleId}>
+              <Select value={cycleId || "none"} onValueChange={(value) => setCycleId(value === "none" ? "" : value)}>
                 <SelectTrigger id="edit-cycle">
                   <SelectValue placeholder="Select cycle" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {availableCycles.map((cycle) => (
                     <SelectItem key={cycle.id} value={cycle.id}>
                       {cycle.name}

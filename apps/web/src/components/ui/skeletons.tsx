@@ -72,3 +72,39 @@ export function GovernanceStatusSkeleton() {
   )
 }
 
+export function DrawerFormSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      {/* Title field */}
+      <div className="space-y-2">
+        <div className="h-4 bg-muted rounded w-16" />
+        <div className="h-10 bg-muted rounded w-full" />
+      </div>
+      
+      {/* Description field */}
+      <div className="space-y-2">
+        <div className="h-4 bg-muted rounded w-20" />
+        <div className="h-24 bg-muted rounded w-full" />
+      </div>
+      
+      {/* Select fields */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <div className="h-4 bg-muted rounded w-16" />
+          <div className="h-10 bg-muted rounded w-full" />
+        </div>
+        <div className="space-y-2">
+          <div className="h-4 bg-muted rounded w-16" />
+          <div className="h-10 bg-muted rounded w-full" />
+        </div>
+      </div>
+      
+      {/* Action buttons */}
+      <div className="flex gap-2 pt-4">
+        <div className="h-10 bg-muted rounded w-24" />
+        <div className="h-10 bg-muted rounded w-24" />
+      </div>
+    </div>
+  )
+}
+
