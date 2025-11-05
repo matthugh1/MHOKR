@@ -1,3 +1,22 @@
+## Seeds
+
+### Large-Organisation Seed Suite
+
+- **Seed Suite**: Comprehensive seed suite for provisioning large organisations (~200 users) with realistic OKR data
+  - Idempotent seed scripts with deterministic UUIDv5 ID generation
+  - Size presets: `tiny` (~25 users, ~30 objectives), `demo` (~200 users, ~256 objectives), `full` (~200 users, ~392 objectives)
+  - 6 workspaces, ~20 teams, realistic OKR distribution across tenant/workspace/team levels
+  - 4 cycles (Q4 2025 ACTIVE, Q1 2026 ACTIVE, Q2 2026 DRAFT, Q3 2026 ARCHIVED)
+  - Realistic org chart with manager chains (depth 1-4)
+  - Role distribution: 1 TENANT_OWNER, 5 TENANT_ADMIN, 24 WORKSPACE_LEAD, 24 TEAM_LEAD, remainder contributors
+  - Attention items: overdue check-ins (10-15%), no-progress signals (15-25%)
+  - PRIVATE visibility whitelists configured
+  - SUPERUSER read-only enforcement
+  - Validation probes and documentation
+  - Commands: `npm run seed:dry`, `npm run seed:run`, `npm run seed:run:full`, `npm run seed:run:tiny`, `npm run seed:purge`
+
+---
+
 ## [OKR Mini Sprint 4.0] 2025-01-XX
 
 ### Features
