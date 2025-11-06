@@ -169,7 +169,7 @@ export class RBACTestHelper {
     await this.prisma.team.deleteMany({
       where: {
         workspace: {
-          organizationId: tenantId,
+          organizationId: { equals: tenantId },
         },
       },
     });
