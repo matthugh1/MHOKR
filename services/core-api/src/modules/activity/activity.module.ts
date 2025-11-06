@@ -5,7 +5,7 @@ import { RBACModule } from '../rbac/rbac.module';
 import { OkrModule } from '../okr/okr.module';
 
 @Module({
-  imports: [RBACModule, forwardRef(() => OkrModule)],
+  imports: [forwardRef(() => RBACModule), forwardRef(() => OkrModule)],
   controllers: [ActivityController],
   providers: [ActivityService],
   exports: [ActivityService],

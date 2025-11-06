@@ -1,13 +1,15 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { SuperuserController } from './superuser.controller';
 import { SuperuserService } from './superuser.service';
 import { PrismaModule } from '../../common/prisma/prisma.module';
+import { RBACModule } from '../rbac/rbac.module';
 
 @Module({
   imports: [
     PrismaModule,
+    forwardRef(() => RBACModule),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({

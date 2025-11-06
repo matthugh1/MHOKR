@@ -189,11 +189,14 @@ export class InitiativeService {
       throw new NotFoundException(`User with ID ${data.ownerId} not found`);
     }
 
-    // Validate objectiveId if provided
-    let objective: { organizationId: string | null } | null = null;
+    // Validate objectiveId if provided and sync cycleId
+    let objective: { tenantId: string | null; cycleId: string | null } | null = null;
+    let parentCycleId: string | null = null;
+    
     if (data.objectiveId) {
       objective = await this.prisma.objective.findUnique({
         where: { id: data.objectiveId },
+        select: { tenantId: true, cycleId: true },
       });
 
       if (!objective) {
@@ -201,11 +204,105 @@ export class InitiativeService {
       }
 
       // Tenant isolation: verify org match
-      OkrTenantGuard.assertSameTenant(objective.organizationId, userOrganizationId);
+      OkrTenantGuard.assertSameTenant(objective.tenantId, userOrganizationId);
+      
+      // Sync cycleId from parent Objective
+      parentCycleId = objective.cycleId;
+    }
+    
+    // If linked to KeyResult, validate it exists and optionally belongs to the Objective
+    if (data.keyResultId) {
+      const keyResult = await this.prisma.keyResult.findUnique({
+        where: { id: data.keyResultId },
+        select: {
+          id: true,
+          objectives: {
+            select: {
+              objectiveId: true,
+              objective: {
+                select: {
+                  id: true,
+                  tenantId: true,
+                  cycleId: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!keyResult) {
+        throw new NotFoundException(`Key Result with ID ${data.keyResultId} not found`);
+      }
+
+      // IMPORTANT: If keyResultId is provided, do NOT also set objectiveId
+      // The Objective relationship can be inferred from the KR's relationship
+      // This avoids data redundancy and prevents confusion in rollups
+      if (data.objectiveId) {
+        // Remove objectiveId to avoid redundancy
+        delete data.objectiveId;
+      }
+
+      // Tenant isolation: verify Key Result belongs to same tenant
+      if (keyResult.objectives.length > 0) {
+        const krObjective = keyResult.objectives[0].objective;
+        if (krObjective) {
+          OkrTenantGuard.assertSameTenant(krObjective.tenantId, userOrganizationId);
+          // Use cycleId from KR's objective if we don't have one yet
+          if (!parentCycleId && krObjective.cycleId) {
+            parentCycleId = krObjective.cycleId;
+          }
+          // If we don't have an objective yet, use the KR's objective for tenantId
+          if (!objective && krObjective.tenantId) {
+            objective = { tenantId: krObjective.tenantId, cycleId: krObjective.cycleId };
+          }
+        }
+      } else {
+        // KeyResult has no linked objectives - this shouldn't happen in normal flow
+        throw new BadRequestException(
+          `Key Result ${data.keyResultId} is not linked to any Objective`
+        );
+      }
+    }
+    
+    // Set cycleId from parent if not explicitly provided
+    if (!data.cycleId && parentCycleId) {
+      data.cycleId = parentCycleId;
     }
 
+    // Set tenantId from parent Objective if available, otherwise use userOrganizationId
+    // CRITICAL: tenantId is required for tenant isolation
+    if (!data.tenantId) {
+      if (objective?.tenantId) {
+        data.tenantId = objective.tenantId;
+      } else if (data.keyResultId) {
+        // Get tenantId from parent KeyResult
+        const keyResult = await this.prisma.keyResult.findUnique({
+          where: { id: data.keyResultId },
+          select: { tenantId: true },
+        });
+        if (keyResult?.tenantId) {
+          data.tenantId = keyResult.tenantId;
+        }
+      }
+      
+      // Fallback to userOrganizationId if still not set
+      if (!data.tenantId && userOrganizationId) {
+        data.tenantId = userOrganizationId;
+      }
+    }
+    
+    // CRITICAL: tenantId is required - fail if still not set
+    if (!data.tenantId) {
+      throw new BadRequestException('tenantId is required for Initiative creation');
+    }
+
+    // Remove fields that don't exist on the Initiative model
+    // tenantId is now a field, so keep it
+    const { ...prismaData } = data;
+
     const created = await this.prisma.initiative.create({
-      data,
+      data: prismaData,
     });
 
     await this.auditLogService.record({
@@ -213,7 +310,7 @@ export class InitiativeService {
       actorUserId: userId,
       targetId: created.id,
       targetType: AuditTargetType.OKR,
-      organizationId: objective?.organizationId || undefined,
+      tenantId: objective?.tenantId || undefined,
     });
 
     return created;
@@ -226,7 +323,14 @@ export class InitiativeService {
     // Get existing initiative to check tenant isolation
     const existing = await this.prisma.initiative.findUnique({
       where: { id },
-      include: { objective: true },
+      include: { 
+        objective: {
+          select: {
+            tenantId: true,
+            cycleId: true,
+          },
+        },
+      },
     });
 
     if (!existing) {
@@ -236,7 +340,51 @@ export class InitiativeService {
     // Tenant isolation: verify org match via parent objective
     if (existing.objectiveId) {
       const objective = existing.objective;
-      OkrTenantGuard.assertSameTenant(objective?.organizationId, userOrganizationId);
+      OkrTenantGuard.assertSameTenant(objective?.tenantId, userOrganizationId);
+    }
+    
+    // Sync cycleId when parent changes or if not set
+    let parentCycleId: string | null = null;
+    
+    // Check new or existing objectiveId
+    const objectiveId = data.objectiveId ?? existing.objectiveId;
+    if (objectiveId) {
+      const objective = await this.prisma.objective.findUnique({
+        where: { id: objectiveId },
+        select: { cycleId: true },
+      });
+      parentCycleId = objective?.cycleId ?? null;
+    }
+    
+    // If linked to KeyResult (but not Objective), get cycleId via KR's objective
+    if (!parentCycleId) {
+      const keyResultId = data.keyResultId ?? existing.keyResultId;
+      if (keyResultId) {
+        const keyResult = await this.prisma.keyResult.findUnique({
+          where: { id: keyResultId },
+          select: {
+            objectives: {
+              select: {
+                objective: {
+                  select: {
+                    cycleId: true,
+                  },
+                },
+              },
+              take: 1,
+            },
+          },
+        });
+        
+        if (keyResult?.objectives[0]?.objective?.cycleId) {
+          parentCycleId = keyResult.objectives[0].objective.cycleId;
+        }
+      }
+    }
+    
+    // Update cycleId if parent provides one and it's not explicitly set in update
+    if (!data.cycleId && parentCycleId) {
+      data.cycleId = parentCycleId;
     }
 
     const updated = await this.prisma.initiative.update({
@@ -249,7 +397,7 @@ export class InitiativeService {
       actorUserId: userId,
       targetId: id,
       targetType: AuditTargetType.OKR,
-      organizationId: existing.objective?.organizationId || undefined,
+      tenantId: existing.objective?.tenantId || undefined,
     });
 
     return updated;
@@ -273,7 +421,7 @@ export class InitiativeService {
       // Tenant isolation: verify org match via parent objective
       if (initiative.objectiveId) {
         const objective = initiative.objective;
-        OkrTenantGuard.assertSameTenant(objective?.organizationId, userOrganizationId);
+        OkrTenantGuard.assertSameTenant(objective?.tenantId, userOrganizationId);
       }
 
       await this.auditLogService.record({
@@ -281,7 +429,7 @@ export class InitiativeService {
         actorUserId: userId,
         targetId: id,
         targetType: AuditTargetType.OKR,
-        organizationId: initiative.objective?.organizationId || undefined,
+        tenantId: initiative.objective?.tenantId || undefined,
       });
 
       // Delete initiative

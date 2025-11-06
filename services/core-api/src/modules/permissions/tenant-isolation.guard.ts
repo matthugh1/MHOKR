@@ -50,14 +50,14 @@ export class TenantIsolationGuard implements CanActivate {
     const userRoles = await this.roleService.getUserRoles(user.id);
     
     // Extract unique organization IDs
-    const organizationIds = new Set<string>();
+    const tenantIds = new Set<string>();
     for (const role of userRoles) {
-      if (role.organizationId) {
-        organizationIds.add(role.organizationId);
+      if (role.tenantId) {
+        tenantIds.add(role.tenantId);
       }
     }
 
-    if (organizationIds.size === 0) {
+    if (tenantIds.size === 0) {
       // User has no organization memberships - they can't access anything
       request.userOrganizations = [];
       // Don't throw error here - let the service decide what to return
@@ -65,7 +65,7 @@ export class TenantIsolationGuard implements CanActivate {
     }
 
     // Attach user's organization IDs to request for filtering
-    request.userOrganizations = Array.from(organizationIds);
+    request.userOrganizations = Array.from(tenantIds);
     request.isSuperuser = false;
 
     return true;

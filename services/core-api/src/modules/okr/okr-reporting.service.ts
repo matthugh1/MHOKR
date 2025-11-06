@@ -55,7 +55,7 @@ export class OkrReportingService {
       };
     }
     if (orgFilter) {
-      where.organizationId = orgFilter.organizationId;
+      where.tenantId = orgFilter.tenantId;
     }
     // Superuser (null): aggregate across ALL organisations
 
@@ -66,7 +66,7 @@ export class OkrReportingService {
         id: true,
         status: true,
         ownerId: true,
-        organizationId: true,
+        tenantId: true,
         visibilityLevel: true,
       },
     });
@@ -74,14 +74,14 @@ export class OkrReportingService {
     // Filter by visibility
     const visibleObjectives = [];
     for (const obj of objectives) {
-      if (!obj.organizationId) {
+      if (!obj.tenantId) {
         continue;
       }
       const canSee = await this.visibilityService.canUserSeeObjective({
         objective: {
           id: obj.id,
           ownerId: obj.ownerId,
-          organizationId: obj.organizationId,
+          tenantId: obj.tenantId,
           visibilityLevel: obj.visibilityLevel,
         },
         requesterUserId,
@@ -149,7 +149,6 @@ export class OkrReportingService {
         'status',
         'progress',
         'isPublished',
-        'period',
         'startDate',
         'endDate',
         'parentId',
@@ -165,7 +164,7 @@ export class OkrReportingService {
       return headers.join(',') + '\n';
     }
     if (orgFilter) {
-      where.organizationId = orgFilter.organizationId;
+      where.tenantId = orgFilter.tenantId;
     }
     // Superuser (null): no org filter, return all OKRs
 
@@ -225,7 +224,6 @@ export class OkrReportingService {
       'status',
       'progress',
       'isPublished',
-      'period',
       'startDate',
       'endDate',
       'parentId',
@@ -263,11 +261,10 @@ export class OkrReportingService {
         escapeCSV(obj.status),
         escapeCSV(obj.progress),
         escapeCSV(obj.isPublished),
-        escapeCSV(obj.period),
         escapeCSV(obj.startDate?.toISOString().split('T')[0] || ''),
         escapeCSV(obj.endDate?.toISOString().split('T')[0] || ''),
         escapeCSV(obj.parentId),
-        escapeCSV(obj.organizationId),
+        escapeCSV(obj.tenantId),
       ];
 
       // If objective has key results, create one row per KR
@@ -341,7 +338,7 @@ export class OkrReportingService {
     const objectiveWhere: any = {};
     const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
     if (orgFilter) {
-      objectiveWhere.organizationId = orgFilter.organizationId;
+      objectiveWhere.tenantId = orgFilter.tenantId;
     }
     // Superuser (null): no filter, see all orgs
 
@@ -384,7 +381,7 @@ export class OkrReportingService {
               select: {
                 id: true,
                 ownerId: true,
-                organizationId: true,
+                tenantId: true,
                 visibilityLevel: true,
               },
             },
@@ -402,14 +399,14 @@ export class OkrReportingService {
       }
 
       const parentObjective = kr.objectives[0].objective;
-      if (!parentObjective.organizationId) {
+      if (!parentObjective.tenantId) {
         continue;
       }
       const canSee = await this.visibilityService.canUserSeeObjective({
         objective: {
           id: parentObjective.id,
           ownerId: parentObjective.ownerId,
-          organizationId: parentObjective.organizationId,
+          tenantId: parentObjective.tenantId,
           visibilityLevel: parentObjective.visibilityLevel,
         },
         requesterUserId,
@@ -479,7 +476,7 @@ export class OkrReportingService {
       return [];
     }
     if (orgFilter) {
-      where.organizationId = orgFilter.organizationId;
+      where.tenantId = orgFilter.tenantId;
     }
     // Superuser (null): no org filter, return all pillars across all orgs
 
@@ -518,6 +515,58 @@ export class OkrReportingService {
   }
 
   /**
+   * Get all cycles for an organization (ACTIVE, DRAFT, ARCHIVED, etc.).
+   * 
+   * Returns all cycles for filtering dropdowns and cycle selection.
+   * 
+   * Tenant isolation:
+   * - If userOrganizationId === null (superuser): returns all cycles across all orgs
+   * - Else if userOrganizationId is a non-empty string: return all cycles for that org
+   * - Else (undefined/falsy): return []
+   * 
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @returns Array of cycles with id, name, status, startDate, endDate, tenantId
+   */
+  async getAllCyclesForOrg(userOrganizationId: string | null | undefined): Promise<Array<{
+    id: string;
+    name: string;
+    status: string;
+    startDate: Date;
+    endDate: Date;
+    tenantId: string;
+  }>> {
+    const where: any = {};
+
+    // Tenant isolation: use OkrTenantGuard to build where clause
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (orgFilter === null && userOrganizationId !== null) {
+      // User has no org or invalid org → return empty array
+      return [];
+    }
+    if (orgFilter) {
+      where.tenantId = orgFilter.tenantId;
+    }
+    // Superuser (null): no org filter, return all cycles across all orgs
+
+    const cycles = await this.prisma.cycle.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        tenantId: true,
+      },
+      orderBy: {
+        startDate: 'desc',
+      },
+    });
+
+    return cycles;
+  }
+
+  /**
    * Get active cycles for an organization.
    * 
    * Moved from ObjectiveService.getActiveCycleForOrg() in Phase 4.
@@ -532,7 +581,7 @@ export class OkrReportingService {
    * TODO [phase7-hardening]: Later we should handle multiple active cycles, but for now assume at most one active cycle per org.
    * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
-   * @returns Array of active cycles with id, name, status, startDate, endDate, organizationId
+   * @returns Array of active cycles with id, name, status, startDate, endDate, tenantId
    */
   async getActiveCycleForOrg(userOrganizationId: string | null | undefined): Promise<Array<{
     id: string;
@@ -540,7 +589,7 @@ export class OkrReportingService {
     status: string;
     startDate: Date;
     endDate: Date;
-    organizationId: string;
+    tenantId: string;
   }>> {
     const where: any = {
       status: 'ACTIVE',
@@ -553,7 +602,7 @@ export class OkrReportingService {
       return [];
     }
     if (orgFilter) {
-      where.organizationId = orgFilter.organizationId;
+      where.tenantId = orgFilter.tenantId;
     }
     // Superuser (null): no org filter, return all ACTIVE cycles across all orgs
 
@@ -565,7 +614,7 @@ export class OkrReportingService {
         status: true,
         startDate: true,
         endDate: true,
-        organizationId: true,
+        tenantId: true,
       },
       orderBy: {
         startDate: 'desc',
@@ -614,7 +663,7 @@ export class OkrReportingService {
     };
     const cycleOrgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
     if (cycleOrgFilter) {
-      cycleWhere.organizationId = cycleOrgFilter.organizationId;
+      cycleWhere.tenantId = cycleOrgFilter.tenantId;
     }
     // Superuser (null): no filter, see all orgs
 
@@ -623,7 +672,7 @@ export class OkrReportingService {
       where: cycleWhere,
       select: {
         id: true,
-        organizationId: true,
+        tenantId: true,
       },
     });
 
@@ -636,7 +685,7 @@ export class OkrReportingService {
     const pillarWhere: any = {};
     const pillarOrgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
     if (pillarOrgFilter) {
-      pillarWhere.organizationId = pillarOrgFilter.organizationId;
+      pillarWhere.tenantId = pillarOrgFilter.tenantId;
     }
     // Superuser (null): no filter, see all orgs
 
@@ -669,7 +718,7 @@ export class OkrReportingService {
           select: {
             id: true,
             ownerId: true,
-            organizationId: true,
+            tenantId: true,
             visibilityLevel: true,
           },
         });
@@ -677,14 +726,14 @@ export class OkrReportingService {
         // Filter by visibility
         let visibleCount = 0;
         for (const obj of objectives) {
-          if (!obj.organizationId) {
+          if (!obj.tenantId) {
             continue;
           }
           const canSee = await this.visibilityService.canUserSeeObjective({
             objective: {
               id: obj.id,
               ownerId: obj.ownerId,
-              organizationId: obj.organizationId,
+              tenantId: obj.tenantId,
               visibilityLevel: obj.visibilityLevel,
             },
             requesterUserId,
@@ -744,7 +793,7 @@ export class OkrReportingService {
     // Tenant isolation: use OkrTenantGuard to build where clause
     const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
     if (orgFilter) {
-      where.organizationId = orgFilter.organizationId;
+      where.tenantId = orgFilter.tenantId;
     }
     // Superuser (null): no org filter, see all orgs
 
@@ -805,7 +854,7 @@ export class OkrReportingService {
    * W3.M2: Now filters by visibility before returning overdue check-ins.
    * Only includes overdue KRs whose parent objectives are visible to the requester.
    * 
-   * Returns Key Results that haven't been checked in within their expected cadence period.
+   * Returns Key Results that haven't been checked in within their expected cadence timeframe.
    * Tenant isolation applies: null (superuser) sees all orgs, string sees that org only, undefined returns [].
    * 
    * TODO [phase7-performance]: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
@@ -827,24 +876,26 @@ export class OkrReportingService {
     daysLate: number;
     cadence: string | null;
   }>> {
-    // Tenant isolation: if user has no org, return empty
-    if (userOrganizationId === undefined || userOrganizationId === '') {
-      return [];
-    }
+    console.log('[OKR REPORTING] getOverdueCheckIns called:', { userOrganizationId, requesterUserId });
+    try {
+      // Tenant isolation: if user has no org, return empty
+      if (userOrganizationId === undefined || userOrganizationId === '') {
+        return [];
+      }
 
-    // Build where clause for objectives (tenant isolation)
-    const objectiveWhere: any = {};
-    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
-    if (orgFilter) {
-      objectiveWhere.organizationId = orgFilter.organizationId;
-    }
-    // Superuser (null): no filter, see all orgs
+      // Build where clause for objectives (tenant isolation)
+      const objectiveWhere: any = {};
+      const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+      if (orgFilter) {
+        objectiveWhere.tenantId = orgFilter.tenantId;
+      }
+      // Superuser (null): no filter, see all orgs
 
-    // TODO [phase7-performance]: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
-    // Future optimization: use SQL window functions or subqueries to calculate overdue in database.
+      // TODO [phase7-performance]: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
+      // Future optimization: use SQL window functions or subqueries to calculate overdue in database.
 
-    // Fetch all Key Results in scope with their objectives and latest check-in
-    const keyResults = await this.prisma.keyResult.findMany({
+      // Fetch all Key Results in scope with their objectives and latest check-in
+      const keyResults = await this.prisma.keyResult.findMany({
       where: {
         objectives: {
           some: {
@@ -864,7 +915,7 @@ export class OkrReportingService {
                 id: true,
                 title: true,
                 ownerId: true,
-                organizationId: true,
+                tenantId: true,
                 visibilityLevel: true,
               },
             },
@@ -952,8 +1003,8 @@ export class OkrReportingService {
           continue; // Skip KRs without parent objective
         }
 
-        if (!objective.organizationId) {
-          continue; // Skip objectives without organizationId
+        if (!objective.tenantId) {
+          continue; // Skip objectives without tenantId
         }
 
         // Filter by visibility
@@ -961,7 +1012,7 @@ export class OkrReportingService {
           objective: {
             id: objective.id,
             ownerId: objective.ownerId,
-            organizationId: objective.organizationId,
+            tenantId: objective.tenantId,
             visibilityLevel: objective.visibilityLevel,
           },
           requesterUserId,
@@ -992,10 +1043,26 @@ export class OkrReportingService {
       }
     }
 
-    // Sort by days late (most overdue first)
-    overdueResults.sort((a, b) => b.daysLate - a.daysLate);
+      // Sort by days late (most overdue first)
+      overdueResults.sort((a, b) => b.daysLate - a.daysLate);
 
-    return overdueResults;
+      return overdueResults;
+    } catch (error: any) {
+      console.error('[OKR REPORTING] Error in getOverdueCheckIns:');
+      console.error('[OKR REPORTING] Message:', error?.message || 'Unknown error');
+      console.error('[OKR REPORTING] Name:', error?.name || 'Unknown');
+      console.error('[OKR REPORTING] Code:', error?.code || 'N/A');
+      console.error('[OKR REPORTING] Stack:', error?.stack || 'No stack trace');
+      if (error?.meta) {
+        console.error('[OKR REPORTING] Prisma Meta:', JSON.stringify(error.meta, null, 2));
+      }
+      try {
+        console.error('[OKR REPORTING] Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+      } catch (e) {
+        console.error('[OKR REPORTING] Error object (non-serializable):', error);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -1031,7 +1098,7 @@ export class OkrReportingService {
     const objectiveWhere: any = {};
     const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
     if (orgFilter) {
-      objectiveWhere.organizationId = orgFilter.organizationId;
+      objectiveWhere.tenantId = orgFilter.tenantId;
     }
     // Superuser (null): no filter, see all orgs
 

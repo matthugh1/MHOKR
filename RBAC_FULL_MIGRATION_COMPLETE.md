@@ -114,3 +114,6 @@ export class UserController {
 The RBAC system is now fully integrated across the entire application. All endpoints are protected with appropriate action decorators, and the data migration has populated the RoleAssignment table.
 
 
+
+
+

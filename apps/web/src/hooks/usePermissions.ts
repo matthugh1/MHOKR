@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/auth.context'
 import api from '@/lib/api'
 
 interface RolesByScope {
-  tenant: Array<{ organizationId: string; roles: string[] }>
+  tenant: Array<{ tenantId: string; roles: string[] }>
   workspace: Array<{ workspaceId: string; roles: string[] }>
   team: Array<{ teamId: string; roles: string[] }>
 }
@@ -16,13 +16,13 @@ interface RBACAssignmentsResponse {
 
 interface OKR {
   ownerId: string
-  organizationId?: string | null
+  tenantId?: string | null
   workspaceId?: string | null
   teamId?: string | null
 }
 
 interface InviteMembersParams {
-  organizationId?: string
+  tenantId?: string
   workspaceId?: string
   teamId?: string
 }
@@ -67,6 +67,11 @@ export function usePermissions() {
 
   const canEditOKR = useMemo(() => {
     return (okr: OKR): boolean => {
+      // Guard against undefined/null okr
+      if (!okr) {
+        return false
+      }
+
       // Superuser: always true
       if (isSuperuser) {
         return true
@@ -77,11 +82,11 @@ export function usePermissions() {
         return true
       }
 
-      // Tenant roles: If okr.organizationId matches an entry in roles.tenant[].organizationId
+      // Tenant roles: If okr.tenantId matches an entry in roles.tenant[].tenantId
       // and that entry contains 'TENANT_OWNER' or 'TENANT_ADMIN', return true
-      if (okr.organizationId) {
+      if (okr.tenantId) {
         const tenantRoles = rolesByScope.tenant.find(
-          (t) => t.organizationId === okr.organizationId
+          (t) => t.tenantId === okr.tenantId
         )
         if (tenantRoles && (tenantRoles.roles.includes('TENANT_OWNER') || tenantRoles.roles.includes('TENANT_ADMIN'))) {
           return true
@@ -117,6 +122,11 @@ export function usePermissions() {
 
   const canDeleteOKR = useMemo(() => {
     return (okr: OKR): boolean => {
+      // Guard against undefined/null okr
+      if (!okr) {
+        return false
+      }
+
       // Superuser: always true
       if (isSuperuser) {
         return true
@@ -127,11 +137,11 @@ export function usePermissions() {
         return true
       }
 
-      // Tenant roles: If okr.organizationId matches an entry in roles.tenant[].organizationId
+      // Tenant roles: If okr.tenantId matches an entry in roles.tenant[].tenantId
       // and that entry contains 'TENANT_OWNER' or 'TENANT_ADMIN', return true
-      if (okr.organizationId) {
+      if (okr.tenantId) {
         const tenantRoles = rolesByScope.tenant.find(
-          (t) => t.organizationId === okr.organizationId
+          (t) => t.tenantId === okr.tenantId
         )
         if (tenantRoles && (tenantRoles.roles.includes('TENANT_OWNER') || tenantRoles.roles.includes('TENANT_ADMIN'))) {
           return true
@@ -173,9 +183,9 @@ export function usePermissions() {
       }
 
       // Tenant level: Check if user has TENANT_OWNER or TENANT_ADMIN for the organization
-      if (params.organizationId) {
+      if (params.tenantId) {
         const tenantRoles = rolesByScope.tenant.find(
-          (t) => t.organizationId === params.organizationId
+          (t) => t.tenantId === params.tenantId
         )
         if (tenantRoles && (tenantRoles.roles.includes('TENANT_OWNER') || tenantRoles.roles.includes('TENANT_ADMIN'))) {
           return true
@@ -203,7 +213,7 @@ export function usePermissions() {
       }
 
       // If no specific scope provided, check if user has any admin role at any level
-      if (!params.organizationId && !params.workspaceId && !params.teamId) {
+      if (!params.tenantId && !params.workspaceId && !params.teamId) {
         const hasTenantAdmin = rolesByScope.tenant.some(
           (t) => t.roles.includes('TENANT_OWNER') || t.roles.includes('TENANT_ADMIN')
         )
@@ -224,31 +234,33 @@ export function usePermissions() {
    * Check if user can administer tenant (TENANT_OWNER or TENANT_ADMIN).
    * Used to determine if user can edit published OKRs or access admin features.
    * 
-   * @param organizationId - Optional organization ID to check. If not provided, checks if user has admin role in any organization.
+   * @param tenantId - Optional organization ID to check. If not provided, checks if user has admin role in any organization.
    * @returns true if user has TENANT_OWNER or TENANT_ADMIN role for the organization
    */
   const canAdministerTenant = useMemo(() => {
-    return (organizationId?: string): boolean => {
+    return (tenantId?: string): boolean => {
       // Superuser: always true (though they're read-only for OKRs)
       if (isSuperuser) {
         return true
       }
 
-      // If organizationId provided, check that specific org
-      if (organizationId) {
+      // If tenantId provided, check that specific org
+      if (tenantId) {
         const tenantRoles = rolesByScope.tenant.find(
-          (t) => t.organizationId === organizationId
+          (t) => t.tenantId === tenantId
         )
-        return tenantRoles !== undefined && (
+        const hasAdmin = tenantRoles !== undefined && (
           tenantRoles.roles.includes('TENANT_OWNER') || 
           tenantRoles.roles.includes('TENANT_ADMIN')
         )
+        return hasAdmin
       }
 
-      // If no organizationId, check if user has admin role in any organization
-      return rolesByScope.tenant.some(
+      // If no tenantId, check if user has admin role in any organization
+      const hasAnyAdmin = rolesByScope.tenant.some(
         (t) => t.roles.includes('TENANT_OWNER') || t.roles.includes('TENANT_ADMIN')
       )
+      return hasAnyAdmin
     }
   }, [isSuperuser, rolesByScope])
 
@@ -256,18 +268,19 @@ export function usePermissions() {
    * Check if current user is a tenant admin or owner for the current organization.
    * This is a convenience helper that wraps canAdministerTenant with the current org context.
    * 
-   * @param organizationId - Optional organization ID. If not provided, checks if user has admin role in any organization.
+   * @param tenantId - Optional organization ID. If not provided, checks if user has admin role in any organization.
    * @returns true if user has TENANT_OWNER or TENANT_ADMIN role
    */
   const isTenantAdminOrOwner = useMemo(() => {
-    return (organizationId?: string): boolean => {
-      return canAdministerTenant(organizationId)
+    return (tenantId?: string): boolean => {
+      return canAdministerTenant(tenantId)
     }
   }, [canAdministerTenant])
 
   return {
     loading,
     isSuperuser,
+    rolesByScope,
     canEditOKR,
     canDeleteOKR,
     canInviteMembers,

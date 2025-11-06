@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { PageContainer } from '@/components/ui/PageContainer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,7 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
-import { Building2, Users, Briefcase, Edit2, Shield, Plus } from 'lucide-react'
+import { Building2, Users, Briefcase, Edit2, Shield, Plus, Trash2 } from 'lucide-react'
 import api from '@/lib/api'
 
 export default function OrganizationSettingsPage() {
@@ -41,12 +43,15 @@ function OrganizationSettings() {
   const [loading, setLoading] = useState(true)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [organizationToDelete, setOrganizationToDelete] = useState<any>(null)
   const [editName, setEditName] = useState('')
   const [editSlug, setEditSlug] = useState('')
   const [createName, setCreateName] = useState('')
   const [createSlug, setCreateSlug] = useState('')
   const [saving, setSaving] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   
   // Private whitelist settings
   const [privateWhitelist, setPrivateWhitelist] = useState<string[]>([])
@@ -162,7 +167,7 @@ function OrganizationSettings() {
           try {
             const [membersRes, workspacesRes] = await Promise.all([
               api.get(`/organizations/${firstOrg.id}/members`),
-              api.get(`/workspaces?organizationId=${firstOrg.id}`),
+              api.get(`/workspaces?tenantId=${firstOrg.id}`),
             ])
             console.log('Loaded workspaces for first organization:', firstOrg.id, workspacesRes.data)
             setMembers(membersRes.data || [])
@@ -181,7 +186,7 @@ function OrganizationSettings() {
           try {
             const [membersRes, workspacesRes] = await Promise.all([
               api.get(`/organizations/${organization.id}/members`),
-              api.get(`/workspaces?organizationId=${organization.id}`),
+              api.get(`/workspaces?tenantId=${organization.id}`),
             ])
             console.log('Loaded workspaces for organization:', organization.id, workspacesRes.data)
             setMembers(membersRes.data || [])
@@ -213,7 +218,7 @@ function OrganizationSettings() {
       try {
         const [membersRes, workspacesRes] = await Promise.all([
           api.get(`/organizations/${organization.id}/members`),
-          api.get(`/workspaces?organizationId=${organization.id}`),
+          api.get(`/workspaces?tenantId=${organization.id}`),
         ])
         setMembers(membersRes.data)
         setWorkspaces(workspacesRes.data)
@@ -267,7 +272,7 @@ function OrganizationSettings() {
 
     setCreating(true)
     try {
-      await api.post('/superuser/organizations', {
+      await api.post('/organizations', {
         name: createName.trim(),
         slug: createSlug.trim().toLowerCase(),
       })
@@ -285,36 +290,59 @@ function OrganizationSettings() {
     }
   }
 
+  const handleDeleteOrganization = (org: any) => {
+    setOrganizationToDelete(org)
+    setShowDeleteDialog(true)
+  }
+
+  const confirmDeleteOrganization = async () => {
+    if (!organizationToDelete) return
+
+    setDeleting(true)
+    try {
+      await api.delete(`/organizations/${organizationToDelete.id}`)
+      setShowDeleteDialog(false)
+      setOrganizationToDelete(null)
+      await refreshContext()
+      await loadOrganizationData()
+      alert('Organization deleted successfully')
+    } catch (error: any) {
+      console.error('Failed to delete organization:', error)
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to delete organization'
+      alert(errorMessage)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-2xl font-bold text-slate-900 mb-6">Organization Settings</h1>
-          <div className="text-slate-600">Loading...</div>
-        </div>
-      </div>
+      <PageContainer variant="form">
+        <PageHeader
+          title="Organization Settings"
+          subtitle="Manage organization settings and structure"
+        />
+        <div className="text-slate-600">Loading...</div>
+      </PageContainer>
     )
   }
 
   // Superuser view - show all organizations
   if (isSuperuser && allOrganizations.length > 0) {
     return (
-      <div className="p-6">
-        <div className="max-w-7xl mx-auto space-y-6">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-2xl font-bold text-slate-900">Organization Settings</h1>
-              <Badge className="bg-purple-600 text-white flex items-center gap-1">
-                <Shield className="h-3 w-3" />
-                Superuser
-              </Badge>
-            </div>
-            <p className="text-slate-600 mt-1">System-wide organization management</p>
-            <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-              <p className="text-sm text-purple-900">
-                <strong>Superuser Mode:</strong> You have access to all organizations in the system.
-              </p>
-            </div>
+      <PageContainer variant="form">
+        <PageHeader
+          title="Organization Settings"
+          subtitle="System-wide organization management"
+          badges={[
+            { label: 'Superuser', tone: 'warning' }
+          ]}
+        />
+        <div className="space-y-6">
+          <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+            <p className="text-sm text-purple-900">
+              <strong>Superuser Mode:</strong> You have access to all organizations in the system.
+            </p>
           </div>
 
           {/* All Organizations List */}
@@ -343,6 +371,15 @@ function OrganizationSettings() {
                           {org.slug}
                         </Badge>
                       </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteOrganization(org)}
+                        className="text-red-600 border-red-300 hover:text-red-700 hover:bg-red-50 hover:border-red-400"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Delete
+                      </Button>
                     </div>
                     <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
                       <div>
@@ -410,54 +447,88 @@ function OrganizationSettings() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Delete Organization Confirmation Dialog */}
+          <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete Organization</DialogTitle>
+                <DialogDescription>
+                  Are you sure you want to delete <strong>{organizationToDelete?.name}</strong>? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
+                <p className="text-sm text-red-900 font-semibold mb-2">Warning: This will permanently delete:</p>
+                <ul className="text-sm text-red-800 list-disc list-inside space-y-1">
+                  <li>The organization and all its data</li>
+                  <li>All workspaces within this organization</li>
+                  <li>All teams within those workspaces</li>
+                  <li>All OKRs, objectives, and key results</li>
+                  <li>All role assignments and permissions</li>
+                  <li>All cycles, strategic pillars, and check-ins</li>
+                </ul>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => {
+                  setShowDeleteDialog(false)
+                  setOrganizationToDelete(null)
+                }} disabled={deleting}>
+                  Cancel
+                </Button>
+                <Button variant="destructive" onClick={confirmDeleteOrganization} disabled={deleting}>
+                  {deleting ? 'Deleting...' : 'Delete Organization'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
-      </div>
+      </PageContainer>
     )
   }
 
   // Regular user - no organization
   if (!organization && !isSuperuser) {
     return (
-      <div className="p-6">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-2xl font-bold text-slate-900 mb-6">Organization Settings</h1>
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-slate-600">
-                You are not a member of any organization yet. Please contact your administrator.
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      <PageContainer variant="form">
+        <PageHeader
+          title="Organization Settings"
+          subtitle="Manage organization settings and structure"
+        />
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-slate-600">
+              You are not a member of any organization yet. Please contact your administrator.
+            </div>
+          </CardContent>
+        </Card>
+      </PageContainer>
     )
   }
 
   // Regular user - has organization OR superuser viewing specific org
   if (!organization && isSuperuser && allOrganizations.length === 0) {
     return (
-      <div className="p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center gap-3 mb-6">
-            <h1 className="text-2xl font-bold text-slate-900">Organization Settings</h1>
-            <Badge className="bg-purple-600 text-white flex items-center gap-1">
-              <Shield className="h-3 w-3" />
-              Superuser
-            </Badge>
-          </div>
-          <Card>
-            <CardContent className="p-6">
-              <div className="text-center space-y-4">
-                <div className="text-slate-600">
-                  No organizations exist yet. Create your first organization to get started.
-                </div>
-                <Button onClick={() => setShowCreateDialog(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Organization
-                </Button>
+      <PageContainer variant="form">
+        <PageHeader
+          title="Organization Settings"
+          subtitle="System-wide organization management"
+          badges={[
+            { label: 'Superuser', tone: 'warning' }
+          ]}
+        />
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center space-y-4">
+              <div className="text-slate-600">
+                No organizations exist yet. Create your first organization to get started.
               </div>
-            </CardContent>
-          </Card>
+              <Button onClick={() => setShowCreateDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Organization
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
           {/* Create Organization Dialog */}
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
@@ -505,45 +576,35 @@ function OrganizationSettings() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
+      </PageContainer>
     )
   }
 
   return (
-    <div className="p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-2xl font-bold text-slate-900">Organization Settings</h1>
-            {isSuperuser && (
-              <Badge className="bg-purple-600 text-white flex items-center gap-1">
-                <Shield className="h-3 w-3" />
-                Superuser
-              </Badge>
-            )}
+    <PageContainer variant="form">
+      <PageHeader
+        title="Organization Settings"
+        subtitle={isSuperuser ? 'System-wide organization management' : 'Your company-wide settings and structure'}
+        badges={isSuperuser ? [{ label: 'Superuser', tone: 'warning' }] : []}
+      />
+      <div className="space-y-6">
+        {isSuperuser && (
+          <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+            <p className="text-sm text-purple-900">
+              <strong>Superuser Mode:</strong> You have system-wide access to all organizations.
+            </p>
           </div>
-          <p className="text-slate-600 mt-1">
-            {isSuperuser ? 'System-wide organization management' : 'Your company-wide settings and structure'}
-          </p>
-          {isSuperuser && (
-            <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-              <p className="text-sm text-purple-900">
-                <strong>Superuser Mode:</strong> You have system-wide access to all organizations.
-              </p>
-            </div>
-          )}
-          {!isSuperuser && (
-            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-900">
-                <strong>Hierarchy:</strong> Organization → Workspaces → Teams → People
-              </p>
-              <p className="text-xs text-blue-700 mt-1">
-                Your organization contains multiple workspaces (departments). Each workspace has teams, and each team has members.
-              </p>
-            </div>
-          )}
-        </div>
+        )}
+        {!isSuperuser && (
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-900">
+              <strong>Hierarchy:</strong> Organization → Workspaces → Teams → People
+            </p>
+            <p className="text-xs text-blue-700 mt-1">
+              Your organization contains multiple workspaces (departments). Each workspace has teams, and each team has members.
+            </p>
+          </div>
+        )}
 
         {/* Organization Overview */}
         {organization && (
@@ -554,10 +615,21 @@ function OrganizationSettings() {
                 <Building2 className="h-5 w-5" />
                 {organization.name}
               </CardTitle>
-              <Button variant="outline" size="sm" onClick={handleEditOrganization}>
-                <Edit2 className="h-4 w-4 mr-2" />
-                Edit
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={handleEditOrganization}>
+                  <Edit2 className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDeleteOrganization(organization)}
+                  className="text-red-600 border-red-300 hover:text-red-700 hover:bg-red-50 hover:border-red-400"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -614,6 +686,40 @@ function OrganizationSettings() {
               </Button>
               <Button onClick={handleSaveOrganization} disabled={saving}>
                 {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Organization Confirmation Dialog */}
+        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Organization</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete <strong>{organizationToDelete?.name}</strong>? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
+              <p className="text-sm text-red-900 font-semibold mb-2">Warning: This will permanently delete:</p>
+              <ul className="text-sm text-red-800 list-disc list-inside space-y-1">
+                <li>The organization and all its data</li>
+                <li>All workspaces within this organization</li>
+                <li>All teams within those workspaces</li>
+                <li>All OKRs, objectives, and key results</li>
+                <li>All role assignments and permissions</li>
+                <li>All cycles, strategic pillars, and check-ins</li>
+              </ul>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setShowDeleteDialog(false)
+                setOrganizationToDelete(null)
+              }} disabled={deleting}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDeleteOrganization} disabled={deleting}>
+                {deleting ? 'Deleting...' : 'Delete Organization'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -758,7 +864,7 @@ function OrganizationSettings() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageContainer>
   )
 }
 

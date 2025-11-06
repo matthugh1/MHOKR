@@ -97,6 +97,17 @@ export class RBACService {
       where: { userId },
     });
 
+    // Log role assignments for debugging
+    this.logger.log(`[RBAC] buildUserContext: Found ${roleAssignments.length} role assignments for user ${userId}`, {
+      userId,
+      roleAssignments: roleAssignments.map(ra => ({
+        id: ra.id,
+        role: ra.role,
+        scopeType: ra.scopeType,
+        scopeId: ra.scopeId,
+      })),
+    });
+
     // Build maps of roles by scope
     const tenantRoles = new Map<string, TenantRole[]>();
     const workspaceRoles = new Map<string, WorkspaceRole[]>();
@@ -132,6 +143,15 @@ export class RBACService {
           break;
       }
     }
+
+    // Log built maps for debugging
+    this.logger.log(`[RBAC] buildUserContext: Built role maps`, {
+      userId,
+      tenantRolesCount: tenantRoles.size,
+      tenantRoles: Array.from(tenantRoles.entries()),
+      workspaceRolesCount: workspaceRoles.size,
+      teamRolesCount: teamRoles.size,
+    });
 
     // Load manager relationships (for MANAGER_CHAIN visibility)
     const directReportsResult = await this.prisma.user.findMany({
@@ -251,6 +271,165 @@ export class RBACService {
   }
 
   /**
+   * Get effective permissions for a user
+   * 
+   * Returns all actions the user can perform at different scopes.
+   * Used for debugging, auditing, and RBAC visualization.
+   */
+  async getEffectivePermissions(
+    userId: string,
+    filterTenantId?: string,
+    filterWorkspaceId?: string,
+    filterTeamId?: string,
+  ): Promise<{
+    userId: string;
+    isSuperuser: boolean;
+    scopes: Array<{
+      tenantId: string;
+      workspaceId?: string;
+      teamId?: string;
+      effectiveRoles: Role[];
+      actionsAllowed: Action[];
+      actionsDenied: Action[];
+    }>;
+  }> {
+    const userContext = await this.buildUserContext(userId, false);
+    
+    // Define all possible actions to test
+    const allActions: Action[] = [
+      'view_okr',
+      'edit_okr',
+      'delete_okr',
+      'create_okr',
+      'request_checkin',
+      'publish_okr',
+      'manage_users',
+      'manage_billing',
+      'manage_workspaces',
+      'manage_teams',
+      'impersonate_user',
+      'manage_tenant_settings',
+      'view_all_okrs',
+      'export_data',
+    ];
+
+    const scopes: Array<{
+      tenantId: string;
+      workspaceId?: string;
+      teamId?: string;
+      effectiveRoles: Role[];
+      actionsAllowed: Action[];
+      actionsDenied: Action[];
+    }> = [];
+
+    // Get all tenants user has roles in
+    const tenantIds = filterTenantId 
+      ? [filterTenantId] 
+      : Array.from(userContext.tenantRoles.keys());
+
+    for (const tenantId of tenantIds) {
+      // Tenant-level scope
+      if (!filterWorkspaceId && !filterTeamId) {
+        const effectiveRoles = getEffectiveRoles(userContext, tenantId);
+        const actionsAllowed: Action[] = [];
+        const actionsDenied: Action[] = [];
+
+        for (const action of allActions) {
+          const resourceContext: ResourceContext = { tenantId };
+          const allowed = can(userContext, action, resourceContext);
+          
+          if (allowed) {
+            actionsAllowed.push(action);
+          } else {
+            actionsDenied.push(action);
+          }
+        }
+
+        scopes.push({
+          tenantId,
+          effectiveRoles,
+          actionsAllowed,
+          actionsDenied,
+        });
+      }
+
+      // Workspace-level scopes
+      const workspaceIds = filterWorkspaceId 
+        ? [filterWorkspaceId] 
+        : Array.from(userContext.workspaceRoles.keys());
+
+      for (const workspaceId of workspaceIds) {
+        if (!filterTeamId) {
+          const effectiveRoles = getEffectiveRoles(userContext, tenantId, workspaceId);
+          const actionsAllowed: Action[] = [];
+          const actionsDenied: Action[] = [];
+
+          for (const action of allActions) {
+            const resourceContext: ResourceContext = { 
+              tenantId, 
+              workspaceId 
+            };
+            const allowed = can(userContext, action, resourceContext);
+            
+            if (allowed) {
+              actionsAllowed.push(action);
+            } else {
+              actionsDenied.push(action);
+            }
+          }
+
+          scopes.push({
+            tenantId,
+            workspaceId,
+            effectiveRoles,
+            actionsAllowed,
+            actionsDenied,
+          });
+        }
+      }
+
+      // Team-level scopes
+      const teamIds = filterTeamId 
+        ? [filterTeamId] 
+        : Array.from(userContext.teamRoles.keys());
+
+      for (const teamId of teamIds) {
+        const effectiveRoles = getEffectiveRoles(userContext, tenantId, null, teamId);
+        const actionsAllowed: Action[] = [];
+        const actionsDenied: Action[] = [];
+
+        for (const action of allActions) {
+          const resourceContext: ResourceContext = { 
+            tenantId, 
+            teamId 
+          };
+          const allowed = can(userContext, action, resourceContext);
+          
+          if (allowed) {
+            actionsAllowed.push(action);
+          } else {
+            actionsDenied.push(action);
+          }
+        }
+
+        scopes.push({
+          tenantId,
+          teamId,
+          effectiveRoles,
+          actionsAllowed,
+          actionsDenied,
+        });
+      }
+    }
+
+    return {
+      userId,
+      isSuperuser: userContext.isSuperuser,
+      scopes,
+    };
+  }
+
+  /**
    * Assign a role to a user
    */
   async assignRole(
@@ -278,22 +457,22 @@ export class RBACService {
         // Verify workspace belongs to caller's org
         const workspace = await this.prisma.workspace.findUnique({
           where: { id: scopeId! },
-          select: { organizationId: true },
+          select: { tenantId: true },
         });
         if (!workspace) {
           throw new NotFoundException(`Workspace with ID ${scopeId} not found`);
         }
-        OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
+        OkrTenantGuard.assertSameTenant(workspace.tenantId, userOrganizationId);
       } else if (scopeType === 'TEAM') {
         // Verify team's workspace belongs to caller's org
         const team = await this.prisma.team.findUnique({
           where: { id: scopeId! },
-          include: { workspace: { select: { organizationId: true } } },
+          include: { workspace: { select: { tenantId: true } } },
         });
         if (!team) {
           throw new NotFoundException(`Team with ID ${scopeId} not found`);
         }
-        OkrTenantGuard.assertSameTenant(team.workspace.organizationId, userOrganizationId);
+        OkrTenantGuard.assertSameTenant(team.workspace.tenantId, userOrganizationId);
       }
     }
 
@@ -385,7 +564,7 @@ export class RBACService {
       targetId: userId,
       targetType: AuditTargetType.ROLE_ASSIGNMENT,
       newRole: role as RBACRole,
-      organizationId: scopeType === 'TENANT' ? (scopeId || undefined) : undefined,
+      tenantId: scopeType === 'TENANT' ? (scopeId || undefined) : undefined,
       metadata: { scopeType, scopeId },
     });
 
@@ -415,22 +594,22 @@ export class RBACService {
         // Verify workspace belongs to caller's org
         const workspace = await this.prisma.workspace.findUnique({
           where: { id: scopeId! },
-          select: { organizationId: true },
+          select: { tenantId: true },
         });
         if (!workspace) {
           throw new NotFoundException(`Workspace with ID ${scopeId} not found`);
         }
-        OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
+        OkrTenantGuard.assertSameTenant(workspace.tenantId, userOrganizationId);
       } else if (scopeType === 'TEAM') {
         // Verify team's workspace belongs to caller's org
         const team = await this.prisma.team.findUnique({
           where: { id: scopeId! },
-          include: { workspace: { select: { organizationId: true } } },
+          include: { workspace: { select: { tenantId: true } } },
         });
         if (!team) {
           throw new NotFoundException(`Team with ID ${scopeId} not found`);
         }
-        OkrTenantGuard.assertSameTenant(team.workspace.organizationId, userOrganizationId);
+        OkrTenantGuard.assertSameTenant(team.workspace.tenantId, userOrganizationId);
       }
     }
 
@@ -453,7 +632,7 @@ export class RBACService {
       targetId: userId,
       targetType: AuditTargetType.ROLE_ASSIGNMENT,
       previousRole: role as RBACRole,
-      organizationId: scopeType === 'TENANT' ? (scopeId || undefined) : undefined,
+      tenantId: scopeType === 'TENANT' ? (scopeId || undefined) : undefined,
       metadata: { scopeType, scopeId },
     });
   }

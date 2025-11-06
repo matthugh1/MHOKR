@@ -11,15 +11,17 @@ export interface CycleSelectorProps {
     startsAt?: string | undefined
     endsAt?: string | undefined
   }>
-  /** legacyPeriods is the list of past/future planning buckets we previously showed in the giant <select> */
-  legacyPeriods: Array<{
-    id: string // e.g. "2025-Q1", "2025-Q2-planning"
-    label: string // e.g. "Q1 2025 (planning)", "Q2 2025 (draft)"
-    isFuture?: boolean // optional marker for styling
+  /** @deprecated Legacy periods removed - Cycle is canonical. This prop is kept for backward compatibility but ignored. */
+  legacyPeriods?: Array<{
+    id: string
+    label: string
+    isFuture?: boolean
   }>
-  /** currently selected item, can be either a cycle.id or a legacyPeriod.id */
+  /** currently selected cycle id */
   selectedId: string | null
   onSelect: (opt: { key: string; label: string }) => void
+  /** Optional callback to open cycle management drawer */
+  onManageCycles?: () => void
 }
 
 const getStatusLabel = (status: string): string => {
@@ -43,22 +45,21 @@ const getStatusLabel = (status: string): string => {
  * @module CycleSelector
  * @see {@link https://github.com/matthugh1/MHOKR/blob/main/docs/architecture/DESIGN_SYSTEM.md Design System Documentation}
  * 
- * CycleSelector - Unified cycle and period selection component
+ * CycleSelector - Cycle selection component
  * 
- * Displays the currently selected cycle or period with a popover menu for selecting from
- * cycles (Current & Upcoming, All Cycles) and legacy planning periods.
+ * Displays the currently selected cycle with a popover menu for selecting from
+ * cycles (Current & Upcoming, Previous Cycles).
  * 
  * @example
  * ```tsx
  * <CycleSelector
  *   cycles={cycles}
- *   legacyPeriods={legacyPeriods}
  *   selectedId={selectedId}
- *   onSelect={(id) => setSelectedId(id)}
+ *   onSelect={(opt) => setSelectedId(opt.key)}
  * />
  * ```
  */
-export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: CycleSelectorProps) {
+export function CycleSelector({ cycles, legacyPeriods = [], selectedId, onSelect, onManageCycles }: CycleSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -80,16 +81,13 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
 
   // Determine what label to show on the button
   const selectedCycle = cycles.find(c => c.id === selectedId)
-  const selectedPeriod = legacyPeriods.find(p => p.id === selectedId)
   const buttonLabel = selectedCycle
     ? selectedCycle.name
-    : selectedPeriod
-    ? selectedPeriod.label
     : selectedId === 'unassigned'
     ? 'Unassigned / Backlog'
     : selectedId === 'all'
-    ? 'All periods'
-    : 'Select cycle / period'
+    ? 'All cycles'
+    : 'Select cycle'
 
   // Group cycles: Current & Upcoming
   const currentAndUpcoming = cycles.filter(cycle => {
@@ -193,31 +191,7 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
             </div>
           ) : null}
 
-          {/* Legacy Periods Section */}
-          {legacyPeriods.length > 0 ? (
-            <div className="mb-4">
-              {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
-              <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
-                Planning / historical periods
-              </div>
-              <div className="max-h-[160px] overflow-y-auto space-y-1">
-                {legacyPeriods.map((period) => (
-                  <div
-                    key={period.id}
-                    onClick={() => handleSelect(period.id, period.label)}
-                    className="rounded-md hover:bg-neutral-100 cursor-pointer text-sm text-neutral-700 flex items-center justify-between w-full px-3 py-2"
-                  >
-                    <span className="font-medium text-neutral-800">{period.label}</span>
-                    {period.isFuture && (
-                      <span className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-0.5 text-[10px] font-medium text-neutral-700">
-                        Future
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+          {/* Legacy Periods Section - REMOVED: Period model removed, Cycle is canonical */}
 
           {/* Special Section */}
           <div>
@@ -235,15 +209,31 @@ export function CycleSelector({ cycles, legacyPeriods, selectedId, onSelect }: C
                 <span className="font-medium text-neutral-800">Unassigned / Backlog</span>
               </div>
               <div
-                onClick={() => handleSelect('all', 'All periods')}
+                onClick={() => handleSelect('all', 'All cycles')}
                 className={`rounded-md hover:bg-neutral-100 cursor-pointer text-sm text-neutral-700 flex items-center justify-between w-full px-3 py-2 ${
                   selectedId === 'all' ? 'bg-neutral-100' : ''
                 }`}
               >
-                <span className="font-medium text-neutral-800">All periods</span>
+                <span className="font-medium text-neutral-800">All cycles</span>
               </div>
             </div>
           </div>
+
+          {/* Footer: Manage Cycles Link */}
+          {onManageCycles && (
+            <div className="mt-4 pt-4 border-t border-neutral-200">
+              <button
+                onClick={() => {
+                  setIsOpen(false)
+                  onManageCycles()
+                }}
+                className="w-full text-left text-sm text-neutral-600 hover:text-neutral-900 px-3 py-2 rounded-md hover:bg-neutral-100 transition-colors"
+                aria-label="Manage cycles"
+              >
+                Manage cycles…
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

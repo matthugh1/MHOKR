@@ -62,7 +62,7 @@ export class ExecWhitelistService {
         targetUserId: userId,
         targetId: userId,
         targetType: AuditTargetType.USER,
-        organizationId: tenantId,
+        tenantId: tenantId,
         metadata: { tenantId },
       });
       
@@ -97,7 +97,7 @@ export class ExecWhitelistService {
       targetUserId: userId,
       targetId: userId,
       targetType: AuditTargetType.USER,
-      organizationId: tenantId,
+      tenantId: tenantId,
       metadata: { tenantId },
     });
 
@@ -124,7 +124,7 @@ export class ExecWhitelistService {
       actorUserId,
       targetId: tenantId,
       targetType: AuditTargetType.TENANT,
-      organizationId: tenantId,
+      tenantId: tenantId,
       metadata: { userIds },
     });
 
@@ -159,7 +159,7 @@ export class ExecWhitelistService {
       actorUserId,
       targetId: tenantId,
       targetType: AuditTargetType.TENANT,
-      organizationId: tenantId,
+      tenantId: tenantId,
     });
   }
 }

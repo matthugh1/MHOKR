@@ -27,9 +27,12 @@ export function PublishLockWarningModal({
 }: PublishLockWarningModalProps) {
   const getTitle = () => {
     if (lockReason === 'cycle_locked') {
-      return 'OKR is Locked by Cycle'
+      return 'Cycle Locked'
     }
-    return 'OKR is Published and Locked'
+    if (lockReason === 'published') {
+      return 'OKR is Published'
+    }
+    return 'Action Not Available'
   }
 
   const getDescription = () => {
@@ -39,21 +42,21 @@ export function PublishLockWarningModal({
     }
     // Fallback for backwards compatibility
     if (lockReason === 'cycle_locked') {
-      return `This OKR is locked because its cycle is locked. You cannot change targets during a locked cycle. Only tenant administrators can edit or delete OKRs in locked cycles.`
+      return 'This cycle is locked. Changes are disabled until the cycle is reopened.'
     }
-    return `${entityName ? `"${entityName}" is` : 'This OKR is'} published and locked. You cannot change targets after publish. Only tenant administrators can edit or delete published OKRs.`
+    if (lockReason === 'published') {
+      return `${entityName ? `"${entityName}" is` : 'This item is'} published. Only Tenant Admins or Owners can change published OKRs for this cycle.`
+    }
+    return 'This action is not available.'
   }
 
   return (
     <AlertDialog open={open} onOpenChange={onClose}>
-      <AlertDialogContent>
+      <AlertDialogContent data-testid={lockReason === 'published' ? 'tip-publish-lock' : lockReason === 'cycle_locked' ? 'tip-cycle-lock' : undefined}>
         <AlertDialogHeader>
           <AlertDialogTitle>{getTitle()}</AlertDialogTitle>
-          <AlertDialogDescription>
-            <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm text-neutral-800">
-              {getDescription()}
-              {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
-            </div>
+          <AlertDialogDescription className="block rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm text-neutral-800">
+            {getDescription()}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

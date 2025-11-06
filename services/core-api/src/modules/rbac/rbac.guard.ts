@@ -13,17 +13,27 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { RBACService } from './rbac.service';
+import { PrismaService } from '../../common/prisma/prisma.service';
 import { Action, ResourceContext } from './types';
 import { RBAC_ACTION_KEY, RBAC_RESOURCE_CONTEXT_KEY } from './rbac.decorator';
 import { buildResourceContextFromRequest } from './helpers';
+import { withTenantContext } from '../../common/prisma/tenant-isolation.middleware';
+import { AuthorisationService } from '../../policy/authorisation.service';
+import { Inject, forwardRef } from '@nestjs/common';
+import { recordDeny } from './rbac.telemetry';
 
 @Injectable()
 export class RBACGuard implements CanActivate {
   private readonly logger = new Logger(RBACGuard.name);
 
+  private readonly useAuthCentre = process.env.RBAC_AUTHZ_CENTRE !== 'off';
+
   constructor(
     private rbacService: RBACService,
     private reflector: Reflector,
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => AuthorisationService))
+    private authorisationService: AuthorisationService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -50,12 +60,39 @@ export class RBACGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    // Check if user is superuser early (before building resource context)
-    // Superusers have organizationId: null and may not have tenant roles
-    const userContext = await this.rbacService.buildUserContext(user.id, true);
-    if (userContext.isSuperuser) {
-      // For superusers, check if the action is allowed without requiring tenantId
-      // Superusers can perform these actions even without a tenant context
+    // Set tenant context for Prisma middleware (defense-in-depth)
+    // This allows the middleware to automatically filter queries
+    return withTenantContext(user?.tenantId, async () => {
+      return this.performAuthorizationCheck(context, action, resourceContextFn, request, user);
+    });
+  }
+
+  private async performAuthorizationCheck(
+    _context: ExecutionContext,
+    action: Action,
+    resourceContextFn: ((request: any) => ResourceContext | Promise<ResourceContext>) | undefined,
+    request: any,
+    user: any,
+  ): Promise<boolean> {
+    // Check superuser status directly from database (bypass cache for reliability)
+    const userRecord = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { isSuperuser: true },
+    });
+
+    const isSuperuser = userRecord?.isSuperuser === true;
+    
+    this.logger.log(`[RBAC Guard] Checking authorization`, {
+      userId: user.id,
+      userEmail: user.email,
+      userTenantId: user.tenantId,
+      dbIsSuperuser: userRecord?.isSuperuser,
+      isSuperuser,
+      action,
+    });
+    
+    // Early return for superusers with allowed actions
+    if (isSuperuser) {
       const superuserAllowedActions: Action[] = [
         'manage_users',
         'manage_workspaces',
@@ -68,31 +105,18 @@ export class RBACGuard implements CanActivate {
       ];
       
       if (superuserAllowedActions.includes(action)) {
-        // Extract organizationId from query params if available (for tenant-scoped requests)
-        // This allows superusers to access resources in specific organizations
-        const extractedContext = this.extractResourceContextFromRequest(request);
-        const tenantId = extractedContext?.tenantId || '';
-        
-        // Allow superuser access - they can access across all tenants
-        // Use extracted tenantId if available, otherwise empty string for platform-level access
-        const minimalContext: ResourceContext = {
-          tenantId, // Use extracted tenantId if available, otherwise empty string
-          workspaceId: extractedContext?.workspaceId || null,
-          teamId: extractedContext?.teamId || null,
-        };
-        
-        // Verify the action is allowed for superusers
-        const authorized = await this.rbacService.canPerformAction(
-          user.id,
+        this.logger.log(`[RBAC Guard] SUPERUSER AUTHORIZED for ${action}`, {
+          userId: user.id,
           action,
-          minimalContext,
-        );
-        
-        if (authorized) {
-          return true;
-        }
+        });
+        return true;
       }
     }
+    
+    // Build user context for regular authorization flow
+    // CRITICAL: Don't use cache for authorization checks to ensure fresh role data
+    // Cache might be stale if roles were recently assigned or changed
+    const userContext = await this.rbacService.buildUserContext(user.id, false);
 
     // Build resource context
     let resourceContext: ResourceContext;
@@ -124,28 +148,37 @@ export class RBACGuard implements CanActivate {
               // Try to get tenantId from multiple sources
               let tenantId = '';
               
-              // 1. First try: user's organizationId from JWT token
-              if (user.organizationId) {
-                tenantId = user.organizationId;
+              // 1. First try: extract from request body/params/query (POST/PUT requests often have tenantId in body)
+              const extracted = this.extractResourceContextFromRequest(request);
+              if (extracted?.tenantId) {
+                tenantId = extracted.tenantId;
+                this.logger.debug(`Extracted tenantId from request: ${tenantId}`, {
+                  source: 'request',
+                  hasBody: !!request.body,
+                  bodyKeys: request.body ? Object.keys(request.body) : [],
+                  hasParams: !!request.params,
+                  paramsKeys: request.params ? Object.keys(request.params) : [],
+                });
               }
               
-              // 2. Second try: first tenant from user's tenant roles
+              // 2. Second try: user's tenantId from JWT token
+              if (!tenantId && user.tenantId) {
+                tenantId = user.tenantId;
+                this.logger.debug(`Using tenantId from user.tenantId: ${tenantId}`);
+              }
+              
+              // 3. Third try: first tenant from user's tenant roles
               if (!tenantId && userContext.tenantRoles && userContext.tenantRoles.size > 0) {
                 // tenantRoles is a Map, iterate to get first key
                 for (const tid of userContext.tenantRoles.keys()) {
                   tenantId = tid;
                   break;
                 }
-              }
-              
-              // 3. Third try: extract from request params/query (for list endpoints)
-              if (!tenantId) {
-                const extracted = this.extractResourceContextFromRequest(request);
-                tenantId = extracted?.tenantId || '';
+                this.logger.debug(`Using tenantId from userContext.tenantRoles: ${tenantId}`);
               }
               
               // For actions that require tenant context (view_okr, manage_users, etc.),
-              // allow using organizationId to derive tenantId even if not explicitly in request
+              // allow using tenantId from user even if not explicitly in request
               // This allows authenticated users to access tenant-scoped endpoints
               if (tenantId) {
                 resourceContext = {
@@ -155,11 +188,11 @@ export class RBACGuard implements CanActivate {
                 };
                 
                 // Debug logging for tenant-scoped endpoints
-                this.logger.log(`Built resourceContext from user.organizationId`, {
+                this.logger.log(`Built resourceContext from user.tenantId`, {
                   action,
                   userId: user.id,
                   userEmail: user.email,
-                  userOrganizationId: user.organizationId,
+                  userTenantId: user.tenantId,
                   derivedTenantId: tenantId,
                   resourceContext,
                 });
@@ -168,7 +201,7 @@ export class RBACGuard implements CanActivate {
                 this.logger.error(`No tenantId found for user`, {
                   userId: user.id,
                   userEmail: user.email,
-                  userOrganizationId: user.organizationId,
+                  userTenantId: user.tenantId,
                   action,
                 });
                 throw new ForbiddenException(
@@ -189,7 +222,53 @@ export class RBACGuard implements CanActivate {
       }
     }
 
-    // Check authorization
+    // Use centralised authorisation service if enabled
+    if (this.useAuthCentre) {
+      const decision = await this.authorisationService.can(
+        userContext,
+        action,
+        resourceContext,
+        user.tenantId,
+      );
+
+      if (!decision.allow) {
+        const tenantRoles = resourceContext.tenantId 
+          ? userContext.tenantRoles.get(resourceContext.tenantId) || []
+          : [];
+        
+        const debugInfo = {
+          userId: user.id,
+          userEmail: user.email,
+          userTenantId: user.tenantId,
+          action,
+          resourceContext,
+          tenantRoles,
+          isSuperuser: userContext.isSuperuser,
+          reason: decision.reason,
+        };
+        
+        this.logger.error('RBAC Authorization Failed', JSON.stringify(debugInfo, null, 2));
+        
+        // Record telemetry for deny event
+        const route = request.url || request.path || 'unknown';
+        recordDeny({
+          action,
+          role: tenantRoles.length > 0 ? tenantRoles[0] : 'UNKNOWN',
+          route,
+          reasonCode: decision.reason,
+          userId: user.id,
+          tenantId: resourceContext.tenantId,
+        });
+        
+        throw new ForbiddenException(
+          `User does not have permission to ${action}. Reason: ${decision.reason}`,
+        );
+      }
+
+      return true;
+    }
+
+    // Legacy path (fallback if centre disabled)
     const authorized = await this.rbacService.canPerformAction(
       user.id,
       action,
@@ -198,27 +277,38 @@ export class RBACGuard implements CanActivate {
 
     if (!authorized) {
       // Debug logging
-      const userContext = await this.rbacService.buildUserContext(user.id, false);
+      const userContextForDebug = await this.rbacService.buildUserContext(user.id, false);
       const tenantRoles = resourceContext.tenantId 
-        ? userContext.tenantRoles.get(resourceContext.tenantId) || []
+        ? userContextForDebug.tenantRoles.get(resourceContext.tenantId) || []
         : [];
       
       // Additional debug info
       const debugInfo = {
         userId: user.id,
         userEmail: user.email,
-        userOrganizationId: user.organizationId,
+        userTenantId: user.tenantId,
         action,
         resourceContext,
         tenantRoles,
-        allTenantRoles: Array.from(userContext.tenantRoles.entries()),
-        isSuperuser: userContext.isSuperuser,
+        allTenantRoles: Array.from(userContextForDebug.tenantRoles.entries()),
+        isSuperuser: userContextForDebug.isSuperuser,
       };
       
       this.logger.error('RBAC Authorization Failed', JSON.stringify(debugInfo, null, 2));
       
+      // Record telemetry for deny event
+      const route = request.url || request.path || 'unknown';
+      recordDeny({
+        action,
+        role: tenantRoles.length > 0 ? tenantRoles[0] : 'UNKNOWN',
+        route,
+        reasonCode: 'PERMISSION_DENIED',
+        userId: user.id,
+        tenantId: resourceContext.tenantId,
+      });
+      
       throw new ForbiddenException(
-        `User does not have permission to ${action}. TenantId: ${resourceContext.tenantId}, UserOrganizationId: ${user.organizationId}, TenantRoles: ${JSON.stringify(tenantRoles)}`,
+        `User does not have permission to ${action}. TenantId: ${resourceContext.tenantId}, UserTenantId: ${user.tenantId}, TenantRoles: ${JSON.stringify(tenantRoles)}`,
       );
     }
 
@@ -234,23 +324,50 @@ export class RBACGuard implements CanActivate {
     const params = request.params || {};
     const body = request.body || {};
     const query = request.query || {};
+    const url = request.url || '';
+    const method = request.method || '';
 
+    // For DELETE /organizations/:id, the id param is the tenantId
+    // Check URL pattern to determine context
+    const isOrganizationRoute = url.includes('/organizations/') || url.startsWith('/organizations/');
+    
+    // Log for debugging
+    this.logger.debug(`Extracting resource context`, {
+      url,
+      method,
+      params,
+      isOrganizationRoute,
+      hasParamsId: !!params.id,
+    });
+    
     // Prefer params, then body, then query
+    // For organization routes, params.id is the tenantId
     const tenantId =
       params.tenantId || 
-      params.organizationId || 
+      (isOrganizationRoute && params.id ? params.id : null) || // For /organizations/:id routes
       body.tenantId || 
-      body.organizationId || 
-      query.tenantId || 
-      query.organizationId;
+      query.tenantId;
     const workspaceId =
       params.workspaceId || body.workspaceId || query.workspaceId;
     const teamId = params.teamId || body.teamId || query.teamId;
 
     // Return null if tenantId is missing (caller will use fallback)
     if (!tenantId) {
+      this.logger.debug(`No tenantId extracted from request`, {
+        url,
+        method,
+        params,
+        body,
+        query,
+      });
       return null;
     }
+
+    this.logger.debug(`Extracted tenantId: ${tenantId}`, {
+      tenantId,
+      workspaceId,
+      teamId,
+    });
 
     return {
       tenantId,

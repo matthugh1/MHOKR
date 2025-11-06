@@ -56,7 +56,7 @@ export class KeyResultController {
       }
     }
 
-    return this.keyResultService.create(data, req.user.id, req.user.organizationId);
+    return this.keyResultService.create(data, req.user.id, req.user.tenantId);
   }
 
   @Patch(':id')
@@ -65,11 +65,11 @@ export class KeyResultController {
   @ApiOperation({ summary: 'Update key result' })
   async update(@Param('id') id: string, @Body() data: any, @Req() req: any) {
     // Check if user can edit this key result (via parent objective)
-    const canEdit = await this.keyResultService.canEdit(req.user.id, id, req.user.organizationId);
+    const canEdit = await this.keyResultService.canEdit(req.user.id, id, req.user.tenantId);
     if (!canEdit) {
       throw new ForbiddenException('You do not have permission to edit this key result');
     }
-    return this.keyResultService.update(id, data, req.user.id, req.user.organizationId);
+    return this.keyResultService.update(id, data, req.user.id, req.user.tenantId);
   }
 
   @Delete(':id')
@@ -78,14 +78,14 @@ export class KeyResultController {
   @ApiOperation({ summary: 'Delete key result' })
   async delete(@Param('id') id: string, @Req() req: any) {
     // Check if user can delete this key result (via parent objective)
-    const canDelete = await this.keyResultService.canDelete(req.user.id, id, req.user.organizationId);
+    const canDelete = await this.keyResultService.canDelete(req.user.id, id, req.user.tenantId);
     if (!canDelete) {
       throw new ForbiddenException('You do not have permission to delete this key result');
     }
     
     console.log(`[KeyResultController] DELETE /key-results/${id} - Request received`);
     try {
-      const result = await this.keyResultService.delete(id, req.user.id, req.user.organizationId);
+      const result = await this.keyResultService.delete(id, req.user.id, req.user.tenantId);
       console.log(`[KeyResultController] DELETE /key-results/${id} - Success`);
       return result;
     } catch (error: any) {
@@ -99,14 +99,14 @@ export class KeyResultController {
   @ApiOperation({ summary: 'Create check-in' })
   async checkIn(@Param('id') id: string, @Body() data: any, @Req() req: any) {
     // Check if user can edit this key result
-    const canEdit = await this.keyResultService.canEdit(req.user.id, id, req.user.organizationId);
+    const canEdit = await this.keyResultService.canEdit(req.user.id, id, req.user.tenantId);
     if (!canEdit) {
       throw new ForbiddenException('You do not have permission to create check-ins for this key result');
     }
     
     // Ensure userId matches authenticated user
     data.userId = req.user.id;
-    return this.keyResultService.createCheckIn(id, data, req.user.organizationId);
+    return this.keyResultService.createCheckIn(id, data, req.user.tenantId);
   }
 
   // NOTE: Activity timeline endpoints moved to ActivityController under /activity/* in Phase 4.

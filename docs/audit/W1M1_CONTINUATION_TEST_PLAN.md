@@ -486,3 +486,5 @@ curl -X POST http://localhost:3000/api/rbac/assignments/assign \
 
 **W1.M1 is now COMPLETE.** All mutating routes are protected with guards, tenant isolation, SUPERUSER blocks, and AuditLog TODOs.
 
+
+

@@ -1,12 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/common/prisma/prisma.service';
 
 describe('Pagination Smoke Test', () => {
   let app: INestApplication;
-  let prisma: PrismaService;
 
   const mockPrisma = {
     objective: {

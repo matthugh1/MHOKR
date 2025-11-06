@@ -22,8 +22,10 @@ export class OkrVisibilityService {
   /**
    * Check if a user can see an objective.
    * 
+   * W4.M1: Taxonomy alignment - canonical visibility levels enforced.
+   * 
    * Rules:
-   * 1. Tenant isolation: if objective.organizationId !== requesterOrgId, return false immediately.
+   * 1. Tenant isolation: if objective.tenantId !== requesterOrgId, return false immediately.
    * 2. SUPERUSER: may see everything.
    * 3. Owner rule: if objective.ownerUserId === requesterUserId, return true.
    * 4. PRIVATE visibility:
@@ -32,6 +34,8 @@ export class OkrVisibilityService {
    *    - allow if requester is owner,
    *    - otherwise false.
    * 5. All other visibility levels (PUBLIC_TENANT, EXEC_ONLY, etc.): allow true.
+   *    - Deprecated values (WORKSPACE_ONLY, TEAM_ONLY, MANAGER_CHAIN, EXEC_ONLY) 
+   *      are normalized to PUBLIC_TENANT in migration and treated as globally visible.
    * 6. Default deny.
    * 
    * @param params - { objective, requesterUserId, requesterOrgId }
@@ -41,7 +45,7 @@ export class OkrVisibilityService {
     objective: {
       id: string;
       ownerId: string;
-      organizationId: string;
+      tenantId: string;
       visibilityLevel: string;
     };
     requesterUserId: string;
@@ -49,9 +53,9 @@ export class OkrVisibilityService {
   }): Promise<boolean> {
     const { objective, requesterUserId, requesterOrgId } = params;
 
-    // Tenant isolation: if objective.organizationId !== requesterOrgId, deny
+    // Tenant isolation: if objective.tenantId !== requesterOrgId, deny
     // Exception: SUPERUSER (requesterOrgId === null) can see everything
-    if (requesterOrgId !== null && objective.organizationId !== requesterOrgId) {
+    if (requesterOrgId !== null && objective.tenantId !== requesterOrgId) {
       return false;
     }
 
@@ -70,7 +74,7 @@ export class OkrVisibilityService {
 
     // Fetch organization to get whitelist configuration
     const organization = await this.prisma.organization.findUnique({
-      where: { id: objective.organizationId },
+      where: { id: objective.tenantId },
       select: {
         id: true,
         execOnlyWhitelist: true,
@@ -93,8 +97,7 @@ export class OkrVisibilityService {
     const okrEntity = {
       id: objective.id,
       ownerId: objective.ownerId,
-      organizationId: objective.organizationId,
-      tenantId: objective.organizationId,
+      tenantId: objective.tenantId,
       visibilityLevel: objective.visibilityLevel as any,
       isPublished: false,
       createdAt: new Date(),
@@ -120,7 +123,7 @@ export class OkrVisibilityService {
     parentObjective: {
       id: string;
       ownerId: string;
-      organizationId: string;
+      tenantId: string;
       visibilityLevel: string;
     };
     requesterUserId: string;
@@ -144,7 +147,7 @@ export class OkrVisibilityService {
     objectives: Array<{
       id: string;
       ownerId: string;
-      organizationId: string;
+      tenantId: string;
       visibilityLevel: string;
     }>;
     requesterUserId: string;
@@ -152,7 +155,7 @@ export class OkrVisibilityService {
   }): Promise<Array<{
     id: string;
     ownerId: string;
-    organizationId: string;
+    tenantId: string;
     visibilityLevel: string;
   }>> {
     const { objectives, requesterUserId, requesterOrgId } = params;

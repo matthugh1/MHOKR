@@ -18,7 +18,7 @@ export async function buildResourceContextFromOKR(
     where: { id: okrId },
     select: {
       id: true,
-      organizationId: true,
+      tenantId: true,
       workspaceId: true,
       teamId: true,
       ownerId: true,
@@ -34,8 +34,7 @@ export async function buildResourceContextFromOKR(
   const okr: OKREntity = {
     id: objective.id,
     ownerId: objective.ownerId,
-    organizationId: objective.organizationId || '',  // Use organizationId, not tenantId
-    tenantId: objective.organizationId || '',  // Keep tenantId for backward compatibility
+    tenantId: objective.tenantId || '',
     workspaceId: objective.workspaceId,
     teamId: objective.teamId,
     visibilityLevel: objective.visibilityLevel as any,
@@ -45,9 +44,9 @@ export async function buildResourceContextFromOKR(
   };
 
   // Load tenant for config flags
-  const tenant = objective.organizationId
+  const tenant = objective.tenantId
     ? await prisma.organization.findUnique({
-        where: { id: objective.organizationId },
+        where: { id: objective.tenantId },
         select: {
           id: true,
           name: true,
@@ -62,7 +61,7 @@ export async function buildResourceContextFromOKR(
     : null;
 
   return {
-    tenantId: objective.organizationId || '',
+    tenantId: objective.tenantId || '',
     workspaceId: objective.workspaceId,
     teamId: objective.teamId,
     okr,
@@ -91,11 +90,11 @@ export function buildResourceContextFromRequest(request: any): ResourceContext {
 
   const tenantId =
     params.tenantId ||
-    params.organizationId ||
+    params.tenantId ||
     body.tenantId ||
-    body.organizationId ||
+    body.tenantId ||
     query.tenantId ||
-    query.organizationId;
+    query.tenantId;
 
   if (!tenantId) {
     throw new Error('tenantId is required in resource context');
@@ -127,7 +126,7 @@ export async function buildResourceContextFromKeyResult(
           objective: {
             select: {
               id: true,
-              organizationId: true,
+              tenantId: true,
               workspaceId: true,
               teamId: true,
             },
@@ -147,8 +146,7 @@ export async function buildResourceContextFromKeyResult(
   const okr: OKREntity = {
     id: keyResult.id,
     ownerId: keyResult.ownerId,
-    organizationId: objective.organizationId || '',  // Use organizationId, not tenantId
-    tenantId: objective.organizationId || '',  // Keep tenantId for backward compatibility
+    tenantId: objective.tenantId || '',
     workspaceId: objective.workspaceId,
     teamId: objective.teamId,
     visibilityLevel: keyResult.visibilityLevel as any,
@@ -158,7 +156,7 @@ export async function buildResourceContextFromKeyResult(
   };
 
   return {
-    tenantId: objective.organizationId || '',
+    tenantId: objective.tenantId || '',
     workspaceId: objective.workspaceId,
     teamId: objective.teamId,
     okr,
@@ -175,9 +173,9 @@ export function extractTenantId(request: any): string {
 
   return (
     params.tenantId ||
-    params.organizationId ||
+    params.tenantId ||
     body.tenantId ||
-    body.organizationId ||
+    body.tenantId ||
     query.tenantId ||
     ''
   );

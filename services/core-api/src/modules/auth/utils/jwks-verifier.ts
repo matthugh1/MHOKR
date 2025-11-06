@@ -124,22 +124,22 @@ export class JwksVerifier {
    */
   private verifyInternalToken(token: string): VerifiedTokenPayload {
     try {
+      this.logger.debug(`[JWKS VERIFIER] Verifying HS256 token, secret length: ${this.jwtSecret?.length || 0}`);
       const payload = jwt.verify(token, this.jwtSecret, {
         algorithms: ['HS256'],
       }) as VerifiedTokenPayload;
-
-      // Token is fully verified before this point
-      // If verification fails, jwt.verify throws an error
+      this.logger.debug(`[JWKS VERIFIER] Token verified successfully for user: ${payload.sub}`);
       return payload;
     } catch (error: any) {
+      this.logger.error(`[JWKS VERIFIER] Token verification error: ${error.name} - ${error.message}`);
       if (error.name === 'TokenExpiredError') {
         throw new UnauthorizedException('Token has expired');
       } else if (error.name === 'JsonWebTokenError') {
-        throw new UnauthorizedException('Invalid token signature');
+        throw new UnauthorizedException(`Invalid token signature: ${error.message}`);
       } else if (error.name === 'NotBeforeError') {
         throw new UnauthorizedException('Token not yet valid');
       }
-      throw new UnauthorizedException('Token verification failed');
+      throw new UnauthorizedException(`Token verification failed: ${error.message || 'Unknown error'}`);
     }
   }
 
@@ -233,5 +233,7 @@ export class JwksVerifier {
     });
   }
 }
+
+
 
 

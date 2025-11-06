@@ -97,3 +97,6 @@ psql -h localhost -p 5432 -U okr_user -d okr_nexus < docker_users.sql
 
 If you prefer to use your local database with the 11 existing users, let me know and I can help you switch!
 
+
+
+

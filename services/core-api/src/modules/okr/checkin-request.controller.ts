@@ -61,7 +61,7 @@ export class CheckInRequestController {
       req.user.id,
       targetUserIds,
       dueDate,
-      req.user.organizationId,
+      req.user.tenantId,
     );
   }
 
@@ -69,7 +69,7 @@ export class CheckInRequestController {
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get all OPEN or LATE check-in requests for the current user' })
   async getMyRequests(@Req() req: any) {
-    return this.checkInRequestService.getMyRequests(req.user.id, req.user.organizationId);
+    return this.checkInRequestService.getMyRequests(req.user.id, req.user.tenantId);
   }
 
   @Post('checkin-responses')
@@ -122,7 +122,7 @@ export class CheckInRequestController {
         summaryBlocked,
         summaryNeedHelp,
       },
-      req.user.organizationId,
+      req.user.tenantId,
     );
   }
 
@@ -149,7 +149,7 @@ export class CheckInRequestController {
       cycleId,
       teamId,
       daysBackNum,
-      req.user.organizationId,
+      req.user.tenantId,
     );
   }
 }

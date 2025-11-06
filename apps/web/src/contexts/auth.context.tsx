@@ -11,6 +11,11 @@ interface User {
   lastName: string
   role: string
   isSuperuser?: boolean
+  features?: {
+    rbacInspector?: boolean
+    okrTreeView?: boolean
+    [key: string]: any
+  }
 }
 
 interface AuthContextType {

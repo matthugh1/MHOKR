@@ -1,15 +1,19 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException, BadRequestException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { InitiativeService } from './initiative.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
+import { PrismaService } from '../../common/prisma/prisma.service';
 
 @ApiTags('Initiatives')
 @Controller('initiatives')
 @UseGuards(JwtAuthGuard, RBACGuard)
 @ApiBearerAuth()
 export class InitiativeController {
-  constructor(private readonly initiativeService: InitiativeService) {}
+  constructor(
+    private readonly initiativeService: InitiativeService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Get()
   @RequireAction('view_okr')
@@ -39,22 +43,62 @@ export class InitiativeController {
   @RequireAction('create_okr')
   @ApiOperation({ summary: 'Create initiative' })
   async create(@Body() data: any, @Req() req: any) {
-    // Ensure ownerId matches the authenticated user
-    if (!data.ownerId) {
-      data.ownerId = req.user.id;
-    } else if (data.ownerId !== req.user.id) {
-      data.ownerId = req.user.id;
-    }
-
-    // Verify user can create initiatives for the parent objective
-    if (data.objectiveId) {
-      const canEdit = await this.initiativeService.canEditObjective(req.user.id, data.objectiveId);
-      if (!canEdit) {
-        throw new ForbiddenException('You do not have permission to create initiatives for this objective');
+    try {
+      // Ensure ownerId matches the authenticated user
+      if (!data.ownerId) {
+        data.ownerId = req.user.id;
+      } else if (data.ownerId !== req.user.id) {
+        data.ownerId = req.user.id;
       }
-    }
 
-    return this.initiativeService.create(data, req.user.id, req.user.organizationId);
+      // Verify user can create initiatives for the parent objective
+      let objectiveIdToCheck: string | undefined = data.objectiveId;
+      
+      // If creating from a Key Result, get the objectiveId from the KR's relationship
+      if (!objectiveIdToCheck && data.keyResultId) {
+        const keyResult = await this.prisma.keyResult.findUnique({
+          where: { id: data.keyResultId },
+          include: {
+            objectives: {
+              take: 1,
+              select: {
+                objectiveId: true,
+              },
+            },
+          },
+        });
+        
+        if (!keyResult) {
+          throw new NotFoundException(`Key Result with ID ${data.keyResultId} not found`);
+        }
+        
+        if (keyResult.objectives.length === 0) {
+          throw new BadRequestException(`Key Result ${data.keyResultId} is not linked to any Objective`);
+        }
+        
+        objectiveIdToCheck = keyResult.objectives[0].objectiveId;
+      }
+      
+      // Check permissions if we have an objectiveId
+      if (objectiveIdToCheck) {
+        const canEdit = await this.initiativeService.canEditObjective(req.user.id, objectiveIdToCheck);
+        if (!canEdit) {
+          throw new ForbiddenException('You do not have permission to create initiatives for this objective');
+        }
+      }
+
+      return await this.initiativeService.create(data, req.user.id, req.user.tenantId);
+    } catch (error: any) {
+      // Re-throw known HTTP exceptions
+      if (error instanceof ForbiddenException || error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      // Log unexpected errors and return internal server error
+      console.error('Error creating initiative:', error);
+      throw new InternalServerErrorException(
+        error.message || 'An error occurred while creating the initiative'
+      );
+    }
   }
 
   @Patch(':id')
@@ -66,7 +110,7 @@ export class InitiativeController {
     if (!canEdit) {
       throw new ForbiddenException('You do not have permission to edit this initiative');
     }
-    return this.initiativeService.update(id, data, req.user.id, req.user.organizationId);
+    return this.initiativeService.update(id, data, req.user.id, req.user.tenantId);
   }
 
   @Delete(':id')
@@ -78,6 +122,6 @@ export class InitiativeController {
     if (!canDelete) {
       throw new ForbiddenException('You do not have permission to delete this initiative');
     }
-    return this.initiativeService.delete(id, req.user.id, req.user.organizationId);
+    return this.initiativeService.delete(id, req.user.id, req.user.tenantId);
   }
 }

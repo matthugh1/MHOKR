@@ -21,7 +21,7 @@ export class MeController {
   async getSummary(@Req() req: any) {
     // TODO [phase7-hardening]: Expose this data in a dedicated 'My dashboard' view in frontend
     const userId = req.user.id;
-    const userOrganizationId = req.user.organizationId;
+    const userOrganizationId = req.user.tenantId;
 
     // Get user's owned Objectives and Key Results
     const [ownedObjectives, ownedKeyResults, recentActivity, allOverdueCheckIns] = await Promise.all([

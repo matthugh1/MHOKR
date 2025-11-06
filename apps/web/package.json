@@ -4,10 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 5173",
-    "build": "next build",
+    "build": "npm run prebuild && next build",
+    "prebuild": "npm run resolve:backend-tag && npm run generate:version",
+    "resolve:backend-tag": "ts-node scripts/resolve_backend_tag.ts",
+    "generate:version": "ts-node scripts/generate_version_json.ts",
     "start": "next start --port 5173",
     "typecheck": "tsc --noEmit",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "jest --passWithNoTests --coverage",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "verify:okrs": "ts-node scripts/verify_okrs_screen.ts"
   },
   "dependencies": {
     "@okr-nexus/types": "*",

@@ -7,11 +7,13 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { JwksVerifier } from './utils/jwks-verifier';
+import { RBACModule } from '../rbac/rbac.module';
 
 @Module({
   imports: [
     PassportModule,
     PrismaModule,  // Import PrismaModule so PrismaService is available
+    RBACModule,     // Import RBACModule for RBACService
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({

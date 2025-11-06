@@ -124,11 +124,11 @@ export class SuperuserController {
    * Add user to organization (superuser only)
    * NOTE: SUPERUSER is read-only per RBAC_MATRIX.md - blocking mutations.
    */
-  @Post('organizations/:organizationId/users/:userId')
+  @Post('organizations/:tenantId/users/:userId')
   @RequireAction('impersonate_user')
   @ApiOperation({ summary: 'Add user to organization' })
   async addUserToOrganization(
-    @Param('organizationId') _organizationId: string,
+    @Param('tenantId') _tenantId: string,
     @Param('userId') _userId: string,
     @Body() _data: { role?: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER' },
     @Req() req: any,
@@ -146,11 +146,11 @@ export class SuperuserController {
    * Remove user from organization (superuser only)
    * NOTE: SUPERUSER is read-only per RBAC_MATRIX.md - blocking mutations.
    */
-  @Delete('organizations/:organizationId/users/:userId')
+  @Delete('organizations/:tenantId/users/:userId')
   @RequireAction('impersonate_user')
   @ApiOperation({ summary: 'Remove user from organization' })
   async removeUserFromOrganization(
-    @Param('organizationId') _organizationId: string,
+    @Param('tenantId') _tenantId: string,
     @Param('userId') _userId: string,
     @Req() req: any,
   ) {

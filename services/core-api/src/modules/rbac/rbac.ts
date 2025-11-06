@@ -222,7 +222,7 @@ function hasTenantOwnerRole(userContext: UserContext, tenantId: string): boolean
  * - Operational admin for the tenant
  * - Invite/remove users from the tenant
  * - Assign workspace and team roles
- * - Create/close OKR periods / quarters
+ * - Create/close OKR cycles / quarters
  * - Run reporting across the whole tenant
  * - View all PUBLIC / TEAM / MANAGER-CHAIN OKRs across the tenant
  * - May or may not see EXEC_ONLY OKRs depending on tenant setting
@@ -301,10 +301,10 @@ function canEditOKRAction(
   }
 
   const okr = resourceContext.okr;
-  // NOTE: organizationId is the canonical tenant identifier.
+  // NOTE: tenantId is the canonical tenant identifier.
   // tenantId is legacy and kept only for backward compatibility with pre-P0 data.
   // Do not reintroduce tenantId in new code.
-  const tenantId = okr.organizationId || (okr as any).tenantId || '';
+  const tenantId = okr.tenantId || (okr as any).tenantId || '';
 
   // PUBLISH LOCK: If OKR is published, only TENANT_OWNER and TENANT_ADMIN can edit
   if (okr.isPublished === true) {
@@ -369,10 +369,10 @@ function canDeleteOKRAction(
   }
 
   const okr = resourceContext.okr;
-  // NOTE: organizationId is the canonical tenant identifier.
+  // NOTE: tenantId is the canonical tenant identifier.
   // tenantId is legacy and kept only for backward compatibility with pre-P0 data.
   // Do not reintroduce tenantId in new code.
-  const tenantId = okr.organizationId || (okr as any).tenantId || '';
+  const tenantId = okr.tenantId || (okr as any).tenantId || '';
 
   // PUBLISH LOCK: If OKR is published, only TENANT_OWNER and TENANT_ADMIN can delete
   if (okr.isPublished === true) {
@@ -433,6 +433,17 @@ function canCreateOKRAction(
   resourceContext: ResourceContext,
 ): boolean {
   const tenantId = resourceContext.tenantId;
+
+  // CRITICAL: tenantId must be present for tenant-level checks
+  // If tenantId is missing, this indicates a bug in resource context building
+  if (!tenantId || tenantId === '') {
+    console.error('[RBAC] canCreateOKRAction: tenantId is missing from resourceContext', {
+      userId: userContext.userId,
+      resourceContext,
+      tenantRolesKeys: Array.from(userContext.tenantRoles.keys()),
+    });
+    return false;
+  }
 
   // Check if user has any role in the tenant
   const tenantRoles = userContext.tenantRoles.get(tenantId) || [];
@@ -522,10 +533,10 @@ function canPublishOKRAction(
   }
 
   const okr = resourceContext.okr;
-  // NOTE: organizationId is the canonical tenant identifier.
+  // NOTE: tenantId is the canonical tenant identifier.
   // tenantId is legacy and kept only for backward compatibility with pre-P0 data.
   // Do not reintroduce tenantId in new code.
-  const tenantId = okr.organizationId || (okr as any).tenantId || '';
+  const tenantId = okr.tenantId || (okr as any).tenantId || '';
 
   // TENANT_OWNER can publish any OKR
   if (hasTenantOwnerRole(userContext, tenantId)) {
@@ -626,7 +637,11 @@ function canManageWorkspaces(
     return true;
   }
 
-  // TENANT_ADMIN cannot delete workspaces (but can create/edit?)
+  // TENANT_ADMIN can create/edit workspaces (but cannot delete)
+  if (hasTenantAdminRole(userContext, tenantId)) {
+    return true;
+  }
+
   // WORKSPACE_LEAD can create/manage teams within workspace
 
   return false;

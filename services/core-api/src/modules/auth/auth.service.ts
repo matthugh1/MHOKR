@@ -2,12 +2,14 @@ import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
+import { RBACService } from '../rbac/rbac.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private jwtService: JwtService,
     private prisma: PrismaService,
+    private rbacService: RBACService,
   ) {}
 
   async register(data: { 
@@ -15,7 +17,7 @@ export class AuthService {
     password: string; 
     firstName: string; 
     lastName: string;
-    organizationId: string; // REQUIRED - all users must belong to an organization
+    tenantId: string; // REQUIRED - all users must belong to an organization
     workspaceId: string; // REQUIRED - all users must belong to a workspace
   }) {
     // Normalize email to lowercase for case-insensitive storage
@@ -32,11 +34,11 @@ export class AuthService {
 
     // Verify organization exists
     const organization = await this.prisma.organization.findUnique({
-      where: { id: data.organizationId },
+      where: { id: data.tenantId },
     });
 
     if (!organization) {
-      throw new ConflictException(`Organization with ID ${data.organizationId} not found`);
+      throw new ConflictException(`Organization with ID ${data.tenantId} not found`);
     }
 
     // Verify workspace exists and belongs to the organization
@@ -48,16 +50,16 @@ export class AuthService {
       throw new ConflictException(`Workspace with ID ${data.workspaceId} not found`);
     }
 
-    if (workspace.organizationId !== data.organizationId) {
-      throw new ConflictException(`Workspace ${data.workspaceId} does not belong to organization ${data.organizationId}`);
+    if (workspace.tenantId !== data.tenantId) {
+      throw new ConflictException(`Workspace ${data.workspaceId} does not belong to organization ${data.tenantId}`);
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    // Create user and assign to organization and workspace in a transaction
+    // Create user (Phase 3: RBAC only - no legacy membership writes)
     const user = await this.prisma.$transaction(async (tx) => {
-      // Create user
+      // Create user only - no legacy membership writes
       const newUser = await tx.user.create({
         data: {
           email: normalizedEmail,
@@ -66,26 +68,41 @@ export class AuthService {
         },
       });
 
-      // ALWAYS add user to organization (mandatory)
-      await tx.organizationMember.create({
-        data: {
-          userId: newUser.id,
-          organizationId: data.organizationId,
-          role: 'MEMBER', // Default role for self-registered users
-        },
-      });
-
-      // ALWAYS add user to workspace (mandatory)
-      await tx.workspaceMember.create({
-        data: {
-          userId: newUser.id,
-          workspaceId: data.workspaceId,
-          role: 'MEMBER', // Default role for self-registered users
-        },
-      });
-
       return newUser;
     });
+
+    // Create RBAC role assignments after transaction (Phase 3: RBAC only)
+    // For self-registration, use the user's own ID as actor (they're registering themselves)
+    // CRITICAL: Role assignments MUST succeed - if they fail, user cannot authenticate
+    try {
+      // Default roles for self-registered users: TENANT_VIEWER and WORKSPACE_MEMBER
+      await this.rbacService.assignRole(
+        user.id,
+        'TENANT_VIEWER',
+        'TENANT',
+        data.tenantId,
+        user.id, // User is registering themselves
+        data.tenantId,
+      );
+
+      await this.rbacService.assignRole(
+        user.id,
+        'WORKSPACE_MEMBER',
+        'WORKSPACE',
+        data.workspaceId,
+        user.id, // User is registering themselves
+        data.tenantId,
+      );
+    } catch (error) {
+      // If RBAC assignment fails, rollback user creation
+      // User cannot authenticate without role assignments
+      console.error(`Failed to assign RBAC roles for new user ${user.id} during registration:`, error);
+      await this.prisma.user.delete({ where: { id: user.id } }).catch(() => {
+        // If deletion fails, log but don't throw - user is in inconsistent state
+        console.error(`Failed to rollback user creation for ${user.id} after RBAC assignment failure`);
+      });
+      throw new ConflictException('Failed to create user: role assignment failed. Please try again.');
+    }
 
     // Generate JWT
     const accessToken = this.jwtService.sign({
@@ -113,12 +130,20 @@ export class AuthService {
     // Normalize email to lowercase for case-insensitive login
     const normalizedEmail = email.toLowerCase().trim();
     
+    console.log(`[AUTH] Login attempt for email: ${normalizedEmail}`);
+    
     // Find user
     const user = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
     });
 
-    if (!user || !user.passwordHash) {
+    if (!user) {
+      console.warn(`[AUTH] Login failed: User not found for email: ${normalizedEmail}`);
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (!user.passwordHash) {
+      console.warn(`[AUTH] Login failed: User ${user.id} (${normalizedEmail}) has no password hash`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -126,7 +151,27 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
     if (!isPasswordValid) {
+      console.warn(`[AUTH] Login failed: Invalid password for user ${user.id} (${normalizedEmail})`);
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    console.log(`[AUTH] Login successful for user ${user.id} (${normalizedEmail})`);
+
+    // CRITICAL: Verify user has at least one tenant role assignment
+    // Users without role assignments cannot authenticate (tenantId would be undefined)
+    if (!user.isSuperuser) {
+      const tenantAssignment = await this.prisma.roleAssignment.findFirst({
+        where: {
+          userId: user.id,
+          scopeType: 'TENANT',
+        },
+        select: { scopeId: true },
+      });
+
+      if (!tenantAssignment) {
+        console.warn(`[AUTH] Login failed: User ${user.id} (${normalizedEmail}) has no tenant role assignments`);
+        throw new UnauthorizedException('User account is not properly configured. Please contact support.');
+      }
     }
 
     // Generate JWT

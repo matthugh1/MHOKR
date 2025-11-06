@@ -147,7 +147,7 @@ export class RBACTestHelper {
     const workspace = await this.prisma.workspace.create({
       data: {
         name: 'Test Workspace',
-        organizationId: tenant.id,
+        tenantId: tenant.id,
       },
     });
 
@@ -173,13 +173,13 @@ export class RBACTestHelper {
     await this.prisma.team.deleteMany({
       where: {
         workspace: {
-          organizationId: tenantId,
+          tenantId: tenantId,
         },
       },
     });
 
     await this.prisma.workspace.deleteMany({
-      where: { organizationId: tenantId },
+      where: { tenantId: tenantId },
     });
 
     await this.prisma.organization.delete({

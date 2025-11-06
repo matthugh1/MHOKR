@@ -1,10 +1,11 @@
 import axios from 'axios'
 
-// Use API Gateway (port 3000) instead of Core API directly
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+// Direct connection to core-api (port 3001) in development
+// In production/Docker, this would go through API gateway (port 3000)
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
 export const api = axios.create({
-  baseURL: `${API_URL}/api`,
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },

@@ -22,7 +22,12 @@ export class SystemController {
         visibilityFiltering: true,
         auditLogging: true,
       },
+      flags: {
+        rbacInspector: process.env.RBAC_INSPECTOR === 'true',
+      },
     };
   }
 }
+
+
 

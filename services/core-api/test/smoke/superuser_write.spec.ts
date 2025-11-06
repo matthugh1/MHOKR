@@ -1,13 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '../../src/common/prisma/prisma.service';
-import { CheckInRequestService } from '../../src/modules/okr/checkin-request.service';
 
 describe('Superuser Write Smoke Test', () => {
   let app: INestApplication;
-  let prisma: PrismaService;
 
   const mockPrisma = {
     user: {
@@ -42,7 +40,6 @@ describe('Superuser Write Smoke Test', () => {
 
   it('should return 403 when SUPERUSER attempts to create check-in request', async () => {
     const superuserId = 'superuser-1';
-    const organizationId = 'org-1';
 
     mockPrisma.user.findUnique.mockResolvedValue({
       id: superuserId,

@@ -21,7 +21,7 @@ export interface Objective {
   progressPct: number
   ownerId: string
   ownerName?: string | null
-  organizationId: string
+  tenantId: string
   workspaceId?: string | null
   teamId?: string | null
   isPublished: boolean

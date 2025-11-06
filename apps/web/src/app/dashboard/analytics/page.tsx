@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { PageContainer } from '@/components/ui/PageContainer'
 import { StatCard } from '@/components/ui/StatCard'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Download } from 'lucide-react'
@@ -60,7 +61,7 @@ export default function AnalyticsPage() {
     status: string
     startDate: string
     endDate: string
-    organizationId: string
+    tenantId: string
   }>>([])
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
@@ -203,7 +204,7 @@ export default function AnalyticsPage() {
   return (
     <ProtectedRoute>
       <DashboardLayout>
-        <div className="p-8">
+        <PageContainer variant="content">
           <div className="mb-8">
             <div className="flex items-start justify-between flex-wrap gap-4">
               <div className="flex-1">
@@ -419,7 +420,7 @@ export default function AnalyticsPage() {
               </div>
             </>
           )}
-        </div>
+        </PageContainer>
       </DashboardLayout>
     </ProtectedRoute>
   )

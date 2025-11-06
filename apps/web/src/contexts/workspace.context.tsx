@@ -13,7 +13,7 @@ interface Organization {
 interface Workspace {
   id: string
   name: string
-  organizationId: string
+  tenantId: string
 }
 
 interface Team {
@@ -42,7 +42,7 @@ interface WorkspaceContextType {
   selectOKRLevel: (level: OKRLevel) => void
   refreshContext: () => Promise<void>
   defaultOKRContext: {
-    organizationId: string | null
+    tenantId: string | null
     workspaceId: string | null
     teamId: string | null
     ownerId: string | null
@@ -174,12 +174,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         // Only set if the workspace belongs to the selected organization
         if (savedWorkspaceId) {
           const savedWorkspace = userContextData.workspaces?.find((w: Workspace) => w.id === savedWorkspaceId)
-          if (savedWorkspace && (!selectedOrgId || savedWorkspace.organizationId === selectedOrgId)) {
+          if (savedWorkspace && (!selectedOrgId || savedWorkspace.tenantId === selectedOrgId)) {
             setCurrentWorkspace(savedWorkspace)
           }
         } else if (userContextData.workspace) {
           // Only set if workspace belongs to selected organization
-          if (!selectedOrgId || userContextData.workspace.organizationId === selectedOrgId) {
+          if (!selectedOrgId || userContextData.workspace.tenantId === selectedOrgId) {
             setCurrentWorkspace(userContextData.workspace)
             localStorage.setItem('currentWorkspaceId', userContextData.workspace.id)
           }
@@ -191,14 +191,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           if (savedTeam) {
             // Find the workspace for this team
             const teamWorkspace = userContextData.workspaces?.find((w: Workspace) => w.id === savedTeam.workspaceId)
-            if (teamWorkspace && (!selectedOrgId || teamWorkspace.organizationId === selectedOrgId)) {
+            if (teamWorkspace && (!selectedOrgId || teamWorkspace.tenantId === selectedOrgId)) {
               setCurrentTeam(savedTeam)
             }
           }
         } else if (userContextData.team) {
           // Find the workspace for this team
           const teamWorkspace = userContextData.workspaces?.find((w: Workspace) => w.id === userContextData.team.workspaceId)
-          if (teamWorkspace && (!selectedOrgId || teamWorkspace.organizationId === selectedOrgId)) {
+          if (teamWorkspace && (!selectedOrgId || teamWorkspace.tenantId === selectedOrgId)) {
             setCurrentTeam(userContextData.team)
             localStorage.setItem('currentTeamId', userContextData.team.id)
           }
@@ -230,7 +230,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       // If superuser, check if user is a member of the selected organization
       if (isSuperuser) {
         // Check if user has any workspace/team memberships in the selected organization
-        const userWorkspacesInOrg = workspaces.filter(w => w.organizationId === organizationId)
+        const userWorkspacesInOrg = workspaces.filter(w => w.tenantId === organizationId)
         
         if (userWorkspacesInOrg.length > 0) {
           // User is a member: set their workspace/team in this org
@@ -260,7 +260,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         // Regular user: Filter existing workspaces
-        const workspacesInOrg = workspaces.filter(w => w.organizationId === organizationId)
+        const workspacesInOrg = workspaces.filter(w => w.tenantId === organizationId)
         if (workspacesInOrg.length > 0) {
           setCurrentWorkspace(workspacesInOrg[0])
           localStorage.setItem('currentWorkspaceId', workspacesInOrg[0].id)
@@ -288,8 +288,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     const newWorkspace = workspaces.find(w => w.id === workspaceId)
     if (newWorkspace) {
       // Check if we need to switch organization
-      if (newWorkspace.organizationId !== currentOrganization?.id) {
-        const newOrganization = organizations.find(o => o.id === newWorkspace.organizationId)
+      if (newWorkspace.tenantId !== currentOrganization?.id) {
+        const newOrganization = organizations.find(o => o.id === newWorkspace.tenantId)
         if (newOrganization) {
           setCurrentOrganization(newOrganization)
           localStorage.setItem('currentOrganizationId', newOrganization.id)
@@ -329,8 +329,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem('currentWorkspaceId', newWorkspace.id)
 
             // Check if we need to switch organization too
-            if (newWorkspace.organizationId !== currentOrganization?.id) {
-              const newOrganization = organizations.find(o => o.id === newWorkspace.organizationId)
+            if (newWorkspace.tenantId !== currentOrganization?.id) {
+              const newOrganization = organizations.find(o => o.id === newWorkspace.tenantId)
               if (newOrganization) {
                 setCurrentOrganization(newOrganization)
                 localStorage.setItem('currentOrganizationId', newOrganization.id)
@@ -353,7 +353,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   }
 
   const defaultOKRContext = {
-    organizationId: currentOKRLevel === 'organization' ? currentOrganization?.id || null : null,
+    tenantId: currentOKRLevel === 'organization' ? currentOrganization?.id || null : null,
     workspaceId: currentOKRLevel === 'workspace' || currentOKRLevel === 'team' ? currentWorkspace?.id || null : null,
     teamId: currentOKRLevel === 'team' ? currentTeam?.id || null : null,
     ownerId: userId,

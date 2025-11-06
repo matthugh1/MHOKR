@@ -64,8 +64,7 @@ function canViewPrivate(
   okr: OKREntity,
   tenant?: Tenant & { privateWhitelist?: string[] | null },
 ): boolean {
-  // Use organizationId instead of tenantId
-  const tenantId = okr.organizationId || okr.tenantId || '';
+  const tenantId = okr.tenantId || '';
   
   // TENANT_OWNER can view private OKRs in their tenant
   const tenantRoles = userContext.tenantRoles.get(tenantId) || [];
