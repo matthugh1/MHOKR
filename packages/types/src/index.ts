@@ -72,6 +72,13 @@ export enum MetricType {
   MAINTAIN = 'MAINTAIN',
 }
 
+export enum Period {
+  MONTHLY = 'MONTHLY',
+  QUARTERLY = 'QUARTERLY',
+  ANNUAL = 'ANNUAL',
+  CUSTOM = 'CUSTOM',
+}
+
 export enum InitiativeStatus {
   NOT_STARTED = 'NOT_STARTED',
   IN_PROGRESS = 'IN_PROGRESS',

@@ -590,8 +590,8 @@ export default function BuilderPage() {
       }
 
       // Update node in canvas
-      setNodes((nds) =>
-        nds.map((n) =>
+      setNodes((nds: Node[]) =>
+        nds.map((n: Node) =>
           n.id === nodeId ? { ...n, data: { ...n.data, ...quickData } } : n
         )
       )
@@ -633,9 +633,9 @@ export default function BuilderPage() {
           if (oldParentId !== newParentId) {
             // Remove old parent edge if it exists
             if (oldParentId) {
-              setEdges(prev => prev.filter(e => 
-                !(e.source.endsWith(oldParentId) && e.target === nodeId && e.data?.type === 'parent-child')
-              ))
+            setEdges((prev: Edge[]) => prev.filter((e: Edge) => 
+              !(e.source.endsWith(oldParentId) && e.target === nodeId && e.data?.type === 'parent-child')
+            ))
             }
             
             // Add new parent edge if parent is set
@@ -651,7 +651,7 @@ export default function BuilderPage() {
                   style: { stroke: '#3b82f6', strokeWidth: 2 },
                   data: { type: 'parent-child' }
                 }
-                setEdges(prev => [...prev, newEdge])
+                setEdges((prev: Edge[]) => [...prev, newEdge])
               }
             }
           }
@@ -685,7 +685,7 @@ export default function BuilderPage() {
                 style: { stroke: '#3b82f6', strokeWidth: 2 },
                 data: { type: 'parent-child' }
               }
-              setEdges(prev => [...prev, newEdge])
+              setEdges((prev: Edge[]) => [...prev, newEdge])
             }
           }
         }
@@ -775,7 +775,7 @@ export default function BuilderPage() {
       }
 
       // Update node in canvas
-      setNodes((nds) =>
+      setNodes((nds: Node[]) =>
         nds.map((node) =>
           node.id === nodeId ? { ...node, data: { ...node.data, ...updatedData } } : node
         )
@@ -797,8 +797,8 @@ export default function BuilderPage() {
 
     // If node hasn't been saved yet, just remove from canvas
     if (!node.data.okrId) {
-      setNodes((nds) => nds.filter((n) => n.id !== nodeId))
-      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId))
+      setNodes((nds: Node[]) => nds.filter((n: Node) => n.id !== nodeId))
+      setEdges((eds: Edge[]) => eds.filter((e: Edge) => e.source !== nodeId && e.target !== nodeId))
       setEditingNode(null)
       return
     }
@@ -811,8 +811,8 @@ export default function BuilderPage() {
 
       if (!okrId) {
         // Just remove from canvas if no ID
-        setNodes((nds) => nds.filter((n) => n.id !== nodeId))
-        setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId))
+        setNodes((nds: Node[]) => nds.filter((n) => n.id !== nodeId))
+        setEdges((eds: Edge[]) => eds.filter((e: Edge) => e.source !== nodeId && e.target !== nodeId))
         setEditingNode(null)
         return
       }
@@ -829,8 +829,8 @@ export default function BuilderPage() {
       }
 
       // Remove from canvas on success
-      setNodes((nds) => nds.filter((n) => n.id !== nodeId))
-      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId))
+      setNodes((nds: Node[]) => nds.filter((n: Node) => n.id !== nodeId))
+      setEdges((eds: Edge[]) => eds.filter((e: Edge) => e.source !== nodeId && e.target !== nodeId))
       setEditingNode(null)
     } catch (error: any) {
       console.error('Failed to delete node:', error)
@@ -870,7 +870,7 @@ export default function BuilderPage() {
       newNode.data.canEdit = true
     }
 
-    setNodes((nds) => [...nds, newNode])
+    setNodes((nds: Node[]) => [...nds, newNode])
     setShowNodeCreator(false)
     // Auto-open edit dialog
     setTimeout(() => handleEditNode(newNode.id, newNode.data), 100)
@@ -890,7 +890,7 @@ export default function BuilderPage() {
         edgeStyle = { stroke: '#3b82f6', strokeWidth: 2 }
       }
       
-      setEdges((eds) => addEdge({ 
+      setEdges((eds: Edge[]) => addEdge({ 
         ...params, 
         animated: true, 
         style: edgeStyle,
@@ -998,7 +998,7 @@ export default function BuilderPage() {
     badges.push({ label: `Viewing: ${selectedTimeframeLabel}`, tone: 'neutral' as const })
   }
   if (!workspaceLoading && currentWorkspace && currentOrganization && 
-      currentWorkspace.organizationId === currentOrganization.id) {
+      currentWorkspace.tenantId === currentOrganization.id) {
     const workspaceBadge = currentTeam && currentTeam.workspaceId === currentWorkspace.id
       ? `${currentWorkspace.name} • ${currentTeam.name}`
       : currentWorkspace.name

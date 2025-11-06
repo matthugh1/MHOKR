@@ -519,7 +519,7 @@ function CyclesManagement() {
               </div>
               <div>
                 <Label htmlFor="create-status">Status</Label>
-                <Select value={formStatus} onValueChange={(v) => setFormStatus(v as any)}>
+                <Select value={formStatus} onValueChange={(v: string) => setFormStatus(v as 'DRAFT' | 'ACTIVE' | 'LOCKED' | 'ARCHIVED')}>
                   <SelectTrigger id="create-status">
                     <SelectValue />
                   </SelectTrigger>
@@ -542,7 +542,7 @@ function CyclesManagement() {
         </Dialog>
 
         {/* Edit Cycle Dialog */}
-        <Dialog open={!!editingCycle} onOpenChange={(open) => { if (!open) { setEditingCycle(null); resetForm() } }}>
+        <Dialog open={!!editingCycle} onOpenChange={(open: boolean) => { if (!open) { setEditingCycle(null); resetForm() } }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit Cycle</DialogTitle>
@@ -580,7 +580,7 @@ function CyclesManagement() {
               </div>
               <div>
                 <Label htmlFor="edit-status">Status</Label>
-                <Select value={formStatus} onValueChange={(v) => setFormStatus(v as any)}>
+                <Select value={formStatus} onValueChange={(v: string) => setFormStatus(v as 'DRAFT' | 'ACTIVE' | 'LOCKED' | 'ARCHIVED')}>
                   <SelectTrigger id="edit-status">
                     <SelectValue />
                   </SelectTrigger>
@@ -605,7 +605,7 @@ function CyclesManagement() {
         </Dialog>
 
         {/* Lock Cycle Confirmation */}
-        <AlertDialog open={!!lockCycle} onOpenChange={(open) => { if (!open) setLockCycle(null) }}>
+        <AlertDialog open={!!lockCycle} onOpenChange={(open: boolean) => { if (!open) setLockCycle(null) }}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Lock Cycle</AlertDialogTitle>
@@ -623,7 +623,7 @@ function CyclesManagement() {
         </AlertDialog>
 
         {/* Archive Cycle Confirmation */}
-        <AlertDialog open={!!archiveCycle} onOpenChange={(open) => { if (!open) setArchiveCycle(null) }}>
+        <AlertDialog open={!!archiveCycle} onOpenChange={(open: boolean) => { if (!open) setArchiveCycle(null) }}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Archive Cycle</AlertDialogTitle>
@@ -641,7 +641,7 @@ function CyclesManagement() {
         </AlertDialog>
 
         {/* Delete Cycle Confirmation */}
-        <AlertDialog open={!!deletingCycle} onOpenChange={(open) => { if (!open) setDeletingCycle(null) }}>
+        <AlertDialog open={!!deletingCycle} onOpenChange={(open: boolean) => { if (!open) setDeletingCycle(null) }}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete Cycle</AlertDialogTitle>
