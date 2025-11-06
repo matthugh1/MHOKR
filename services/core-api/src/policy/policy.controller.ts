@@ -15,14 +15,13 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RBACGuard } from '../rbac/rbac.guard';
-import { AuthorisationService } from '../authorisation.service';
-import { RBACService } from '../rbac/rbac.service';
-import { PrismaService } from '../../common/prisma/prisma.service';
-import { SuperuserService } from '../superuser/superuser.service';
-import { Action, ResourceContext } from '../rbac/types';
-import { recordDeny } from '../rbac/rbac.telemetry';
+import { JwtAuthGuard } from '../modules/auth/guards/jwt-auth.guard';
+import { AuthorisationService } from './authorisation.service';
+import { RBACService } from '../modules/rbac/rbac.service';
+import { PrismaService } from '../common/prisma/prisma.service';
+import { SuperuserService } from '../modules/superuser/superuser.service';
+import { Action, ResourceContext } from '../modules/rbac/types';
+import { recordDeny } from '../modules/rbac/rbac.telemetry';
 
 interface DecideRequestDto {
   userId?: string;
@@ -103,6 +102,12 @@ export class PolicyController {
       teamId: body.resource?.teamId || null,
     };
 
+    // If no tenantId provided and user has tenant roles, use their primary tenant
+    if (!resourceContext.tenantId && userContext.tenantRoles.size > 0) {
+      const primaryTenantId = Array.from(userContext.tenantRoles.keys())[0];
+      resourceContext.tenantId = primaryTenantId;
+    }
+
     // If objectiveId or keyResultId provided, try to load OKR entity
     if (body.resource?.objectiveId) {
       const objective = await this.prisma.objective.findUnique({
@@ -110,7 +115,6 @@ export class PolicyController {
         select: {
           id: true,
           ownerId: true,
-          organizationId: true,
           tenantId: true,
           workspaceId: true,
           teamId: true,
@@ -122,11 +126,45 @@ export class PolicyController {
       });
 
       if (objective) {
+        // Determine tenantId: use tenantId if present, otherwise look up from workspace/team
+        let tenantId: string | null = objective.tenantId;
+        if (!tenantId && objective.workspaceId) {
+          const workspace = await this.prisma.workspace.findUnique({
+            where: { id: objective.workspaceId },
+            select: { tenantId: true },
+          });
+          tenantId = workspace?.tenantId || null;
+        } else if (!tenantId && objective.teamId) {
+          const team = await this.prisma.team.findUnique({
+            where: { id: objective.teamId },
+            include: { workspace: { select: { tenantId: true } } },
+          });
+          tenantId = team?.workspace?.tenantId || null;
+        }
+
+        // CRITICAL: If we still don't have a tenantId, we cannot proceed safely
+        // This should never happen in production, but if it does, deny access
+        if (!tenantId) {
+          return {
+            allow: false,
+            reason: 'TENANT_BOUNDARY',
+            details: {
+              message: 'Resource has no tenant association. Cannot determine tenant boundary.',
+              objectiveId: objective.id,
+            },
+            meta: {
+              requestUserId: req.user.id,
+              evaluatedUserId: targetUserId,
+              action: body.action,
+              timestamp: new Date().toISOString(),
+            },
+          } as any;
+        }
+
         resourceContext.okr = {
           id: objective.id,
           ownerId: objective.ownerId,
-          organizationId: objective.organizationId,
-          tenantId: objective.tenantId || objective.organizationId,
+          tenantId: tenantId!, // tenantId is guaranteed to be string after null check above
           workspaceId: objective.workspaceId,
           teamId: objective.teamId,
           visibilityLevel: objective.visibilityLevel as any,
@@ -134,17 +172,17 @@ export class PolicyController {
           createdAt: objective.createdAt,
           updatedAt: objective.updatedAt,
         };
-        resourceContext.tenantId = objective.organizationId;
+        resourceContext.tenantId = tenantId!; // tenantId is guaranteed to be string after null check above
       }
     } else if (body.resource?.keyResultId) {
-      const keyResult = await this.prisma.keyResult.findUnique({
-        where: { id: body.resource.keyResultId },
+      // Find the objective that contains this key result via junction table
+      const objectiveKeyResult = await this.prisma.objectiveKeyResult.findFirst({
+        where: { keyResultId: body.resource.keyResultId },
         include: {
           objective: {
             select: {
               id: true,
               ownerId: true,
-              organizationId: true,
               tenantId: true,
               workspaceId: true,
               teamId: true,
@@ -157,13 +195,47 @@ export class PolicyController {
         },
       });
 
-      if (keyResult?.objective) {
-        const objective = keyResult.objective;
+      if (objectiveKeyResult?.objective) {
+        const objective = objectiveKeyResult.objective;
+        
+        // Determine tenantId: use tenantId if present, otherwise look up from workspace/team
+        let tenantId: string | null = objective.tenantId;
+        if (!tenantId && objective.workspaceId) {
+          const workspace = await this.prisma.workspace.findUnique({
+            where: { id: objective.workspaceId },
+            select: { tenantId: true },
+          });
+          tenantId = workspace?.tenantId || null;
+        } else if (!tenantId && objective.teamId) {
+          const team = await this.prisma.team.findUnique({
+            where: { id: objective.teamId },
+            include: { workspace: { select: { tenantId: true } } },
+          });
+          tenantId = team?.workspace?.tenantId || null;
+        }
+
+        // CRITICAL: If we still don't have a tenantId, we cannot proceed safely
+        if (!tenantId) {
+          return {
+            allow: false,
+            reason: 'TENANT_BOUNDARY',
+            details: {
+              message: 'Resource has no tenant association. Cannot determine tenant boundary.',
+              keyResultId: body.resource.keyResultId,
+            },
+            meta: {
+              requestUserId: req.user.id,
+              evaluatedUserId: targetUserId,
+              action: body.action,
+              timestamp: new Date().toISOString(),
+            },
+          } as any;
+        }
+        
         resourceContext.okr = {
-          id: keyResult.id,
+          id: body.resource.keyResultId,
           ownerId: objective.ownerId,
-          organizationId: objective.organizationId,
-          tenantId: objective.tenantId || objective.organizationId,
+          tenantId: tenantId!, // tenantId is guaranteed to be string after null check above
           workspaceId: objective.workspaceId,
           teamId: objective.teamId,
           visibilityLevel: objective.visibilityLevel as any,
@@ -171,16 +243,16 @@ export class PolicyController {
           createdAt: objective.createdAt,
           updatedAt: objective.updatedAt,
         };
-        resourceContext.tenantId = objective.organizationId;
+        resourceContext.tenantId = tenantId!; // tenantId is guaranteed to be string after null check above
       }
     }
 
-    // Get user's organisation ID for tenant boundary checks (use target user's org if evaluating different user)
-    const requestUserOrgId = req.user.organizationId || null;
+    // Get user's tenant ID for tenant boundary checks (use target user's tenant if evaluating different user)
+    const requestUserTenantId = req.user.tenantId || null;
     
-    // For tenant boundary checks, use the evaluated user's organisation
-    // If evaluating a different user, we need their org ID
-    let evaluatedUserOrgId = requestUserOrgId;
+    // For tenant boundary checks, use the evaluated user's tenant
+    // If evaluating a different user, we need their tenant ID
+    let evaluatedUserTenantId = requestUserTenantId;
     if (targetUserId !== req.user.id) {
       const targetUser = await this.prisma.user.findUnique({
         where: { id: targetUserId },
@@ -188,10 +260,10 @@ export class PolicyController {
       });
       
       if (targetUser?.isSuperuser) {
-        evaluatedUserOrgId = null;
+        evaluatedUserTenantId = null;
       } else {
-        // Get target user's primary organisation
-        const targetOrgAssignment = await this.prisma.roleAssignment.findFirst({
+        // Get target user's primary tenant
+        const targetTenantAssignment = await this.prisma.roleAssignment.findFirst({
           where: {
             userId: targetUserId,
             scopeType: 'TENANT',
@@ -199,7 +271,16 @@ export class PolicyController {
           select: { scopeId: true },
           orderBy: { createdAt: 'asc' },
         });
-        evaluatedUserOrgId = targetOrgAssignment?.scopeId || undefined;
+        evaluatedUserTenantId = targetTenantAssignment?.scopeId || undefined;
+      }
+    } else {
+      // If evaluating same user and no tenantId provided, use their primary tenant
+      if (!resourceContext.tenantId && userContext.tenantRoles.size > 0) {
+        const primaryTenantId = Array.from(userContext.tenantRoles.keys())[0];
+        resourceContext.tenantId = primaryTenantId;
+        evaluatedUserTenantId = primaryTenantId;
+      } else if (resourceContext.tenantId) {
+        evaluatedUserTenantId = resourceContext.tenantId;
       }
     }
 
@@ -208,16 +289,16 @@ export class PolicyController {
       userContext,
       body.action,
       resourceContext,
-      evaluatedUserOrgId,
+      evaluatedUserTenantId,
     );
 
     // Build response with details
     const tenantRoles = resourceContext.tenantId
       ? Array.from(userContext.tenantRoles.get(resourceContext.tenantId) || [])
       : [];
-    const allTenantRoles = Array.from(userContext.tenantRoles.values()).flat();
-    const allWorkspaceRoles = Array.from(userContext.workspaceRoles.values()).flat();
-    const allTeamRoles = Array.from(userContext.teamRoles.values()).flat();
+    const allTenantRoles = Array.from(new Set(Array.from(userContext.tenantRoles.values()).flat()));
+    const allWorkspaceRoles = Array.from(new Set(Array.from(userContext.workspaceRoles.values()).flat()));
+    const allTeamRoles = Array.from(new Set(Array.from(userContext.teamRoles.values()).flat()));
 
     const response: DecideResponseDto = {
       allow: decision.allow,
@@ -225,9 +306,9 @@ export class PolicyController {
       details: {
         userRoles: [
           ...(userContext.isSuperuser ? ['SUPERUSER'] : []),
-          ...allTenantRoles,
-          ...allWorkspaceRoles,
-          ...allTeamRoles,
+          ...allTenantRoles.map(r => String(r)),
+          ...allWorkspaceRoles.map(r => String(r)),
+          ...allTeamRoles.map(r => String(r)),
         ],
         scopes: {
           tenantIds: Array.from(userContext.tenantRoles.keys()),

@@ -37,7 +37,7 @@ export class OkrInsightsController {
       throw new BadRequestException('cycleId query parameter is required');
     }
 
-    const userOrganizationId = req.user?.organizationId ?? null;
+    const userOrganizationId = req.user?.tenantId ?? null;
     const requesterUserId = req.user?.id;
 
     return this.insightsService.getCycleSummary(cycleId, userOrganizationId, requesterUserId);
@@ -53,7 +53,7 @@ export class OkrInsightsController {
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get objective-level insights' })
   async getObjectiveInsights(@Param('id') objectiveId: string, @Req() req: any) {
-    const userOrganizationId = req.user?.organizationId ?? null;
+    const userOrganizationId = req.user?.tenantId ?? null;
     const requesterUserId = req.user?.id;
 
     const insights = await this.insightsService.getObjectiveInsights(
@@ -89,7 +89,7 @@ export class OkrInsightsController {
     @Query('pageSize') pageSize: string | undefined,
     @Req() req: any,
   ) {
-    const userOrganizationId = req.user?.organizationId ?? null;
+    const userOrganizationId = req.user?.tenantId ?? null;
     const requesterUserId = req.user?.id;
 
     const pageNum = page ? parseInt(page, 10) : 1;

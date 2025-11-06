@@ -17,7 +17,7 @@ export class AuthService {
     password: string; 
     firstName: string; 
     lastName: string;
-    organizationId: string; // REQUIRED - all users must belong to an organization
+    tenantId: string; // REQUIRED - all users must belong to an organization
     workspaceId: string; // REQUIRED - all users must belong to a workspace
   }) {
     // Normalize email to lowercase for case-insensitive storage
@@ -34,11 +34,11 @@ export class AuthService {
 
     // Verify organization exists
     const organization = await this.prisma.organization.findUnique({
-      where: { id: data.organizationId },
+      where: { id: data.tenantId },
     });
 
     if (!organization) {
-      throw new ConflictException(`Organization with ID ${data.organizationId} not found`);
+      throw new ConflictException(`Organization with ID ${data.tenantId} not found`);
     }
 
     // Verify workspace exists and belongs to the organization
@@ -50,8 +50,8 @@ export class AuthService {
       throw new ConflictException(`Workspace with ID ${data.workspaceId} not found`);
     }
 
-    if (workspace.organizationId !== data.organizationId) {
-      throw new ConflictException(`Workspace ${data.workspaceId} does not belong to organization ${data.organizationId}`);
+    if (workspace.tenantId !== data.tenantId) {
+      throw new ConflictException(`Workspace ${data.workspaceId} does not belong to organization ${data.tenantId}`);
     }
 
     // Hash password
@@ -73,15 +73,16 @@ export class AuthService {
 
     // Create RBAC role assignments after transaction (Phase 3: RBAC only)
     // For self-registration, use the user's own ID as actor (they're registering themselves)
+    // CRITICAL: Role assignments MUST succeed - if they fail, user cannot authenticate
     try {
       // Default roles for self-registered users: TENANT_VIEWER and WORKSPACE_MEMBER
       await this.rbacService.assignRole(
         user.id,
         'TENANT_VIEWER',
         'TENANT',
-        data.organizationId,
+        data.tenantId,
         user.id, // User is registering themselves
-        data.organizationId,
+        data.tenantId,
       );
 
       await this.rbacService.assignRole(
@@ -90,12 +91,17 @@ export class AuthService {
         'WORKSPACE',
         data.workspaceId,
         user.id, // User is registering themselves
-        data.organizationId,
+        data.tenantId,
       );
     } catch (error) {
-      // If RBAC assignment fails, log error but don't rollback user creation
+      // If RBAC assignment fails, rollback user creation
+      // User cannot authenticate without role assignments
       console.error(`Failed to assign RBAC roles for new user ${user.id} during registration:`, error);
-      // User exists but may not have proper role assignments - manual recovery may be needed
+      await this.prisma.user.delete({ where: { id: user.id } }).catch(() => {
+        // If deletion fails, log but don't throw - user is in inconsistent state
+        console.error(`Failed to rollback user creation for ${user.id} after RBAC assignment failure`);
+      });
+      throw new ConflictException('Failed to create user: role assignment failed. Please try again.');
     }
 
     // Generate JWT
@@ -150,6 +156,23 @@ export class AuthService {
     }
 
     console.log(`[AUTH] Login successful for user ${user.id} (${normalizedEmail})`);
+
+    // CRITICAL: Verify user has at least one tenant role assignment
+    // Users without role assignments cannot authenticate (tenantId would be undefined)
+    if (!user.isSuperuser) {
+      const tenantAssignment = await this.prisma.roleAssignment.findFirst({
+        where: {
+          userId: user.id,
+          scopeType: 'TENANT',
+        },
+        select: { scopeId: true },
+      });
+
+      if (!tenantAssignment) {
+        console.warn(`[AUTH] Login failed: User ${user.id} (${normalizedEmail}) has no tenant role assignments`);
+        throw new UnauthorizedException('User account is not properly configured. Please contact support.');
+      }
+    }
 
     // Generate JWT
     const accessToken = this.jwtService.sign({

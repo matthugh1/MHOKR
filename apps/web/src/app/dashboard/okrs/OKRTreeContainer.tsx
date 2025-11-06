@@ -203,7 +203,7 @@ export function OKRTreeContainer({
       
       while (hasMore) {
         const params = new URLSearchParams({
-          organizationId: currentOrganization.id,
+          tenantId: currentOrganization.id,
           page: currentPage.toString(),
           pageSize: maxPageSize.toString(),
         })

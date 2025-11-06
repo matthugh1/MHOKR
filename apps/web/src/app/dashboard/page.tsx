@@ -125,7 +125,7 @@ export default function DashboardPage() {
         
         // Check permissions for creating/publishing
         const overviewResponse = await api.get<OKROverviewResponse>(
-          `/okr/overview?organizationId=${currentOrganization.id}&page=1&pageSize=1`
+          `/okr/overview?tenantId=${currentOrganization.id}&page=1&pageSize=1`
         ).catch(() => ({ data: { canCreateObjective: false, canPublishOKR: false } }))
         
         setCanCreateObjective(overviewResponse.data.canCreateObjective || false)

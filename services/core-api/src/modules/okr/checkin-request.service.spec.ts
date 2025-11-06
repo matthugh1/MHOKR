@@ -63,7 +63,7 @@ describe('CheckInRequestService', () => {
         id: 'request-1',
         requesterUserId,
         targetUserId: 'target-1',
-        organizationId: userOrganizationId,
+        tenantId: userOrganizationId,
         dueAt,
         status: 'OPEN',
         targetUser: { id: 'target-1', name: 'User 1', email: 'user1@example.com' },
@@ -74,7 +74,7 @@ describe('CheckInRequestService', () => {
         id: 'request-2',
         requesterUserId,
         targetUserId: 'target-2',
-        organizationId: userOrganizationId,
+        tenantId: userOrganizationId,
         dueAt,
         status: 'OPEN',
         targetUser: { id: 'target-2', name: 'User 2', email: 'user2@example.com' },
@@ -136,7 +136,7 @@ describe('CheckInRequestService', () => {
       const mockRequest = {
         id: requestId,
         targetUserId: userId,
-        organizationId: userOrganizationId,
+        tenantId: userOrganizationId,
         status: 'OPEN',
         response: null,
       };
@@ -184,7 +184,7 @@ describe('CheckInRequestService', () => {
       const mockRequest = {
         id: requestId,
         targetUserId: 'target-1',
-        organizationId: userOrganizationId,
+        tenantId: userOrganizationId,
         status: 'OPEN',
         response: null,
       };

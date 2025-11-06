@@ -97,6 +97,17 @@ export class RBACService {
       where: { userId },
     });
 
+    // Log role assignments for debugging
+    this.logger.log(`[RBAC] buildUserContext: Found ${roleAssignments.length} role assignments for user ${userId}`, {
+      userId,
+      roleAssignments: roleAssignments.map(ra => ({
+        id: ra.id,
+        role: ra.role,
+        scopeType: ra.scopeType,
+        scopeId: ra.scopeId,
+      })),
+    });
+
     // Build maps of roles by scope
     const tenantRoles = new Map<string, TenantRole[]>();
     const workspaceRoles = new Map<string, WorkspaceRole[]>();
@@ -132,6 +143,15 @@ export class RBACService {
           break;
       }
     }
+
+    // Log built maps for debugging
+    this.logger.log(`[RBAC] buildUserContext: Built role maps`, {
+      userId,
+      tenantRolesCount: tenantRoles.size,
+      tenantRoles: Array.from(tenantRoles.entries()),
+      workspaceRolesCount: workspaceRoles.size,
+      teamRolesCount: teamRoles.size,
+    });
 
     // Load manager relationships (for MANAGER_CHAIN visibility)
     const directReportsResult = await this.prisma.user.findMany({
@@ -437,22 +457,22 @@ export class RBACService {
         // Verify workspace belongs to caller's org
         const workspace = await this.prisma.workspace.findUnique({
           where: { id: scopeId! },
-          select: { organizationId: true },
+          select: { tenantId: true },
         });
         if (!workspace) {
           throw new NotFoundException(`Workspace with ID ${scopeId} not found`);
         }
-        OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
+        OkrTenantGuard.assertSameTenant(workspace.tenantId, userOrganizationId);
       } else if (scopeType === 'TEAM') {
         // Verify team's workspace belongs to caller's org
         const team = await this.prisma.team.findUnique({
           where: { id: scopeId! },
-          include: { workspace: { select: { organizationId: true } } },
+          include: { workspace: { select: { tenantId: true } } },
         });
         if (!team) {
           throw new NotFoundException(`Team with ID ${scopeId} not found`);
         }
-        OkrTenantGuard.assertSameTenant(team.workspace.organizationId, userOrganizationId);
+        OkrTenantGuard.assertSameTenant(team.workspace.tenantId, userOrganizationId);
       }
     }
 
@@ -544,7 +564,7 @@ export class RBACService {
       targetId: userId,
       targetType: AuditTargetType.ROLE_ASSIGNMENT,
       newRole: role as RBACRole,
-      organizationId: scopeType === 'TENANT' ? (scopeId || undefined) : undefined,
+      tenantId: scopeType === 'TENANT' ? (scopeId || undefined) : undefined,
       metadata: { scopeType, scopeId },
     });
 
@@ -574,22 +594,22 @@ export class RBACService {
         // Verify workspace belongs to caller's org
         const workspace = await this.prisma.workspace.findUnique({
           where: { id: scopeId! },
-          select: { organizationId: true },
+          select: { tenantId: true },
         });
         if (!workspace) {
           throw new NotFoundException(`Workspace with ID ${scopeId} not found`);
         }
-        OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
+        OkrTenantGuard.assertSameTenant(workspace.tenantId, userOrganizationId);
       } else if (scopeType === 'TEAM') {
         // Verify team's workspace belongs to caller's org
         const team = await this.prisma.team.findUnique({
           where: { id: scopeId! },
-          include: { workspace: { select: { organizationId: true } } },
+          include: { workspace: { select: { tenantId: true } } },
         });
         if (!team) {
           throw new NotFoundException(`Team with ID ${scopeId} not found`);
         }
-        OkrTenantGuard.assertSameTenant(team.workspace.organizationId, userOrganizationId);
+        OkrTenantGuard.assertSameTenant(team.workspace.tenantId, userOrganizationId);
       }
     }
 
@@ -612,7 +632,7 @@ export class RBACService {
       targetId: userId,
       targetType: AuditTargetType.ROLE_ASSIGNMENT,
       previousRole: role as RBACRole,
-      organizationId: scopeType === 'TENANT' ? (scopeId || undefined) : undefined,
+      tenantId: scopeType === 'TENANT' ? (scopeId || undefined) : undefined,
       metadata: { scopeType, scopeId },
     });
   }

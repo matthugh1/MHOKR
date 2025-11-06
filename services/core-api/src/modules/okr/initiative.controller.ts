@@ -87,7 +87,7 @@ export class InitiativeController {
         }
       }
 
-      return await this.initiativeService.create(data, req.user.id, req.user.organizationId);
+      return await this.initiativeService.create(data, req.user.id, req.user.tenantId);
     } catch (error: any) {
       // Re-throw known HTTP exceptions
       if (error instanceof ForbiddenException || error instanceof BadRequestException || error instanceof NotFoundException) {
@@ -110,7 +110,7 @@ export class InitiativeController {
     if (!canEdit) {
       throw new ForbiddenException('You do not have permission to edit this initiative');
     }
-    return this.initiativeService.update(id, data, req.user.id, req.user.organizationId);
+    return this.initiativeService.update(id, data, req.user.id, req.user.tenantId);
   }
 
   @Delete(':id')
@@ -122,6 +122,6 @@ export class InitiativeController {
     if (!canDelete) {
       throw new ForbiddenException('You do not have permission to delete this initiative');
     }
-    return this.initiativeService.delete(id, req.user.id, req.user.organizationId);
+    return this.initiativeService.delete(id, req.user.id, req.user.tenantId);
   }
 }

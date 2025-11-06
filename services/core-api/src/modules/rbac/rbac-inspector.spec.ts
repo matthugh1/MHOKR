@@ -22,28 +22,28 @@ describe('RBACInspectorController', () => {
   const mockTenantAdmin = {
     id: 'tenant-admin-id',
     email: 'admin@tenant.com',
-    organizationId: 'tenant-a-id',
+    tenantId: 'tenant-a-id',
     isSuperuser: false,
   };
 
   const mockWorkspaceLead = {
     id: 'workspace-lead-id',
     email: 'lead@tenant.com',
-    organizationId: 'tenant-a-id',
+    tenantId: 'tenant-a-id',
     isSuperuser: false,
   };
 
   const mockTargetUser = {
     id: 'target-user-id',
     email: 'target@tenant.com',
-    organizationId: 'tenant-a-id',
+    tenantId: 'tenant-a-id',
     settings: { debug: { rbacInspectorEnabled: false } },
   };
 
   const mockTargetUserCrossTenant = {
     id: 'target-user-b-id',
     email: 'target@tenantb.com',
-    organizationId: 'tenant-b-id',
+    tenantId: 'tenant-b-id',
     settings: { debug: { rbacInspectorEnabled: false } },
   };
 

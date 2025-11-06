@@ -73,8 +73,8 @@ export function DecisionViewer({ decision }: DecisionViewerProps) {
           <h4 className="text-sm font-semibold mb-2">User Roles</h4>
           <div className="flex flex-wrap gap-2">
             {decision.details.userRoles.length > 0 ? (
-              decision.details.userRoles.map((role) => (
-                <Badge key={role} variant="secondary">
+              Array.from(new Set(decision.details.userRoles)).map((role, index) => (
+                <Badge key={`${role}-${index}`} variant="secondary">
                   {role}
                 </Badge>
               ))

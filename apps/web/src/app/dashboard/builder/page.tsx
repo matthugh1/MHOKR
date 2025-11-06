@@ -68,7 +68,7 @@ export default function BuilderPage() {
     status: string
     startDate: string
     endDate: string
-    organizationId: string
+    tenantId: string
   }>>([])
 
   // Auto-save positions - Temporarily disabled until endpoint is verified
@@ -295,7 +295,7 @@ export default function BuilderPage() {
   const loadOKRs = async () => {
     try {
       // Build query params with organizationId if available
-      const queryParams = currentOrganization?.id ? `?organizationId=${currentOrganization.id}` : ''
+      const queryParams = currentOrganization?.id ? `?tenantId=${currentOrganization.id}` : ''
       
       // Load objectives, key results, initiatives, and user layout
       const [objectivesRes, , initiativesRes, userLayoutRes] = await Promise.all([
@@ -327,7 +327,7 @@ export default function BuilderPage() {
         const objectiveForPerms = {
           id: obj.id,
           ownerId: obj.ownerId,
-          organizationId: obj.organizationId,
+          tenantId: obj.tenantId,
           workspaceId: obj.workspaceId,
           teamId: obj.teamId,
           isPublished: obj.isPublished || false,
@@ -369,7 +369,7 @@ export default function BuilderPage() {
             ownerId: obj.ownerId,
             ownerName: obj.owner?.name,
             parentId: obj.parentId,
-            organizationId: obj.organizationId,
+            tenantId: obj.tenantId,
             workspaceId: obj.workspaceId,
             teamId: obj.teamId,
             period: obj.period,
@@ -413,7 +413,7 @@ export default function BuilderPage() {
             const krForPerms = {
               id: kr.id,
               ownerId: kr.ownerId || obj.ownerId,
-              organizationId: obj.organizationId,
+              tenantId: obj.tenantId,
               workspaceId: obj.workspaceId,
               teamId: obj.teamId,
               parentObjective: objectiveForPerms,
@@ -440,7 +440,7 @@ export default function BuilderPage() {
                 canEdit: canEditKR,
                 canView: canViewKR,
                 ownerId: kr.ownerId || obj.ownerId,
-                organizationId: obj.organizationId,
+                tenantId: obj.tenantId,
                 workspaceId: obj.workspaceId,
                 teamId: obj.teamId,
                 parentObjective: objectiveForPerms,
@@ -543,7 +543,7 @@ export default function BuilderPage() {
       okrId: data.okrId || '',
       ownerId: data.ownerId || user?.id || '',
       ownerName: data.ownerName || fallbackOwnerName,
-      organizationId: data.organizationId || defaultOKRContext.organizationId || '',
+      tenantId: data.tenantId || defaultOKRContext.tenantId || '',
       workspaceId: data.workspaceId || defaultOKRContext.workspaceId || '',
       teamId: data.teamId || defaultOKRContext.teamId || '',
       parentId: data.parentId || '',
@@ -613,7 +613,7 @@ export default function BuilderPage() {
             title: updatedData.label,
             description: updatedData.description,
             ownerId: updatedData.ownerId,
-            organizationId: updatedData.organizationId && updatedData.organizationId !== '' ? updatedData.organizationId : null,
+            tenantId: updatedData.tenantId && updatedData.tenantId !== '' ? updatedData.tenantId : null,
             workspaceId: updatedData.workspaceId && updatedData.workspaceId !== '' ? updatedData.workspaceId : null,
             teamId: updatedData.teamId && updatedData.teamId !== '' ? updatedData.teamId : null,
             parentId: updatedData.parentId && updatedData.parentId !== '' ? updatedData.parentId : null,
@@ -660,7 +660,7 @@ export default function BuilderPage() {
           const res = await api.post('/objectives', {
             title: updatedData.label,
             description: updatedData.description,
-            organizationId: (updatedData.organizationId && updatedData.organizationId !== '') ? updatedData.organizationId : (defaultOKRContext.organizationId || null),
+            tenantId: (updatedData.tenantId && updatedData.tenantId !== '') ? updatedData.tenantId : (defaultOKRContext.tenantId || null),
             workspaceId: (updatedData.workspaceId && updatedData.workspaceId !== '') ? updatedData.workspaceId : (defaultOKRContext.workspaceId || null),
             teamId: (updatedData.teamId && updatedData.teamId !== '') ? updatedData.teamId : (defaultOKRContext.teamId || null),
             ownerId: updatedData.ownerId || defaultOKRContext.ownerId,
@@ -1322,7 +1322,7 @@ export default function BuilderPage() {
               return tenantPermissions.canEditObjective({
                 id: editingFormData.okrId as string || '',
                 ownerId: editingFormData.ownerId as string || '',
-                organizationId: editingFormData.organizationId as string | null || null,
+                tenantId: editingFormData.tenantId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
                 isPublished: editingFormData.isPublished as boolean || false,
@@ -1333,13 +1333,13 @@ export default function BuilderPage() {
               return tenantPermissions.canEditKeyResult({
                 id: editingFormData.okrId as string || '',
                 ownerId: editingFormData.ownerId as string || '',
-                organizationId: editingFormData.organizationId as string | null || null,
+                tenantId: editingFormData.tenantId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
                 parentObjective: editingFormData.parentObjective && typeof editingFormData.parentObjective === 'object' && 'id' in editingFormData.parentObjective
                   ? {
                       id: (editingFormData.parentObjective as any).id as string,
-                      organizationId: (editingFormData.parentObjective as any).organizationId as string | null | undefined,
+                      tenantId: (editingFormData.parentObjective as any).tenantId as string | null | undefined,
                       isPublished: (editingFormData.parentObjective as any).isPublished as boolean | undefined,
                       cycle: (editingFormData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
                       cycleStatus: (editingFormData.parentObjective as any).cycleStatus as string | null | undefined,
@@ -1355,7 +1355,7 @@ export default function BuilderPage() {
               return tenantPermissions.canDeleteObjective({
                 id: editingFormData.okrId as string || '',
                 ownerId: editingFormData.ownerId as string || '',
-                organizationId: editingFormData.organizationId as string | null || null,
+                tenantId: editingFormData.tenantId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
                 isPublished: editingFormData.isPublished as boolean || false,
@@ -1367,7 +1367,7 @@ export default function BuilderPage() {
               return tenantPermissions.canDeleteObjective({
                 id: (editingFormData.parentObjective as Record<string, unknown>)?.id as string || '',
                 ownerId: editingFormData.ownerId as string || '',
-                organizationId: editingFormData.organizationId as string | null || null,
+                tenantId: editingFormData.tenantId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
                 isPublished: (editingFormData.parentObjective as Record<string, unknown>)?.isPublished as boolean || false,
@@ -1383,7 +1383,7 @@ export default function BuilderPage() {
               const lockInfo = tenantPermissions.getLockInfoForObjective({
                 id: editingFormData.okrId as string || '',
                 ownerId: editingFormData.ownerId as string || '',
-                organizationId: editingFormData.organizationId as string | null || null,
+                tenantId: editingFormData.tenantId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
                 isPublished: editingFormData.isPublished as boolean || false,
@@ -1395,13 +1395,13 @@ export default function BuilderPage() {
               const lockInfo = tenantPermissions.getLockInfoForKeyResult({
                 id: editingFormData.okrId as string || '',
                 ownerId: editingFormData.ownerId as string || '',
-                organizationId: editingFormData.organizationId as string | null || null,
+                tenantId: editingFormData.tenantId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
                 parentObjective: editingFormData.parentObjective && typeof editingFormData.parentObjective === 'object' && 'id' in editingFormData.parentObjective
                   ? {
                       id: (editingFormData.parentObjective as any).id as string,
-                      organizationId: (editingFormData.parentObjective as any).organizationId as string | null | undefined,
+                      tenantId: (editingFormData.parentObjective as any).tenantId as string | null | undefined,
                       isPublished: (editingFormData.parentObjective as any).isPublished as boolean | undefined,
                       cycle: (editingFormData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
                       cycleStatus: (editingFormData.parentObjective as any).cycleStatus as string | null | undefined,
@@ -1466,7 +1466,7 @@ function _EditNodeForm({
     okrId: data.okrId || '', // CRITICAL: Must preserve okrId to distinguish update vs create
     ownerId: data.ownerId || user?.id || '',
     ownerName: data.ownerName || fallbackOwnerName,
-    organizationId: data.organizationId || defaultOKRContext.organizationId || '',
+    tenantId: data.tenantId || defaultOKRContext.tenantId || '',
     workspaceId: data.workspaceId || defaultOKRContext.workspaceId || '',
     teamId: data.teamId || defaultOKRContext.teamId || '',
     parentId: data.parentId || '',
@@ -1514,7 +1514,7 @@ function _EditNodeForm({
   useEffect(() => {
     const loadObjectives = async () => {
       try {
-        const queryParams = currentOrganization?.id ? `?organizationId=${currentOrganization.id}` : ''
+        const queryParams = currentOrganization?.id ? `?tenantId=${currentOrganization.id}` : ''
         const response = await api.get(`/objectives${queryParams}`)
         setAvailableObjectives(response.data)
       } catch (error) {
@@ -1539,8 +1539,8 @@ function _EditNodeForm({
   }, [])
 
   const getContextDisplay = () => {
-    if (formData.organizationId && !formData.workspaceId && !formData.teamId) {
-      const org = organizations.find(o => o.id === formData.organizationId)
+    if (formData.tenantId && !formData.workspaceId && !formData.teamId) {
+      const org = organizations.find(o => o.id === formData.tenantId)
       return `🏢 ${org?.name || 'Organization'}`
     }
     if (formData.workspaceId && !formData.teamId) {
@@ -1693,7 +1693,7 @@ function _EditNodeForm({
                     {/* Personal */}
                     <button
                       onClick={() => {
-                        setFormData({ ...formData, organizationId: '', workspaceId: '', teamId: '' })
+                        setFormData({ ...formData, tenantId: '', workspaceId: '', teamId: '' })
                         setShowContextDropdown(false)
                       }}
                       className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
@@ -1709,7 +1709,7 @@ function _EditNodeForm({
                         <button
                           key={org.id}
                           onClick={() => {
-                            setFormData({ ...formData, organizationId: org.id, workspaceId: '', teamId: '' })
+                            setFormData({ ...formData, tenantId: org.id, workspaceId: '', teamId: '' })
                             setShowContextDropdown(false)
                           }}
                           className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
@@ -1726,7 +1726,7 @@ function _EditNodeForm({
                         <button
                           key={ws.id}
                           onClick={() => {
-                            setFormData({ ...formData, organizationId: '', workspaceId: ws.id, teamId: '' })
+                            setFormData({ ...formData, tenantId: '', workspaceId: ws.id, teamId: '' })
                             setShowContextDropdown(false)
                           }}
                           className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
@@ -1743,7 +1743,7 @@ function _EditNodeForm({
                         <button
                           key={team.id}
                           onClick={() => {
-                            setFormData({ ...formData, organizationId: '', workspaceId: '', teamId: team.id })
+                            setFormData({ ...formData, tenantId: '', workspaceId: '', teamId: team.id })
                             setShowContextDropdown(false)
                           }}
                           className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"

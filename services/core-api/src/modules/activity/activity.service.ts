@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { EntityType } from '@prisma/client';
 
@@ -24,13 +24,20 @@ export class ActivityService {
     entityType: EntityType;
     entityId: string;
     userId: string;
+    tenantId: string; // Required - tenant scoping
     action: string;
     metadata?: any;
   }) {
+    // Validate tenantId is provided
+    if (!data.tenantId) {
+      throw new BadRequestException('tenantId is required when creating activity');
+    }
+
     return this.prisma.activity.create({
       data: {
         ...data,
         action: data.action as any,
+        tenantId: data.tenantId, // Explicitly set tenantId
       },
     });
   }
@@ -56,30 +63,31 @@ export class ActivityService {
     actionFilter?: string,
     userIdFilter?: string,
   ) {
-    // First verify the objective exists and get its organizationId for tenant isolation
+    // First verify the objective exists and get its tenantId for tenant isolation
     const objective = await this.prisma.objective.findUnique({
       where: { id: objectiveId },
-      select: { organizationId: true },
+      select: { tenantId: true },
     });
 
-    if (!objective) {
+    if (!objective || !objective.tenantId) {
       return [];
     }
 
     // Tenant isolation check
     if (userOrganizationId === null) {
       // Superuser: can view all
-    } else if (userOrganizationId && objective.organizationId === userOrganizationId) {
+    } else if (userOrganizationId && objective.tenantId === userOrganizationId) {
       // Normal user: must match org
     } else {
       // No access or org mismatch
       return [];
     }
 
-    // Build where clause with filters
+    // Build where clause with filters - NOW USE DIRECT tenantId
     const where: any = {
       entityType: 'OBJECTIVE',
       entityId: objectiveId,
+      tenantId: objective.tenantId, // ADD THIS - direct tenant filter
     };
 
     if (actionFilter) {
@@ -125,41 +133,31 @@ export class ActivityService {
     actionFilter?: string,
     userIdFilter?: string,
   ) {
-    // First verify the key result exists and get its parent objective's organizationId
+    // Get key result with tenantId directly
     const keyResult = await this.prisma.keyResult.findUnique({
       where: { id: keyResultId },
-      select: {
-        objectives: {
-          select: {
-            objective: {
-              select: { organizationId: true },
-            },
-          },
-          take: 1,
-        },
-      },
+      select: { tenantId: true },
     });
 
-    if (!keyResult || keyResult.objectives.length === 0) {
+    if (!keyResult || !keyResult.tenantId) {
       return [];
     }
-
-    const objectiveOrgId = keyResult.objectives[0].objective.organizationId;
 
     // Tenant isolation check
     if (userOrganizationId === null) {
       // Superuser: can view all
-    } else if (userOrganizationId && objectiveOrgId === userOrganizationId) {
+    } else if (userOrganizationId && keyResult.tenantId === userOrganizationId) {
       // Normal user: must match org
     } else {
       // No access or org mismatch
       return [];
     }
 
-    // Build where clause with filters
+    // Build where clause - USE DIRECT tenantId
     const where: any = {
       entityType: 'KEY_RESULT',
       entityId: keyResultId,
+      tenantId: keyResult.tenantId, // ADD THIS - direct tenant filter
     };
 
     if (actionFilter) {
@@ -211,11 +209,10 @@ export class ActivityService {
       return [];
     }
 
-    // Build tenant isolation filter for objectives/KRs
-    const objectiveWhere: any = {};
+    // Build tenant filter for activities
+    const activityWhere: any = {};
     if (userOrganizationId !== null) {
-      // Normal user: only their org
-      objectiveWhere.organizationId = userOrganizationId;
+      activityWhere.tenantId = userOrganizationId; // ADD THIS - direct tenant filter
     }
     // Superuser (null): no filter, see all orgs
 
@@ -223,36 +220,26 @@ export class ActivityService {
     const ownedObjectives = await this.prisma.objective.findMany({
       where: {
         ownerId: userId,
-        ...(userOrganizationId !== null ? { organizationId: userOrganizationId } : {}),
+        ...(userOrganizationId !== null ? { tenantId: userOrganizationId } : {}),
       },
-      select: {
-        id: true,
-      },
+      select: { id: true },
     });
     const ownedObjectiveIds = ownedObjectives.map((o) => o.id);
 
-    // Get Key Results owned by user in scope (via parent objectives)
+    // Get Key Results owned by user in scope
     const ownedKeyResults = await this.prisma.keyResult.findMany({
       where: {
         ownerId: userId,
-        objectives: {
-          some: {
-            objective: objectiveWhere,
-          },
-        },
+        ...(userOrganizationId !== null ? { tenantId: userOrganizationId } : {}), // Use direct tenantId
       },
-      select: {
-        id: true,
-      },
+      select: { id: true },
     });
     const ownedKeyResultIds = ownedKeyResults.map((kr) => kr.id);
 
-    // Query activities where:
-    // - userId matches (user performed the action), OR
-    // - entityId is in ownedObjectiveIds and entityType is OBJECTIVE, OR
-    // - entityId is in ownedKeyResultIds and entityType is KEY_RESULT
+    // Query activities with tenant filter
     const activities = await this.prisma.activity.findMany({
       where: {
+        ...activityWhere, // ADD THIS - tenant filter
         OR: [
           { userId: userId },
           {
@@ -265,9 +252,7 @@ export class ActivityService {
           },
         ],
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
       take: 20,
     });
 

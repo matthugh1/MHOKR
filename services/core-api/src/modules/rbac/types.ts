@@ -6,6 +6,22 @@
  */
 
 // ============================================================================
+// TYPE ALIASES FOR TENANT CANONICALISATION
+// ============================================================================
+
+/**
+ * OrganizationId type is deprecated - use TenantId instead
+ * 
+ * @deprecated Use TenantId instead. This type is set to never to force compile-time errors.
+ */
+export type OrganizationId = never;
+
+/**
+ * Tenant ID - canonical identifier for tenants
+ */
+export type TenantId = string;
+
+// ============================================================================
 // ENUMS
 // ============================================================================
 
@@ -150,8 +166,7 @@ export interface RoleAssignment {
 export interface OKREntity {
   id: string;
   ownerId: string; // User who owns this OKR
-  organizationId: string;  // Standardized organization ID (primary field)
-  tenantId: string;  // Deprecated: kept for backward compatibility, maps to organizationId
+  tenantId: string; // Tenant ID (canonical identifier)
   workspaceId?: string | null;
   teamId?: string | null;
   visibilityLevel: VisibilityLevel;

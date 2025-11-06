@@ -35,12 +35,12 @@ export class OkrCycleService {
    * Get all cycles for a tenant, ordered by startDate DESC
    * Returns both standard and custom cycles
    */
-  async findAll(organizationId: string): Promise<any[]> {
-    OkrTenantGuard.assertCanMutateTenant(organizationId);
+  async findAll(tenantId: string): Promise<any[]> {
+    OkrTenantGuard.assertCanMutateTenant(tenantId);
 
     return this.prisma.cycle.findMany({
       where: {
-        organizationId,
+        tenantId,
       },
       orderBy: {
         startDate: 'desc',
@@ -51,8 +51,8 @@ export class OkrCycleService {
   /**
    * Get a single cycle by ID
    */
-  async findById(id: string, organizationId: string): Promise<any> {
-    OkrTenantGuard.assertCanMutateTenant(organizationId);
+  async findById(id: string, tenantId: string): Promise<any> {
+    OkrTenantGuard.assertCanMutateTenant(tenantId);
 
     const cycle = await this.prisma.cycle.findUnique({
       where: { id },
@@ -72,7 +72,7 @@ export class OkrCycleService {
     }
 
     // Ensure cycle belongs to the same tenant
-    if (cycle.organizationId !== organizationId) {
+    if (cycle.tenantId !== tenantId) {
       throw new ForbiddenException('Cycle does not belong to your organization');
     }
 
@@ -82,8 +82,8 @@ export class OkrCycleService {
   /**
    * Create a new cycle
    */
-  async create(data: CreateCycleDto, organizationId: string): Promise<any> {
-    OkrTenantGuard.assertCanMutateTenant(organizationId);
+  async create(data: CreateCycleDto, tenantId: string): Promise<any> {
+    OkrTenantGuard.assertCanMutateTenant(tenantId);
 
     // Validate dates
     const startDate = typeof data.startDate === 'string' ? new Date(data.startDate) : data.startDate;
@@ -102,12 +102,12 @@ export class OkrCycleService {
     }
 
     // Check for overlapping cycles
-    await this.validateNoOverlap(organizationId, startDate, endDate, null);
+    await this.validateNoOverlap(tenantId, startDate, endDate, null);
 
     // Create cycle (mark as custom since it's manually created)
     return this.prisma.cycle.create({
       data: {
-        organizationId,
+        tenantId,
         name: data.name,
         startDate,
         endDate,
@@ -123,12 +123,12 @@ export class OkrCycleService {
   async update(
     id: string,
     data: UpdateCycleDto,
-    organizationId: string,
+    tenantId: string,
   ): Promise<any> {
-    OkrTenantGuard.assertCanMutateTenant(organizationId);
+    OkrTenantGuard.assertCanMutateTenant(tenantId);
 
     // Fetch existing cycle
-    const cycle = await this.findById(id, organizationId);
+    const cycle = await this.findById(id, tenantId);
 
     // Prepare update data
     const updateData: any = {};
@@ -155,7 +155,7 @@ export class OkrCycleService {
 
     // Check for overlapping cycles (excluding current cycle)
     if (updateData.startDate || updateData.endDate) {
-      await this.validateNoOverlap(organizationId, startDate, endDate, id);
+      await this.validateNoOverlap(tenantId, startDate, endDate, id);
     }
 
     // Update cycle
@@ -171,11 +171,11 @@ export class OkrCycleService {
   async updateStatus(
     id: string,
     status: 'DRAFT' | 'ACTIVE' | 'LOCKED' | 'ARCHIVED',
-    organizationId: string,
+    tenantId: string,
   ): Promise<any> {
-    OkrTenantGuard.assertCanMutateTenant(organizationId);
+    OkrTenantGuard.assertCanMutateTenant(tenantId);
 
-    const cycle = await this.findById(id, organizationId);
+    const cycle = await this.findById(id, tenantId);
     this.validateStatusTransition(cycle.status, status);
 
     return this.prisma.cycle.update({
@@ -187,11 +187,11 @@ export class OkrCycleService {
   /**
    * Delete a cycle (only if no linked OKRs)
    */
-  async delete(id: string, organizationId: string): Promise<void> {
-    OkrTenantGuard.assertCanMutateTenant(organizationId);
+  async delete(id: string, tenantId: string): Promise<void> {
+    OkrTenantGuard.assertCanMutateTenant(tenantId);
 
     // Validate cycle exists and belongs to organization
-    await this.findById(id, organizationId);
+    await this.findById(id, tenantId);
 
     // Check for linked objectives
     const objectiveCount = await this.prisma.objective.count({
@@ -213,11 +213,11 @@ export class OkrCycleService {
   /**
    * Get cycle summary (objectives count, published count, etc.)
    */
-  async getSummary(id: string, organizationId: string): Promise<CycleSummaryDto> {
-    OkrTenantGuard.assertCanMutateTenant(organizationId);
+  async getSummary(id: string, tenantId: string): Promise<CycleSummaryDto> {
+    OkrTenantGuard.assertCanMutateTenant(tenantId);
 
     // Validate cycle exists and belongs to organization
-    await this.findById(id, organizationId);
+    await this.findById(id, tenantId);
 
     const objectivesCount = await this.prisma.objective.count({
       where: { cycleId: id },
@@ -244,13 +244,13 @@ export class OkrCycleService {
    * Validate no overlapping cycles (excluding a specific cycle ID)
    */
   private async validateNoOverlap(
-    organizationId: string,
+    tenantId: string,
     startDate: Date,
     endDate: Date,
     excludeCycleId: string | null,
   ): Promise<void> {
     const where: any = {
-      organizationId,
+      tenantId,
       OR: [
         // New cycle starts during existing cycle
         {

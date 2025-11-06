@@ -222,7 +222,7 @@ export default function OKRsPage() {
     status: string
     startDate: string
     endDate: string
-    organizationId: string
+    tenantId: string
   }>>([])
   
   // Objective creation
@@ -495,7 +495,7 @@ export default function OKRsPage() {
     const objectiveForHook = okr.objectiveForHook || {
       id: okr.id,
       ownerId: okr.ownerId,
-      organizationId: okr.organizationId,
+      tenantId: okr.tenantId,
       workspaceId: okr.workspaceId,
       teamId: okr.teamId,
       isPublished: okr.isPublished,
@@ -523,7 +523,7 @@ export default function OKRsPage() {
         objectiveId: okr.id,
         isPublished: okr.isPublished,
         visibilityLevel: okr.visibilityLevel,
-        organizationId: okr.organizationId,
+        tenantId: okr.tenantId,
         lockInfo
       })
       return
@@ -617,7 +617,7 @@ export default function OKRsPage() {
     const objectiveForHook = okr.objectiveForHook || {
       id: okr.id,
       ownerId: okr.ownerId,
-      organizationId: okr.organizationId,
+      tenantId: okr.tenantId,
       workspaceId: okr.workspaceId,
       teamId: okr.teamId,
       isPublished: okr.isPublished,
@@ -1319,8 +1319,8 @@ export default function OKRsPage() {
                   // If keyResultId is provided, the backend will auto-set objectiveId from the KR's objective
                   objectiveId: initiativeParentKeyResultId ? undefined : (initiativeParentObjectiveId ?? undefined),
                   keyResultId: initiativeParentKeyResultId ?? undefined,
-                  // Include organizationId so RBAC guard can extract tenantId
-                  organizationId: currentOrganization?.id,
+                  // Include tenantId so RBAC guard can extract tenantId
+                  tenantId: currentOrganization?.id,
                 }
                 
                 // Convert dueDate from YYYY-MM-DD to ISO-8601 DateTime format if provided

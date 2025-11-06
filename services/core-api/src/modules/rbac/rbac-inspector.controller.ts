@@ -45,7 +45,7 @@ export class RBACInspectorController {
   ) {
     // Allow self-toggle only if caller has manage_users permission
     if (dto.userId === req.user.id) {
-      const canManage = await this.inspectorService.canManageUsers(req.user.id, req.user.organizationId);
+      const canManage = await this.inspectorService.canManageUsers(req.user.id, req.user.tenantId);
       if (!canManage) {
         throw new NotFoundException('Permission denied: manage_users required to toggle inspector');
       }
@@ -57,7 +57,7 @@ export class RBACInspectorController {
       throw new NotFoundException('User not found');
     }
 
-    if (req.user.organizationId && targetUserTenantId !== req.user.organizationId) {
+    if (req.user.tenantId && targetUserTenantId !== req.user.tenantId) {
       throw new NotFoundException('User not found in specified tenant');
     }
 

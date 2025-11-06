@@ -24,7 +24,7 @@ import { ActivityModule } from '../activity/activity.module';
 import { AuditModule } from '../audit/audit.module';
 
 @Module({
-  imports: [RBACModule, forwardRef(() => ActivityModule), AuditModule],
+  imports: [forwardRef(() => RBACModule), forwardRef(() => ActivityModule), AuditModule],
   controllers: [ObjectiveController, KeyResultController, InitiativeController, MeController, OkrReportingController, OkrOverviewController, CheckInRequestController, OkrInsightsController, OkrCycleController],
   providers: [ObjectiveService, KeyResultService, InitiativeService, OkrProgressService, OkrGovernanceService, OkrReportingService, OkrVisibilityService, OkrInsightsService, CheckInRequestService, OkrCycleService, CycleGeneratorService],
   exports: [ObjectiveService, KeyResultService, InitiativeService, OkrProgressService, OkrGovernanceService, OkrReportingService, OkrVisibilityService, OkrInsightsService, CheckInRequestService, OkrCycleService, CycleGeneratorService],

@@ -176,7 +176,7 @@ export class SuperuserService {
    */
   async addUserToOrganization(
     userId: string,
-    organizationId: string,
+    tenantId: string,
     role: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER' = 'MEMBER',
   ) {
     // Verify user exists
@@ -190,11 +190,11 @@ export class SuperuserService {
 
     // Verify organization exists
     const organization = await this.prisma.organization.findUnique({
-      where: { id: organizationId },
+      where: { id: tenantId },
     });
 
     if (!organization) {
-      throw new NotFoundException(`Organization with ID ${organizationId} not found`);
+      throw new NotFoundException(`Organization with ID ${tenantId} not found`);
     }
 
     // Map legacy role to RBAC role
@@ -205,15 +205,15 @@ export class SuperuserService {
       userId,
       rbacRole,
       'TENANT',
-      organizationId,
+      tenantId,
       userId, // Superuser is the actor
-      organizationId,
+      tenantId,
     );
 
     // Return format compatible with legacy API
     return {
       userId,
-      organizationId,
+      tenantId,
       role,
       user: {
         id: user.id,
@@ -231,13 +231,13 @@ export class SuperuserService {
   /**
    * Remove user from organization (superuser only) - Phase 4: RBAC only
    */
-  async removeUserFromOrganization(userId: string, organizationId: string) {
+  async removeUserFromOrganization(userId: string, tenantId: string) {
     // Check if user has role assignments (Phase 4: RBAC only)
     const roleAssignments = await this.prisma.roleAssignment.findMany({
       where: {
         userId,
         scopeType: 'TENANT',
-        scopeId: organizationId,
+        scopeId: tenantId,
       },
     });
 
@@ -251,9 +251,9 @@ export class SuperuserService {
         userId,
         assignment.role as Role,
         'TENANT',
-        organizationId,
+        tenantId,
         userId, // Superuser is the actor
-        organizationId,
+        tenantId,
       );
     }
 

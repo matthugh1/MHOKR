@@ -52,8 +52,8 @@ describe('OkrCycleService', () => {
     it('should return all cycles for organization ordered by startDate DESC', async () => {
       const orgId = 'org-1';
       const mockCycles = [
-        { id: 'cycle-1', name: 'Q1 2026', startDate: new Date('2026-01-01'), endDate: new Date('2026-03-31'), status: 'DRAFT', organizationId: orgId },
-        { id: 'cycle-2', name: 'Q4 2025', startDate: new Date('2025-10-01'), endDate: new Date('2025-12-31'), status: 'ACTIVE', organizationId: orgId },
+        { id: 'cycle-1', name: 'Q1 2026', startDate: new Date('2026-01-01'), endDate: new Date('2026-03-31'), status: 'DRAFT', tenantId: orgId },
+        { id: 'cycle-2', name: 'Q4 2025', startDate: new Date('2025-10-01'), endDate: new Date('2025-12-31'), status: 'ACTIVE', tenantId: orgId },
       ];
 
       mockPrismaService.cycle.findMany.mockResolvedValue(mockCycles);
@@ -62,7 +62,7 @@ describe('OkrCycleService', () => {
 
       expect(result).toEqual(mockCycles);
       expect(mockPrismaService.cycle.findMany).toHaveBeenCalledWith({
-        where: { organizationId: orgId },
+        where: { tenantId: orgId },
         orderBy: { startDate: 'desc' },
       });
     });
@@ -75,7 +75,7 @@ describe('OkrCycleService', () => {
       const mockCycle = {
         id: cycleId,
         name: 'Q1 2026',
-        organizationId: orgId,
+        tenantId: orgId,
         _count: { objectives: 5, keyResults: 10, initiatives: 2 },
       };
 
@@ -107,7 +107,7 @@ describe('OkrCycleService', () => {
     it('should throw ForbiddenException if cycle belongs to different organization', async () => {
       const mockCycle = {
         id: 'cycle-1',
-        organizationId: 'org-other',
+        tenantId: 'org-other',
       };
 
       mockPrismaService.cycle.findUnique.mockResolvedValue(mockCycle);
@@ -129,7 +129,7 @@ describe('OkrCycleService', () => {
       const mockCycle = {
         id: 'cycle-1',
         ...validCycleData,
-        organizationId: orgId,
+        tenantId: orgId,
         startDate: new Date(validCycleData.startDate),
         endDate: new Date(validCycleData.endDate),
       };
@@ -184,7 +184,7 @@ describe('OkrCycleService', () => {
       startDate: new Date('2026-01-01'),
       endDate: new Date('2026-03-31'),
       status: 'DRAFT' as const,
-      organizationId: orgId,
+      tenantId: orgId,
     };
 
     beforeEach(() => {
@@ -236,7 +236,7 @@ describe('OkrCycleService', () => {
       const cycle = {
         id: cycleId,
         status: 'DRAFT' as const,
-        organizationId: orgId,
+        tenantId: orgId,
       };
 
       mockPrismaService.cycle.findUnique.mockResolvedValue(cycle);
@@ -251,7 +251,7 @@ describe('OkrCycleService', () => {
       const cycle = {
         id: cycleId,
         status: 'DRAFT' as const,
-        organizationId: orgId,
+        tenantId: orgId,
       };
 
       mockPrismaService.cycle.findUnique.mockResolvedValue(cycle);
@@ -267,7 +267,7 @@ describe('OkrCycleService', () => {
     it('should delete cycle when no objectives are linked', async () => {
       const cycle = {
         id: cycleId,
-        organizationId: orgId,
+        tenantId: orgId,
       };
 
       mockPrismaService.cycle.findUnique.mockResolvedValue(cycle);
@@ -284,7 +284,7 @@ describe('OkrCycleService', () => {
     it('should throw BadRequestException when objectives are linked', async () => {
       const cycle = {
         id: cycleId,
-        organizationId: orgId,
+        tenantId: orgId,
       };
 
       mockPrismaService.cycle.findUnique.mockResolvedValue(cycle);
@@ -302,7 +302,7 @@ describe('OkrCycleService', () => {
     it('should return cycle summary with objectives count', async () => {
       const cycle = {
         id: cycleId,
-        organizationId: orgId,
+        tenantId: orgId,
       };
 
       mockPrismaService.cycle.findUnique.mockResolvedValue(cycle);

@@ -15,7 +15,7 @@ import { Injectable } from '@nestjs/common';
 import { AsyncLocalStorage } from 'async_hooks';
 
 export interface TenantContext {
-  organizationId: string | null | undefined;
+  tenantId: string | null | undefined;
   userId?: string;
 }
 
@@ -26,13 +26,13 @@ export class TenantContextService {
   /**
    * Run a function with tenant context
    * 
-   * @param organizationId - User's organization ID (null for SUPERUSER, string for normal user, undefined for no org)
+   * @param tenantId - User's tenant ID (null for SUPERUSER, string for normal user, undefined for no tenant)
    * @param userId - Optional: User ID for audit logging
    * @param fn - Function to run with tenant context
    * @returns Result of the function
    */
-  run<T>(organizationId: string | null | undefined, fn: () => T, userId?: string): T {
-    return this.context.run({ organizationId, userId }, fn);
+  run<T>(tenantId: string | null | undefined, fn: () => T, userId?: string): T {
+    return this.context.run({ tenantId, userId }, fn);
   }
 
   /**
@@ -45,12 +45,22 @@ export class TenantContextService {
   }
 
   /**
-   * Get current organization ID from context
+   * Get current tenant ID from context
    * 
-   * @returns Current organization ID (null for SUPERUSER, string for normal user, undefined if not set)
+   * @returns Current tenant ID (null for SUPERUSER, string for normal user, undefined if not set)
+   */
+  getTenantId(): string | null | undefined {
+    return this.context.getStore()?.tenantId;
+  }
+
+  /**
+   * Get current organization ID from context (deprecated - use getTenantId)
+   * 
+   * @deprecated Use getTenantId() instead
+   * @returns Current tenant ID (null for SUPERUSER, string for normal user, undefined if not set)
    */
   getOrganizationId(): string | null | undefined {
-    return this.context.getStore()?.organizationId;
+    return this.context.getStore()?.tenantId;
   }
 
   /**
@@ -65,20 +75,20 @@ export class TenantContextService {
   /**
    * Check if current context is SUPERUSER
    * 
-   * @returns true if organizationId is null (SUPERUSER)
+   * @returns true if tenantId is null (SUPERUSER)
    */
   isSuperuser(): boolean {
-    return this.context.getStore()?.organizationId === null;
+    return this.context.getStore()?.tenantId === null;
   }
 
   /**
-   * Check if current context has an organization
+   * Check if current context has a tenant
    * 
-   * @returns true if organizationId is a string (normal user)
+   * @returns true if tenantId is a string (normal user)
    */
-  hasOrganization(): boolean {
-    const orgId = this.context.getStore()?.organizationId;
-    return typeof orgId === 'string' && orgId !== '';
+  hasTenant(): boolean {
+    const tenantId = this.context.getStore()?.tenantId;
+    return typeof tenantId === 'string' && tenantId !== '';
   }
 }
 

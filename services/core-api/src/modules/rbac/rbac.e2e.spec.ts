@@ -90,7 +90,7 @@ describe('RBAC E2E Tests', () => {
     workspaceA = await prisma.workspace.create({
       data: {
         name: 'Engineering',
-        organizationId: tenantA.id,
+        tenantId: tenantA.id,
       },
     });
 
@@ -172,43 +172,43 @@ describe('RBAC E2E Tests', () => {
       id: superuserId, 
       email: superuser.email,
       isSuperuser: true,
-      organizationId: null,
+      tenantId: null,
     });
 
     tenantOwnerToken = jwtService.sign({ 
       id: tenantOwnerId, 
       email: tenantOwner.email,
-      organizationId: tenantA.id,
+      tenantId: tenantA.id,
     });
 
     tenantAdminToken = jwtService.sign({ 
       id: tenantAdminId, 
       email: tenantAdmin.email,
-      organizationId: tenantA.id,
+      tenantId: tenantA.id,
     });
 
     teamLeadToken = jwtService.sign({ 
       id: teamLeadId, 
       email: teamLead.email,
-      organizationId: tenantA.id,
+      tenantId: tenantA.id,
     });
 
     workspaceMemberToken = jwtService.sign({ 
       id: workspaceMemberId, 
       email: workspaceMember.email,
-      organizationId: tenantA.id,
+      tenantId: tenantA.id,
     });
 
     tenantViewerToken = jwtService.sign({ 
       id: tenantViewerId, 
       email: tenantViewer.email,
-      organizationId: tenantA.id,
+      tenantId: tenantA.id,
     });
 
     crossTenantUserToken = jwtService.sign({ 
       id: crossTenantUserId, 
       email: crossTenantUser.email,
-      organizationId: tenantB.id,
+      tenantId: tenantB.id,
     });
   });
 
@@ -376,7 +376,7 @@ describe('RBAC E2E Tests', () => {
       const publishedOkr = await prisma.objective.create({
         data: {
           title: 'Published Team OKR',
-          organizationId: tenantA.id,
+          tenantId: tenantA.id,
           teamId: teamA.id,
           ownerId: teamLeadId,
           visibilityLevel: 'PUBLIC_TENANT',
@@ -391,7 +391,7 @@ describe('RBAC E2E Tests', () => {
       const draftOkr = await prisma.objective.create({
         data: {
           title: 'Draft Team OKR',
-          organizationId: tenantA.id,
+          tenantId: tenantA.id,
           teamId: teamA.id,
           ownerId: teamLeadId,
           visibilityLevel: 'PUBLIC_TENANT',
@@ -517,7 +517,7 @@ describe('RBAC E2E Tests', () => {
       const privateOkr = await prisma.objective.create({
         data: {
           title: 'Confidential M&A OKR',
-          organizationId: tenantA.id,
+          tenantId: tenantA.id,
           ownerId: tenantOwnerId,
           visibilityLevel: 'PRIVATE',
           isPublished: true,
@@ -612,7 +612,7 @@ describe('RBAC E2E Tests', () => {
       const otherPrivateOkr = await prisma.objective.create({
         data: {
           title: 'Another Private OKR',
-          organizationId: tenantA.id,
+          tenantId: tenantA.id,
           ownerId: teamLeadId,
           visibilityLevel: 'PRIVATE',
           isPublished: true,
@@ -703,7 +703,7 @@ describe('RBAC E2E Tests', () => {
       const tenantBOkr = await prisma.objective.create({
         data: {
           title: 'Tenant B OKR',
-          organizationId: tenantB.id,
+          tenantId: tenantB.id,
           ownerId: crossTenantUserId,
           visibilityLevel: 'PUBLIC_TENANT',
           isPublished: true,

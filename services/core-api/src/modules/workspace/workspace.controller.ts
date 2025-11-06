@@ -14,9 +14,9 @@ export class WorkspaceController {
   @Get()
   @RequireAction('manage_workspaces')
   @ApiOperation({ summary: 'Get all workspaces for user or organization (tenant-isolated)' })
-  async getAll(@Query('organizationId') organizationId?: string, @Req() req?: any) {
-    if (organizationId) {
-      return this.workspaceService.findAll(req.user.organizationId, organizationId);
+  async getAll(@Query('tenantId') tenantId?: string, @Req() req?: any) {
+    if (tenantId) {
+      return this.workspaceService.findAll(req.user.tenantId, tenantId);
     }
     // Return workspaces the user has access to
     return this.workspaceService.findByUserId(req.user.id);
@@ -32,28 +32,28 @@ export class WorkspaceController {
   @RequireAction('manage_workspaces')
   @ApiOperation({ summary: 'Get workspace by ID (tenant-isolated)' })
   async getById(@Param('id') id: string, @Req() req: any) {
-    return this.workspaceService.findById(id, req.user.organizationId);
+    return this.workspaceService.findById(id, req.user.tenantId);
   }
 
   @Post()
   @RequireAction('manage_workspaces')
   @ApiOperation({ summary: 'Create workspace (supports hierarchy with parentWorkspaceId)' })
-  async create(@Body() data: { name: string; organizationId: string; parentWorkspaceId?: string }, @Req() req: any) {
-    return this.workspaceService.create(data, req.user.organizationId, req.user.id);
+  async create(@Body() data: { name: string; tenantId: string; parentWorkspaceId?: string }, @Req() req: any) {
+    return this.workspaceService.create(data, req.user.tenantId, req.user.id);
   }
 
   @Patch(':id')
   @RequireAction('manage_workspaces')
   @ApiOperation({ summary: 'Update workspace (supports changing parent workspace)' })
   async update(@Param('id') id: string, @Body() data: { name?: string; parentWorkspaceId?: string | null }, @Req() req: any) {
-    return this.workspaceService.update(id, data, req.user.organizationId, req.user.id);
+    return this.workspaceService.update(id, data, req.user.tenantId, req.user.id);
   }
 
   @Delete(':id')
   @RequireAction('manage_workspaces')
   @ApiOperation({ summary: 'Delete workspace' })
   async delete(@Param('id') id: string, @Req() req: any) {
-    return this.workspaceService.delete(id, req.user.organizationId, req.user.id);
+    return this.workspaceService.delete(id, req.user.tenantId, req.user.id);
   }
 
   @Get(':id/members')
@@ -61,7 +61,7 @@ export class WorkspaceController {
   @ApiOperation({ summary: 'Get all members of workspace (tenant-isolated)' })
   async getMembers(@Param('id') id: string, @Req() req: any) {
     // Tenant isolation: verify workspace belongs to caller's tenant
-    await this.workspaceService.findById(id, req.user.organizationId);
+    await this.workspaceService.findById(id, req.user.tenantId);
     return this.workspaceService.getMembers(id);
   }
 
@@ -73,7 +73,7 @@ export class WorkspaceController {
     @Body() data: { userId: string; role?: 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER' },
     @Req() req: any,
   ) {
-    return this.workspaceService.addMember(workspaceId, data.userId, data.role || 'MEMBER', req.user.organizationId, req.user.id);
+    return this.workspaceService.addMember(workspaceId, data.userId, data.role || 'MEMBER', req.user.tenantId, req.user.id);
   }
 
   @Delete(':id/members/:userId')
@@ -84,13 +84,13 @@ export class WorkspaceController {
     @Param('userId') userId: string,
     @Req() req: any,
   ) {
-    return this.workspaceService.removeMember(workspaceId, userId, req.user.organizationId, req.user.id);
+    return this.workspaceService.removeMember(workspaceId, userId, req.user.tenantId, req.user.id);
   }
 
-  @Get('hierarchy/:organizationId')
+  @Get('hierarchy/:tenantId')
   @RequireAction('manage_workspaces')
   @ApiOperation({ summary: 'Get workspace hierarchy tree for an organization' })
-  async getHierarchy(@Param('organizationId') organizationId: string) {
-    return this.workspaceService.getHierarchy(organizationId);
+  async getHierarchy(@Param('tenantId') tenantId: string) {
+    return this.workspaceService.getHierarchy(tenantId);
   }
 }

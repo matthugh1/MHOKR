@@ -25,7 +25,7 @@ export class ObjectiveController {
     return this.objectiveService.findAll(
       req.user.id,
       workspaceId,
-      req.user.organizationId, // null = superuser
+      req.user.tenantId, // null = superuser
       pillarId
     );
   }
@@ -42,7 +42,7 @@ export class ObjectiveController {
       throw new ForbiddenException('You do not have permission to view this OKR');
     }
     // Tenant isolation validation (defense-in-depth)
-    return this.objectiveService.findById(id, req.user.organizationId);
+    return this.objectiveService.findById(id, req.user.tenantId);
   }
 
   @Post()
@@ -67,7 +67,7 @@ export class ObjectiveController {
       }
     }
 
-    return this.objectiveService.create(data, req.user.id, req.user.organizationId);
+    return this.objectiveService.create(data, req.user.id, req.user.tenantId);
   }
 
   @Patch(':id')
@@ -78,13 +78,13 @@ export class ObjectiveController {
     const canEdit = await this.objectiveService.canEdit(
       req.user.id,
       id,
-      req.user.organizationId // null for superuser
+      req.user.tenantId // null for superuser
     );
     if (!canEdit) {
       throw new ForbiddenException('You do not have permission to edit this OKR');
     }
     // TODO [phase7-hardening]: Frontend - show warning modal when attempting to edit published OKR
-    return this.objectiveService.update(id, data, req.user.id, req.user.organizationId);
+    return this.objectiveService.update(id, data, req.user.id, req.user.tenantId);
   }
 
   @Delete(':id')
@@ -95,13 +95,13 @@ export class ObjectiveController {
     const canDelete = await this.objectiveService.canDelete(
       req.user.id,
       id,
-      req.user.organizationId // null for superuser
+      req.user.tenantId // null for superuser
     );
     if (!canDelete) {
       throw new ForbiddenException('You do not have permission to delete this OKR');
     }
     // TODO [phase7-hardening]: Frontend - show warning modal when attempting to delete published OKR
-    return this.objectiveService.delete(id, req.user.id, req.user.organizationId);
+    return this.objectiveService.delete(id, req.user.id, req.user.tenantId);
   }
 
   // NOTE: Activity timeline endpoints moved to ActivityController under /activity/* in Phase 4.

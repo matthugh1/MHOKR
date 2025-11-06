@@ -21,7 +21,7 @@ interface OKRPageContainerProps {
     status: string
     startDate: string
     endDate: string
-    organizationId: string
+    tenantId: string
   }>
   overdueCheckIns: Array<{ krId: string; objectiveId: string }>
   filterWorkspaceId: string
@@ -279,7 +279,7 @@ export function OKRPageContainer({
       setPermissionError(null)
       
       const params = new URLSearchParams({
-        organizationId: currentOrganization.id,
+        tenantId: currentOrganization.id,
         page: currentPage.toString(),
         pageSize: pageSize.toString(),
       })

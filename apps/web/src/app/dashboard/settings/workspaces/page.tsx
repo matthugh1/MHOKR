@@ -64,7 +64,7 @@ function WorkspacesSettings() {
     try {
       await api.post('/workspaces', {
         name: newWorkspaceName,
-        organizationId: organization.id,
+        tenantId: organization.id,
       })
       setNewWorkspaceName('')
       setShowCreate(false)

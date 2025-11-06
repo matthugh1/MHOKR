@@ -23,7 +23,7 @@ describe('Visibility Enforcement', () => {
       const okr: OKREntity = {
         id: 'okr-1',
         ownerId: 'owner-id',
-        organizationId: 'org-1',
+        tenantId: 'org-1',
         tenantId: 'org-1',
         visibilityLevel: 'PRIVATE',
         createdAt: new Date(),
@@ -46,7 +46,7 @@ describe('Visibility Enforcement', () => {
       const okr: OKREntity = {
         id: 'okr-1',
         ownerId: 'owner-id',
-        organizationId: 'org-1',
+        tenantId: 'org-1',
         tenantId: 'org-1',
         visibilityLevel: 'PRIVATE',
         createdAt: new Date(),
@@ -69,7 +69,7 @@ describe('Visibility Enforcement', () => {
       const okr: OKREntity = {
         id: 'okr-1',
         ownerId: 'other-owner-id',
-        organizationId: 'org-1',
+        tenantId: 'org-1',
         tenantId: 'org-1',
         visibilityLevel: 'PRIVATE',
         createdAt: new Date(),
@@ -100,7 +100,7 @@ describe('Visibility Enforcement', () => {
       const okr: OKREntity = {
         id: 'okr-1',
         ownerId: 'other-owner-id',
-        organizationId: 'org-1',
+        tenantId: 'org-1',
         tenantId: 'org-1',
         visibilityLevel: 'PRIVATE',
         createdAt: new Date(),
@@ -132,7 +132,7 @@ describe('Visibility Enforcement', () => {
       const okr: OKREntity = {
         id: 'okr-1',
         ownerId: 'other-owner-id',
-        organizationId: 'org-1',
+        tenantId: 'org-1',
         tenantId: 'org-1',
         visibilityLevel: 'PRIVATE',
         createdAt: new Date(),
@@ -166,7 +166,7 @@ describe('Visibility Enforcement', () => {
       const okr: OKREntity = {
         id: 'okr-1',
         ownerId: 'owner-id',
-        organizationId: 'org-1',
+        tenantId: 'org-1',
         tenantId: 'org-1',
         visibilityLevel: 'PUBLIC_TENANT',
         createdAt: new Date(),

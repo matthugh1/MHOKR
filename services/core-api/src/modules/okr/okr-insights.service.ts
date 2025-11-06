@@ -56,7 +56,7 @@ export class OkrInsightsService {
     // Fetch objectives in this cycle
     const objectiveWhere: any = { cycleId };
     if (orgFilter) {
-      objectiveWhere.organizationId = orgFilter.organizationId;
+      objectiveWhere.tenantId = orgFilter.tenantId;
     }
 
     const objectives = await this.prisma.objective.findMany({
@@ -65,7 +65,7 @@ export class OkrInsightsService {
         id: true,
         status: true,
         ownerId: true,
-        organizationId: true,
+        tenantId: true,
         visibilityLevel: true,
         isPublished: true,
         keyResults: {
@@ -90,14 +90,14 @@ export class OkrInsightsService {
     // Filter by visibility
     const visibleObjectives = [];
     for (const obj of objectives) {
-      if (!obj.organizationId) {
+      if (!obj.tenantId) {
         continue;
       }
       const canSee = await this.visibilityService.canUserSeeObjective({
         objective: {
           id: obj.id,
           ownerId: obj.ownerId,
-          organizationId: obj.organizationId,
+          tenantId: obj.tenantId,
           visibilityLevel: obj.visibilityLevel,
         },
         requesterUserId,
@@ -228,7 +228,7 @@ export class OkrInsightsService {
         id: true,
         status: true,
         ownerId: true,
-        organizationId: true,
+        tenantId: true,
         visibilityLevel: true,
         updatedAt: true,
         keyResults: {
@@ -251,7 +251,7 @@ export class OkrInsightsService {
       },
     });
 
-    if (!objective || !objective.organizationId) {
+    if (!objective || !objective.tenantId) {
       return null;
     }
 
@@ -260,7 +260,7 @@ export class OkrInsightsService {
       objective: {
         id: objective.id,
         ownerId: objective.ownerId,
-        organizationId: objective.organizationId,
+        tenantId: objective.tenantId,
         visibilityLevel: objective.visibilityLevel,
       },
       requesterUserId,
@@ -394,7 +394,7 @@ export class OkrInsightsService {
 
     const objectiveWhere: any = {};
     if (orgFilter) {
-      objectiveWhere.organizationId = orgFilter.organizationId;
+      objectiveWhere.tenantId = orgFilter.tenantId;
     }
     if (cycleId) {
       objectiveWhere.cycleId = cycleId;
@@ -408,7 +408,7 @@ export class OkrInsightsService {
         title: true,
         status: true,
         ownerId: true,
-        organizationId: true,
+        tenantId: true,
         visibilityLevel: true,
         updatedAt: true,
         createdAt: true,
@@ -446,7 +446,7 @@ export class OkrInsightsService {
     // const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000); // TODO: Use this for trending analysis
 
     for (const obj of objectives) {
-      if (!obj.organizationId) {
+      if (!obj.tenantId) {
         continue;
       }
 
@@ -454,7 +454,7 @@ export class OkrInsightsService {
         objective: {
           id: obj.id,
           ownerId: obj.ownerId,
-          organizationId: obj.organizationId,
+          tenantId: obj.tenantId,
           visibilityLevel: obj.visibilityLevel,
         },
         requesterUserId,

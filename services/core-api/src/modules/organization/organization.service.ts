@@ -53,14 +53,14 @@ export class OrganizationService {
     });
   }
 
-  async findByUserOrganizations(organizationIds: string[]) {
-    if (organizationIds.length === 0) {
+  async findByUserOrganizations(tenantIds: string[]) {
+    if (tenantIds.length === 0) {
       return [];
     }
     
     return this.prisma.organization.findMany({
       where: {
-        id: { in: organizationIds },
+        id: { in: tenantIds },
       },
       include: {
         workspaces: {
@@ -120,16 +120,16 @@ export class OrganizationService {
     });
 
     // Get unique organization IDs
-    const organizationIds = [...new Set(
+    const tenantIds = [...new Set(
       tenantAssignments
         .map(ta => ta.scopeId)
         .filter((id): id is string => id !== null)
     )];
 
     // Fetch organizations
-    const directOrganizations = organizationIds.length > 0
+    const directOrganizations = tenantIds.length > 0
       ? await this.prisma.organization.findMany({
-          where: { id: { in: organizationIds } },
+          where: { id: { in: tenantIds } },
         })
       : [];
 
@@ -155,14 +155,14 @@ export class OrganizationService {
           include: {
             workspace: {
               include: {
-                organization: true,
+                tenant: true,
               },
             },
           },
         })
       : [];
 
-    const indirectOrganizations = teamsWithOrgs.map(t => t.workspace.organization);
+    const indirectOrganizations = teamsWithOrgs.map(t => t.workspace.tenant);
 
     // Extract unique organizations
     const allOrganizations = [...directOrganizations, ...indirectOrganizations];
@@ -216,7 +216,7 @@ export class OrganizationService {
       actorUserId,
       targetId: created.id,
       targetType: AuditTargetType.TENANT,
-      organizationId: created.id,
+      tenantId: created.id,
     });
 
     return created;
@@ -262,7 +262,7 @@ export class OrganizationService {
       actorUserId,
       targetId: id,
       targetType: AuditTargetType.TENANT,
-      organizationId: id,
+      tenantId: id,
     });
 
     return updated;
@@ -306,7 +306,7 @@ export class OrganizationService {
 
     // Get all workspaces in this organization to find related RoleAssignments
     const workspaces = await this.prisma.workspace.findMany({
-      where: { organizationId: id },
+      where: { tenantId: id },
       select: { id: true },
     });
     const workspaceIds = workspaces.map(w => w.id);
@@ -347,7 +347,7 @@ export class OrganizationService {
       actorUserId,
       targetId: id,
       targetType: AuditTargetType.TENANT,
-      organizationId: id,
+      tenantId: id,
     });
 
     // Delete organization (cascades will handle workspaces, teams, objectives, cycles, etc.)
@@ -400,12 +400,12 @@ export class OrganizationService {
     return MemberRole.MEMBER;
   }
 
-  async getMembers(organizationId: string) {
+  async getMembers(tenantId: string) {
     // Get members from RBAC system (Phase 2 - primary source)
     const tenantAssignments = await this.prisma.roleAssignment.findMany({
       where: {
         scopeType: 'TENANT',
-        scopeId: organizationId,
+        scopeId: tenantId,
       },
       include: {
         user: true,
@@ -416,7 +416,7 @@ export class OrganizationService {
     const teams = await this.prisma.team.findMany({
       where: {
         workspace: {
-          organizationId,
+          tenantId,
         },
       },
       include: {
@@ -499,12 +499,12 @@ export class OrganizationService {
     }
   }
 
-  async addMember(organizationId: string, userId: string, role: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER' = 'MEMBER', userOrganizationId: string | null | undefined, actorUserId: string) {
+  async addMember(tenantId: string, userId: string, role: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER' = 'MEMBER', userOrganizationId: string | null | undefined, actorUserId: string) {
     // Tenant isolation: enforce mutation rules
     OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
 
     // Verify organization exists and tenant match
-    const org = await this.findById(organizationId, userOrganizationId);
+    const org = await this.findById(tenantId, userOrganizationId);
     OkrTenantGuard.assertSameTenant(org.id, userOrganizationId);
     
     // Verify user exists
@@ -524,7 +524,7 @@ export class OrganizationService {
       where: {
         userId,
         scopeType: 'TENANT',
-        scopeId: organizationId,
+        scopeId: tenantId,
       },
     });
 
@@ -534,7 +534,7 @@ export class OrganizationService {
         userId,
         rbacRole,
         'TENANT',
-        organizationId,
+        tenantId,
         actorUserId,
         userOrganizationId || undefined,
       );
@@ -545,14 +545,14 @@ export class OrganizationService {
         targetUserId: userId,
         targetId: userId,
         targetType: AuditTargetType.USER,
-        organizationId,
+        tenantId,
         metadata: { role, previousRole: existingAssignment.role },
       });
 
       // Return format compatible with legacy API
       return {
         userId,
-        organizationId,
+        tenantId,
         role,
         user,
         organization: org,
@@ -564,7 +564,7 @@ export class OrganizationService {
       userId,
       rbacRole,
       'TENANT',
-      organizationId,
+      tenantId,
       actorUserId,
       userOrganizationId || undefined,
     );
@@ -575,26 +575,26 @@ export class OrganizationService {
       targetUserId: userId,
       targetId: userId,
       targetType: AuditTargetType.USER,
-      organizationId,
+      tenantId,
       metadata: { role },
     });
 
     // Return format compatible with legacy API
     return {
       userId,
-      organizationId,
+      tenantId,
       role,
       user,
       organization: org,
     };
   }
 
-  async removeMember(organizationId: string, userId: string, userOrganizationId: string | null | undefined, actorUserId: string) {
+  async removeMember(tenantId: string, userId: string, userOrganizationId: string | null | undefined, actorUserId: string) {
     // Tenant isolation: enforce mutation rules
     OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
 
     // Verify organization exists and tenant match
-    const org = await this.findById(organizationId, userOrganizationId);
+    const org = await this.findById(tenantId, userOrganizationId);
     OkrTenantGuard.assertSameTenant(org.id, userOrganizationId);
 
     // Check if user has role assignments (Phase 3: RBAC only)
@@ -602,7 +602,7 @@ export class OrganizationService {
       where: {
         userId,
         scopeType: 'TENANT',
-        scopeId: organizationId,
+        scopeId: tenantId,
       },
     });
 
@@ -616,7 +616,7 @@ export class OrganizationService {
         userId,
         assignment.role as Role,
         'TENANT',
-        organizationId,
+        tenantId,
         actorUserId,
         userOrganizationId || undefined,
       );
@@ -628,7 +628,7 @@ export class OrganizationService {
       targetUserId: userId,
       targetId: userId,
       targetType: AuditTargetType.USER,
-      organizationId,
+      tenantId,
     });
 
     return { success: true };

@@ -40,7 +40,7 @@ export interface ObjectiveRowProps {
       name: string
       email?: string | null
     }
-    organizationId?: string | null
+    tenantId?: string | null
     workspaceId?: string | null
     teamId?: string | null
     overdueCountForObjective?: number
@@ -521,7 +521,7 @@ export function ObjectiveRow({
   const objectiveForHook = {
     id: optimisticObjective.id,
     ownerId: optimisticObjective.owner.id,
-    organizationId: optimisticObjective.organizationId,
+    tenantId: optimisticObjective.tenantId,
     workspaceId: optimisticObjective.workspaceId,
     teamId: optimisticObjective.teamId,
     isPublished: optimisticObjective.isPublished,

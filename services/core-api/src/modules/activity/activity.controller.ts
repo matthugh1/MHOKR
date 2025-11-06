@@ -57,7 +57,7 @@ export class ActivityController {
     
     return this.activityService.getRecentForObjective(
       id,
-      req.user.organizationId,
+      req.user.tenantId,
       limitNum,
       offsetNum,
       actionFilter,
@@ -93,7 +93,7 @@ export class ActivityController {
     
     return this.activityService.getRecentForKeyResult(
       id,
-      req.user.organizationId,
+      req.user.tenantId,
       limitNum,
       offsetNum,
       actionFilter,

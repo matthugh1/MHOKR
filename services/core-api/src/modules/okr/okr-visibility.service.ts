@@ -25,7 +25,7 @@ export class OkrVisibilityService {
    * W4.M1: Taxonomy alignment - canonical visibility levels enforced.
    * 
    * Rules:
-   * 1. Tenant isolation: if objective.organizationId !== requesterOrgId, return false immediately.
+   * 1. Tenant isolation: if objective.tenantId !== requesterOrgId, return false immediately.
    * 2. SUPERUSER: may see everything.
    * 3. Owner rule: if objective.ownerUserId === requesterUserId, return true.
    * 4. PRIVATE visibility:
@@ -45,7 +45,7 @@ export class OkrVisibilityService {
     objective: {
       id: string;
       ownerId: string;
-      organizationId: string;
+      tenantId: string;
       visibilityLevel: string;
     };
     requesterUserId: string;
@@ -53,9 +53,9 @@ export class OkrVisibilityService {
   }): Promise<boolean> {
     const { objective, requesterUserId, requesterOrgId } = params;
 
-    // Tenant isolation: if objective.organizationId !== requesterOrgId, deny
+    // Tenant isolation: if objective.tenantId !== requesterOrgId, deny
     // Exception: SUPERUSER (requesterOrgId === null) can see everything
-    if (requesterOrgId !== null && objective.organizationId !== requesterOrgId) {
+    if (requesterOrgId !== null && objective.tenantId !== requesterOrgId) {
       return false;
     }
 
@@ -74,7 +74,7 @@ export class OkrVisibilityService {
 
     // Fetch organization to get whitelist configuration
     const organization = await this.prisma.organization.findUnique({
-      where: { id: objective.organizationId },
+      where: { id: objective.tenantId },
       select: {
         id: true,
         execOnlyWhitelist: true,
@@ -97,8 +97,7 @@ export class OkrVisibilityService {
     const okrEntity = {
       id: objective.id,
       ownerId: objective.ownerId,
-      organizationId: objective.organizationId,
-      tenantId: objective.organizationId,
+      tenantId: objective.tenantId,
       visibilityLevel: objective.visibilityLevel as any,
       isPublished: false,
       createdAt: new Date(),
@@ -124,7 +123,7 @@ export class OkrVisibilityService {
     parentObjective: {
       id: string;
       ownerId: string;
-      organizationId: string;
+      tenantId: string;
       visibilityLevel: string;
     };
     requesterUserId: string;
@@ -148,7 +147,7 @@ export class OkrVisibilityService {
     objectives: Array<{
       id: string;
       ownerId: string;
-      organizationId: string;
+      tenantId: string;
       visibilityLevel: string;
     }>;
     requesterUserId: string;
@@ -156,7 +155,7 @@ export class OkrVisibilityService {
   }): Promise<Array<{
     id: string;
     ownerId: string;
-    organizationId: string;
+    tenantId: string;
     visibilityLevel: string;
   }>> {
     const { objectives, requesterUserId, requesterOrgId } = params;

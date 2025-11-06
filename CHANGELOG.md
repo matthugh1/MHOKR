@@ -1,3 +1,104 @@
+## [Tenant Canonicalisation] 2025-01-06
+
+### Overview
+
+Eliminated "organisation/org" vs "tenant" confusion by canonicalising to **tenant** terminology. Added runtime guardrails, backfilled NULL data, and introduced static/CI guardrails.
+
+### Canonical Term
+
+- **Tenant** is the canonical term for multi-tenancy
+- **Tenant ID** (`tenantId`) is the canonical identifier
+- Database schema retains `organizationId` column name (backward compatibility)
+
+### Runtime Guardrails
+
+- **Tenant Context Middleware** (`services/core-api/src/common/tenant/tenant-context.middleware.ts`)
+  - Resolves `tenantId` from JWT, header, subdomain, session
+  - Normalises `organizationId` → `tenantId` in request body/params/query
+  - Attaches `req.tenantId` to all requests
+  - Registered globally in `app.module.ts`
+
+- **Tenant Mutation Guard** (`services/core-api/src/common/tenant/tenant-mutation.guard.ts`)
+  - Enforces tenant boundary checks for all mutations (POST/PUT/PATCH/DELETE)
+  - Validates `req.tenantId` is present
+  - Ensures payload `tenantId` matches request `tenantId`
+  - Registered globally via `APP_GUARD` provider
+
+- **Service Entry Check** (`services/core-api/src/policy/tenant-boundary.ts`)
+  - `assertMutationBoundary(userCtx, resourceCtx)` function
+  - Call at TOP of every mutating service method
+  - Idempotent: safe to call multiple times
+
+- **DTO Normaliser Pipe** (`services/core-api/src/common/tenant/organization-to-tenant.pipe.ts`)
+  - Accepts both `organizationId` and `tenantId` in DTOs
+  - Normalises `organizationId` → `tenantId` with deprecation warning
+
+### Data Backfill
+
+- **Migration** (`prisma/migrations/20250106_tenant_not_null_guard/migration.sql`)
+  - Backfills NULL `organizationId` via parent relationships (objectives→cycles/workspaces/teams)
+  - Quarantines irreconcilable rows into `TENANT_QUARANTINE`
+  - Adds NOT NULL constraints to all tenant-scoped tables
+  - Adds foreign keys with ON DELETE RESTRICT
+
+- **Backfill Report** (`docs/audit/TENANT_BACKFILL_REPORT.md`)
+  - Pre/post migration statistics
+  - Quarantine process documentation
+
+### Static & CI Guardrails
+
+- **ESLint Rule**: `local-tenant/no-org-identifier`
+  - Flags `organizationId`, `organisationId`, `orgId` usage
+  - Exceptions: DTOs, tests, migrations, seed files
+
+- **ESLint Rule**: `local-tenant/no-unguarded-mutations`
+  - Ensures mutations have `TenantMutationGuard`
+  - Works alongside `RBACGuard` and `@RequireAction`
+
+- **Type Aliases** (`services/core-api/src/modules/rbac/types.ts`)
+  - `export type OrganizationId = never` - Forces compile-time errors
+  - `export type TenantId = string` - Canonical type
+
+### Telemetry
+
+- `rbac_missing_tenant_context_total` - Incremented on missing tenant context (400 error)
+- `org_to_tenant_mapping` - Logged when `organizationId` is normalised to `tenantId`
+
+### Tests
+
+- `services/core-api/src/common/tenant/__tests__/tenant-context.middleware.spec.ts`
+  - Tenant resolution from JWT/header/subdomain/session
+  - OrganizationId → tenantId normalisation
+
+- `services/core-api/src/common/tenant/__tests__/tenant-mutation.guard.spec.ts`
+  - Tenant boundary enforcement
+  - Cross-tenant mutation rejection
+
+- `services/core-api/src/common/tenant/__tests__/tenant-backfill.spec.ts`
+  - Migration validation queries
+
+### Documentation
+
+- `docs/audit/TENANT_AUDIT_MAP.md` - Comprehensive audit of tenant identifiers
+- `docs/audit/TENANT_NAMING_DRIFT.md` - Naming drift analysis
+- `docs/audit/TENANT_NULL_SURVEY.sql` - SQL queries for NULL tenant_id
+- `docs/audit/MUTATION_ENDPOINTS_WITHOUT_TENANT_CONTEXT.md` - Summary of endpoints missing tenant guards
+- `docs/audit/TENANT_CANONICALISATION_NOTES.md` - Implementation notes and rollback guide
+
+### Backward Compatibility
+
+- `organizationId` parameter still accepted (with deprecation warning)
+- Database schema unchanged (`organizationId` column retained)
+- No breaking changes to API contracts
+
+### Safety
+
+- Idempotent: Re-running creates no duplicates; guards don't double-apply
+- No business rules changed: Only enforcing presence/equality of tenant
+- No DB fetches in middleware/guard: Compare IDs only
+
+---
+
 ## [Superuser Policy Decision Explorer] 2025-01-27
 
 ### Feature

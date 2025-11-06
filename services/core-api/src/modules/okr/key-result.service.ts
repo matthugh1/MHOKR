@@ -121,7 +121,7 @@ export class KeyResultService {
    * Tenant Isolation Rules (enforced before RBAC):
    * - Superusers (userOrganizationId === null) are read-only auditors → return false
    * - Users without an organisation (undefined/falsy) cannot mutate → return false
-   * - You can only mutate KRs in your own organisation (objective's organizationId must match userOrganizationId) → return false if mismatch
+   * - You can only mutate KRs in your own organisation (objective's tenantId must match userOrganizationId) → return false if mismatch
    * - Owner shortcut applies only inside same org (after tenant check passes)
    * 
    * TODO [phase7-hardening]: This is a placeholder until formal KR RBAC is implemented.
@@ -153,8 +153,8 @@ export class KeyResultService {
       return false;
     }
 
-    // Determine the objective's organizationId (use first parent objective)
-    const objectiveOrgId = keyResult.objectives[0]?.objective?.organizationId;
+    // Determine the objective's tenantId (use first parent objective)
+    const objectiveOrgId = keyResult.objectives[0]?.objective?.tenantId;
 
     // Tenant isolation: verify org match (throws if mismatch or system/global)
     try {
@@ -191,7 +191,7 @@ export class KeyResultService {
    * Tenant Isolation Rules (enforced before RBAC):
    * - Superusers (userOrganizationId === null) are read-only auditors → return false
    * - Users without an organisation (undefined/falsy) cannot mutate → return false
-   * - You can only mutate KRs in your own organisation (objective's organizationId must match userOrganizationId) → return false if mismatch
+   * - You can only mutate KRs in your own organisation (objective's tenantId must match userOrganizationId) → return false if mismatch
    * - Owner shortcut applies only inside same org (after tenant check passes)
    * 
    * TODO [phase7-hardening]: This is a placeholder until formal KR RBAC is implemented.
@@ -223,8 +223,8 @@ export class KeyResultService {
       return false;
     }
 
-    // Determine the objective's organizationId (use first parent objective)
-    const objectiveOrgId = keyResult.objectives[0]?.objective?.organizationId;
+    // Determine the objective's tenantId (use first parent objective)
+    const objectiveOrgId = keyResult.objectives[0]?.objective?.tenantId;
 
     // Tenant isolation: verify org match (throws if mismatch or system/global)
     try {
@@ -276,11 +276,11 @@ export class KeyResultService {
     // Extract objectiveId before validation (Prisma will reject it from keyResult.create)
     const objectiveId = data.objectiveId;
     
-    // Get parent objective's organizationId for validation
+    // Get parent objective's tenantId for validation
     if (objectiveId) {
       const objective = await this.prisma.objective.findUnique({
         where: { id: objectiveId },
-        select: { organizationId: true },
+        select: { tenantId: true },
       });
 
       if (!objective) {
@@ -288,7 +288,7 @@ export class KeyResultService {
       }
 
       // Tenant isolation: verify org match
-      OkrTenantGuard.assertSameTenant(objective.organizationId, userOrganizationId);
+      OkrTenantGuard.assertSameTenant(objective.tenantId, userOrganizationId);
     } else {
       // If no objectiveId provided, reject (for now - may need to allow standalone KRs later)
       // Tenant isolation already checked above, but need explicit org for standalone KRs
@@ -335,7 +335,33 @@ export class KeyResultService {
     // Remove objectiveId from data since it's not a field on KeyResult model
     delete data.objectiveId;
     
+    // Set tenantId from parent Objective if available, otherwise use userOrganizationId
+    // CRITICAL: tenantId is required for tenant isolation
+    if (!data.tenantId) {
+      if (objectiveId) {
+        // Get tenantId from parent Objective
+        const objective = await this.prisma.objective.findUnique({
+          where: { id: objectiveId },
+          select: { tenantId: true },
+        });
+        if (objective?.tenantId) {
+          data.tenantId = objective.tenantId;
+        }
+      }
+      
+      // Fallback to userOrganizationId if still not set
+      if (!data.tenantId && userOrganizationId) {
+        data.tenantId = userOrganizationId;
+      }
+    }
+    
+    // CRITICAL: tenantId is required - fail if still not set
+    if (!data.tenantId) {
+      throw new BadRequestException('tenantId is required for Key Result creation');
+    }
+    
     // Set cycleId from parent Objective if not explicitly provided
+    // Note: cycleId is a direct field on KeyResult model, not a relation
     if (!data.cycleId && parentCycleId) {
       data.cycleId = parentCycleId;
     }
@@ -357,6 +383,17 @@ export class KeyResultService {
 
     const createdKr = await this.prisma.keyResult.create({
       data,
+    }).catch((error) => {
+      console.error('[KeyResultService] Error creating key result:', {
+        error: error.message,
+        errorCode: error.code,
+        data: {
+          ...data,
+          cycleId: data.cycleId,
+          tenantId: data.tenantId,
+        },
+      });
+      throw error;
     });
 
     // Log activity for creation
@@ -364,6 +401,7 @@ export class KeyResultService {
       entityType: 'KEY_RESULT',
       entityId: createdKr.id,
       userId: _userId,
+      tenantId: createdKr.tenantId, // ADD THIS
       action: 'CREATED',
       metadata: {
         title: createdKr.title,
@@ -375,17 +413,17 @@ export class KeyResultService {
     });
 
     // Log audit entry for key result creation
-    // Get organizationId from parent objective if available
-    let organizationId: string | null = null;
+    // Get tenantId from parent objective if available
+    let tenantId: string | null = null;
     if (objectiveId) {
       try {
         const objective = await this.prisma.objective.findUnique({
           where: { id: objectiveId },
-          select: { organizationId: true },
+          select: { tenantId: true },
         });
-        organizationId = objective?.organizationId || null;
+        tenantId = objective?.tenantId || null;
       } catch (error) {
-        // If lookup fails, continue without organizationId
+        // If lookup fails, continue without tenantId
       }
     }
 
@@ -394,7 +432,7 @@ export class KeyResultService {
       action: 'key_result_created',
       targetType: 'OKR',
       targetId: createdKr.id,
-      organizationId: organizationId,
+      tenantId: tenantId,
       metadata: {
         title: createdKr.title,
         objectiveId: objectiveId || null,
@@ -433,7 +471,7 @@ export class KeyResultService {
             objective: { 
               select: { 
                 id: true,
-                organizationId: true,
+                tenantId: true,
                 isPublished: true,
                 cycleId: true,
               } 
@@ -449,7 +487,7 @@ export class KeyResultService {
     }
 
     const objective = krWithParent.objectives[0]?.objective;
-    const objectiveOrgId = objective?.organizationId;
+    const objectiveOrgId = objective?.tenantId;
 
     // Tenant isolation: verify org match
     OkrTenantGuard.assertSameTenant(objectiveOrgId, userOrganizationId);
@@ -468,7 +506,7 @@ export class KeyResultService {
         },
         actingUser: {
           id: userId,
-          organizationId: userOrganizationId ?? null,
+          tenantId: userOrganizationId ?? null,
         },
         rbacService: this.rbacService,
       });
@@ -503,6 +541,7 @@ export class KeyResultService {
         entityType: 'KEY_RESULT',
         entityId: updatedKr.id,
         userId: userId,
+        tenantId: updatedKr.tenantId, // ADD THIS
         action: 'UPDATED',
         metadata: {
           before: {
@@ -544,7 +583,7 @@ export class KeyResultService {
             objective: { 
               select: { 
                 id: true,
-                organizationId: true,
+                tenantId: true,
                 isPublished: true,
                 cycleId: true,
               } 
@@ -560,7 +599,7 @@ export class KeyResultService {
     }
 
     const objective = krWithParent.objectives[0]?.objective;
-    const objectiveOrgId = objective?.organizationId;
+    const objectiveOrgId = objective?.tenantId;
 
     // Tenant isolation: verify org match
     OkrTenantGuard.assertSameTenant(objectiveOrgId, userOrganizationId);
@@ -574,7 +613,7 @@ export class KeyResultService {
         },
         actingUser: {
           id: userId,
-          organizationId: userOrganizationId ?? null,
+          tenantId: userOrganizationId ?? null,
         },
         rbacService: this.rbacService,
       });
@@ -603,6 +642,7 @@ export class KeyResultService {
         entityType: 'KEY_RESULT',
         entityId: keyResult.id,
         userId: userId,
+        tenantId: keyResult.tenantId, // ADD THIS
         action: 'DELETED',
         metadata: {
           title: keyResult.title,
@@ -641,13 +681,15 @@ export class KeyResultService {
 
     const krWithParent = await this.prisma.keyResult.findUnique({
       where: { id: keyResultId },
-      select: { 
+      select: {
+        id: true,
+        tenantId: true, // ADD THIS - select tenantId directly
         objectives: {
           select: {
             objective: { 
               select: { 
                 id: true,
-                organizationId: true,
+                tenantId: true,
                 isPublished: true,
                 cycleId: true,
               } 
@@ -663,7 +705,7 @@ export class KeyResultService {
     }
 
     const objective = krWithParent.objectives[0]?.objective;
-    const objectiveOrgId = objective?.organizationId;
+    const objectiveOrgId = objective?.tenantId;
 
     // Tenant isolation: verify org match
     OkrTenantGuard.assertSameTenant(objectiveOrgId, userOrganizationId);
@@ -679,7 +721,7 @@ export class KeyResultService {
         },
         actingUser: {
           id: data.userId,
-          organizationId: userOrganizationId ?? null,
+          tenantId: userOrganizationId ?? null,
         },
         rbacService: this.rbacService,
       });
@@ -700,6 +742,7 @@ export class KeyResultService {
       entityType: 'KEY_RESULT',
       entityId: keyResultId,
       userId: data.userId,
+      tenantId: krWithParent.tenantId, // ADD THIS - get from key result
       action: 'UPDATED', // Using UPDATED for check-ins (we track CHECK_IN via entityType/action distinction in future)
       metadata: {
         checkIn: {

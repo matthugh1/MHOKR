@@ -26,17 +26,17 @@ export class ObjectiveService {
     private auditLogService: AuditLogService,
   ) {}
 
-  async findAll(_userId: string, workspaceId: string | undefined, userOrganizationId: string | null, pillarId?: string) {
+  async findAll(_userId: string, workspaceId: string | undefined, userTenantId: string | null, pillarId?: string) {
     const where: any = {};
 
     // Tenant isolation: use OkrTenantGuard to build where clause
-    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
-    if (orgFilter === null && userOrganizationId !== null) {
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userTenantId);
+    if (orgFilter === null && userTenantId !== null) {
       // User has no org or invalid org → return empty array
       return [];
     }
     if (orgFilter) {
-      where.organizationId = orgFilter.organizationId;
+      where.tenantId = orgFilter.tenantId;
     }
     // Superuser (null): no org filter, see all OKRs
 
@@ -59,7 +59,7 @@ export class ObjectiveService {
           },
         },
         team: true,
-        organization: true,
+        tenant: true,
         workspace: true,
         pillar: {
           select: {
@@ -86,7 +86,7 @@ export class ObjectiveService {
     });
   }
 
-  async findById(id: string, userOrganizationId?: string | null | undefined) {
+  async findById(id: string, userTenantId?: string | null | undefined) {
     const objective = await this.prisma.objective.findUnique({
       where: { id },
       include: {
@@ -105,7 +105,7 @@ export class ObjectiveService {
         },
         initiatives: true,
         team: true,
-        organization: true,
+        tenant: true,
         workspace: true,
         pillar: {
           select: {
@@ -137,13 +137,13 @@ export class ObjectiveService {
 
     // Tenant isolation: verify objective belongs to caller's tenant (defense-in-depth)
     // Note: This is in addition to RBAC permission checks (canView) in the controller
-    if (userOrganizationId !== undefined) {
-      if (userOrganizationId === null) {
+    if (userTenantId !== undefined) {
+      if (userTenantId === null) {
         // SUPERUSER: can see any objective (read-only)
         return objective;
       }
 
-      if (userOrganizationId === '' || objective.organizationId !== userOrganizationId) {
+      if (userTenantId === '' || objective.tenantId !== userTenantId) {
         // Normal user: verify objective belongs to caller's tenant
         // Don't leak existence - return not found
         throw new NotFoundException(`Objective with ID ${id} not found`);
@@ -168,21 +168,21 @@ export class ObjectiveService {
   /**
    * Check if user can edit a specific OKR
    */
-  async canEdit(userId: string, objectiveId: string, userOrganizationId: string | null): Promise<boolean> {
+  async canEdit(userId: string, objectiveId: string, userTenantId: string | null): Promise<boolean> {
     // Tenant isolation: superuser is read-only
-    if (userOrganizationId === null) {
+    if (userTenantId === null) {
       return false;
     }
 
     try {
       const resourceContext = await buildResourceContextFromOKR(this.prisma, objectiveId);
       
-      // Extract OKR's organizationId from resource context
-      const okrOrganizationId = resourceContext.okr?.organizationId;
+      // Extract OKR's tenantId from resource context
+      const okrOrganizationId = resourceContext.okr?.tenantId;
       
       // Tenant isolation: verify org match (throws if mismatch or system/global)
       try {
-        OkrTenantGuard.assertSameTenant(okrOrganizationId, userOrganizationId);
+        OkrTenantGuard.assertSameTenant(okrOrganizationId, userTenantId);
       } catch {
         return false;
       }
@@ -198,21 +198,21 @@ export class ObjectiveService {
   /**
    * Check if user can delete a specific OKR
    */
-  async canDelete(userId: string, objectiveId: string, userOrganizationId: string | null): Promise<boolean> {
+  async canDelete(userId: string, objectiveId: string, userTenantId: string | null): Promise<boolean> {
     // Tenant isolation: superuser is read-only
-    if (userOrganizationId === null) {
+    if (userTenantId === null) {
       return false;
     }
 
     try {
       const resourceContext = await buildResourceContextFromOKR(this.prisma, objectiveId);
       
-      // Extract OKR's organizationId from resource context
-      const okrOrganizationId = resourceContext.okr?.organizationId;
+      // Extract OKR's tenantId from resource context
+      const okrOrganizationId = resourceContext.okr?.tenantId;
       
       // Tenant isolation: verify org match (throws if mismatch or system/global)
       try {
-        OkrTenantGuard.assertSameTenant(okrOrganizationId, userOrganizationId);
+        OkrTenantGuard.assertSameTenant(okrOrganizationId, userTenantId);
       } catch {
         return false;
       }
@@ -230,12 +230,12 @@ export class ObjectiveService {
     try {
       const workspace = await this.prisma.workspace.findUnique({
         where: { id: workspaceId },
-        select: { organizationId: true },
+        select: { tenantId: true },
       });
       if (!workspace) return false;
       
       const resourceContext = {
-        tenantId: workspace.organizationId,
+        tenantId: workspace.tenantId,
         workspaceId,
         teamId: null,
       };
@@ -245,9 +245,9 @@ export class ObjectiveService {
     }
   }
 
-  async create(data: any, _userId: string, userOrganizationId: string | null | undefined) {
+  async create(data: any, _userId: string, userTenantId: string | null | undefined) {
     // Tenant isolation: enforce mutation rules
-    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+    OkrTenantGuard.assertCanMutateTenant(userTenantId);
 
     // Validate required fields
     if (!data.ownerId) {
@@ -259,8 +259,8 @@ export class ObjectiveService {
       throw new BadRequestException('Invalid ownerId: Please select a valid owner');
     }
 
-    // At least one of organizationId, workspaceId, or teamId must be set
-    if (!data.organizationId && !data.workspaceId && !data.teamId) {
+    // At least one of tenantId, workspaceId, or teamId must be set
+    if (!data.tenantId && !data.workspaceId && !data.teamId) {
       throw new BadRequestException('OKR must be assigned to an organization, workspace, or team');
     }
 
@@ -290,13 +290,13 @@ export class ObjectiveService {
     }
 
     // Validate organization if provided
-    if (data.organizationId) {
+    if (data.tenantId) {
       const organization = await this.prisma.organization.findUnique({
-        where: { id: data.organizationId },
+        where: { id: data.tenantId },
       });
 
       if (!organization) {
-        throw new NotFoundException(`Organization with ID ${data.organizationId} not found`);
+        throw new NotFoundException(`Organization with ID ${data.tenantId} not found`);
       }
     }
 
@@ -335,13 +335,13 @@ export class ObjectiveService {
     // Validate visibility level permissions
     if (data.visibilityLevel === 'PRIVATE' || data.visibilityLevel === 'EXEC_ONLY') {
       // Only TENANT_ADMIN or TENANT_OWNER can create PRIVATE or EXEC_ONLY OKRs
-      if (!data.organizationId) {
+      if (!data.tenantId) {
         throw new BadRequestException('Organization ID is required for PRIVATE or EXEC_ONLY visibility');
       }
 
       try {
         const resourceContext = {
-          tenantId: data.organizationId,
+          tenantId: data.tenantId,
           workspaceId: data.workspaceId || null,
           teamId: data.teamId || null,
         };
@@ -363,19 +363,19 @@ export class ObjectiveService {
       try {
         const cycle = await this.prisma.cycle.findUnique({
           where: { id: data.cycleId },
-          select: { status: true, organizationId: true },
+          select: { status: true, tenantId: true },
         });
 
         if (cycle) {
           // Enforce tenant isolation for cycle
-          if (cycle.organizationId && userOrganizationId !== null) {
-            OkrTenantGuard.assertSameTenant(cycle.organizationId, userOrganizationId);
+          if (cycle.tenantId && userTenantId !== null) {
+            OkrTenantGuard.assertSameTenant(cycle.tenantId, userTenantId);
           }
 
           // If cycle is LOCKED or ARCHIVED, only admins can create
           if (cycle.status === 'LOCKED' || cycle.status === 'ARCHIVED') {
             const resourceContext = {
-              tenantId: cycle.organizationId || data.organizationId || '',
+              tenantId: cycle.tenantId || data.tenantId || '',
               workspaceId: data.workspaceId || null,
               teamId: data.teamId || null,
             };
@@ -407,6 +407,7 @@ export class ObjectiveService {
       entityType: 'OBJECTIVE',
       entityId: createdObjective.id,
       userId: _userId,
+      tenantId: createdObjective.tenantId!, // ADD THIS
       action: 'CREATED',
       metadata: {
         title: createdObjective.title,
@@ -423,7 +424,7 @@ export class ObjectiveService {
       action: 'objective_created',
       targetType: 'OKR',
       targetId: createdObjective.id,
-      organizationId: createdObjective.organizationId || null,
+      tenantId: createdObjective.tenantId || null,
       metadata: {
         title: createdObjective.title,
         ownerId: createdObjective.ownerId,
@@ -452,7 +453,7 @@ export class ObjectiveService {
    * @param objectiveData - Objective data
    * @param keyResultsData - Array of Key Result data
    * @param _userId - User ID creating the OKR
-   * @param userOrganizationId - User's organization ID (null for SUPERUSER)
+   * @param userTenantId - User's organization ID (null for SUPERUSER)
    * @returns Created objective with key result IDs
    */
   async createComposite(
@@ -475,10 +476,10 @@ export class ObjectiveService {
       unit?: string;
     }>,
     _userId: string,
-    userOrganizationId: string | null | undefined,
+    userTenantId: string | null | undefined,
   ) {
     // Tenant isolation: enforce mutation rules
-    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+    OkrTenantGuard.assertCanMutateTenant(userTenantId);
 
     // Validate required fields
     if (!objectiveData.title || objectiveData.title.trim() === '') {
@@ -493,8 +494,8 @@ export class ObjectiveService {
       throw new BadRequestException('cycleId is required');
     }
 
-    if (!userOrganizationId) {
-      throw new BadRequestException('organizationId is required');
+    if (!userTenantId) {
+      throw new BadRequestException('tenantId is required');
     }
 
     // Validate owner exists and is in same tenant
@@ -504,7 +505,7 @@ export class ObjectiveService {
         roleAssignments: {
           where: {
             scopeType: 'TENANT',
-            scopeId: userOrganizationId,
+            scopeId: userTenantId,
           },
         },
       },
@@ -517,7 +518,7 @@ export class ObjectiveService {
     // Validate cycle exists and user has access
     const cycle = await this.prisma.cycle.findUnique({
       where: { id: objectiveData.cycleId },
-      select: { id: true, status: true, organizationId: true, startDate: true, endDate: true },
+      select: { id: true, status: true, tenantId: true, startDate: true, endDate: true },
     });
 
     if (!cycle) {
@@ -525,12 +526,12 @@ export class ObjectiveService {
     }
 
     // Enforce tenant isolation for cycle
-    OkrTenantGuard.assertSameTenant(cycle.organizationId, userOrganizationId);
+    OkrTenantGuard.assertSameTenant(cycle.tenantId, userTenantId);
 
     // Governance: Check cycle lock
     if (cycle.status === 'LOCKED' || cycle.status === 'ARCHIVED') {
       const resourceContext = {
-        tenantId: userOrganizationId,
+        tenantId: userTenantId,
         workspaceId: null,
         teamId: null,
       };
@@ -544,7 +545,7 @@ export class ObjectiveService {
 
     // RBAC: Check if user can create OKRs
     const resourceContext = {
-      tenantId: userOrganizationId,
+      tenantId: userTenantId,
       workspaceId: null,
       teamId: null,
     };
@@ -575,7 +576,7 @@ export class ObjectiveService {
           roleAssignments: {
             where: {
               scopeType: 'TENANT',
-              scopeId: userOrganizationId,
+              scopeId: userTenantId,
             },
           },
         },
@@ -590,7 +591,7 @@ export class ObjectiveService {
     if (objectiveData.parentId) {
       const parentObjective = await this.prisma.objective.findUnique({
         where: { id: objectiveData.parentId },
-        select: { id: true, organizationId: true },
+        select: { id: true, tenantId: true },
       });
 
       if (!parentObjective) {
@@ -598,7 +599,7 @@ export class ObjectiveService {
       }
 
       // Enforce tenant isolation for parent
-      OkrTenantGuard.assertSameTenant(parentObjective.organizationId, userOrganizationId);
+      OkrTenantGuard.assertSameTenant(parentObjective.tenantId, userTenantId);
     }
 
     // Validate Key Results
@@ -625,7 +626,7 @@ export class ObjectiveService {
           roleAssignments: {
             where: {
               scopeType: 'TENANT',
-              scopeId: userOrganizationId,
+              scopeId: userTenantId,
             },
           },
         },
@@ -646,7 +647,7 @@ export class ObjectiveService {
       description: objectiveData.description || null,
       ownerId: objectiveData.ownerUserId,
       cycleId: objectiveData.cycleId,
-      organizationId: userOrganizationId,
+      tenantId: userTenantId,
       visibilityLevel: objectiveData.visibilityLevel,
       parentId: objectiveData.parentId || null,
       status: 'ON_TRACK',
@@ -685,6 +686,7 @@ export class ObjectiveService {
           unit: krData.unit || null,
           status: 'ON_TRACK',
           cycleId: objectiveData.cycleId, // Sync cycleId from parent Objective
+          tenantId: userTenantId!, // Use userTenantId (already validated, cannot be null/undefined here)
         };
 
         // Calculate initial progress
@@ -725,7 +727,7 @@ export class ObjectiveService {
         action: 'key_result_created',
         targetType: 'OKR',
         targetId: kr.id,
-        organizationId: userOrganizationId,
+        tenantId: userTenantId,
         metadata: {
           title: kr.title,
           objectiveId: result.objective.id,
@@ -741,7 +743,7 @@ export class ObjectiveService {
       action: 'objective_created',
       targetType: 'OKR',
       targetId: result.objective.id,
-      organizationId: userOrganizationId,
+      tenantId: userTenantId,
       metadata: {
         title: result.objective.title,
         ownerId: result.objective.ownerId,
@@ -769,13 +771,13 @@ export class ObjectiveService {
     };
   }
 
-  async update(id: string, data: any, userId: string, userOrganizationId: string | null) {
+  async update(id: string, data: any, userId: string, userTenantId: string | null) {
     // Verify objective exists and user has permission (already checked in controller)
     const objective = await this.prisma.objective.findUnique({
       where: { id },
       select: {
         id: true,
-        organizationId: true,
+        tenantId: true,
         isPublished: true,
         ownerId: true,
         workspaceId: true,
@@ -798,7 +800,7 @@ export class ObjectiveService {
       },
       actingUser: {
         id: userId,
-        organizationId: userOrganizationId,
+        tenantId: userTenantId,
       },
       rbacService: this.rbacService,
     });
@@ -813,11 +815,11 @@ export class ObjectiveService {
       if (objective.workspaceId) {
         const workspace = await this.prisma.workspace.findUnique({
           where: { id: objective.workspaceId },
-          select: { organizationId: true },
+          select: { tenantId: true },
         });
         if (workspace) {
           const resourceContext = {
-            tenantId: workspace.organizationId,
+            tenantId: workspace.tenantId,
             workspaceId: objective.workspaceId,
             teamId: null,
           };
@@ -825,9 +827,9 @@ export class ObjectiveService {
         }
       }
       
-      if (!canManage && objective.organizationId) {
+      if (!canManage && objective.tenantId) {
         const resourceContext = {
-          tenantId: objective.organizationId,
+          tenantId: objective.tenantId,
           workspaceId: null,
           teamId: null,
         };
@@ -855,6 +857,7 @@ export class ObjectiveService {
       entityType: 'OBJECTIVE',
       entityId: updatedObjective.id,
       userId: userId,
+      tenantId: updatedObjective.tenantId!, // ADD THIS
       action: 'UPDATED', // Using UPDATED for both regular updates and publish (isPublished change noted in metadata)
       metadata: {
         wasPublish: wasPublish,
@@ -892,7 +895,7 @@ export class ObjectiveService {
     return updatedObjective;
   }
 
-  async delete(id: string, userId: string, userOrganizationId: string | null) {
+  async delete(id: string, userId: string, userTenantId: string | null) {
     try {
       // Check if objective exists
       const objective = await this.prisma.objective.findUnique({
@@ -916,7 +919,7 @@ export class ObjectiveService {
         },
         actingUser: {
           id: userId,
-          organizationId: userOrganizationId,
+          tenantId: userTenantId,
         },
         rbacService: this.rbacService,
       });
@@ -931,6 +934,7 @@ export class ObjectiveService {
         entityType: 'OBJECTIVE',
         entityId: objective.id,
         userId: userId,
+        tenantId: objective.tenantId!, // ADD THIS
         action: 'DELETED',
         metadata: {
           title: objective.title,

@@ -56,7 +56,7 @@ export class RBACAssignmentController {
 
     // Group assignments by scopeType
     const rolesByScope: {
-      tenant: Array<{ organizationId: string; roles: string[] }>;
+      tenant: Array<{ tenantId: string; roles: string[] }>;
       workspace: Array<{ workspaceId: string; roles: string[] }>;
       team: Array<{ teamId: string; roles: string[] }>;
     } = {
@@ -96,8 +96,8 @@ export class RBACAssignmentController {
     }
 
     // Convert maps to arrays
-    for (const [organizationId, roles] of tenantMap.entries()) {
-      rolesByScope.tenant.push({ organizationId, roles });
+    for (const [tenantId, roles] of tenantMap.entries()) {
+      rolesByScope.tenant.push({ tenantId, roles });
     }
     for (const [workspaceId, roles] of workspaceMap.entries()) {
       rolesByScope.workspace.push({ workspaceId, roles });
@@ -135,7 +135,7 @@ export class RBACAssignmentController {
       const canManage = await this.rbacService.canPerformAction(
         req.user.id,
         'manage_users',
-        { tenantId: tenantId || req.user.organizationId || undefined },
+        { tenantId: tenantId || req.user.tenantId || undefined },
       );
 
       if (!canManage) {
@@ -163,7 +163,7 @@ export class RBACAssignmentController {
         targetUserId: userId,
         targetId: userId,
         targetType: AuditTargetType.USER,
-        organizationId: tenantId || req.user.organizationId || null,
+        tenantId: tenantId || req.user.tenantId || null,
         metadata: { 
           inspectedUserId: userId,
           tenantId: tenantId || undefined,
@@ -308,7 +308,7 @@ export class RBACAssignmentController {
       dto.scopeType,
       dto.scopeId,
       req.user.id,
-      req.user.organizationId,
+      req.user.tenantId,
     );
 
     return assignment;
@@ -337,7 +337,7 @@ export class RBACAssignmentController {
       assignment.scopeType as ScopeType,
       assignment.scopeId,
       req.user.id,
-      req.user.organizationId,
+      req.user.tenantId,
     );
 
     return { success: true };
@@ -369,13 +369,13 @@ export class ExecWhitelistController {
     @Request() req: any,
   ) {
     // Verify tenant match
-    if (tenantId !== req.user.organizationId) {
+    if (tenantId !== req.user.tenantId) {
       throw new NotFoundException('Tenant not found');
     }
     const whitelist = await this.execWhitelistService.addToWhitelist(
       tenantId,
       body.userId,
-      req.user.organizationId,
+      req.user.tenantId,
       req.user.id,
     );
     return { tenantId, whitelist };
@@ -391,13 +391,13 @@ export class ExecWhitelistController {
     @Request() req: any,
   ) {
     // Verify tenant match
-    if (tenantId !== req.user.organizationId) {
+    if (tenantId !== req.user.tenantId) {
       throw new NotFoundException('Tenant not found');
     }
     const whitelist = await this.execWhitelistService.removeFromWhitelist(
       tenantId,
       body.userId,
-      req.user.organizationId,
+      req.user.tenantId,
       req.user.id,
     );
     return { tenantId, whitelist };
@@ -413,13 +413,13 @@ export class ExecWhitelistController {
     @Request() req: any,
   ) {
     // Verify tenant match
-    if (tenantId !== req.user.organizationId) {
+    if (tenantId !== req.user.tenantId) {
       throw new NotFoundException('Tenant not found');
     }
     const whitelist = await this.execWhitelistService.setWhitelist(
       tenantId,
       body.userIds,
-      req.user.organizationId,
+      req.user.tenantId,
       req.user.id,
     );
     return { tenantId, whitelist };
@@ -431,10 +431,10 @@ export class ExecWhitelistController {
   @ApiOperation({ summary: 'Clear EXEC_ONLY whitelist' })
   async clearWhitelist(@Param('tenantId') tenantId: string, @Request() req: any) {
     // Verify tenant match
-    if (tenantId !== req.user.organizationId) {
+    if (tenantId !== req.user.tenantId) {
       throw new NotFoundException('Tenant not found');
     }
-    await this.execWhitelistService.clearWhitelist(tenantId, req.user.organizationId, req.user.id);
+    await this.execWhitelistService.clearWhitelist(tenantId, req.user.tenantId, req.user.id);
     return { tenantId, whitelist: [] };
   }
 }

@@ -167,7 +167,7 @@ function OrganizationSettings() {
           try {
             const [membersRes, workspacesRes] = await Promise.all([
               api.get(`/organizations/${firstOrg.id}/members`),
-              api.get(`/workspaces?organizationId=${firstOrg.id}`),
+              api.get(`/workspaces?tenantId=${firstOrg.id}`),
             ])
             console.log('Loaded workspaces for first organization:', firstOrg.id, workspacesRes.data)
             setMembers(membersRes.data || [])
@@ -186,7 +186,7 @@ function OrganizationSettings() {
           try {
             const [membersRes, workspacesRes] = await Promise.all([
               api.get(`/organizations/${organization.id}/members`),
-              api.get(`/workspaces?organizationId=${organization.id}`),
+              api.get(`/workspaces?tenantId=${organization.id}`),
             ])
             console.log('Loaded workspaces for organization:', organization.id, workspacesRes.data)
             setMembers(membersRes.data || [])
@@ -218,7 +218,7 @@ function OrganizationSettings() {
       try {
         const [membersRes, workspacesRes] = await Promise.all([
           api.get(`/organizations/${organization.id}/members`),
-          api.get(`/workspaces?organizationId=${organization.id}`),
+          api.get(`/workspaces?tenantId=${organization.id}`),
         ])
         setMembers(membersRes.data)
         setWorkspaces(workspacesRes.data)

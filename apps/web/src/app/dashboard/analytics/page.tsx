@@ -61,7 +61,7 @@ export default function AnalyticsPage() {
     status: string
     startDate: string
     endDate: string
-    organizationId: string
+    tenantId: string
   }>>([])
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)

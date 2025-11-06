@@ -250,7 +250,7 @@ export function OKRCreationDrawer({
   // Fetch creation context when drawer opens
   useEffect(() => {
     if (isOpen && currentOrganization?.id) {
-      api.get(`/okr/creation-context?organizationId=${currentOrganization.id}`)
+      api.get(`/okr/creation-context?tenantId=${currentOrganization.id}`)
         .then((res) => {
           setAllowedVisibilityLevels(res.data.allowedVisibilityLevels || ['PUBLIC_TENANT'])
           setAllowedOwners(res.data.allowedOwners || [])
@@ -274,7 +274,7 @@ export function OKRCreationDrawer({
 
       // Load objectives for parent selection (objective mode) or KR/Initiative parent selection
       if (mode === 'objective' || mode === 'kr' || mode === 'initiative') {
-        api.get(`/okr/overview?organizationId=${currentOrganization.id}&pageSize=50`)
+        api.get(`/okr/overview?tenantId=${currentOrganization.id}&pageSize=50`)
           .then((res) => {
             const objectives = res.data?.objectives || []
             setAvailableObjectives(objectives.map((obj: any) => ({
@@ -460,7 +460,7 @@ export function OKRCreationDrawer({
         description: draftObjective.description || undefined,
         ownerId: draftObjective.ownerId,
         cycleId: draftObjective.cycleId,
-        organizationId: currentOrganization.id,
+        tenantId: currentOrganization.id,
         visibilityLevel: draftObjective.visibilityLevel,
         parentId: draftObjective.parentId || undefined,
       // W4.M1: period removed - not sent to backend
@@ -481,6 +481,7 @@ export function OKRCreationDrawer({
           startValue: kr.startValue,
           metricType: kr.metricType,
           unit: kr.unit,
+          tenantId: currentOrganization.id,
         })
       }
       
@@ -1061,6 +1062,7 @@ export function OKRCreationDrawer({
           startValue: krData.startValue,
           unit: krData.unit,
           metricType: krData.metricType,
+          tenantId: currentOrganization?.id,
         })
 
         toast({
@@ -1284,6 +1286,7 @@ export function OKRCreationDrawer({
           title: initiativeData.title,
           ownerId: initiativeData.ownerId,
           status: initiativeData.status,
+          tenantId: currentOrganization?.id,
         }
         if (objectiveIdToUse) payload.objectiveId = objectiveIdToUse
         if (keyResultIdToUse) payload.keyResultId = keyResultIdToUse

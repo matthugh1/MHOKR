@@ -8,13 +8,13 @@
  */
 
 import { Injectable } from '@nestjs/common';
-import { UserContext, ResourceContext, Action } from '../rbac/types';
-import { can } from '../rbac/rbac';
-import { canViewOKR } from '../rbac/visibilityPolicy';
-import { assertMutation, Decision, ReasonCode } from './tenant-boundary';
-import { OkrGovernanceService } from '../okr/okr-governance.service';
-import { PrismaService } from '../../common/prisma/prisma.service';
-import { RBACService } from '../rbac/rbac.service';
+import { UserContext, ResourceContext, Action } from '../modules/rbac/types';
+import { can } from '../modules/rbac/rbac';
+import { canViewOKR } from '../modules/rbac/visibilityPolicy';
+import { assertMutation, Decision } from './tenant-boundary';
+import { OkrGovernanceService } from '../modules/okr/okr-governance.service';
+import { PrismaService } from '../common/prisma/prisma.service';
+import { RBACService } from '../modules/rbac/rbac.service';
 
 @Injectable()
 export class AuthorisationService {
@@ -48,9 +48,69 @@ export class AuthorisationService {
     // Check if this is a mutation action
     const isMutation = this.isMutationAction(action);
 
+    // For create_okr, ensure resourceContext.tenantId matches the tenant where user has roles
+    // (resource doesn't exist yet, so tenantId may be empty or mismatched)
+    // Users can only create OKRs in their own tenant
+    // CRITICAL: Always use tenantId from userContext.tenantRoles (source of truth) rather than JWT
+    // The JWT tenantId should match, but role assignments are the authoritative source
+    if (action === 'create_okr') {
+      // Get tenantId from role assignments (source of truth)
+      let effectiveUserTenantId: string | undefined;
+      
+      if (userContext.tenantRoles && userContext.tenantRoles.size > 0) {
+        // Use first tenant where user has roles (this is the authoritative source)
+        effectiveUserTenantId = Array.from(userContext.tenantRoles.keys())[0];
+        
+        // If userOrgId is provided, prefer it IF it matches a tenant in role assignments
+        // This handles the case where user has multiple tenants but we want to use the one from JWT
+        if (userOrgId && userContext.tenantRoles.has(userOrgId)) {
+          effectiveUserTenantId = userOrgId;
+        }
+      } else if (userOrgId) {
+        // Fallback: use userOrgId if no role assignments found (shouldn't happen for authenticated users)
+        effectiveUserTenantId = userOrgId;
+        console.warn('[AUTHORISATION] create_okr: Using userOrgId as fallback (no role assignments found)', {
+          userId: userContext.userId,
+          userOrgId,
+        });
+      }
+      
+      // CRITICAL: If we still don't have a tenantId, deny access
+      // This should never happen for authenticated users (login should have failed)
+      if (!effectiveUserTenantId) {
+        console.error('[AUTHORISATION] create_okr: No tenantId found for user', {
+          userId: userContext.userId,
+          userOrgId,
+          tenantRolesSize: userContext.tenantRoles?.size || 0,
+          tenantRolesKeys: userContext.tenantRoles ? Array.from(userContext.tenantRoles.keys()) : [],
+        });
+        return {
+          allow: false,
+          reason: 'TENANT_BOUNDARY',
+          details: { message: 'User account is not properly configured. Please contact support.' },
+        };
+      }
+      
+      // Always override resourceContext.tenantId to ensure it matches where user has roles
+      // This prevents tenant leaks and ensures RBAC checks use the correct tenant
+      if (!resourceContext.tenantId || resourceContext.tenantId === '' || resourceContext.tenantId !== effectiveUserTenantId) {
+        console.log('[AUTHORISATION] create_okr: Overriding resourceContext.tenantId', {
+          originalTenantId: resourceContext.tenantId,
+          effectiveUserTenantId,
+          userOrgId,
+          userId: userContext.userId,
+          tenantRolesKeys: Array.from(userContext.tenantRoles.keys()),
+        });
+        resourceContext = {
+          ...resourceContext,
+          tenantId: effectiveUserTenantId,
+        };
+      }
+    }
+
     // For mutations, check tenant boundary first
     if (isMutation) {
-      const tenantDecision = assertMutation(userContext, resourceContext, userOrgId);
+      const tenantDecision = assertMutation(userContext, resourceContext, userOrgId, action);
       if (!tenantDecision.allow) {
         return tenantDecision;
       }
@@ -64,13 +124,61 @@ export class AuthorisationService {
       }
     }
 
+    // For read actions with resources, check tenant boundary
+    // (Visibility checks don't enforce tenant boundaries, so we must do it here)
+    if (!isMutation && resourceContext.tenantId && userOrgId !== undefined) {
+      // SUPERUSER can read across tenants (read-only access)
+      if (userContext.isSuperuser) {
+        // Allow superuser to read (but not mutate)
+      } else if (userOrgId === null || userOrgId === '') {
+        // User has no organisation - deny access
+        return {
+          allow: false,
+          reason: 'TENANT_BOUNDARY',
+          details: { message: 'You do not have permission to access resources without an organization.' },
+        };
+      } else if (resourceContext.tenantId !== userOrgId) {
+        // Cross-tenant access attempt - deny
+        return {
+          allow: false,
+          reason: 'TENANT_BOUNDARY',
+          details: {
+            message: 'You do not have permission to access resources outside your organization.',
+            resourceTenantId: resourceContext.tenantId,
+            userTenantId: userOrgId,
+          },
+        };
+      }
+    }
+
     // Check RBAC role permissions
     const rbacAllowed = can(userContext, action, resourceContext);
     if (!rbacAllowed) {
+      // Enhanced error details for debugging
+      const tenantRoles = resourceContext.tenantId 
+        ? userContext.tenantRoles.get(resourceContext.tenantId) || []
+        : [];
+      
+      console.error('[AUTHORISATION] RBAC check failed', {
+        userId: userContext.userId,
+        action,
+        resourceContext,
+        userOrgId,
+        tenantId: resourceContext.tenantId,
+        tenantRoles,
+        allTenantRoles: Array.from(userContext.tenantRoles.entries()),
+        isSuperuser: userContext.isSuperuser,
+      });
+      
       return {
         allow: false,
         reason: 'ROLE_DENY',
-        details: { action, resourceContext: { tenantId: resourceContext.tenantId } },
+        details: { 
+          action, 
+          resourceContext: { tenantId: resourceContext.tenantId },
+          tenantRoles,
+          message: `User does not have permission to ${action} in tenant ${resourceContext.tenantId}`,
+        },
       };
     }
 
@@ -133,7 +241,7 @@ export class AuthorisationService {
     // Build acting user from userContext
     const actingUser = {
       id: userContext.userId,
-      organizationId: resourceContext.tenantId || null,
+      tenantId: resourceContext.tenantId || null,
     };
 
     try {
@@ -152,25 +260,22 @@ export class AuthorisationService {
             rbacService: this.rbacService,
           });
         } else {
-          // Try as key result - check parent objective
-          const keyResult = await this.prisma.keyResult.findUnique({
-            where: { id: resourceContext.okr.id },
-            select: { id: true, objectiveId: true },
+          // Try as key result - check parent objective via junction table
+          const objectiveKeyResult = await this.prisma.objectiveKeyResult.findFirst({
+            where: { keyResultId: resourceContext.okr.id },
+            include: {
+              objective: {
+                select: { id: true, isPublished: true },
+              },
+            },
           });
 
-          if (keyResult) {
-            const parentObjective = await this.prisma.objective.findUnique({
-              where: { id: keyResult.objectiveId },
-              select: { id: true, isPublished: true },
+          if (objectiveKeyResult?.objective) {
+            await this.governanceService.checkPublishLockForKeyResult({
+              parentObjective: objectiveKeyResult.objective,
+              actingUser,
+              rbacService: this.rbacService,
             });
-
-            if (parentObjective) {
-              await this.governanceService.checkPublishLockForKeyResult({
-                parentObjective,
-                actingUser,
-                rbacService: this.rbacService,
-              });
-            }
           }
         }
       }

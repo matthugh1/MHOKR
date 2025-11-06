@@ -46,7 +46,7 @@ describe('OkrVisibilityService - W4.M1 Taxonomy Alignment', () => {
       const parentObjective = {
         id: 'obj-1',
         ownerId: 'owner-1',
-        organizationId: 'org-1',
+        tenantId: 'org-1',
         visibilityLevel: 'PRIVATE',
       };
 
@@ -96,7 +96,7 @@ describe('OkrVisibilityService - W4.M1 Taxonomy Alignment', () => {
       const parentObjective = {
         id: 'obj-1',
         ownerId: 'owner-1',
-        organizationId: 'org-1',
+        tenantId: 'org-1',
         visibilityLevel: 'PUBLIC_TENANT',
       };
 
@@ -144,7 +144,7 @@ describe('OkrVisibilityService - W4.M1 Taxonomy Alignment', () => {
         const objective = {
           id: 'obj-1',
           ownerId: 'owner-1',
-          organizationId: 'org-1',
+          tenantId: 'org-1',
           visibilityLevel: deprecatedValue,
         };
 

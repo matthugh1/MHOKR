@@ -27,7 +27,7 @@ export interface EditFormState {
   okrId?: string
   ownerId?: string
   ownerName?: string
-  organizationId?: string | null
+  tenantId?: string | null
   workspaceId?: string | null
   teamId?: string | null
 
@@ -101,7 +101,7 @@ export function EditFormTabs({
     ? tenantPermissions.canEditObjective({
         id: formData.okrId as string || '',
         ownerId: formData.ownerId as string || '',
-        organizationId: formData.organizationId as string | null || null,
+        tenantId: formData.tenantId as string | null || null,
         workspaceId: formData.workspaceId as string | null || null,
         teamId: formData.teamId as string | null || null,
         isPublished: formData.isPublished as boolean || false,
@@ -112,13 +112,13 @@ export function EditFormTabs({
     ? tenantPermissions.canEditKeyResult({
         id: formData.okrId as string || '',
         ownerId: formData.ownerId as string || '',
-        organizationId: formData.organizationId as string | null || null,
+        tenantId: formData.tenantId as string | null || null,
         workspaceId: formData.workspaceId as string | null || null,
         teamId: formData.teamId as string | null || null,
         parentObjective: formData.parentObjective && typeof formData.parentObjective === 'object' && 'id' in formData.parentObjective
           ? {
               id: (formData.parentObjective as any).id as string,
-              organizationId: (formData.parentObjective as any).organizationId as string | null | undefined,
+              tenantId: (formData.parentObjective as any).tenantId as string | null | undefined,
               isPublished: (formData.parentObjective as any).isPublished as boolean | undefined,
               cycle: (formData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
               cycleStatus: (formData.parentObjective as any).cycleStatus as string | null | undefined,
@@ -131,7 +131,7 @@ export function EditFormTabs({
     ? tenantPermissions.getLockInfoForObjective({
         id: formData.okrId as string || '',
         ownerId: formData.ownerId as string || '',
-        organizationId: formData.organizationId as string | null || null,
+        tenantId: formData.tenantId as string | null || null,
         workspaceId: formData.workspaceId as string | null || null,
         teamId: formData.teamId as string | null || null,
         isPublished: formData.isPublished as boolean || false,
@@ -142,13 +142,13 @@ export function EditFormTabs({
     ? tenantPermissions.getLockInfoForKeyResult({
         id: formData.okrId as string || '',
         ownerId: formData.ownerId as string || '',
-        organizationId: formData.organizationId as string | null || null,
+        tenantId: formData.tenantId as string | null || null,
         workspaceId: formData.workspaceId as string | null || null,
         teamId: formData.teamId as string | null || null,
         parentObjective: formData.parentObjective && typeof formData.parentObjective === 'object' && 'id' in formData.parentObjective
           ? {
               id: (formData.parentObjective as any).id as string,
-              organizationId: (formData.parentObjective as any).organizationId as string | null | undefined,
+              tenantId: (formData.parentObjective as any).tenantId as string | null | undefined,
               isPublished: (formData.parentObjective as any).isPublished as boolean | undefined,
               cycle: (formData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
               cycleStatus: (formData.parentObjective as any).cycleStatus as string | null | undefined,
@@ -173,7 +173,7 @@ export function EditFormTabs({
     if (nodeType === 'obj') {
       const loadObjectives = async () => {
         try {
-          const queryParams = currentOrganization?.id ? `?organizationId=${currentOrganization.id}` : ''
+          const queryParams = currentOrganization?.id ? `?tenantId=${currentOrganization.id}` : ''
           const response = await api.get(`/objectives${queryParams}`)
           setAvailableObjectives(response.data)
         } catch (error) {
@@ -197,8 +197,8 @@ export function EditFormTabs({
   }
 
   const getContextDisplay = () => {
-    if (formData.organizationId && !formData.workspaceId && !formData.teamId) {
-      const org = organizations.find(o => o.id === formData.organizationId)
+    if (formData.tenantId && !formData.workspaceId && !formData.teamId) {
+      const org = organizations.find(o => o.id === formData.tenantId)
       return `🏢 ${org?.name || 'Organization'}`
     }
     if (formData.workspaceId && !formData.teamId) {
@@ -628,7 +628,7 @@ export function EditFormTabs({
                     <div className="max-h-48 overflow-y-auto">
                       <button
                         onClick={() => {
-                          setFormData({ ...formData, organizationId: '', workspaceId: '', teamId: '' })
+                          setFormData({ ...formData, tenantId: '', workspaceId: '', teamId: '' })
                           setShowContextDropdown(false)
                         }}
                         className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
@@ -642,7 +642,7 @@ export function EditFormTabs({
                           <button
                             key={org.id}
                             onClick={() => {
-                              setFormData({ ...formData, organizationId: org.id, workspaceId: '', teamId: '' })
+                              setFormData({ ...formData, tenantId: org.id, workspaceId: '', teamId: '' })
                               setShowContextDropdown(false)
                             }}
                             className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
@@ -657,7 +657,7 @@ export function EditFormTabs({
                           <button
                             key={ws.id}
                             onClick={() => {
-                              setFormData({ ...formData, organizationId: '', workspaceId: ws.id, teamId: '' })
+                              setFormData({ ...formData, tenantId: '', workspaceId: ws.id, teamId: '' })
                               setShowContextDropdown(false)
                             }}
                             className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
@@ -672,7 +672,7 @@ export function EditFormTabs({
                           <button
                             key={team.id}
                             onClick={() => {
-                              setFormData({ ...formData, organizationId: '', workspaceId: '', teamId: team.id })
+                              setFormData({ ...formData, tenantId: '', workspaceId: '', teamId: team.id })
                               setShowContextDropdown(false)
                             }}
                             className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"

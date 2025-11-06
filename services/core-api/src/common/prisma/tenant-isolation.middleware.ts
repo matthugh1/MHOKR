@@ -12,24 +12,24 @@ import { AsyncLocalStorage } from 'async_hooks';
 
 // Tenant context stored in AsyncLocalStorage
 export const tenantContext = new AsyncLocalStorage<{
-  organizationId: string | null | undefined;
+  tenantId: string | null | undefined;
 }>();
 
 /**
  * Get current tenant context from AsyncLocalStorage
  */
 export function getTenantContext(): string | null | undefined {
-  return tenantContext.getStore()?.organizationId;
+  return tenantContext.getStore()?.tenantId;
 }
 
 /**
  * Run a function with tenant context
  */
 export function withTenantContext<T>(
-  organizationId: string | null | undefined,
+  tenantId: string | null | undefined,
   fn: () => T,
 ): T {
-  return tenantContext.run({ organizationId }, fn);
+  return tenantContext.run({ tenantId }, fn);
 }
 
 /**
@@ -38,9 +38,9 @@ export function withTenantContext<T>(
  * This middleware:
  * - Sets PostgreSQL session variables for RLS (defense-in-depth)
  * - Checks if query is on a tenant-scoped model
- * - Automatically adds organizationId filter if tenant context is available
- * - Skips filtering for SUPERUSER (organizationId === null)
- * - Does NOT filter if organizationId is undefined (user has no org)
+ * - Automatically adds tenantId filter if tenant context is available
+ * - Skips filtering for SUPERUSER (tenantId === null)
+ * - Does NOT filter if tenantId is undefined (user has no tenant)
  */
 export function createTenantIsolationMiddleware() {
   return async (params: Prisma.MiddlewareParams, next: (params: Prisma.MiddlewareParams) => Promise<any>) => {
@@ -57,6 +57,8 @@ export function createTenantIsolationMiddleware() {
       'initiative',
       'checkInRequest',
       'strategicPillar',
+      'activity',      // ADD THIS
+      'userLayout',    // ADD THIS
     ];
 
     // Skip if not a tenant-scoped model
@@ -76,21 +78,21 @@ export function createTenantIsolationMiddleware() {
 
     // Get tenant context
     const tenantContextStore = tenantContext.getStore();
-    const organizationId = tenantContextStore?.organizationId;
+    const tenantId = tenantContextStore?.tenantId;
 
     // If no tenant context, skip (let service handle it)
-    if (organizationId === undefined) {
+    if (tenantId === undefined) {
       return next(params);
     }
 
     // SUPERUSER (null) - no filter, can see all
-    if (organizationId === null) {
+    if (tenantId === null) {
       return next(params);
     }
 
     // Normal user - inject tenant filter
     if (params.action === 'findMany' || params.action === 'count' || params.action === 'aggregate' || params.action === 'groupBy') {
-      // For findMany, add organizationId to where clause
+      // For findMany, add tenantId to where clause
       if (!params.args) {
         params.args = {};
       }
@@ -98,10 +100,10 @@ export function createTenantIsolationMiddleware() {
         params.args.where = {};
       }
 
-      // Add organizationId filter (merge with existing where clause)
+      // Add tenantId filter (merge with existing where clause)
       params.args.where = {
         ...params.args.where,
-        organizationId,
+        tenantId,
       };
     } else if (params.action === 'findUnique' || params.action === 'findFirst') {
       // For findUnique/findFirst, we can't automatically filter by ID
@@ -110,7 +112,7 @@ export function createTenantIsolationMiddleware() {
       if (params.args?.where && typeof params.args.where === 'object' && !params.args.where.id) {
         params.args.where = {
           ...params.args.where,
-          organizationId,
+          tenantId,
         };
       }
     }

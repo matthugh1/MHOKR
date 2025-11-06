@@ -68,17 +68,17 @@ export class RBACMigrationService {
     const superuserIds = new Set(superusers.map(u => u.id));
 
     // Migrate organization memberships - use raw SQL if Prisma schema doesn't have the table
-    let orgMembers: Array<{id: string, userId: string, organizationId: string, role: string}> = [];
+    let orgMembers: Array<{id: string, userId: string, tenantId: string, role: string}> = [];
     try {
       // Try Prisma first
       orgMembers = await this.prisma.$queryRaw`
-        SELECT id, "userId", "organizationId", role::text
+        SELECT id, "userId", "tenantId", role::text
         FROM organization_members
       `;
     } catch (error) {
       // If table doesn't exist in Prisma schema, use raw SQL
-      const result = await this.prisma.$queryRaw<Array<{id: string, userId: string, organizationId: string, role: string}>>`
-        SELECT id, "userId", "organizationId", role::text
+      const result = await this.prisma.$queryRaw<Array<{id: string, userId: string, tenantId: string, role: string}>>`
+        SELECT id, "userId", "tenantId", role::text
         FROM organization_members
       `;
       orgMembers = result;
@@ -98,9 +98,9 @@ export class RBACMigrationService {
             member.userId,
             newRole,
             'TENANT',
-            member.organizationId,
+            member.tenantId,
             migratedBy,
-            member.organizationId, // Use the organization being migrated, not null
+            member.tenantId, // Use the organization being migrated, not null
           );
           orgCount++;
         } catch (error) {
@@ -112,16 +112,16 @@ export class RBACMigrationService {
     }
 
     // Migrate workspace memberships
-    let workspaceMembers: Array<{id: string, userId: string, workspaceId: string, role: string, organizationId: string}> = [];
+    let workspaceMembers: Array<{id: string, userId: string, workspaceId: string, role: string, tenantId: string}> = [];
     try {
       workspaceMembers = await this.prisma.$queryRaw`
-        SELECT wm.id, wm."userId", wm."workspaceId", wm.role::text, w."organizationId"
+        SELECT wm.id, wm."userId", wm."workspaceId", wm.role::text, w."tenantId"
         FROM workspace_members wm
         JOIN workspaces w ON wm."workspaceId" = w.id
       `;
     } catch (error) {
-      const result = await this.prisma.$queryRaw<Array<{id: string, userId: string, workspaceId: string, role: string, organizationId: string}>>`
-        SELECT wm.id, wm."userId", wm."workspaceId", wm.role::text, w."organizationId"
+      const result = await this.prisma.$queryRaw<Array<{id: string, userId: string, workspaceId: string, role: string, tenantId: string}>>`
+        SELECT wm.id, wm."userId", wm."workspaceId", wm.role::text, w."tenantId"
         FROM workspace_members wm
         JOIN workspaces w ON wm."workspaceId" = w.id
       `;
@@ -144,7 +144,7 @@ export class RBACMigrationService {
             'WORKSPACE',
             member.workspaceId,
             migratedBy,
-            member.organizationId, // Use the workspace's organization
+            member.tenantId, // Use the workspace's organization
           );
           workspaceCount++;
         } catch (error) {
@@ -156,17 +156,17 @@ export class RBACMigrationService {
     }
 
     // Migrate team memberships
-    let teamMembers: Array<{id: string, userId: string, teamId: string, role: string, organizationId: string}> = [];
+    let teamMembers: Array<{id: string, userId: string, teamId: string, role: string, tenantId: string}> = [];
     try {
       teamMembers = await this.prisma.$queryRaw`
-        SELECT tm.id, tm."userId", tm."teamId", tm.role::text, w."organizationId"
+        SELECT tm.id, tm."userId", tm."teamId", tm.role::text, w."tenantId"
         FROM team_members tm
         JOIN teams t ON tm."teamId" = t.id
         JOIN workspaces w ON t."workspaceId" = w.id
       `;
     } catch (error) {
-      const result = await this.prisma.$queryRaw<Array<{id: string, userId: string, teamId: string, role: string, organizationId: string}>>`
-        SELECT tm.id, tm."userId", tm."teamId", tm.role::text, w."organizationId"
+      const result = await this.prisma.$queryRaw<Array<{id: string, userId: string, teamId: string, role: string, tenantId: string}>>`
+        SELECT tm.id, tm."userId", tm."teamId", tm.role::text, w."tenantId"
         FROM team_members tm
         JOIN teams t ON tm."teamId" = t.id
         JOIN workspaces w ON t."workspaceId" = w.id
@@ -190,7 +190,7 @@ export class RBACMigrationService {
             'TEAM',
             member.teamId,
             migratedBy,
-            member.organizationId, // Use the team's workspace organization
+            member.tenantId, // Use the team's workspace organization
           );
           teamCount++;
         } catch (error) {
@@ -235,8 +235,8 @@ export class RBACMigrationService {
     }
 
     // Organization memberships - use raw SQL
-    const orgMembers = await this.prisma.$queryRaw<Array<{id: string, userId: string, organizationId: string, role: string}>>`
-      SELECT id, "userId", "organizationId", role::text
+    const orgMembers = await this.prisma.$queryRaw<Array<{id: string, userId: string, tenantId: string, role: string}>>`
+      SELECT id, "userId", "tenantId", role::text
       FROM organization_members
       WHERE "userId" = ${userId}
     `;
@@ -248,16 +248,16 @@ export class RBACMigrationService {
           userId,
           newRole,
           'TENANT',
-          member.organizationId,
+          member.tenantId,
           migratedBy,
-          member.organizationId,
+          member.tenantId,
         );
       }
     }
 
     // Workspace memberships - use raw SQL
-    const workspaceMembers = await this.prisma.$queryRaw<Array<{id: string, userId: string, workspaceId: string, role: string, organizationId: string}>>`
-      SELECT wm.id, wm."userId", wm."workspaceId", wm.role::text, w."organizationId"
+    const workspaceMembers = await this.prisma.$queryRaw<Array<{id: string, userId: string, workspaceId: string, role: string, tenantId: string}>>`
+      SELECT wm.id, wm."userId", wm."workspaceId", wm.role::text, w."tenantId"
       FROM workspace_members wm
       JOIN workspaces w ON wm."workspaceId" = w.id
       WHERE wm."userId" = ${userId}
@@ -272,14 +272,14 @@ export class RBACMigrationService {
           'WORKSPACE',
           member.workspaceId,
           migratedBy,
-          member.organizationId,
+          member.tenantId,
         );
       }
     }
 
     // Team memberships - use raw SQL
-    const teamMembers = await this.prisma.$queryRaw<Array<{id: string, userId: string, teamId: string, role: string, organizationId: string}>>`
-      SELECT tm.id, tm."userId", tm."teamId", tm.role::text, w."organizationId"
+    const teamMembers = await this.prisma.$queryRaw<Array<{id: string, userId: string, teamId: string, role: string, tenantId: string}>>`
+      SELECT tm.id, tm."userId", tm."teamId", tm.role::text, w."tenantId"
       FROM team_members tm
       JOIN teams t ON tm."teamId" = t.id
       JOIN workspaces w ON t."workspaceId" = w.id
@@ -295,7 +295,7 @@ export class RBACMigrationService {
           'TEAM',
           member.teamId,
           migratedBy,
-          member.organizationId,
+          member.tenantId,
         );
       }
     }

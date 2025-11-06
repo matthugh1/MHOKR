@@ -16,7 +16,7 @@ export interface AuditLogRecordParams {
   targetUserId?: string;
   targetId: string;
   targetType: AuditTargetType;
-  organizationId?: string | null;
+  tenantId?: string | null;
   previousRole?: RBACRole | null;
   newRole?: RBACRole | null;
   metadata?: Record<string, any>;

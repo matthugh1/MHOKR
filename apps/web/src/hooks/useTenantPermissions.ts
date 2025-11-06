@@ -24,7 +24,7 @@ import { usePermissions } from './usePermissions'
 interface Objective {
   id: string
   ownerId: string
-  organizationId?: string | null
+  tenantId?: string | null
   workspaceId?: string | null
   teamId?: string | null
   isPublished?: boolean
@@ -39,14 +39,14 @@ interface Objective {
 interface KeyResult {
   id: string
   ownerId: string
-  organizationId?: string | null
+  tenantId?: string | null
   workspaceId?: string | null
   teamId?: string | null
   // Key Results inherit publish/cycle lock from parent objective
   // Pass parent objective info when checking permissions
   parentObjective?: {
     id: string
-    organizationId?: string | null
+    tenantId?: string | null
     isPublished?: boolean
     cycle?: {
       id: string
@@ -82,8 +82,8 @@ export function useTenantPermissions(): PermissionChecks {
 
   // Helper: Check if user can override publish/cycle locks (tenant admin/owner)
   const canOverrideLocks = useMemo(() => {
-    return (organizationId?: string | null): boolean => {
-      return permissions.isTenantAdminOrOwner(organizationId || undefined)
+    return (tenantId?: string | null): boolean => {
+      return permissions.isTenantAdminOrOwner(tenantId || undefined)
     }
   }, [permissions.isTenantAdminOrOwner])
 
@@ -120,12 +120,12 @@ export function useTenantPermissions(): PermissionChecks {
       }
 
       // PRIVATE: Check if user is TENANT_OWNER for this organization
-      if (objective.organizationId && permissions.isTenantAdminOrOwner(objective.organizationId)) {
+      if (objective.tenantId && permissions.isTenantAdminOrOwner(objective.tenantId)) {
         return true
       }
 
       // PRIVATE: Check whitelist from organization metadata
-      if (objective.organizationId && currentOrganization?.id === objective.organizationId) {
+      if (objective.tenantId && currentOrganization?.id === objective.tenantId) {
         const org = currentOrganization as any
         const userId = user?.id
         
@@ -163,7 +163,7 @@ export function useTenantPermissions(): PermissionChecks {
       }
 
       // Different tenant - deny by default (should not happen due to tenant isolation, but be defensive)
-      if (objective.organizationId && currentOrganization?.id && objective.organizationId !== currentOrganization.id) {
+      if (objective.tenantId && currentOrganization?.id && objective.tenantId !== currentOrganization.id) {
         return false
       }
 
@@ -178,7 +178,7 @@ export function useTenantPermissions(): PermissionChecks {
       return canViewObjective({
         id: obj.id,
         ownerId: obj.ownerId,
-        organizationId: obj.organizationId,
+        tenantId: obj.tenantId,
         workspaceId: obj.workspaceId,
         teamId: obj.teamId,
         isPublished: obj.isPublished,
@@ -197,7 +197,7 @@ export function useTenantPermissions(): PermissionChecks {
         return canViewObjective({
           id: parentObjective.id,
           ownerId: parentObjective.ownerId,
-          organizationId: parentObjective.organizationId,
+          tenantId: parentObjective.tenantId,
           workspaceId: parentObjective.workspaceId,
           teamId: parentObjective.teamId,
           isPublished: parentObjective.isPublished,
@@ -222,17 +222,17 @@ export function useTenantPermissions(): PermissionChecks {
         console.log('[canEditObjective] Cannot view objective:', {
           objectiveId: objective.id,
           visibilityLevel: objective.visibilityLevel,
-          organizationId: objective.organizationId,
+          tenantId: objective.tenantId,
         })
         return false
       }
 
       // Tenant admins/owners can override locks, so check that first
-      const canOverride = canOverrideLocks(objective.organizationId)
+      const canOverride = canOverrideLocks(objective.tenantId)
       console.log('[canEditObjective] Permission check:', {
         objectiveId: objective.id,
         canOverride,
-        organizationId: objective.organizationId,
+        tenantId: objective.tenantId,
         isPublished: objective.isPublished,
       })
       
@@ -258,7 +258,7 @@ export function useTenantPermissions(): PermissionChecks {
       // Otherwise, check basic RBAC edit permission
       const canEditRBAC = permissions.canEditOKR({
         ownerId: objective.ownerId,
-        organizationId: objective.organizationId || undefined,
+        tenantId: objective.tenantId || undefined,
         workspaceId: objective.workspaceId || undefined,
         teamId: objective.teamId || undefined,
       })
@@ -277,7 +277,7 @@ export function useTenantPermissions(): PermissionChecks {
       }
 
       // Tenant admins/owners can override locks, so check that first
-      const canOverride = canOverrideLocks(objective.organizationId)
+      const canOverride = canOverrideLocks(objective.tenantId)
       
       // Check publish lock: if published, only tenant admin/owner can delete
       const isPublished = objective.isPublished === true
@@ -300,7 +300,7 @@ export function useTenantPermissions(): PermissionChecks {
       // Otherwise, check basic RBAC delete permission
       const canDeleteRBAC = permissions.canDeleteOKR({
         ownerId: objective.ownerId,
-        organizationId: objective.organizationId || undefined,
+        tenantId: objective.tenantId || undefined,
         workspaceId: objective.workspaceId || undefined,
         teamId: objective.teamId || undefined,
       })
@@ -312,7 +312,7 @@ export function useTenantPermissions(): PermissionChecks {
   const canEditKeyResult = useMemo(() => {
     return (keyResult: KeyResult): boolean => {
       // Tenant admins/owners can override locks, so check that first
-      const canOverride = canOverrideLocks(keyResult.organizationId || keyResult.parentObjective?.organizationId)
+      const canOverride = canOverrideLocks(keyResult.tenantId || keyResult.parentObjective?.tenantId)
       
       // Check publish/cycle lock from parent objective
       const parentObjective = keyResult.parentObjective
@@ -338,7 +338,7 @@ export function useTenantPermissions(): PermissionChecks {
       // Otherwise, check basic RBAC edit permission for the KR
       const canEditRBAC = permissions.canEditOKR({
         ownerId: keyResult.ownerId,
-        organizationId: keyResult.organizationId || undefined,
+        tenantId: keyResult.tenantId || undefined,
         workspaceId: keyResult.workspaceId || undefined,
         teamId: keyResult.teamId || undefined,
       })
@@ -382,7 +382,7 @@ export function useTenantPermissions(): PermissionChecks {
       }
       
       const isPublished = objective.isPublished === true
-      const canOverride = canOverrideLocks(objective.organizationId)
+      const canOverride = canOverrideLocks(objective.tenantId)
       const cycleStatus = getCycleStatus(objective)
       const cycleLocked = isCycleLocked(cycleStatus)
 
@@ -439,7 +439,7 @@ export function useTenantPermissions(): PermissionChecks {
       }
 
       const isPublished = parentObjective.isPublished === true
-      const canOverride = canOverrideLocks(parentObjective.organizationId || keyResult.organizationId)
+      const canOverride = canOverrideLocks(parentObjective.tenantId || keyResult.tenantId)
       const cycleStatus = parentObjective.cycle?.status || parentObjective.cycleStatus || null
       const cycleLocked = isCycleLocked(cycleStatus)
 

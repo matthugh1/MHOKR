@@ -15,7 +15,7 @@ describe('WorkspaceService - Tenant Isolation', () => {
   const workspaceA = {
     id: 'workspace-a',
     name: 'Workspace A',
-    organizationId: 'org-a',
+    tenantId: 'org-a',
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -23,7 +23,7 @@ describe('WorkspaceService - Tenant Isolation', () => {
   const workspaceB = {
     id: 'workspace-b',
     name: 'Workspace B',
-    organizationId: 'org-b',
+    tenantId: 'org-b',
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -100,7 +100,7 @@ describe('WorkspaceService - Tenant Isolation', () => {
 
       expect(result).toEqual([workspaceA]);
       expect(mockPrismaService.workspace.findMany).toHaveBeenCalledWith({
-        where: { organizationId: 'org-a' },
+        where: { tenantId: 'org-a' },
         include: {
           organization: true,
           parentWorkspace: true,
@@ -117,7 +117,7 @@ describe('WorkspaceService - Tenant Isolation', () => {
 
       expect(result).toEqual([workspaceB]);
       expect(mockPrismaService.workspace.findMany).toHaveBeenCalledWith({
-        where: { organizationId: 'org-b' },
+        where: { tenantId: 'org-b' },
         include: {
           organization: true,
           parentWorkspace: true,

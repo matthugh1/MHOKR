@@ -160,7 +160,7 @@ describe('RBACGuard Enforcement', () => {
 
   describe('Publish Lock Enforcement', () => {
     it('should deny non-admin roles from publishing published OKRs', async () => {
-      const user = { id: 'user-id', email: 'user@test.com', organizationId: 'org-1' };
+      const user = { id: 'user-id', email: 'user@test.com', tenantId: 'org-1' };
       const context = mockExecutionContext('publish_okr', user);
 
       jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue('publish_okr');
@@ -181,7 +181,7 @@ describe('RBACGuard Enforcement', () => {
 
   describe('Tenant Isolation', () => {
     it('should deny cross-tenant access attempts', async () => {
-      const user = { id: 'user-id', email: 'user@test.com', organizationId: 'org-1' };
+      const user = { id: 'user-id', email: 'user@test.com', tenantId: 'org-1' };
       const context = mockExecutionContext('view_okr', user);
 
       jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue('view_okr');

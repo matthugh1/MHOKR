@@ -5,6 +5,8 @@
  */
 
 const rbacRule = require('../../scripts/rbac/eslint-no-unguarded-mutation');
+const noOrgIdentifierRule = require('../../scripts/eslint-rules/no-org-identifier');
+const noUnguardedMutationsRule = require('../../scripts/eslint-rules/no-unguarded-mutations');
 
 module.exports = {
   plugins: {
@@ -13,10 +15,22 @@ module.exports = {
         'no-unguarded-mutation': rbacRule,
       },
     },
+    'local-tenant': {
+      rules: {
+        'no-org-identifier': noOrgIdentifierRule,
+        'no-unguarded-mutations': noUnguardedMutationsRule,
+      },
+    },
   },
   rules: {
     // RBAC: Ensure mutations have @RequireAction and RBACGuard
     'local-rbac/no-unguarded-mutation': 'error',
+    
+    // Tenant canonicalisation: Flag organizationId/organisationId/orgId usage
+    'local-tenant/no-org-identifier': 'error',
+    
+    // Tenant guardrails: Ensure mutations have TenantMutationGuard
+    'local-tenant/no-unguarded-mutations': 'warn',
     
     // Custom rule: Ensure findMany() includes tenant filter
     // This would require a custom ESLint plugin to implement

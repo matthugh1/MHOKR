@@ -3,10 +3,11 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
+import { TenantMutationGuard } from '../../common/tenant/tenant-mutation.guard';
 
 @ApiTags('Users')
 @Controller('users')
-@UseGuards(JwtAuthGuard, RBACGuard)
+@UseGuards(JwtAuthGuard, TenantMutationGuard, RBACGuard)
 @ApiBearerAuth()
 export class UserController {
   constructor(
@@ -33,14 +34,14 @@ export class UserController {
   @RequireAction('manage_users')
   @ApiOperation({ summary: 'Get all users (tenant-isolated)' })
   async getAllUsers(@Req() req: any) {
-    return this.userService.findAll(req.user.organizationId);
+    return this.userService.findAll(req.user.tenantId);
   }
 
   @Get(':id')
   @RequireAction('manage_users')
   @ApiOperation({ summary: 'Get user by ID (tenant-isolated)' })
   async getUserById(@Param('id') id: string, @Req() req: any) {
-    const user = await this.userService.findById(id, req.user.organizationId);
+    const user = await this.userService.findById(id, req.user.tenantId);
     if (!user) {
       throw new NotFoundException('User not found');
     }
@@ -55,7 +56,7 @@ export class UserController {
       email: string; 
       name: string; 
       password: string; 
-      organizationId?: string; // Optional - auto-injected from context unless dev inspector enabled
+      tenantId?: string; // Optional - auto-injected from context unless dev inspector enabled
       workspaceId?: string; // Optional - only required if workspace role assignment needed
       role?: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER';
       workspaceRole?: 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER';
@@ -63,8 +64,8 @@ export class UserController {
     @Req() req: any,
   ) {
     // Auto-inject tenant from context if not provided
-    let resolvedTenantId = data.organizationId;
-    const callerTenantId = req.user.organizationId;
+    let resolvedTenantId = data.tenantId;
+    const callerTenantId = req.user.tenantId;
     const isSuperuser = callerTenantId === null;
     
     if (!resolvedTenantId) {
@@ -97,24 +98,24 @@ export class UserController {
     // Update data with resolved tenant
     const payload = {
       ...data,
-      organizationId: resolvedTenantId,
+      tenantId: resolvedTenantId,
     };
     
-    return this.userService.createUser(payload, req.user.organizationId, req.user.id);
+    return this.userService.createUser(payload, req.user.tenantId, req.user.id);
   }
 
   @Patch(':id')
   @RequireAction('manage_users')
   @ApiOperation({ summary: 'Update user information' })
   async updateUser(@Param('id') id: string, @Body() data: { name?: string; email?: string }, @Req() req: any) {
-    return this.userService.updateUser(id, data, req.user.organizationId, req.user.id);
+    return this.userService.updateUser(id, data, req.user.tenantId, req.user.id);
   }
 
   @Post(':id/reset-password')
   @RequireAction('manage_users')
   @ApiOperation({ summary: 'Reset user password' })
   async resetPassword(@Param('id') id: string, @Body() data: { password: string }, @Req() req: any) {
-    return this.userService.resetPassword(id, data.password, req.user.organizationId, req.user.id);
+    return this.userService.resetPassword(id, data.password, req.user.tenantId, req.user.id);
   }
 }
 

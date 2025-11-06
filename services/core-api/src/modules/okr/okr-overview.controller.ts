@@ -42,14 +42,14 @@ export class OkrOverviewController {
   @Get('overview')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get unified OKR overview with nested Key Results and Initiatives' })
-  @ApiQuery({ name: 'organizationId', required: true, description: 'Organization ID for tenant filtering' })
+  @ApiQuery({ name: 'tenantId', required: true, description: 'Organization ID for tenant filtering' })
   @ApiQuery({ name: 'cycleId', required: false, description: 'Filter by cycle ID' })
   @ApiQuery({ name: 'status', required: false, enum: ['ON_TRACK', 'AT_RISK', 'BLOCKED', 'COMPLETED', 'CANCELLED'], description: 'Filter by objective status' })
   @ApiQuery({ name: 'scope', required: false, enum: ['my', 'team-workspace', 'tenant'], description: 'Filter by scope: my (owned by user), team-workspace (user manages), tenant (all tenant OKRs)' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
   @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Items per page (default: 20, max: 50)' })
   async getOverview(
-    @Query('organizationId') organizationId: string | undefined,
+    @Query('tenantId') tenantId: string | undefined,
     @Query('cycleId') cycleId: string | undefined,
     @Query('status') status: string | undefined,
     @Query('scope') scope: string | undefined,
@@ -58,13 +58,13 @@ export class OkrOverviewController {
     @Req() req: any,
   ) {
     try {
-      // Require organizationId query parameter
-      if (!organizationId) {
-        throw new BadRequestException('organizationId is required');
+      // Require tenantId query parameter
+      if (!tenantId) {
+        throw new BadRequestException('tenantId is required');
       }
 
       // Tenant isolation: validate user has access to this organization
-      const userOrganizationId = req.user.organizationId;
+      const userOrganizationId = req.user.tenantId;
       
       // If user has no organization (undefined), deny access
       if (userOrganizationId === undefined) {
@@ -74,7 +74,7 @@ export class OkrOverviewController {
       const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
       
       // If user has a specific org and it doesn't match, deny access
-      if (userOrganizationId !== null && orgFilter && orgFilter.organizationId !== organizationId) {
+      if (userOrganizationId !== null && orgFilter && orgFilter.tenantId !== tenantId) {
         throw new BadRequestException('You do not have access to this organisation');
       }
 
@@ -93,7 +93,7 @@ export class OkrOverviewController {
       const requesterUserId = req.user.id;
 
       // Build where clause for objectives (tenant isolation already enforced)
-      const where: any = { organizationId };
+      const where: any = { tenantId };
       
       // Apply scope-based filtering before other filters
       if (scope) {
@@ -155,7 +155,7 @@ export class OkrOverviewController {
             where.id = 'never-match-this-id';
           }
         } else if (scope === 'tenant') {
-          // Tenant scope: no additional filter needed (organizationId already set)
+          // Tenant scope: no additional filter needed (tenantId already set)
           // Show all tenant OKRs (visibility filtering will still apply)
         }
       }
@@ -227,7 +227,7 @@ export class OkrOverviewController {
     // Filter objectives by visibility
     const visibleObjectives = [];
     for (const objective of allObjectives) {
-      if (!objective.organizationId) {
+      if (!objective.tenantId) {
         continue;
       }
       try {
@@ -235,7 +235,7 @@ export class OkrOverviewController {
           objective: {
             id: objective.id,
             ownerId: objective.ownerId,
-            organizationId: objective.organizationId,
+            tenantId: objective.tenantId,
             visibilityLevel: objective.visibilityLevel,
           },
           requesterUserId,
@@ -290,7 +290,7 @@ export class OkrOverviewController {
     });
 
     // Build resource context for governance checks
-    // Ensure organizationId is never undefined - if it is, we shouldn't have gotten this far
+    // Ensure tenantId is never undefined - if it is, we shouldn't have gotten this far
     if (userOrganizationId === undefined) {
       console.error('[OKR OVERVIEW] CRITICAL: userOrganizationId is undefined after validation check');
       throw new BadRequestException('User organization not properly set');
@@ -298,7 +298,7 @@ export class OkrOverviewController {
 
     const actingUser = {
       id: requesterUserId,
-      organizationId: userOrganizationId,
+      tenantId: userOrganizationId,
     };
 
     // Transform to unified response format with canEdit/canDelete/canCheckIn flags
@@ -348,7 +348,7 @@ export class OkrOverviewController {
             parentObjective: {
               id: o.id,
               ownerId: o.ownerId,
-              organizationId: o.organizationId || '',
+              tenantId: o.tenantId || '',
               visibilityLevel: o.visibilityLevel,
             },
             requesterUserId,
@@ -474,9 +474,9 @@ export class OkrOverviewController {
     // Check if user can create objectives in this context
     let canCreateObjective = false;
     try {
-      // Use the organizationId from query params (what user is viewing) for RBAC check
+      // Use the tenantId from query params (what user is viewing) for RBAC check
       // This is the tenant context we're checking permissions against
-      const tenantIdForRBAC = organizationId || userOrganizationId || '';
+      const tenantIdForRBAC = tenantId || userOrganizationId || '';
       
       // Build resource context for creation check (no specific OKR ID needed)
       const resourceContext = {
@@ -565,8 +565,8 @@ export class OkrOverviewController {
       } catch (e) {
         console.error('[OKR OVERVIEW] Error object (non-serializable):', error);
       }
-      console.error('[OKR OVERVIEW] Request params:', { organizationId, cycleId, status, page, pageSize });
-      console.error('[OKR OVERVIEW] User:', { id: req?.user?.id, email: req?.user?.email, organizationId: req?.user?.organizationId });
+      console.error('[OKR OVERVIEW] Request params:', { tenantId, cycleId, status, page, pageSize });
+      console.error('[OKR OVERVIEW] User:', { id: req?.user?.id, email: req?.user?.email, tenantId: req?.user?.tenantId });
       console.error('[OKR OVERVIEW] ========== ERROR END ==========');
       throw error;
     }
@@ -575,30 +575,30 @@ export class OkrOverviewController {
   @Get('creation-context')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get creation context for OKR creation drawer' })
-  @ApiQuery({ name: 'organizationId', required: true, description: 'Organization ID for tenant filtering' })
+  @ApiQuery({ name: 'tenantId', required: true, description: 'Organization ID for tenant filtering' })
   async getCreationContext(
-    @Query('organizationId') organizationId: string | undefined,
+    @Query('tenantId') tenantId: string | undefined,
     @Req() req: any,
   ) {
-    // Require organizationId query parameter
-    if (!organizationId) {
-      throw new BadRequestException('organizationId is required');
+    // Require tenantId query parameter
+    if (!tenantId) {
+      throw new BadRequestException('tenantId is required');
     }
 
     // Tenant isolation: validate user has access to this organization
-    const userOrganizationId = req.user.organizationId;
+    const userOrganizationId = req.user.tenantId;
     const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
     
     // If user has a specific org and it doesn't match, deny access
-    if (userOrganizationId !== null && orgFilter && orgFilter.organizationId !== organizationId) {
+    if (userOrganizationId !== null && orgFilter && orgFilter.tenantId !== tenantId) {
       throw new BadRequestException('You do not have access to this organisation');
     }
 
     const requesterUserId = req.user.id;
 
     // Build resource context for RBAC checks
-    // Use organizationId from query params (what user is viewing) for RBAC check
-    const tenantIdForRBAC = organizationId || userOrganizationId || '';
+    // Use tenantId from query params (what user is viewing) for RBAC check
+    const tenantIdForRBAC = tenantId || userOrganizationId || '';
     const resourceContext = {
       tenantId: tenantIdForRBAC,
       workspaceId: null,
@@ -645,7 +645,7 @@ export class OkrOverviewController {
       const tenantAssignments = await this.prisma.roleAssignment.findMany({
         where: {
           scopeType: 'TENANT',
-          scopeId: organizationId,
+          scopeId: tenantId,
         },
         include: {
           user: {
@@ -673,7 +673,7 @@ export class OkrOverviewController {
     try {
       const cycles = await this.prisma.cycle.findMany({
         where: {
-          organizationId: organizationId,
+          tenantId: tenantId,
           status: {
             in: ['DRAFT', 'ACTIVE'], // Only allow creation in DRAFT or ACTIVE cycles
           },
@@ -699,7 +699,7 @@ export class OkrOverviewController {
         if (canEdit) {
           const lockedCycles = await this.prisma.cycle.findMany({
             where: {
-              organizationId: organizationId,
+              tenantId: tenantId,
               status: 'LOCKED',
             },
             select: {
@@ -758,7 +758,7 @@ export class OkrOverviewController {
     },
     @Req() req: any,
   ) {
-    const userOrganizationId = req.user.organizationId;
+    const userOrganizationId = req.user.tenantId;
     const userId = req.user.id;
 
     // Validate request body

@@ -22,8 +22,8 @@ export class RBACInspectorService {
   /**
    * Check if user can manage users (has manage_users permission)
    */
-  async canManageUsers(userId: string, organizationId: string | null | undefined): Promise<boolean> {
-    if (!organizationId) {
+  async canManageUsers(userId: string, tenantId: string | null | undefined): Promise<boolean> {
+    if (!tenantId) {
       // Superuser can manage (but self-toggle still requires explicit permission check)
       return false;
     }
@@ -31,7 +31,7 @@ export class RBACInspectorService {
     return await this.rbacService.canPerformAction(
       userId,
       'manage_users',
-      { tenantId: organizationId },
+      { tenantId: tenantId },
     );
   }
 
@@ -67,14 +67,14 @@ export class RBACInspectorService {
     userId: string,
     enabled: boolean,
     actorUserId: string,
-    organizationId: string | null,
+    tenantId: string | null,
   ): Promise<void> {
     return await this.featureFlagService.setFeatureFlag(
       userId,
       'rbacInspector',
       enabled,
       actorUserId,
-      organizationId,
+      tenantId,
     );
   }
 }

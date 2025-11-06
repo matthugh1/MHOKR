@@ -14,7 +14,7 @@ describe('ObjectiveService - Tenant Isolation', () => {
   const objectiveA = {
     id: 'objective-a',
     title: 'Objective A',
-    organizationId: 'org-a',
+    tenantId: 'org-a',
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -22,7 +22,7 @@ describe('ObjectiveService - Tenant Isolation', () => {
   const objectiveB = {
     id: 'objective-b',
     title: 'Objective B',
-    organizationId: 'org-b',
+    tenantId: 'org-b',
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -124,10 +124,10 @@ describe('ObjectiveService - Tenant Isolation', () => {
       await expect(service.findById('objective-b', 'org-a')).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw NotFoundException if objective has empty organizationId and user is not SUPERUSER', async () => {
+    it('should throw NotFoundException if objective has empty tenantId and user is not SUPERUSER', async () => {
       const objectiveNoOrg = {
         ...objectiveA,
-        organizationId: '',
+        tenantId: '',
       };
       mockPrismaService.objective.findUnique.mockResolvedValue(objectiveNoOrg);
 

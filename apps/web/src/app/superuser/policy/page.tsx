@@ -15,6 +15,7 @@ import { ActionPicker } from './components/ActionPicker'
 import { ResourcePicker } from './components/ResourcePicker'
 import { JsonContextEditor } from './components/JsonContextEditor'
 import { DecisionViewer } from './components/DecisionViewer'
+import { TenantSelector } from './components/TenantSelector'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Info } from 'lucide-react'
@@ -85,6 +86,7 @@ export default function PolicyExplorerPage() {
     resource: {},
     context: {},
   })
+  const [selectedTenantId, setSelectedTenantId] = useState<string>('')
 
   useEffect(() => {
     // Check if user is superuser and flag is enabled
@@ -212,10 +214,16 @@ export default function PolicyExplorerPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                <TenantSelector
+                  value={selectedTenantId}
+                  onChange={setSelectedTenantId}
+                />
+
                 <div>
                   <UserPicker
                     value={form.userId}
                     onChange={(userId) => setForm({ ...form, userId })}
+                    tenantId={selectedTenantId || undefined}
                   />
                   <Button
                     variant="outline"
@@ -235,6 +243,7 @@ export default function PolicyExplorerPage() {
                 <ResourcePicker
                   value={form.resource}
                   onChange={(resource) => setForm({ ...form, resource })}
+                  tenantId={selectedTenantId || undefined}
                 />
                 <Button
                   variant="outline"

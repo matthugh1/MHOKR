@@ -34,15 +34,15 @@ export class OkrCycleController {
   async getAll(@Req() req: any) {
     await this.checkCycleManagementPermission(req);
     
-    const organizationId = req.user.organizationId;
+    const tenantId = req.user.tenantId;
     
-    if (organizationId === undefined) {
+    if (tenantId === undefined) {
       throw new BadRequestException('User must belong to an organization');
     }
 
-    OkrTenantGuard.assertCanMutateTenant(organizationId);
+    OkrTenantGuard.assertCanMutateTenant(tenantId);
 
-    return this.cycleService.findAll(organizationId);
+    return this.cycleService.findAll(tenantId);
   }
 
   // IMPORTANT: Specific routes must come before parameterized routes in NestJS
@@ -58,9 +58,9 @@ export class OkrCycleController {
     
     await this.checkCycleManagementPermission(req);
     
-    const organizationId = req.user.organizationId;
+    const tenantId = req.user.tenantId;
     
-    if (organizationId === undefined) {
+    if (tenantId === undefined) {
       throw new BadRequestException('User must belong to an organization');
     }
 
@@ -78,7 +78,7 @@ export class OkrCycleController {
     }
 
     // Access cycleGenerator through the service
-    const result = await this.cycleService.cycleGenerator.getOrCreateStandardCycle(organizationId, type, dateObj);
+    const result = await this.cycleService.cycleGenerator.getOrCreateStandardCycle(tenantId, type, dateObj);
     console.log('[CYCLE CONTROLLER] get-or-create-standard result', { cycleId: result?.id, cycleName: result?.name });
     return result;
   }
@@ -94,13 +94,13 @@ export class OkrCycleController {
     
     await this.checkCycleManagementPermission(req);
     
-    const organizationId = req.user.organizationId;
+    const tenantId = req.user.tenantId;
     
-    if (organizationId === undefined) {
+    if (tenantId === undefined) {
       throw new BadRequestException('User must belong to an organization');
     }
 
-    return this.cycleService.getSummary(id, organizationId);
+    return this.cycleService.getSummary(id, tenantId);
   }
 
   // This route must come last to avoid matching conflicts with specific routes
@@ -117,13 +117,13 @@ export class OkrCycleController {
     
     await this.checkCycleManagementPermission(req);
     
-    const organizationId = req.user.organizationId;
+    const tenantId = req.user.tenantId;
     
-    if (organizationId === undefined) {
+    if (tenantId === undefined) {
       throw new BadRequestException('User must belong to an organization');
     }
 
-    return this.cycleService.findById(id, organizationId);
+    return this.cycleService.findById(id, tenantId);
   }
 
   @Post()
@@ -132,13 +132,13 @@ export class OkrCycleController {
   async create(@Body() data: CreateCycleDto, @Req() req: any) {
     await this.checkCycleManagementPermission(req);
     
-    const organizationId = req.user.organizationId;
+    const tenantId = req.user.tenantId;
     
-    if (organizationId === undefined) {
+    if (tenantId === undefined) {
       throw new BadRequestException('User must belong to an organization');
     }
 
-    return this.cycleService.create(data, organizationId);
+    return this.cycleService.create(data, tenantId);
   }
 
   @Patch(':id')
@@ -151,13 +151,13 @@ export class OkrCycleController {
   ) {
     await this.checkCycleManagementPermission(req);
     
-    const organizationId = req.user.organizationId;
+    const tenantId = req.user.tenantId;
     
-    if (organizationId === undefined) {
+    if (tenantId === undefined) {
       throw new BadRequestException('User must belong to an organization');
     }
 
-    return this.cycleService.update(id, data, organizationId);
+    return this.cycleService.update(id, data, tenantId);
   }
 
   @Patch(':id/status')
@@ -170,9 +170,9 @@ export class OkrCycleController {
   ) {
     await this.checkCycleManagementPermission(req);
     
-    const organizationId = req.user.organizationId;
+    const tenantId = req.user.tenantId;
     
-    if (organizationId === undefined) {
+    if (tenantId === undefined) {
       throw new BadRequestException('User must belong to an organization');
     }
 
@@ -180,7 +180,7 @@ export class OkrCycleController {
       throw new BadRequestException('status is required');
     }
 
-    return this.cycleService.updateStatus(id, body.status, organizationId);
+    return this.cycleService.updateStatus(id, body.status, tenantId);
   }
 
   @Delete(':id')
@@ -189,13 +189,13 @@ export class OkrCycleController {
   async delete(@Param('id') id: string, @Req() req: any) {
     await this.checkCycleManagementPermission(req);
     
-    const organizationId = req.user.organizationId;
+    const tenantId = req.user.tenantId;
     
-    if (organizationId === undefined) {
+    if (tenantId === undefined) {
       throw new BadRequestException('User must belong to an organization');
     }
 
-    await this.cycleService.delete(id, organizationId);
+    await this.cycleService.delete(id, tenantId);
     return { success: true };
   }
 
@@ -205,7 +205,7 @@ export class OkrCycleController {
    */
   private async checkCycleManagementPermission(req: any): Promise<void> {
     const userId = req.user.id;
-    const organizationId = req.user.organizationId;
+    const tenantId = req.user.tenantId;
     
     // Build user context to check roles
     const userContext = await this.rbacService.buildUserContext(userId, false);
@@ -214,7 +214,7 @@ export class OkrCycleController {
     console.log('[CYCLE CONTROLLER] Permission check', {
       userId,
       userEmail: req.user.email,
-      organizationId,
+      tenantId,
       isSuperuser: userContext.isSuperuser,
       tenantRoles: Array.from(userContext.tenantRoles.entries()),
     });
@@ -228,13 +228,13 @@ export class OkrCycleController {
     let hasTenantAdminRole = false;
     let matchingTenantId: string | null = null;
     
-    // First check the organizationId from JWT if it exists
-    if (organizationId) {
-      const roles = userContext.tenantRoles.get(organizationId) || [];
+    // First check the tenantId from JWT if it exists
+    if (tenantId) {
+      const roles = userContext.tenantRoles.get(tenantId) || [];
       if (roles.includes('TENANT_OWNER') || roles.includes('TENANT_ADMIN')) {
         hasTenantAdminRole = true;
-        matchingTenantId = organizationId;
-        console.log('[CYCLE CONTROLLER] Found admin role in JWT organizationId', { organizationId, roles });
+        matchingTenantId = tenantId;
+        console.log('[CYCLE CONTROLLER] Found admin role in JWT tenantId', { tenantId, roles });
       }
     }
 
@@ -247,7 +247,7 @@ export class OkrCycleController {
           console.log('[CYCLE CONTROLLER] Found admin role in tenant (not matching JWT orgId)', { 
             tenantId, 
             roles,
-            jwtOrganizationId: organizationId 
+            jwtOrganizationId: tenantId 
           });
           break;
         }
@@ -255,7 +255,7 @@ export class OkrCycleController {
     }
 
     // Check both actions using the matching tenantId (or empty string for "any tenant" check)
-    const checkTenantId = matchingTenantId || organizationId || '';
+    const checkTenantId = matchingTenantId || tenantId || '';
     
     const canManageWorkspaces = await this.rbacService.canPerformAction(
       userId,
@@ -272,7 +272,7 @@ export class OkrCycleController {
     console.log('[CYCLE CONTROLLER] Permission results', {
       userId,
       userEmail: req.user.email,
-      jwtOrganizationId: organizationId,
+      jwtOrganizationId: tenantId,
       matchingTenantId,
       hasTenantAdminRole,
       canManageWorkspaces,
@@ -287,7 +287,7 @@ export class OkrCycleController {
 
     // Deny access
     throw new ForbiddenException(
-      `Cycle management requires manage_workspaces or manage_tenant_settings permission. User: ${req.user.email} (ID: ${userId}), JWT OrganizationId: ${organizationId}, TenantRoles: ${JSON.stringify(Array.from(userContext.tenantRoles.entries()))}`,
+      `Cycle management requires manage_workspaces or manage_tenant_settings permission. User: ${req.user.email} (ID: ${userId}), JWT OrganizationId: ${tenantId}, TenantRoles: ${JSON.stringify(Array.from(userContext.tenantRoles.entries()))}`,
     );
   }
 }

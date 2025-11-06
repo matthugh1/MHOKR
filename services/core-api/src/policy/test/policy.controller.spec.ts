@@ -7,11 +7,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PolicyController } from '../policy.controller';
-import { AuthorisationService } from '../../authorisation.service';
-import { RBACService } from '../../rbac/rbac.service';
+import { AuthorisationService } from '../authorisation.service';
+import { RBACService } from '../../modules/rbac/rbac.service';
 import { PrismaService } from '../../../common/prisma/prisma.service';
-import { SuperuserService } from '../../superuser/superuser.service';
-import { Action } from '../../rbac/types';
+import { SuperuserService } from '../../modules/superuser/superuser.service';
+import { Action } from '../../modules/rbac/types';
 
 describe('PolicyController', () => {
   let controller: PolicyController;
@@ -24,7 +24,7 @@ describe('PolicyController', () => {
     user: {
       id: 'user-123',
       email: 'test@example.com',
-      organizationId: 'org-123',
+      tenantId: 'org-123',
     },
   };
 
@@ -218,7 +218,7 @@ describe('PolicyController', () => {
       prismaService.objective.findUnique.mockResolvedValue({
         id: 'obj-123',
         ownerId: 'user-123',
-        organizationId: 'org-123',
+        tenantId: 'org-123',
         tenantId: 'org-123',
         workspaceId: 'ws-123',
         teamId: null,

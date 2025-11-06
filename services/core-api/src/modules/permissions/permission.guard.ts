@@ -37,8 +37,8 @@ export class PermissionGuard implements CanActivate {
 
     // Extract context from request (params, body, query)
     const contextData = {
-      organizationId:
-        request.params?.organizationId || request.body?.organizationId,
+      tenantId:
+        request.params?.tenantId || request.body?.tenantId,
       workspaceId: request.params?.workspaceId || request.body?.workspaceId,
       teamId: request.params?.teamId || request.body?.teamId,
       okrId: request.params?.id || request.params?.objectiveId,

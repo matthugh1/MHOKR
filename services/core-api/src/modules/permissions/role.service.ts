@@ -20,7 +20,7 @@ export interface UserRole {
   role: MemberRole;
   entityType: 'ORGANIZATION' | 'WORKSPACE' | 'TEAM';
   entityId: string;
-  organizationId?: string;
+  tenantId?: string;
   workspaceId?: string;
 }
 
@@ -122,30 +122,30 @@ export class RoleService {
           role: legacyRole,
           entityType: 'ORGANIZATION',
           entityId: assignment.scopeId,
-          organizationId: assignment.scopeId,
+          tenantId: assignment.scopeId,
         });
       } else if (assignment.scopeType === 'WORKSPACE' && assignment.scopeId) {
-        // Need to get workspace to find organizationId
+        // Need to get workspace to find tenantId
         const workspace = await this.prisma.workspace.findUnique({
           where: { id: assignment.scopeId },
-          select: { organizationId: true },
+          select: { tenantId: true },
         });
         if (workspace) {
           roles.push({
             role: legacyRole,
             entityType: 'WORKSPACE',
             entityId: assignment.scopeId,
-            organizationId: workspace.organizationId,
+            tenantId: workspace.tenantId,
             workspaceId: assignment.scopeId,
           });
         }
       } else if (assignment.scopeType === 'TEAM' && assignment.scopeId) {
-        // Need to get team to find workspaceId and organizationId
+        // Need to get team to find workspaceId and tenantId
         const team = await this.prisma.team.findUnique({
           where: { id: assignment.scopeId },
           include: {
             workspace: {
-              select: { organizationId: true },
+              select: { tenantId: true },
             },
           },
         });
@@ -154,7 +154,7 @@ export class RoleService {
             role: legacyRole,
             entityType: 'TEAM',
             entityId: assignment.scopeId,
-            organizationId: team.workspace.organizationId,
+            tenantId: team.workspace.tenantId,
             workspaceId: team.workspaceId,
           });
         }
@@ -170,14 +170,14 @@ export class RoleService {
    */
   async getUserOrganizationRole(
     userId: string,
-    organizationId: string,
+    tenantId: string,
   ): Promise<MemberRole | null> {
     // Check RBAC role assignments at tenant scope
     const tenantAssignments = await this.prisma.roleAssignment.findMany({
       where: {
         userId,
         scopeType: 'TENANT',
-        scopeId: organizationId,
+        scopeId: tenantId,
       },
     });
 
@@ -198,7 +198,7 @@ export class RoleService {
 
     // Fallback: Check workspace roles in this organization
     const workspaces = await this.prisma.workspace.findMany({
-      where: { organizationId },
+      where: { tenantId },
       select: { id: true },
     });
 
@@ -351,7 +351,7 @@ export class RoleService {
     if (entityType === 'WORKSPACE') {
       const workspace = await this.prisma.workspace.findUnique({
         where: { id: entityId },
-        include: { organization: true },
+        include: { tenant: true },
       });
 
       if (!workspace) return null;
@@ -365,7 +365,7 @@ export class RoleService {
       // Check organization role (ORG_ADMIN inherits)
       const orgRole = await this.getUserOrganizationRole(
         userId,
-        workspace.organizationId,
+        workspace.tenantId,
       );
       if (orgRole === MemberRole.ORG_ADMIN) {
         return MemberRole.ORG_ADMIN;
@@ -380,7 +380,7 @@ export class RoleService {
         include: {
           workspace: {
             include: {
-              organization: true,
+              tenant: true,
             },
           },
         },
@@ -406,7 +406,7 @@ export class RoleService {
       // Check organization role (ORG_ADMIN inherits)
       const orgRole = await this.getUserOrganizationRole(
         userId,
-        team.workspace.organizationId,
+        team.workspace.tenantId,
       );
       if (orgRole === MemberRole.ORG_ADMIN) {
         return MemberRole.ORG_ADMIN;

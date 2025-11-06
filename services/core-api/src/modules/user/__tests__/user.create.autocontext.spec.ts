@@ -19,19 +19,19 @@ describe('UserController - Auto-Context User Creation', () => {
   const mockTenantOwner = {
     id: 'tenant-owner-id',
     email: 'owner@tenant.com',
-    organizationId: 'tenant-a-id',
+    tenantId: 'tenant-a-id',
   };
 
   const mockSuperuser = {
     id: 'superuser-id',
     email: 'super@example.com',
-    organizationId: null, // SUPERUSER has null organizationId
+    tenantId: null, // SUPERUSER has null tenantId
   };
 
   const mockTenantOwnerWithInspector = {
     id: 'tenant-owner-with-inspector-id',
     email: 'owner-inspector@tenant.com',
-    organizationId: 'tenant-a-id',
+    tenantId: 'tenant-a-id',
   };
 
   beforeEach(async () => {
@@ -70,7 +70,7 @@ describe('UserController - Auto-Context User Creation', () => {
 
       const expectedPayload = {
         ...data,
-        organizationId: 'tenant-a-id',
+        tenantId: 'tenant-a-id',
       };
 
       jest.spyOn(userService, 'createUser').mockResolvedValue({
@@ -103,7 +103,7 @@ describe('UserController - Auto-Context User Creation', () => {
 
       const expectedPayload = {
         ...data,
-        organizationId: 'tenant-a-id',
+        tenantId: 'tenant-a-id',
       };
 
       jest.spyOn(userService, 'createUser').mockResolvedValue({
@@ -148,7 +148,7 @@ describe('UserController - Auto-Context User Creation', () => {
     });
 
     it('should reject when no tenant context and no organisationId provided', async () => {
-      const req = { user: { id: 'user-id', organizationId: undefined } };
+      const req = { user: { id: 'user-id', tenantId: undefined } };
       const data = {
         email: 'newuser@tenant.com',
         name: 'New User',
@@ -169,7 +169,7 @@ describe('UserController - Auto-Context User Creation', () => {
         email: 'newuser@tenantb.com',
         name: 'New User',
         password: 'password123',
-        organizationId: 'tenant-b-id',
+        tenantId: 'tenant-b-id',
         role: 'MEMBER' as const,
       };
 
@@ -198,7 +198,7 @@ describe('UserController - Auto-Context User Creation', () => {
         email: 'newuser@tenantb.com',
         name: 'New User',
         password: 'password123',
-        organizationId: 'tenant-b-id',
+        tenantId: 'tenant-b-id',
         role: 'MEMBER' as const,
       };
 
@@ -230,7 +230,7 @@ describe('UserController - Auto-Context User Creation', () => {
         email: 'newuser@tenantb.com',
         name: 'New User',
         password: 'password123',
-        organizationId: 'tenant-b-id',
+        tenantId: 'tenant-b-id',
         role: 'MEMBER' as const,
       };
 
@@ -245,7 +245,7 @@ describe('UserController - Auto-Context User Creation', () => {
         email: 'newuser@tenant.com',
         name: 'New User',
         password: 'password123',
-        organizationId: 'tenant-a-id',
+        tenantId: 'tenant-a-id',
         role: 'MEMBER' as const,
       };
 
@@ -274,7 +274,7 @@ describe('UserController - Auto-Context User Creation', () => {
         email: 'newuser@tenant.com',
         name: 'New User',
         password: 'password123',
-        organizationId: 'tenant-a-id',
+        tenantId: 'tenant-a-id',
         workspaceId: 'workspace-1',
         workspaceRole: 'MEMBER' as const,
         role: 'MEMBER' as const,

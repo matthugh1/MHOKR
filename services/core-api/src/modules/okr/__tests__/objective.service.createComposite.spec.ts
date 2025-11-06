@@ -137,7 +137,7 @@ describe('ObjectiveService.createComposite() - W5.M1', () => {
   const mockCycle = {
     id: 'cycle-1',
     status: 'ACTIVE',
-    organizationId: 'org-1',
+    tenantId: 'org-1',
     startDate: new Date('2025-01-01'),
     endDate: new Date('2025-03-31'),
   };
@@ -162,7 +162,7 @@ describe('ObjectiveService.createComposite() - W5.M1', () => {
         status: 'ON_TRACK',
         isPublished: true,
         visibilityLevel: 'PUBLIC_TENANT',
-        organizationId: 'org-1',
+        tenantId: 'org-1',
         ownerId: validObjectiveData.ownerUserId,
         cycleId: validObjectiveData.cycleId,
       };
@@ -287,7 +287,7 @@ describe('ObjectiveService.createComposite() - W5.M1', () => {
         status: 'ON_TRACK',
         isPublished: true,
         visibilityLevel: 'PUBLIC_TENANT',
-        organizationId: 'org-1',
+        tenantId: 'org-1',
         ownerId: validObjectiveData.ownerUserId,
         cycleId: validObjectiveData.cycleId,
       };
@@ -323,8 +323,8 @@ describe('ObjectiveService.createComposite() - W5.M1', () => {
   });
 
   describe('Tenant Isolation', () => {
-    it('should throw 403 if userOrganizationId does not match cycle organizationId', async () => {
-      const cycleDifferentOrg = { ...mockCycle, organizationId: 'org-2' };
+    it('should throw 403 if userOrganizationId does not match cycle tenantId', async () => {
+      const cycleDifferentOrg = { ...mockCycle, tenantId: 'org-2' };
       mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
       mockPrismaService.cycle.findUnique.mockResolvedValue(cycleDifferentOrg);
 
@@ -478,7 +478,7 @@ describe('ObjectiveService.createComposite() - W5.M1', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw 400 if organizationId is missing', async () => {
+    it('should throw 400 if tenantId is missing', async () => {
       mockPrismaService.user.findUnique.mockResolvedValue(mockUser);
 
       await expect(
@@ -499,7 +499,7 @@ describe('ObjectiveService.createComposite() - W5.M1', () => {
         status: 'ON_TRACK',
         isPublished: true,
         visibilityLevel: 'PUBLIC_TENANT',
-        organizationId: 'org-1',
+        tenantId: 'org-1',
         ownerId: validObjectiveData.ownerUserId,
         cycleId: validObjectiveData.cycleId,
       };
@@ -528,7 +528,7 @@ describe('ObjectiveService.createComposite() - W5.M1', () => {
           action: 'objective_created',
           targetType: 'OKR',
           targetId: 'objective-1',
-          organizationId: 'org-1',
+          tenantId: 'org-1',
           metadata: expect.objectContaining({
             title: validObjectiveData.title,
             ownerId: validObjectiveData.ownerUserId,
@@ -546,7 +546,7 @@ describe('ObjectiveService.createComposite() - W5.M1', () => {
           action: 'key_result_created',
           targetType: 'OKR',
           targetId: 'kr-1',
-          organizationId: 'org-1',
+          tenantId: 'org-1',
           metadata: expect.objectContaining({
             title: validKeyResultsData[0].title,
             objectiveId: 'objective-1',

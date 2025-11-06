@@ -18,14 +18,14 @@ export const TenantScoped = createParamDecorator(
   (paramName: string, ctx: ExecutionContext) => {
     const request = ctx.switchToHttp().getRequest();
     const paramValue = request.params[paramName] || request.query[paramName];
-    const userOrganizationId = request.user?.organizationId;
+    const userTenantId = request.user?.tenantId;
 
     if (!paramValue) {
       throw new ForbiddenException(`Parameter ${paramName} is required`);
     }
 
     // Validate tenant (throws if mismatch)
-    OkrTenantGuard.assertSameTenant(paramValue, userOrganizationId);
+    OkrTenantGuard.assertSameTenant(paramValue, userTenantId);
 
     return paramValue;
   },

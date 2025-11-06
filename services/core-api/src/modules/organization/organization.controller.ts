@@ -15,42 +15,42 @@ export class OrganizationController {
   @Get('current')
   @ApiOperation({ summary: 'Get current user\'s organization' })
   async getCurrentOrganization(@Req() req: any) {
-    return this.organizationService.getCurrentOrganization(req.user.id, req.user.organizationId);
+    return this.organizationService.getCurrentOrganization(req.user.id, req.user.tenantId);
   }
 
   @Get()
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Get user\'s organizations (tenant-isolated)' })
   async getAll(@Req() req: any) {
-    return this.organizationService.findAll(req.user.organizationId);
+    return this.organizationService.findAll(req.user.tenantId);
   }
 
   @Get(':id')
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Get organization by ID (tenant-isolated)' })
   async getById(@Param('id') id: string, @Req() req: any) {
-    return this.organizationService.findById(id, req.user.organizationId);
+    return this.organizationService.findById(id, req.user.tenantId);
   }
 
   @Post()
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Create organization' })
   async create(@Body() data: { name: string; slug: string }, @Req() req: any) {
-    return this.organizationService.create(data, req.user.organizationId, req.user.id);
+    return this.organizationService.create(data, req.user.tenantId, req.user.id);
   }
 
   @Patch(':id')
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Update organization' })
   async update(@Param('id') id: string, @Body() data: { name?: string; slug?: string }, @Req() req: any) {
-    return this.organizationService.update(id, data, req.user.organizationId, req.user.id);
+    return this.organizationService.update(id, data, req.user.tenantId, req.user.id);
   }
 
   @Delete(':id')
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Delete organization' })
   async delete(@Param('id') id: string, @Req() req: any) {
-    return this.organizationService.delete(id, req.user.organizationId, req.user.id);
+    return this.organizationService.delete(id, req.user.tenantId, req.user.id);
   }
 
   @Get(':id/members')
@@ -59,8 +59,8 @@ export class OrganizationController {
   async getMembers(@Param('id') id: string, @Req() req: any) {
     // Tenant isolation: verify organisation belongs to caller's tenant
     // SUPERUSER (null) can view members of any organization
-    if (req.user.organizationId !== null) {
-      OkrTenantGuard.assertSameTenant(id, req.user.organizationId);
+    if (req.user.tenantId !== null) {
+      OkrTenantGuard.assertSameTenant(id, req.user.tenantId);
     }
     return this.organizationService.getMembers(id);
   }
@@ -69,21 +69,21 @@ export class OrganizationController {
   @RequireAction('manage_users')
   @ApiOperation({ summary: 'Add user to organization' })
   async addMember(
-    @Param('id') organizationId: string,
+    @Param('id') tenantId: string,
     @Body() data: { userId: string; role?: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER' },
     @Req() req: any,
   ) {
-    return this.organizationService.addMember(organizationId, data.userId, data.role || 'MEMBER', req.user.organizationId, req.user.id);
+    return this.organizationService.addMember(tenantId, data.userId, data.role || 'MEMBER', req.user.tenantId, req.user.id);
   }
 
   @Delete(':id/members/:userId')
   @RequireAction('manage_users')
   @ApiOperation({ summary: 'Remove user from organization' })
   async removeMember(
-    @Param('id') organizationId: string,
+    @Param('id') tenantId: string,
     @Param('userId') userId: string,
     @Req() req: any,
   ) {
-    return this.organizationService.removeMember(organizationId, userId, req.user.organizationId, req.user.id);
+    return this.organizationService.removeMember(tenantId, userId, req.user.tenantId, req.user.id);
   }
 }

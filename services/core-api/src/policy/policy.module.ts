@@ -1,11 +1,12 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module, forwardRef, Global } from '@nestjs/common';
 import { AuthorisationService } from './authorisation.service';
 import { PolicyController } from './policy.controller';
 import { PrismaModule } from '../common/prisma/prisma.module';
-import { RBACModule } from '../rbac/rbac.module';
-import { OkrModule } from '../okr/okr.module';
-import { SuperuserModule } from '../superuser/superuser.module';
+import { RBACModule } from '../modules/rbac/rbac.module';
+import { OkrModule } from '../modules/okr/okr.module';
+import { SuperuserModule } from '../modules/superuser/superuser.module';
 
+@Global()
 @Module({
   imports: [
     PrismaModule,

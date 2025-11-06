@@ -16,13 +16,13 @@ export class CycleGeneratorService {
 
   /**
    * Generate standard cycles for a date range
-   * @param organizationId - Organization to generate cycles for
+   * @param tenantId - Organization to generate cycles for
    * @param startDate - Start of range (inclusive)
    * @param endDate - End of range (inclusive)
    * @returns Array of created cycles
    */
   async ensureStandardCycles(
-    organizationId: string,
+    tenantId: string,
     startDate: Date,
     endDate: Date,
   ): Promise<any[]> {
@@ -33,7 +33,7 @@ export class CycleGeneratorService {
       // Check if cycle already exists (by date range and name pattern)
       const existing = await this.prisma.cycle.findFirst({
         where: {
-          organizationId,
+          tenantId,
           name: def.name,
           startDate: def.startDate,
           endDate: def.endDate,
@@ -44,7 +44,7 @@ export class CycleGeneratorService {
         // Check for overlapping cycles (avoid duplicates)
         const overlapping = await this.prisma.cycle.findFirst({
           where: {
-            organizationId,
+            tenantId,
             OR: [
               {
                 startDate: { lte: def.startDate },
@@ -66,7 +66,7 @@ export class CycleGeneratorService {
         if (!overlapping) {
           const cycle = await this.prisma.cycle.create({
             data: {
-              organizationId,
+              tenantId,
               name: def.name,
               startDate: def.startDate,
               endDate: def.endDate,
@@ -173,13 +173,13 @@ export class CycleGeneratorService {
 
   /**
    * Get or create a standard cycle for a specific period
-   * @param organizationId - Organization ID
+   * @param tenantId - Organization ID
    * @param type - Type of cycle (MONTH, QUARTER, YEAR)
    * @param date - Date within the period (used to determine which month/quarter/year)
    * @returns The cycle (existing or newly created)
    */
   async getOrCreateStandardCycle(
-    organizationId: string,
+    tenantId: string,
     type: StandardCycleType,
     date: Date,
   ): Promise<any> {
@@ -218,7 +218,7 @@ export class CycleGeneratorService {
     // Check if cycle already exists
     const existing = await this.prisma.cycle.findFirst({
       where: {
-        organizationId,
+        tenantId,
         name,
         startDate,
         endDate,
@@ -232,7 +232,7 @@ export class CycleGeneratorService {
     // Check for overlapping cycles
     const overlapping = await this.prisma.cycle.findFirst({
       where: {
-        organizationId,
+        tenantId,
         OR: [
           {
             startDate: { lte: startDate },
@@ -257,7 +257,7 @@ export class CycleGeneratorService {
     // Create the cycle
     return this.prisma.cycle.create({
       data: {
-        organizationId,
+        tenantId,
         name,
         startDate,
         endDate,

@@ -39,7 +39,7 @@ export class OkrGovernanceService {
    */
   async checkPublishLockForObjective(params: {
     objective: { id: string; isPublished: boolean };
-    actingUser: { id: string; organizationId: string | null };
+    actingUser: { id: string; tenantId: string | null };
     rbacService: RBACService;
   }): Promise<void> {
     const { objective, actingUser } = params;
@@ -50,7 +50,7 @@ export class OkrGovernanceService {
     }
 
     // Superuser cannot edit even published OKRs (read-only)
-    if (actingUser.organizationId === null) {
+    if (actingUser.tenantId === null) {
       throw new ForbiddenException('This OKR is published and can only be modified by admin roles');
     }
 
@@ -83,7 +83,7 @@ export class OkrGovernanceService {
    */
   async checkPublishLockForKeyResult(params: {
     parentObjective: { id: string; isPublished: boolean };
-    actingUser: { id: string; organizationId: string | null };
+    actingUser: { id: string; tenantId: string | null };
     rbacService: RBACService;
   }): Promise<void> {
     const { parentObjective, actingUser } = params;
@@ -94,7 +94,7 @@ export class OkrGovernanceService {
     }
 
     // Superuser cannot edit even if parent is published (read-only)
-    if (actingUser.organizationId === null) {
+    if (actingUser.tenantId === null) {
       throw new ForbiddenException('This Key Result belongs to a published OKR and can only be modified by admin roles');
     }
 
@@ -126,7 +126,7 @@ export class OkrGovernanceService {
    */
   async checkCycleLockForObjective(params: {
     objective: { id: string };
-    actingUser: { id: string; organizationId: string | null };
+    actingUser: { id: string; tenantId: string | null };
   }): Promise<void> {
     const { objective, actingUser } = params;
 
@@ -139,7 +139,7 @@ export class OkrGovernanceService {
             id: true,
             name: true,
             status: true,
-            organizationId: true,
+            tenantId: true,
           },
         },
       },
@@ -161,7 +161,7 @@ export class OkrGovernanceService {
     // LOCKED or ARCHIVED cycles require admin override
     if (cycleStatus === 'LOCKED' || cycleStatus === 'ARCHIVED') {
       // Superuser is read-only, cannot bypass cycle lock
-      if (actingUser.organizationId === null) {
+      if (actingUser.tenantId === null) {
         throw new ForbiddenException(`This cycle (${cycle.name || 'locked'}) is locked and can only be modified by admin roles`);
       }
 
@@ -200,7 +200,7 @@ export class OkrGovernanceService {
    */
   async checkCycleLockForKeyResult(params: {
     parentObjective: { id: string };
-    actingUser: { id: string; organizationId: string | null };
+    actingUser: { id: string; tenantId: string | null };
   }): Promise<void> {
     const { parentObjective, actingUser } = params;
 
@@ -213,7 +213,7 @@ export class OkrGovernanceService {
             id: true,
             name: true,
             status: true,
-            organizationId: true,
+            tenantId: true,
           },
         },
       },
@@ -235,7 +235,7 @@ export class OkrGovernanceService {
     // LOCKED or ARCHIVED cycles require admin override
     if (cycleStatus === 'LOCKED' || cycleStatus === 'ARCHIVED') {
       // Superuser is read-only, cannot bypass cycle lock
-      if (actingUser.organizationId === null) {
+      if (actingUser.tenantId === null) {
         throw new ForbiddenException(`This cycle (${cycle.name || 'locked'}) is locked and can only be modified by admin roles`);
       }
 
@@ -265,7 +265,7 @@ export class OkrGovernanceService {
    */
   async checkAllLocksForObjective(params: {
     objective: { id: string; isPublished: boolean };
-    actingUser: { id: string; organizationId: string | null };
+    actingUser: { id: string; tenantId: string | null };
     rbacService: RBACService;
   }): Promise<void> {
     // Check cycle lock first
@@ -288,7 +288,7 @@ export class OkrGovernanceService {
    */
   async checkAllLocksForKeyResult(params: {
     parentObjective: { id: string; isPublished: boolean };
-    actingUser: { id: string; organizationId: string | null };
+    actingUser: { id: string; tenantId: string | null };
     rbacService: RBACService;
   }): Promise<void> {
     // Check cycle lock first

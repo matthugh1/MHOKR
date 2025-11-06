@@ -15,7 +15,7 @@ describe('OkrCycleController (Integration)', () => {
   const mockUser = {
     id: 'user-1',
     email: 'admin@example.com',
-    organizationId: 'org-1',
+    tenantId: 'org-1',
   };
 
   const mockJwtGuard = {
@@ -64,7 +64,7 @@ describe('OkrCycleController (Integration)', () => {
           startDate: new Date('2026-01-01'),
           endDate: new Date('2026-03-31'),
           status: 'DRAFT',
-          organizationId: 'org-1',
+          tenantId: 'org-1',
         },
       ];
 
@@ -102,7 +102,7 @@ describe('OkrCycleController (Integration)', () => {
       const mockCycle = {
         id: 'cycle-1',
         ...createData,
-        organizationId: 'org-1',
+        tenantId: 'org-1',
         startDate: new Date(createData.startDate),
         endDate: new Date(createData.endDate),
       };
@@ -147,7 +147,7 @@ describe('OkrCycleController (Integration)', () => {
       const mockCycle = {
         id: cycleId,
         name: updateData.name,
-        organizationId: 'org-1',
+        tenantId: 'org-1',
       };
 
       jest.spyOn(cycleService, 'update').mockResolvedValue(mockCycle);
@@ -172,7 +172,7 @@ describe('OkrCycleController (Integration)', () => {
       const mockCycle = {
         id: cycleId,
         status: 'ACTIVE',
-        organizationId: 'org-1',
+        tenantId: 'org-1',
       };
 
       jest.spyOn(cycleService, 'updateStatus').mockResolvedValue(mockCycle);

@@ -40,13 +40,13 @@ export class CheckInRequestService {
    * 
    * @param requesterUserId - User requesting the check-in
    * @param targetUserId - User who needs to submit the update
-   * @param organizationId - Organization ID (tenant scope)
+   * @param tenantId - Organization ID (tenant scope)
    * @returns true if requester is authorized, false otherwise
    */
   private async canRequestCheckinForUser(
     requesterUserId: string,
     targetUserId: string,
-    organizationId: string,
+    tenantId: string,
   ): Promise<boolean> {
     // Load requester and target users
     const [requester, targetUser] = await Promise.all([
@@ -78,7 +78,7 @@ export class CheckInRequestService {
     const requesterContext = await this.rbacService.buildUserContext(requesterUserId);
 
     // Check 2: TENANT_OWNER or TENANT_ADMIN role in organization
-    const tenantRoles = requesterContext.tenantRoles.get(organizationId) || [];
+    const tenantRoles = requesterContext.tenantRoles.get(tenantId) || [];
     if (tenantRoles.includes('TENANT_OWNER') || tenantRoles.includes('TENANT_ADMIN')) {
       return true;
     }
@@ -103,7 +103,7 @@ export class CheckInRequestService {
     const workspacesInOrg = await this.prisma.workspace.findMany({
       where: {
         id: { in: workspaceIds },
-        organizationId,
+        tenantId,
       },
       select: { id: true },
     });
@@ -130,7 +130,7 @@ export class CheckInRequestService {
       where: {
         id: { in: teamIds },
         workspace: {
-          organizationId,
+          tenantId,
         },
       },
       select: { id: true },
@@ -240,7 +240,7 @@ export class CheckInRequestService {
           where: {
             id: { in: teamIds },
             workspace: {
-              organizationId: userOrganizationId,
+              tenantId: userOrganizationId,
             },
           },
         });
@@ -276,7 +276,7 @@ export class CheckInRequestService {
           data: {
             requesterUserId,
             targetUserId,
-            organizationId: userOrganizationId,
+            tenantId: userOrganizationId,
             dueAt,
             status: 'OPEN',
           },
@@ -305,7 +305,7 @@ export class CheckInRequestService {
           targetUserId: targetUserId,
           targetId: request.id,
           targetType: AuditTargetType.USER,
-          organizationId: userOrganizationId,
+          tenantId: userOrganizationId,
           metadata: {
             dueAt: dueAt.toISOString(),
             reason: 'async_checkin_request',
@@ -342,7 +342,7 @@ export class CheckInRequestService {
     const requests = await this.prisma.checkInRequest.findMany({
       where: {
         targetUserId: userId,
-        ...(orgFilter ? { organizationId: orgFilter.organizationId } : {}),
+        ...(orgFilter ? { tenantId: orgFilter.tenantId } : {}),
         status: {
           in: ['OPEN', 'LATE'],
         },
@@ -434,7 +434,7 @@ export class CheckInRequestService {
     }
 
     // Verify tenant match
-    OkrTenantGuard.assertSameTenant(request.organizationId, userOrganizationId);
+    OkrTenantGuard.assertSameTenant(request.tenantId, userOrganizationId);
 
     // Verify user matches target
     if (request.targetUserId !== userId) {
@@ -504,7 +504,7 @@ export class CheckInRequestService {
     const count = await this.prisma.checkInRequest.count({
       where: {
         targetUserId: userId,
-        ...(orgFilter ? { organizationId: orgFilter.organizationId } : {}),
+        ...(orgFilter ? { tenantId: orgFilter.tenantId } : {}),
         status: 'LATE',
       },
     });
@@ -529,7 +529,7 @@ export class CheckInRequestService {
       where: {
         targetUserId: userId,
         request: {
-          ...(orgFilter ? { organizationId: orgFilter.organizationId } : {}),
+          ...(orgFilter ? { tenantId: orgFilter.tenantId } : {}),
         },
       },
       orderBy: {
@@ -575,7 +575,7 @@ export class CheckInRequestService {
 
     // Build where clause for requests
     const where: any = {
-      organizationId: orgFilter?.organizationId,
+      tenantId: orgFilter?.tenantId,
       status: 'SUBMITTED',
       response: {
         submittedAt: {
@@ -590,10 +590,10 @@ export class CheckInRequestService {
       // For now, we'll filter by responses submitted during the cycle period
       const cycle = await this.prisma.cycle.findUnique({
         where: { id: cycleId },
-        select: { startDate: true, endDate: true, organizationId: true },
+        select: { startDate: true, endDate: true, tenantId: true },
       });
 
-      if (cycle && cycle.organizationId === orgFilter?.organizationId) {
+      if (cycle && cycle.tenantId === orgFilter?.tenantId) {
         where.response = {
           ...where.response,
           submittedAt: {
@@ -661,7 +661,7 @@ export class CheckInRequestService {
     // Get all requests (including LATE) for overdue count
     const allRequests = await this.prisma.checkInRequest.findMany({
       where: {
-        organizationId: orgFilter?.organizationId,
+        tenantId: orgFilter?.tenantId,
         ...(teamId && teamUserIds.length > 0 ? {
           targetUserId: { in: teamUserIds },
         } : {}),
@@ -687,7 +687,7 @@ export class CheckInRequestService {
         where: {
           targetUserId: userId,
           request: {
-            ...(orgFilter ? { organizationId: orgFilter.organizationId } : {}),
+            ...(orgFilter ? { tenantId: orgFilter.tenantId } : {}),
           },
         },
         orderBy: {

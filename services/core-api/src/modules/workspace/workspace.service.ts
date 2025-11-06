@@ -29,9 +29,9 @@ export class WorkspaceService {
       }
       // SUPERUSER: can filter by any organisation
       return this.prisma.workspace.findMany({
-        where: { organizationId: filterOrganizationId },
+        where: { tenantId: filterOrganizationId },
         include: {
-          organization: true,
+          tenant: true,
           parentWorkspace: true,
           childWorkspaces: true,
           teams: true,
@@ -44,7 +44,7 @@ export class WorkspaceService {
       // SUPERUSER: no filter means return all (but this is unusual - usually they'd provide orgId)
       return this.prisma.workspace.findMany({
         include: {
-          organization: true,
+          tenant: true,
           parentWorkspace: true,
           childWorkspaces: true,
           teams: true,
@@ -54,9 +54,9 @@ export class WorkspaceService {
 
     // Normal user: return workspaces in their tenant
     return this.prisma.workspace.findMany({
-      where: { organizationId: userOrganizationId },
+      where: { tenantId: userOrganizationId },
       include: {
-        organization: true,
+        tenant: true,
         parentWorkspace: true,
         childWorkspaces: true,
         teams: true,
@@ -68,7 +68,7 @@ export class WorkspaceService {
     const workspace = await this.prisma.workspace.findUnique({
       where: { id },
       include: {
-        organization: true,
+        tenant: true,
         parentWorkspace: true,
         childWorkspaces: true,
         teams: true,
@@ -96,7 +96,7 @@ export class WorkspaceService {
     }
 
     // Normal user: verify workspace belongs to caller's tenant
-    if (workspace.organizationId !== userOrganizationId) {
+    if (workspace.tenantId !== userOrganizationId) {
       // Don't leak existence - return not found
       throw new NotFoundException(`Workspace with ID ${id} not found`);
     }
@@ -126,7 +126,7 @@ export class WorkspaceService {
       ? await this.prisma.workspace.findMany({
           where: { id: { in: workspaceIds } },
           include: {
-            organization: true,
+            tenant: true,
             parentWorkspace: true,
             childWorkspaces: true,
             teams: true,
@@ -156,7 +156,7 @@ export class WorkspaceService {
           include: {
             workspace: {
               include: {
-                organization: true,
+                tenant: true,
                 parentWorkspace: true,
                 childWorkspaces: true,
                 teams: true,
@@ -190,12 +190,12 @@ export class WorkspaceService {
     return workspaces[0];
   }
 
-  async create(data: { name: string; organizationId: string; parentWorkspaceId?: string }, userOrganizationId: string | null | undefined, actorUserId: string) {
+  async create(data: { name: string; tenantId: string; parentWorkspaceId?: string }, userOrganizationId: string | null | undefined, actorUserId: string) {
     // Tenant isolation: enforce mutation rules
     OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
 
     // Tenant isolation: verify org match
-    OkrTenantGuard.assertSameTenant(data.organizationId, userOrganizationId);
+    OkrTenantGuard.assertSameTenant(data.tenantId, userOrganizationId);
 
     // If parent workspace is provided, validate it belongs to the same organization
     if (data.parentWorkspaceId) {
@@ -207,7 +207,7 @@ export class WorkspaceService {
         throw new NotFoundException(`Parent workspace with ID ${data.parentWorkspaceId} not found`);
       }
 
-      if (parentWorkspace.organizationId !== data.organizationId) {
+      if (parentWorkspace.tenantId !== data.tenantId) {
         throw new ConflictException(`Parent workspace must belong to the same organization`);
       }
     }
@@ -215,11 +215,11 @@ export class WorkspaceService {
     const created = await this.prisma.workspace.create({
       data: {
         name: data.name,
-        organizationId: data.organizationId,
+        tenantId: data.tenantId,
         parentWorkspaceId: data.parentWorkspaceId || null,
       },
       include: {
-        organization: true,
+        tenant: true,
         parentWorkspace: true,
         childWorkspaces: true,
         teams: true,
@@ -231,7 +231,7 @@ export class WorkspaceService {
       actorUserId,
       targetId: created.id,
       targetType: AuditTargetType.WORKSPACE,
-      organizationId: data.organizationId,
+      tenantId: data.tenantId,
     });
 
     return created;
@@ -289,7 +289,7 @@ export class WorkspaceService {
     }
 
     // Tenant isolation: verify org match
-    OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
+    OkrTenantGuard.assertSameTenant(workspace.tenantId, userOrganizationId);
 
     // If parent workspace is being updated, validate it
     if (data.parentWorkspaceId !== undefined) {
@@ -302,7 +302,7 @@ export class WorkspaceService {
           throw new NotFoundException(`Parent workspace with ID ${data.parentWorkspaceId} not found`);
         }
 
-        if (parentWorkspace.organizationId !== workspace.organizationId) {
+        if (parentWorkspace.tenantId !== workspace.tenantId) {
           throw new ConflictException(`Parent workspace must belong to the same organization`);
         }
 
@@ -321,7 +321,7 @@ export class WorkspaceService {
         parentWorkspaceId: data.parentWorkspaceId === null ? null : data.parentWorkspaceId,
       },
       include: {
-        organization: true,
+        tenant: true,
         parentWorkspace: true,
         childWorkspaces: true,
         teams: true,
@@ -333,7 +333,7 @@ export class WorkspaceService {
       actorUserId,
       targetId: id,
       targetType: AuditTargetType.WORKSPACE,
-      organizationId: workspace.organizationId,
+      tenantId: workspace.tenantId,
     });
 
     return updated;
@@ -342,9 +342,9 @@ export class WorkspaceService {
   /**
    * Get workspace hierarchy tree starting from root workspaces
    */
-  async getHierarchy(organizationId: string) {
+  async getHierarchy(tenantId: string) {
     const allWorkspaces = await this.prisma.workspace.findMany({
-      where: { organizationId },
+      where: { tenantId },
       include: {
         parentWorkspace: true,
         childWorkspaces: true,
@@ -364,14 +364,14 @@ export class WorkspaceService {
 
     // Get existing workspace to check tenant isolation
     const workspace = await this.findById(id, userOrganizationId);
-    OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
+    OkrTenantGuard.assertSameTenant(workspace.tenantId, userOrganizationId);
 
     await this.auditLogService.record({
       action: 'DELETE_WORKSPACE',
       actorUserId,
       targetId: id,
       targetType: AuditTargetType.WORKSPACE,
-      organizationId: workspace.organizationId,
+      tenantId: workspace.tenantId,
     });
 
     return this.prisma.workspace.delete({
@@ -427,7 +427,7 @@ export class WorkspaceService {
     // Get workspace to find organization
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: workspaceId },
-      include: { organization: true },
+      include: { tenant: true },
     });
 
     if (!workspace) {
@@ -466,7 +466,7 @@ export class WorkspaceService {
     const orgAssignments = await this.prisma.roleAssignment.findMany({
       where: {
         scopeType: 'TENANT',
-        scopeId: workspace.organizationId,
+        scopeId: workspace.tenantId,
       },
       include: {
         user: true,
@@ -601,7 +601,7 @@ export class WorkspaceService {
 
     // Verify workspace exists and tenant match
     const workspace = await this.findById(workspaceId, userOrganizationId);
-    OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
+    OkrTenantGuard.assertSameTenant(workspace.tenantId, userOrganizationId);
     
     // Verify user exists
     const user = await this.prisma.user.findUnique({
@@ -641,7 +641,7 @@ export class WorkspaceService {
         targetUserId: userId,
         targetId: userId,
         targetType: AuditTargetType.USER,
-        organizationId: workspace.organizationId,
+        tenantId: workspace.tenantId,
         metadata: { role, previousRole: existingAssignment.role },
       });
 
@@ -671,7 +671,7 @@ export class WorkspaceService {
       targetUserId: userId,
       targetId: userId,
       targetType: AuditTargetType.USER,
-      organizationId: workspace.organizationId,
+      tenantId: workspace.tenantId,
       metadata: { role },
     });
 
@@ -691,7 +691,7 @@ export class WorkspaceService {
 
     // Verify workspace exists and tenant match
     const workspace = await this.findById(workspaceId, userOrganizationId);
-    OkrTenantGuard.assertSameTenant(workspace.organizationId, userOrganizationId);
+    OkrTenantGuard.assertSameTenant(workspace.tenantId, userOrganizationId);
 
     // Check if user has role assignments (Phase 3: RBAC only)
     const roleAssignments = await this.prisma.roleAssignment.findMany({
@@ -724,7 +724,7 @@ export class WorkspaceService {
       targetUserId: userId,
       targetId: userId,
       targetType: AuditTargetType.USER,
-      organizationId: workspace.organizationId,
+      tenantId: workspace.tenantId,
     });
 
     return { success: true };

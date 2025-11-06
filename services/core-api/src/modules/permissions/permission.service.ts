@@ -160,7 +160,7 @@ export class PermissionService {
     userId: string,
     permission: Permission | string,
     context?: {
-      organizationId?: string;
+      tenantId?: string;
       workspaceId?: string;
       teamId?: string;
       okrId?: string;
@@ -200,7 +200,7 @@ export class PermissionService {
     _userId: string, // Prefix with _ to indicate intentionally unused (used for future extensibility)
     userRole: { role: MemberRole; entityType: string; entityId: string },
     context: {
-      organizationId?: string;
+      tenantId?: string;
       workspaceId?: string;
       teamId?: string;
       okrId?: string;
@@ -208,9 +208,9 @@ export class PermissionService {
     },
   ): Promise<boolean> {
     // Check organization access
-    if (context.organizationId) {
+    if (context.tenantId) {
       if (userRole.entityType === 'ORGANIZATION') {
-        return userRole.entityId === context.organizationId;
+        return userRole.entityId === context.tenantId;
       }
       // Check if workspace/team belongs to organization
       if (userRole.entityType === 'WORKSPACE' || userRole.entityType === 'TEAM') {
@@ -255,7 +255,7 @@ export class PermissionService {
     const objective = await this.prisma.objective.findUnique({
       where: { id: objectiveId },
       include: {
-        organization: true,
+        tenant: true,
         workspace: true,
         team: true,
       },
@@ -271,10 +271,10 @@ export class PermissionService {
     }
 
     // Check organization access
-    if (objective.organizationId) {
+    if (objective.tenantId) {
       const orgRole = await this.roleService.getUserOrganizationRole(
         userId,
-        objective.organizationId,
+        objective.tenantId,
       );
       if (orgRole) return true;
     }
@@ -312,7 +312,7 @@ export class PermissionService {
     const objective = await this.prisma.objective.findUnique({
       where: { id: objectiveId },
       include: {
-        organization: true,
+        tenant: true,
         workspace: true,
         team: true,
       },
@@ -359,10 +359,10 @@ export class PermissionService {
     }
 
     // Check organization role - ORG_ADMIN can edit organization OKRs
-    if (objective.organizationId) {
+    if (objective.tenantId) {
       const orgRole = await this.roleService.getUserOrganizationRole(
         userId,
-        objective.organizationId,
+        objective.tenantId,
       );
       if (orgRole === MemberRole.ORG_ADMIN) {
         return true;
@@ -384,7 +384,7 @@ export class PermissionService {
     const objective = await this.prisma.objective.findUnique({
       where: { id: objectiveId },
       include: {
-        organization: true,
+        tenant: true,
         workspace: true,
         team: true,
       },
@@ -431,10 +431,10 @@ export class PermissionService {
     }
 
     // ORG_ADMIN can delete organization OKRs
-    if (objective.organizationId) {
+    if (objective.tenantId) {
       const orgRole = await this.roleService.getUserOrganizationRole(
         userId,
-        objective.organizationId,
+        objective.tenantId,
       );
       if (orgRole === MemberRole.ORG_ADMIN) {
         return true;
@@ -546,7 +546,7 @@ export class PermissionService {
    */
   async canManageOrganization(
     userId: string,
-    organizationId: string,
+    tenantId: string,
   ): Promise<boolean> {
     // Superusers can manage all organizations
     if (await this.isSuperuser(userId)) {
@@ -555,7 +555,7 @@ export class PermissionService {
 
     const orgRole = await this.roleService.getUserOrganizationRole(
       userId,
-      organizationId,
+      tenantId,
     );
 
     return orgRole === MemberRole.ORG_ADMIN;
@@ -582,7 +582,7 @@ export class PermissionService {
     userId: string,
     permission: Permission | string,
     context?: {
-      organizationId?: string;
+      tenantId?: string;
       workspaceId?: string;
       teamId?: string;
       okrId?: string;

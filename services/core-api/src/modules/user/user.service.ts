@@ -193,16 +193,16 @@ export class UserService {
     });
 
     // Get unique organization IDs
-    const organizationIds = [...new Set(
+    const tenantIds = [...new Set(
       tenantAssignments
         .map(ta => ta.scopeId)
         .filter((id): id is string => id !== null)
     )];
 
     // Fetch organizations
-    const organizations = organizationIds.length > 0
+    const organizations = tenantIds.length > 0
       ? await this.prisma.organization.findMany({
-          where: { id: { in: organizationIds } },
+          where: { id: { in: tenantIds } },
         })
       : [];
 
@@ -227,7 +227,7 @@ export class UserService {
       ? await this.prisma.workspace.findMany({
           where: { id: { in: workspaceIds } },
           include: {
-            organization: true,
+            tenant: true,
             parentWorkspace: true,
             childWorkspaces: true,
           },
@@ -257,7 +257,7 @@ export class UserService {
           include: {
             workspace: {
               include: {
-                organization: true,
+                tenant: true,
                 parentWorkspace: true,
                 childWorkspaces: true,
               },
@@ -370,7 +370,7 @@ export class UserService {
       email: string; 
       name: string; 
       password: string; 
-      organizationId: string; // Required - all users must belong to an organization (auto-injected if not provided)
+      tenantId: string; // Required - all users must belong to an organization (auto-injected if not provided)
       workspaceId?: string; // Optional - only required if workspace role assignment needed
       role?: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER';
       workspaceRole?: 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER';
@@ -389,7 +389,7 @@ export class UserService {
     // SUPERUSER can create in any tenant (controller handles dev inspector check for cross-tenant)
     // Regular users must create within their own tenant
     if (!isSuperuser) {
-      OkrTenantGuard.assertSameTenant(data.organizationId, userOrganizationId);
+      OkrTenantGuard.assertSameTenant(data.tenantId, userOrganizationId);
     }
 
     // Check if user already exists
@@ -403,11 +403,11 @@ export class UserService {
 
     // Verify organization exists
     const organization = await this.prisma.organization.findUnique({
-      where: { id: data.organizationId },
+      where: { id: data.tenantId },
     });
 
     if (!organization) {
-      throw new NotFoundException(`Organization with ID ${data.organizationId} not found`);
+      throw new NotFoundException(`Organization with ID ${data.tenantId} not found`);
     }
 
     // Verify workspace exists and belongs to the organization (if provided)
@@ -421,8 +421,8 @@ export class UserService {
         throw new NotFoundException(`Workspace with ID ${data.workspaceId} not found`);
       }
 
-      if (workspace.organizationId !== data.organizationId) {
-        throw new ConflictException(`Workspace ${data.workspaceId} does not belong to organization ${data.organizationId}`);
+      if (workspace.tenantId !== data.tenantId) {
+        throw new ConflictException(`Workspace ${data.workspaceId} does not belong to organization ${data.tenantId}`);
       }
     }
 
@@ -461,7 +461,7 @@ export class UserService {
           userId: newUser.id,
           role: orgRBACRole,
           scopeType: 'TENANT',
-          scopeId: data.organizationId,
+          scopeId: data.tenantId,
         },
       });
 
@@ -470,14 +470,14 @@ export class UserService {
         // Verify workspace belongs to the organization
         const workspace = await tx.workspace.findUnique({
           where: { id: data.workspaceId },
-          select: { organizationId: true },
+          select: { tenantId: true },
         });
 
         if (!workspace) {
           throw new NotFoundException(`Workspace with ID ${data.workspaceId} not found`);
         }
 
-        if (workspace.organizationId !== data.organizationId) {
+        if (workspace.tenantId !== data.tenantId) {
           throw new ForbiddenException('Workspace does not belong to the specified organization');
         }
 
@@ -506,8 +506,8 @@ export class UserService {
         targetId: user.id,
         targetType: AuditTargetType.ROLE_ASSIGNMENT,
         newRole: orgRBACRole as any,
-        organizationId: data.organizationId,
-        metadata: { scopeType: 'TENANT', scopeId: data.organizationId },
+        tenantId: data.tenantId,
+        metadata: { scopeType: 'TENANT', scopeId: data.tenantId },
       });
     } catch (error) {
       // If audit logging fails, log but don't fail user creation
@@ -537,7 +537,7 @@ export class UserService {
       targetUserId: user.id,
       targetId: user.id,
       targetType: AuditTargetType.USER,
-      organizationId: data.organizationId,
+      tenantId: data.tenantId,
       metadata: {
         role: data.role || 'MEMBER',
         workspaceId: data.workspaceId || null,
@@ -589,7 +589,7 @@ export class UserService {
       targetUserId: userId,
       targetId: userId,
       targetType: AuditTargetType.USER,
-      organizationId: userOrganizationId || undefined,
+      tenantId: userOrganizationId || undefined,
     });
 
     return { message: 'Password reset successfully' };
@@ -651,7 +651,7 @@ export class UserService {
       targetUserId: userId,
       targetId: userId,
       targetType: AuditTargetType.USER,
-      organizationId: userOrganizationId || undefined,
+      tenantId: userOrganizationId || undefined,
     });
 
     return updatedUser;

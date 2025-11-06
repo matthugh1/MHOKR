@@ -113,7 +113,7 @@ function PeopleSettings() {
     name: '', 
     email: '', 
     password: '',
-    organizationId: '',
+    tenantId: '',
     workspaceId: '',
     role: 'MEMBER' as 'ORG_ADMIN' | 'MEMBER' | 'VIEWER',
     workspaceRole: 'MEMBER' as 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER'
@@ -144,7 +144,7 @@ function PeopleSettings() {
       try {
         const [orgsRes, workspacesRes] = await Promise.all([
           api.get('/organizations'),
-          organization ? api.get(`/workspaces?organizationId=${organization.id}`) : Promise.resolve({ data: [] })
+          organization ? api.get(`/workspaces?tenantId=${organization.id}`) : Promise.resolve({ data: [] })
         ])
         setAllOrganizations(orgsRes.data || [])
         setAllWorkspaces(workspacesRes.data || [])
@@ -201,7 +201,7 @@ function PeopleSettings() {
       name: '', 
       email: '', 
       password: '',
-      organizationId: organization?.id || '', // Always set to current context for SUPERUSER
+      tenantId: organization?.id || '', // Always set to current context for SUPERUSER
       workspaceId: workspace?.id || '',
       role: 'MEMBER' as 'ORG_ADMIN' | 'MEMBER' | 'VIEWER',
       workspaceRole: 'MEMBER' as 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER'
@@ -220,7 +220,7 @@ function PeopleSettings() {
     }
 
     // Validate tenant context or explicit selection
-    if (!organization && !newUserData.organizationId && !devInspectorMode) {
+    if (!organization && !newUserData.tenantId && !devInspectorMode) {
       toast({
         variant: 'destructive',
         title: 'Missing tenant context',
@@ -230,7 +230,7 @@ function PeopleSettings() {
     }
 
     // For dev inspector mode, require explicit organisation
-    if (devInspectorMode && !newUserData.organizationId) {
+    if (devInspectorMode && !newUserData.tenantId) {
       toast({
         variant: 'destructive',
         title: 'Missing organisation',
@@ -250,11 +250,11 @@ function PeopleSettings() {
         role: newUserData.role,
       }
 
-      // SUPERUSER always needs to send organisationId (backend has no tenant context)
+      // SUPERUSER always needs to send tenantId (backend has no tenant context)
       // For regular users, only send if dev inspector mode or no context
       if (isSuperuser) {
-        // SUPERUSER: Always send organizationId from form or current context
-        const orgId = newUserData.organizationId || organization?.id
+        // SUPERUSER: Always send tenantId from form or current context
+        const orgId = newUserData.tenantId || organization?.id
         if (!orgId) {
           toast({
             variant: 'destructive',
@@ -264,15 +264,15 @@ function PeopleSettings() {
           setActionLoading(false)
           return
         }
-        payload.organizationId = orgId
+        payload.tenantId = orgId
       } else if (devInspectorMode || !organization) {
         // Regular user: Send only if dev inspector mode or no context
-        const orgId = newUserData.organizationId || organization?.id
+        const orgId = newUserData.tenantId || organization?.id
         if (orgId) {
-          payload.organizationId = orgId
+          payload.tenantId = orgId
         }
       }
-      // Otherwise, backend will auto-inject from req.user.organizationId
+      // Otherwise, backend will auto-inject from req.user.tenantId
       // Only send workspaceId if provided
       if (newUserData.workspaceId) {
         payload.workspaceId = newUserData.workspaceId
@@ -569,7 +569,7 @@ function PeopleSettings() {
     const targetOrgId = orgId || selectedOrgId || organization?.id
     if (isSuperuser && targetOrgId) {
       try {
-        const res = await api.get(`/workspaces?organizationId=${targetOrgId}`)
+        const res = await api.get(`/workspaces?tenantId=${targetOrgId}`)
         return res.data || []
       } catch (error) {
         console.error('Failed to load workspaces:', error)
@@ -715,7 +715,7 @@ function PeopleSettings() {
               name: '', 
               email: '', 
               password: '',
-              organizationId: organization?.id || '',
+              tenantId: organization?.id || '',
               workspaceId: workspace?.id || '',
               role: 'MEMBER' as 'ORG_ADMIN' | 'MEMBER' | 'VIEWER',
               workspaceRole: 'MEMBER' as 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER'
@@ -799,18 +799,18 @@ function PeopleSettings() {
                     <div>
                       <Label htmlFor="organization">Organisation *</Label>
                       <Select 
-                        value={newUserData.organizationId || organization?.id || ''} 
+                        value={newUserData.tenantId || organization?.id || ''} 
                         onValueChange={async (v) => {
                           setNewUserData({ 
                             ...newUserData, 
-                            organizationId: v, 
+                            tenantId: v, 
                             workspaceId: '',
                             workspaceRole: 'MEMBER'
                           })
                           // Load workspaces for selected organisation
                           if (isSuperuser && v) {
                             try {
-                              const res = await api.get(`/workspaces?organizationId=${v}`)
+                              const res = await api.get(`/workspaces?tenantId=${v}`)
                               setAllWorkspaces(res.data || [])
                             } catch (error) {
                               console.error('Failed to load workspaces:', error)
@@ -853,7 +853,7 @@ function PeopleSettings() {
                           setDevInspectorMode(e.target.checked)
                           if (!e.target.checked) {
                             // Reset to auto-context when disabling
-                            setNewUserData({ ...newUserData, organizationId: organization?.id || '' })
+                            setNewUserData({ ...newUserData, tenantId: organization?.id || '' })
                           }
                         }}
                         className="h-4 w-4 rounded border-slate-300"
@@ -865,8 +865,8 @@ function PeopleSettings() {
                 {/* Workspace Selection - Optional and Hidden if None */}
                 {(() => {
                   const availableWorkspacesForTenant = isSuperuser 
-                    ? allWorkspaces.filter(w => w.organizationId === (devInspectorMode ? newUserData.organizationId : organization?.id))
-                    : workspaces.filter(w => w.organizationId === organization?.id)
+                    ? allWorkspaces.filter(w => w.tenantId === (devInspectorMode ? newUserData.tenantId : organization?.id))
+                    : workspaces.filter(w => w.tenantId === organization?.id)
                   
                   if (availableWorkspacesForTenant.length === 0) {
                     return null // Hide workspace selector when none exist

@@ -19,8 +19,7 @@ describe('Visibility Policy', () => {
   const baseOKR: OKREntity = {
     id: 'okr-1',
     ownerId: 'owner-1',
-    organizationId: 'tenant-1',  // organizationId is primary field
-    tenantId: 'tenant-1',  // tenantId kept for backward compatibility
+    tenantId: 'tenant-1',
     workspaceId: 'workspace-1',
     teamId: 'team-1',
     visibilityLevel: 'PUBLIC_TENANT',

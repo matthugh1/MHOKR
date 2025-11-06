@@ -81,11 +81,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     }
     console.log('[JWT STRATEGY] User validated:', { id: user.id, email: user.email, isSuperuser: user.isSuperuser });
     
-    // Superuser => organizationId: null (global read-only; can view all organisations)
+    // Superuser => tenantId: null (global read-only; can view all organisations)
     if (user.isSuperuser) {
       return {
         ...user,
-        organizationId: null,
+        tenantId: null,
       };
     }
     
@@ -101,21 +101,28 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       orderBy: { createdAt: 'asc' },  // Get first membership (primary org)
     });
     
+    // CRITICAL: Non-superuser users MUST have at least one tenant role assignment
+    // If tenantId is undefined, user cannot authenticate (JWT should never be issued without role assignments)
+    if (!user.isSuperuser && !orgAssignment) {
+      console.error(`[JWT STRATEGY] User ${user.id} (${user.email}) has no tenant role assignments - authentication should have failed`);
+      throw new UnauthorizedException('User account is not properly configured. Please contact support.');
+    }
+    
     // Get all feature flags for user
     const featureFlags = await this.featureFlagService.getAllFeatureFlags(user.id);
 
-    // organizationId rules:
+    // tenantId rules:
     // - null        => superuser (global read-only; can view all organisations)
     // - <string>    => normal user (scoped to that organisation)
-    // - undefined   => user with no organisation membership (no tenant access; GET /objectives returns [])
+    // - undefined   => INVALID STATE - should never happen (authentication should have failed)
     //
     // IMPORTANT:
     // undefined is NOT the same as null.
-    // undefined = not assigned anywhere.
+    // undefined = INVALID STATE (user should not have been able to authenticate)
     // null      = platform-level superuser.
     return {
       ...user,
-      organizationId: orgAssignment?.scopeId || undefined,  // Normal user: string or undefined (not null)
+      tenantId: orgAssignment!.scopeId,  // Non-null assertion: we've verified orgAssignment exists above
       features: {
         rbacInspector: featureFlags.rbacInspector,
         okrTreeView: featureFlags.okrTreeView,

@@ -15,7 +15,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       // Only process tenant-scoped models and skip internal Prisma operations
       const tenantScopedModels = [
         'objective', 'keyResult', 'workspace', 'team', 'cycle', 
-        'initiative', 'checkInRequest', 'strategicPillar', 'organization'
+        'initiative', 'checkInRequest', 'strategicPillar', 'organization',
+        'activity',      // ADD THIS
+        'userLayout',    // ADD THIS
       ];
       
       // Skip if not a tenant-scoped model or if it's a metadata/internal query
@@ -23,13 +25,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         return next(params);
       }
       
-      const organizationId = getTenantContext();
-      const isSuperuser = organizationId === null;
+      const tenantId = getTenantContext();
+      const isSuperuser = tenantId === null;
       
       // Set PostgreSQL session variables for RLS only when tenant context is available
       // This reduces overhead on queries that don't need RLS
       // Use a flag to prevent recursive calls during $executeRawUnsafe
-      if (organizationId !== undefined && !(params as any).__rlsVariablesSet) {
+      if (tenantId !== undefined && !(params as any).__rlsVariablesSet) {
         try {
           // Mark this query to prevent recursion
           (params as any).__rlsVariablesSet = true;
@@ -37,9 +39,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           // Use SET (session-level) instead of SET LOCAL (transaction-level)
           // This works for both transaction and non-transaction queries
           // Connection pool will reset variables when connection is returned
-          const orgIdValue = organizationId === null ? 'NULL' : `'${String(organizationId).replace(/'/g, "''")}'`;
+          const tenantIdValue = tenantId === null ? 'NULL' : `'${String(tenantId).replace(/'/g, "''")}'`;
           await this.$executeRawUnsafe(
-            `SET app.current_organization_id = ${orgIdValue}`
+            `SET app.current_tenant_id = ${tenantIdValue}`
           );
           await this.$executeRawUnsafe(
             `SET app.user_is_superuser = ${isSuperuser}`

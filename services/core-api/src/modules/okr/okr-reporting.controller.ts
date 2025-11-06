@@ -49,7 +49,7 @@ export class OkrReportingController {
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get organization summary statistics' })
   async getAnalyticsSummary(@Req() req: any) {
-    const userOrganizationId = req.user?.organizationId ?? null;
+    const userOrganizationId = req.user?.tenantId ?? null;
     const requesterUserId = req.user?.id;
     return this.reportingService.getOrgSummary(userOrganizationId, requesterUserId);
   }
@@ -65,7 +65,7 @@ export class OkrReportingController {
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get recent check-in activity feed' })
   async getAnalyticsFeed(@Req() req: any) {
-    const userOrganizationId = req.user?.organizationId ?? null;
+    const userOrganizationId = req.user?.tenantId ?? null;
     const requesterUserId = req.user?.id;
     return this.reportingService.getRecentCheckInFeed(userOrganizationId, requesterUserId);
   }
@@ -84,7 +84,7 @@ export class OkrReportingController {
   @ApiOperation({ summary: 'Export objectives and key results as CSV' })
   async exportCSV(@Req() req: any, @Res() res: Response) {
     const userId = req.user?.id;
-    const userOrganizationId = req.user?.organizationId ?? null;
+    const userOrganizationId = req.user?.tenantId ?? null;
 
     // Authorize using RBAC: check export_data permission
     const resourceContext = {
@@ -125,7 +125,7 @@ export class OkrReportingController {
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get active cycles for the organization' })
   async getActiveCycles(@Req() req: any) {
-    const userOrganizationId = req.user?.organizationId ?? null;
+    const userOrganizationId = req.user?.tenantId ?? null;
     return this.reportingService.getActiveCycleForOrg(userOrganizationId);
   }
 
@@ -140,7 +140,7 @@ export class OkrReportingController {
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get all cycles for the organization' })
   async getAllCycles(@Req() req: any) {
-    const userOrganizationId = req.user?.organizationId ?? null;
+    const userOrganizationId = req.user?.tenantId ?? null;
     return this.reportingService.getAllCyclesForOrg(userOrganizationId);
   }
 
@@ -155,7 +155,7 @@ export class OkrReportingController {
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get strategic pillars for the organization' })
   async getPillars(@Req() req: any) {
-    const userOrganizationId = req.user?.organizationId ?? null;
+    const userOrganizationId = req.user?.tenantId ?? null;
     return this.reportingService.getPillarsForOrg(userOrganizationId);
   }
 
@@ -169,7 +169,7 @@ export class OkrReportingController {
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get strategic pillar coverage for active cycle' })
   async getPillarCoverage(@Req() req: any) {
-    const userOrganizationId = req.user?.organizationId ?? null;
+    const userOrganizationId = req.user?.tenantId ?? null;
     const requesterUserId = req.user?.id;
     return this.reportingService.getPillarCoverageForActiveCycle(userOrganizationId, requesterUserId);
   }
@@ -184,7 +184,7 @@ export class OkrReportingController {
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get overdue check-ins for Key Results' })
   async getOverdueCheckIns(@Req() req: any) {
-    const userOrganizationId = req.user?.organizationId ?? null;
+    const userOrganizationId = req.user?.tenantId ?? null;
     const requesterUserId = req.user?.id;
     return this.reportingService.getOverdueCheckIns(userOrganizationId, requesterUserId);
   }

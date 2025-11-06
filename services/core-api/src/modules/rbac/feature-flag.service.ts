@@ -53,7 +53,7 @@ export class FeatureFlagService {
     flagName: FeatureFlagName,
     enabled: boolean,
     actorUserId: string,
-    organizationId: string | null,
+    tenantId: string | null,
   ): Promise<void> {
     // Get current state for audit log
     const currentState = await this.getFeatureFlag(userId, flagName);
@@ -111,7 +111,7 @@ export class FeatureFlagService {
       targetUserId: userId,
       targetId: userId,
       targetType: AuditTargetType.USER,
-      organizationId,
+      tenantId,
       metadata: {
         flagName,
         enabled,
