@@ -56,6 +56,7 @@ function findAllFiles(dir, extension, fileList = []) {
   const files = fs.readdirSync(dir);
 
   files.forEach((file) => {
+    if (file.includes('..')) throw new Error('Invalid file name');
     const filePath = path.join(dir, file);
     const stat = fs.statSync(filePath);
 
