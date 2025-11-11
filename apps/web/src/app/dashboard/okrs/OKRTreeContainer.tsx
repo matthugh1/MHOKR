@@ -32,6 +32,7 @@ interface OKRTreeContainerProps {
   filterWorkspaceId: string
   filterTeamId: string
   filterOwnerId: string
+  filterOverdue?: boolean
   searchQuery: string
   selectedTimeframeKey: string | null
   selectedStatus: string | null
@@ -66,21 +67,27 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
   }
   
   const keyResults = (rawObj.keyResults || []).map((kr: any): any => {
-    const isOverdue = overdueCheckIns.some(item => item.krId === kr.keyResultId || item.krId === kr.id)
+    const krId = kr.keyResultId || kr.id
+    const isOverdue = overdueCheckIns.some(item => item.krId === krId)
+    
+    // Extract KR data - handle both junction table format and direct format
+    const krData = kr.keyResult || kr
+    const weight = kr.weight ?? 1.0 // Extract weight from junction table, default to 1.0
     
     return {
-      id: kr.keyResultId || kr.id,
-      title: kr.title,
-      status: kr.status,
-      progress: kr.progress,
-      currentValue: kr.currentValue,
-      targetValue: kr.targetValue,
-      startValue: kr.startValue,
-      unit: kr.unit,
-      checkInCadence: kr.cadence,
+      id: krId,
+      title: krData.title || kr.title,
+      status: krData.status || kr.status,
+      progress: krData.progress ?? kr.progress ?? 0,
+      currentValue: krData.currentValue ?? kr.currentValue,
+      targetValue: krData.targetValue ?? kr.targetValue,
+      startValue: krData.startValue ?? kr.startValue,
+      unit: krData.unit || kr.unit,
+      checkInCadence: krData.checkInCadence || kr.cadence,
       isOverdue,
-      ownerId: kr.ownerId,
+      ownerId: krData.ownerId || kr.ownerId,
       canCheckIn: kr.canCheckIn !== undefined ? kr.canCheckIn : false,
+      weight, // Include weight from junction table
     }
   })
   
@@ -170,6 +177,7 @@ export function OKRTreeContainer({
   filterWorkspaceId,
   filterTeamId,
   filterOwnerId,
+  filterOverdue = false,
   searchQuery,
   selectedTimeframeKey,
   selectedStatus,
@@ -277,6 +285,14 @@ export function OKRTreeContainer({
   // Apply client-side filters
   const filteredOKRs = useMemo(() => {
     return objectivesPage.filter(okr => {
+      // Overdue filter: only show objectives with overdue KRs
+      if (filterOverdue) {
+        const hasOverdueKr = overdueCheckIns.some(item => item.objectiveId === okr.id)
+        if (!hasOverdueKr) {
+          return false
+        }
+      }
+      
       if (!selectedTimeframeKey || selectedTimeframeKey === 'all') {
         // No timeframe filter
       } else {
@@ -310,7 +326,7 @@ export function OKRTreeContainer({
       
       return true
     })
-  }, [objectivesPage, filterWorkspaceId, filterTeamId, filterOwnerId, searchQuery, selectedTimeframeKey])
+  }, [objectivesPage, filterWorkspaceId, filterTeamId, filterOwnerId, filterOverdue, searchQuery, selectedTimeframeKey, overdueCheckIns])
   
   const preparedObjectives = useMemo(() => {
     return filteredOKRs.map((okr: any) => {

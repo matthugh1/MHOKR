@@ -1,7 +1,7 @@
 # Feature Requests Index
 
-**Last Updated:** 2025-11-05  
-**Total Requests:** 16
+**Last Updated:** 2025-01-15  
+**Total Requests:** 63
 
 This index tracks all feature requests in the OKR Framework codebase. Feature requests are stored as Markdown files in `/docs/feature-requests/`.
 
@@ -48,10 +48,17 @@ The following feature requests exist but don't follow the standard FR-XXX format
 
 ---
 
+## Latest Batch
+
+**2025-01-15:** Generated comprehensive feature request document from audit scan:
+- [FEATURE_REQUESTS_2025-01-15.md](FEATURE_REQUESTS_2025-01-15.md) - 47 new requests extracted from TODO comments, audit reports, and planning documents
+
 ## Notes
 
 - All feature requests follow British English conventions
 - Standard format requests include: Problem, Desired outcomes, Users & roles, Scope, UX notes, Technical notes, Acceptance criteria, Telemetry, Quality & non-functional, Test plan, Dependencies & risks, Rollout & rollback
 - Feature requests are stored by year-month directory structure: `YYYY-MM/FR_short-kebab-title.md`
 - Legacy requests may be migrated to standard format in future updates
+- Batch-generated requests (like FEATURE_REQUESTS_YYYY-MM-DD.md) contain multiple requests grouped by product area
+
 

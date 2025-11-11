@@ -258,3 +258,5 @@ GET /okr/overview?organizationId=xxx&cycleId=abc&status=ON_TRACK&page=1&pageSize
 4. ⏭️ Measure performance (page load, API response, scroll FPS)
 5. ⏭️ Optimize slow operations (add indexes, cache, debounce)
 
+
+

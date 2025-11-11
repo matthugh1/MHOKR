@@ -143,3 +143,5 @@ docker exec okr-nexus-postgres psql -U okr_user -d okr_nexus -c "SELECT o.title,
 
 
 
+
+

@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException, BadRequestException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { InitiativeService } from './initiative.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
@@ -41,7 +41,7 @@ export class InitiativeController {
 
   @Post()
   @RequireAction('create_okr')
-  @ApiOperation({ summary: 'Create initiative' })
+  @ApiOperation({ summary: 'Create initiative', description: 'Emits activity event (CREATED) and audit log entry.' })
   async create(@Body() data: any, @Req() req: any) {
     try {
       // Ensure ownerId matches the authenticated user
@@ -103,7 +103,7 @@ export class InitiativeController {
 
   @Patch(':id')
   @RequireAction('edit_okr')
-  @ApiOperation({ summary: 'Update initiative' })
+  @ApiOperation({ summary: 'Update initiative', description: 'Emits activity events (UPDATED, STATE_CHANGE if status transitions) and audit logs.' })
   async update(@Param('id') id: string, @Body() data: any, @Req() req: any) {
     // Check if user can edit this initiative (via parent objective)
     const canEdit = await this.initiativeService.canEdit(req.user.id, id);
@@ -115,7 +115,7 @@ export class InitiativeController {
 
   @Delete(':id')
   @RequireAction('delete_okr')
-  @ApiOperation({ summary: 'Delete initiative' })
+  @ApiOperation({ summary: 'Delete initiative', description: 'Emits activity event (DELETED) and audit log entry.' })
   async delete(@Param('id') id: string, @Req() req: any) {
     // Check if user can delete this initiative (via parent objective)
     const canDelete = await this.initiativeService.canDelete(req.user.id, id);
@@ -123,5 +123,154 @@ export class InitiativeController {
       throw new ForbiddenException('You do not have permission to delete this initiative');
     }
     return this.initiativeService.delete(id, req.user.id, req.user.tenantId);
+  }
+
+  // ==========================================
+  // Tags Management
+  // ==========================================
+
+  @Post(':id/tags')
+  @RequireAction('edit_okr')
+  @ApiOperation({ summary: 'Add tag to initiative', description: 'Adds a tag to an Initiative and emits Activity log (TAG_ADDED).' })
+  @ApiResponse({ status: 200, description: 'Tag added successfully' })
+  @ApiResponse({ status: 400, description: 'Tag already exists on initiative', schema: { properties: { code: { example: 'DUPLICATE_TAG' } } } })
+  @ApiResponse({ status: 404, description: 'Initiative or tag not found' })
+  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
+  async addTag(
+    @Param('id') initiativeId: string,
+    @Body() body: { tagId: string },
+    @Req() req: any,
+  ) {
+    return this.initiativeService.addTag(
+      initiativeId,
+      body.tagId,
+      req.user.id,
+      req.user.tenantId,
+    );
+  }
+
+  @Delete(':id/tags/:tagId')
+  @RequireAction('edit_okr')
+  @ApiOperation({ summary: 'Remove tag from initiative', description: 'Removes a tag from an Initiative and emits Activity log (TAG_REMOVED).' })
+  @ApiResponse({ status: 200, description: 'Tag removed successfully' })
+  @ApiResponse({ status: 404, description: 'Tag not found on initiative', schema: { properties: { code: { example: 'TAG_NOT_FOUND' } } } })
+  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
+  async removeTag(
+    @Param('id') initiativeId: string,
+    @Param('tagId') tagId: string,
+    @Req() req: any,
+  ) {
+    return this.initiativeService.removeTag(
+      initiativeId,
+      tagId,
+      req.user.id,
+      req.user.tenantId,
+    );
+  }
+
+  @Get(':id/tags')
+  @RequireAction('view_okr')
+  @ApiOperation({ summary: 'List tags for initiative', description: 'Returns all tags assigned to an Initiative.' })
+  @ApiResponse({ status: 200, description: 'List of tags' })
+  @ApiResponse({ status: 404, description: 'Initiative not found' })
+  async listTags(
+    @Param('id') initiativeId: string,
+    @Req() req: any,
+  ) {
+    return this.initiativeService.listTags(initiativeId, req.user.tenantId);
+  }
+
+  // ==========================================
+  // Contributors Management
+  // ==========================================
+
+  @Post(':id/contributors')
+  @RequireAction('edit_okr')
+  @ApiOperation({ summary: 'Add contributor to initiative', description: 'Adds a contributor to an Initiative and emits Activity log (CONTRIBUTOR_ADDED).' })
+  @ApiResponse({ status: 200, description: 'Contributor added successfully' })
+  @ApiResponse({ status: 400, description: 'User already a contributor', schema: { properties: { code: { example: 'DUPLICATE_CONTRIBUTOR' } } } })
+  @ApiResponse({ status: 404, description: 'Initiative or user not found' })
+  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
+  async addContributor(
+    @Param('id') initiativeId: string,
+    @Body() body: { userId: string },
+    @Req() req: any,
+  ) {
+    return this.initiativeService.addContributor(
+      initiativeId,
+      body.userId,
+      req.user.id,
+      req.user.tenantId,
+    );
+  }
+
+  @Delete(':id/contributors/:userId')
+  @RequireAction('edit_okr')
+  @ApiOperation({ summary: 'Remove contributor from initiative', description: 'Removes a contributor from an Initiative and emits Activity log (CONTRIBUTOR_REMOVED).' })
+  @ApiResponse({ status: 200, description: 'Contributor removed successfully' })
+  @ApiResponse({ status: 404, description: 'Contributor not found', schema: { properties: { code: { example: 'CONTRIBUTOR_NOT_FOUND' } } } })
+  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
+  async removeContributor(
+    @Param('id') initiativeId: string,
+    @Param('userId') userId: string,
+    @Req() req: any,
+  ) {
+    return this.initiativeService.removeContributor(
+      initiativeId,
+      userId,
+      req.user.id,
+      req.user.tenantId,
+    );
+  }
+
+  @Get(':id/contributors')
+  @RequireAction('view_okr')
+  @ApiOperation({ summary: 'List contributors for initiative', description: 'Returns all contributors assigned to an Initiative.' })
+  @ApiResponse({ status: 200, description: 'List of contributors' })
+  @ApiResponse({ status: 404, description: 'Initiative not found' })
+  async listContributors(
+    @Param('id') initiativeId: string,
+    @Req() req: any,
+  ) {
+    return this.initiativeService.listContributors(initiativeId, req.user.tenantId);
+  }
+
+  /**
+   * Get status trend data for an Initiative.
+   * 
+   * Returns historical status snapshots ordered by timestamp (ASC).
+   * Tenant isolation: Verifies Initiative belongs to user's tenant.
+   * RBAC: User must have view_okr permission.
+   * 
+   * @param id - Initiative ID
+   * @param req - Request object with user info
+   * @returns Array of trend points with timestamp and status
+   */
+  @Get(':id/status-trend')
+  @RequireAction('view_okr')
+  @ApiOperation({ summary: 'Get status trend data for an Initiative' })
+  @ApiResponse({
+    status: 200,
+    description: 'Status trend data array',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          timestamp: { type: 'string', format: 'date-time', example: '2025-01-15T10:30:00Z' },
+          status: { type: 'string', enum: ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED'] },
+          triggeredBy: { type: 'string', nullable: true, example: 'INITIATIVE_UPDATE' },
+        },
+        required: ['timestamp', 'status'],
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden - user lacks view_okr permission or cannot access this initiative' })
+  @ApiResponse({ status: 404, description: 'Initiative not found' })
+  async getStatusTrend(
+    @Param('id') id: string,
+    @Req() req: any,
+  ) {
+    return this.initiativeService.getStatusTrend(id, req.user.tenantId);
   }
 }

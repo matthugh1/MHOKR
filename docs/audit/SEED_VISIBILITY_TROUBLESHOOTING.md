@@ -133,3 +133,5 @@ After scope filtering, visibility rules apply:
    GROUP BY "isPublished", "visibilityLevel", "cycleId";
    ```
 
+
+

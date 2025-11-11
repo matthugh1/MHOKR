@@ -131,3 +131,5 @@ Decide whether to ship interactive bar broadly. Need data-driven decision on whe
 - Rollback: Remove telemetry calls
 - Clean revert: No database changes; pure frontend change
 
+
+

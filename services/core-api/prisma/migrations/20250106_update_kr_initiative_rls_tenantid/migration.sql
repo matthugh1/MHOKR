@@ -95,3 +95,5 @@ CREATE POLICY initiatives_tenant_write ON initiatives
 
 COMMIT;
 
+
+

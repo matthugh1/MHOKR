@@ -62,6 +62,7 @@ interface OKRListVirtualisedProps {
     onAddInitiativeToKr: (krId: string, krTitle: string, objectiveId: string) => void
     onAddCheckIn: (krId: string) => void
     onOpenHistory: (entityType: 'OBJECTIVE' | 'KEY_RESULT', entityId: string, entityTitle?: string) => void
+    onEditKeyResult?: (krId: string) => void
     // Story 5: Contextual Add menu handlers
     onOpenContextualAddMenu?: (objectiveId: string) => void
     onContextualAddKeyResult?: (objectiveId: string, objectiveTitle: string) => void
@@ -242,6 +243,7 @@ export function OKRListVirtualised({
           if (kr) onAction.onAddInitiativeToKr(krId, kr.title, objective.id)
         }}
         onAddCheckIn={onAction.onAddCheckIn}
+        onEditKeyResult={onAction.onEditKeyResult}
         canEdit={objective.canEdit}
         canDelete={objective.canDelete}
         canEditKeyResult={objective.canEditKeyResult}

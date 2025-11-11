@@ -130,3 +130,5 @@ No load baseline (duration, count, role). Currently missing telemetry for OKR li
 - Rollback: Remove telemetry call
 - Clean revert: No database changes; pure frontend change
 
+
+

@@ -40,12 +40,30 @@ export const RequireActionWithContext = (
 ) => {
   return (target: any, propertyKey?: string | symbol, descriptor?: PropertyDescriptor) => {
     if (propertyKey !== undefined && descriptor !== undefined) {
+      console.log('[RBAC DECORATOR] RequireActionWithContext applied', {
+        className: target.constructor?.name,
+        methodName: String(propertyKey),
+        action,
+        hasResourceContextFn: !!resourceContextFn,
+        resourceContextFnType: typeof resourceContextFn,
+      });
+      
+      // Set action metadata
       SetMetadata(RBAC_ACTION_KEY, action)(target, propertyKey, descriptor);
+      
+      // Set resource context function metadata
       SetMetadata(RBAC_RESOURCE_CONTEXT_KEY, resourceContextFn)(
         target,
         propertyKey,
         descriptor,
       );
+      
+      console.log('[RBAC DECORATOR] Metadata set successfully');
+    } else {
+      console.warn('[RBAC DECORATOR] RequireActionWithContext: propertyKey or descriptor is undefined', {
+        hasPropertyKey: propertyKey !== undefined,
+        hasDescriptor: descriptor !== undefined,
+      });
     }
   };
 };

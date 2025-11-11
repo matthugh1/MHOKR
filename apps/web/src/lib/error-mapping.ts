@@ -31,6 +31,52 @@ export function mapErrorToMessage(error: any): ErrorInfo {
           message: data?.message || 'Resource not found.',
           variant: 'destructive',
         }
+      case 400:
+        // Check for alignment validation errors
+        if (data?.code === 'ALIGNMENT_DATE_OUT_OF_RANGE') {
+          return {
+            message: data.message || 'Child Objective dates must fall within parent Objective date range.',
+            variant: 'destructive',
+          }
+        }
+        if (data?.code === 'ALIGNMENT_CYCLE_MISMATCH') {
+          return {
+            message: data.message || 'Child Objective cycle must match parent Objective cycle.',
+            variant: 'destructive',
+          }
+        }
+        if (data?.code === 'INVALID_WEIGHT') {
+          return {
+            message: data.message || 'Weight must be between 0.0 and 3.0.',
+            variant: 'destructive',
+          }
+        }
+        // Check for governance errors in message
+        if (data?.message) {
+          const message = data.message.toLowerCase()
+          if (message.includes('locked') || message.includes('cycle')) {
+            return {
+              message:
+                'This cycle is locked for your role. Ask a Tenant Admin to publish changes.',
+              variant: 'warning',
+            }
+          }
+          if (message.includes('published') || message.includes('publish')) {
+            return {
+              message:
+                'This item is published and cannot be changed. Ask a Tenant Admin for assistance.',
+              variant: 'warning',
+            }
+          }
+          return {
+            message: data.message,
+            variant: 'destructive',
+          }
+        }
+        return {
+          message: data?.message || 'Validation error. Please check your input.',
+          variant: 'destructive',
+        }
       default:
         // Check for governance errors in message
         if (data?.message) {

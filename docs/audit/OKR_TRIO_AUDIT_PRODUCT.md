@@ -484,3 +484,5 @@ if (totalCount === 0 || filteredOKRs.length === 0) {
 4. ✅ Lock warnings specify reason (publish lock vs cycle lock)
 5. ✅ No synthetic cycle fallback (show empty state instead)
 
+
+

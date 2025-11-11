@@ -7,6 +7,7 @@ import { ActivityService } from '../activity/activity.service';
 import { OkrTenantGuard } from './tenant-guard';
 import { OkrGovernanceService } from './okr-governance.service';
 import { AuditLogService } from '../audit/audit-log.service';
+import { OkrStateTransitionService } from './okr-state-transition.service';
 import { calculateProgress } from '@okr-nexus/utils';
 
 /**
@@ -24,6 +25,7 @@ export class ObjectiveService {
     private activityService: ActivityService,
     private okrGovernanceService: OkrGovernanceService,
     private auditLogService: AuditLogService,
+    private stateTransitionService: OkrStateTransitionService,
   ) {}
 
   async findAll(_userId: string, workspaceId: string | undefined, userTenantId: string | null, pillarId?: string) {
@@ -54,8 +56,32 @@ export class ObjectiveService {
       where,
       include: {
         keyResults: {
-          include: {
-            keyResult: true,
+          select: {
+            id: true,
+            weight: true,
+            keyResult: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                progress: true,
+                startValue: true,
+                targetValue: true,
+                currentValue: true,
+                unit: true,
+                ownerId: true,
+                tenantId: true,
+                visibilityLevel: true,
+                isPublished: true,
+                state: true,
+                checkInCadence: true,
+                cycleId: true,
+                startDate: true,
+                endDate: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
           },
         },
         team: true,
@@ -91,7 +117,9 @@ export class ObjectiveService {
       where: { id },
       include: {
         keyResults: {
-          include: {
+          select: {
+            id: true,
+            weight: true,
             keyResult: {
               include: {
                 checkIns: {
@@ -171,6 +199,7 @@ export class ObjectiveService {
   async canEdit(userId: string, objectiveId: string, userTenantId: string | null): Promise<boolean> {
     // Tenant isolation: superuser is read-only
     if (userTenantId === null) {
+      console.log('[OBJECTIVE SERVICE] canEdit: Superuser is read-only', { userId, objectiveId });
       return false;
     }
 
@@ -180,15 +209,47 @@ export class ObjectiveService {
       // Extract OKR's tenantId from resource context
       const okrOrganizationId = resourceContext.okr?.tenantId;
       
+      console.log('[OBJECTIVE SERVICE] canEdit: Checking permissions', {
+        userId,
+        objectiveId,
+        userTenantId,
+        okrTenantId: okrOrganizationId,
+        isPublished: resourceContext.okr?.isPublished,
+        ownerId: resourceContext.okr?.ownerId,
+      });
+      
       // Tenant isolation: verify org match (throws if mismatch or system/global)
       try {
         OkrTenantGuard.assertSameTenant(okrOrganizationId, userTenantId);
-      } catch {
+      } catch (error) {
+        console.log('[OBJECTIVE SERVICE] canEdit: Tenant mismatch', {
+          okrTenantId: okrOrganizationId,
+          userTenantId,
+          error: (error as Error).message,
+        });
         return false;
       }
       
-      return this.rbacService.canPerformAction(userId, 'edit_okr', resourceContext);
-    } catch {
+      // Build user context to check roles
+      const userContext = await this.rbacService.buildUserContext(userId, false);
+      console.log('[OBJECTIVE SERVICE] canEdit: User context', {
+        userId,
+        isSuperuser: userContext.isSuperuser,
+        tenantRoles: Array.from(userContext.tenantRoles.entries()),
+        okrTenantId: okrOrganizationId,
+      });
+      
+      const canEdit = this.rbacService.canPerformAction(userId, 'edit_okr', resourceContext);
+      console.log('[OBJECTIVE SERVICE] canEdit: RBAC result', { canEdit, userId, objectiveId });
+      
+      return canEdit;
+    } catch (error) {
+      console.error('[OBJECTIVE SERVICE] canEdit: Error', {
+        userId,
+        objectiveId,
+        error: (error as Error).message,
+        stack: (error as Error).stack,
+      });
       return false;
     }
   }
@@ -280,6 +341,19 @@ export class ObjectiveService {
       throw new BadRequestException('endDate must be after startDate');
     }
 
+    // Validate alignment with parent Objective if parentId is provided
+    if (data.parentId) {
+      await this.validateAlignment(
+        {
+          startDate: startDate,
+          endDate: endDate,
+          cycleId: data.cycleId,
+        },
+        data.parentId,
+        userTenantId,
+      );
+    }
+
     // Validate owner exists
     const owner = await this.prisma.user.findUnique({
       where: { id: data.ownerId },
@@ -332,11 +406,19 @@ export class ObjectiveService {
       }
     }
 
+    // Validate visibility level: reject legacy deprecated values
+    const legacyVisibilityLevels = ['WORKSPACE_ONLY', 'TEAM_ONLY', 'MANAGER_CHAIN', 'EXEC_ONLY'];
+    if (data.visibilityLevel && legacyVisibilityLevels.includes(data.visibilityLevel)) {
+      throw new BadRequestException(
+        `Legacy visibility level '${data.visibilityLevel}' is no longer supported. Please use 'PUBLIC_TENANT' or 'PRIVATE' instead.`
+      );
+    }
+
     // Validate visibility level permissions
-    if (data.visibilityLevel === 'PRIVATE' || data.visibilityLevel === 'EXEC_ONLY') {
-      // Only TENANT_ADMIN or TENANT_OWNER can create PRIVATE or EXEC_ONLY OKRs
+    if (data.visibilityLevel === 'PRIVATE') {
+      // Only TENANT_ADMIN or TENANT_OWNER can create PRIVATE OKRs
       if (!data.tenantId) {
-        throw new BadRequestException('Organization ID is required for PRIVATE or EXEC_ONLY visibility');
+        throw new BadRequestException('Organization ID is required for PRIVATE visibility');
       }
 
       try {
@@ -347,14 +429,14 @@ export class ObjectiveService {
         };
         const canEdit = await this.rbacService.canPerformAction(_userId, 'edit_okr', resourceContext);
         if (!canEdit) {
-          throw new ForbiddenException('Only tenant administrators can create PRIVATE or EXEC_ONLY OKRs');
+          throw new ForbiddenException('Only tenant administrators can create PRIVATE OKRs');
         }
       } catch (error) {
         if (error instanceof ForbiddenException) {
           throw error;
         }
         // If RBAC check fails, conservatively deny
-        throw new ForbiddenException('Only tenant administrators can create PRIVATE or EXEC_ONLY OKRs');
+        throw new ForbiddenException('Only tenant administrators can create PRIVATE OKRs');
       }
     }
 
@@ -395,6 +477,13 @@ export class ObjectiveService {
       }
     }
 
+    // Set initial state if not provided: calculate from status and isPublished
+    if (data.state === undefined) {
+      const status = data.status || 'ON_TRACK';
+      const isPublished = data.isPublished || false;
+      data.state = this.stateTransitionService.calculateObjectiveStateFromLegacy(status, isPublished);
+    }
+
     const createdObjective = await this.prisma.objective.create({
       data,
       include: {
@@ -402,16 +491,38 @@ export class ObjectiveService {
       },
     });
 
-    // Log activity for creation
+    // Log activity for creation with full entity snapshot
     await this.activityService.createActivity({
       entityType: 'OBJECTIVE',
       entityId: createdObjective.id,
       userId: _userId,
-      tenantId: createdObjective.tenantId!, // ADD THIS
+      tenantId: createdObjective.tenantId!,
       action: 'CREATED',
       metadata: {
-        title: createdObjective.title,
-        ownerId: createdObjective.ownerId,
+        before: null, // No before state for creation
+        after: {
+          id: createdObjective.id,
+          title: createdObjective.title,
+          description: createdObjective.description,
+          tenantId: createdObjective.tenantId,
+          workspaceId: createdObjective.workspaceId,
+          teamId: createdObjective.teamId,
+          pillarId: createdObjective.pillarId,
+          cycleId: createdObjective.cycleId,
+          ownerId: createdObjective.ownerId,
+          parentId: createdObjective.parentId,
+          startDate: createdObjective.startDate,
+          endDate: createdObjective.endDate,
+          status: createdObjective.status,
+          progress: createdObjective.progress,
+          visibilityLevel: createdObjective.visibilityLevel,
+          isPublished: createdObjective.isPublished,
+          state: createdObjective.state,
+          positionX: createdObjective.positionX,
+          positionY: createdObjective.positionY,
+          createdAt: createdObjective.createdAt,
+          updatedAt: createdObjective.updatedAt,
+        },
       },
     }).catch(err => {
       // Log error but don't fail the request
@@ -437,9 +548,9 @@ export class ObjectiveService {
       console.error('Failed to log audit entry for objective creation:', err);
     });
 
-    // If Objective has a parent, trigger progress roll-up for parent
+    // If Objective has a parent, trigger progress and status roll-up for parent
     if (data.parentId) {
-      await this.okrProgressService.refreshObjectiveProgressCascade(data.parentId);
+      await this.okrProgressService.refreshObjectiveProgressAndStatusCascade(data.parentId);
     }
 
     return createdObjective;
@@ -552,6 +663,16 @@ export class ObjectiveService {
     const canCreate = await this.rbacService.canPerformAction(_userId, 'create_okr', resourceContext);
     if (!canCreate) {
       throw new ForbiddenException('You do not have permission to create OKRs in this scope');
+    }
+
+    // Validate visibility level: reject legacy deprecated values
+    if (objectiveData.visibilityLevel) {
+      const legacyVisibilityLevels = ['WORKSPACE_ONLY', 'TEAM_ONLY', 'MANAGER_CHAIN', 'EXEC_ONLY'];
+      if (legacyVisibilityLevels.includes(objectiveData.visibilityLevel)) {
+        throw new BadRequestException(
+          `Legacy visibility level '${objectiveData.visibilityLevel}' is no longer supported. Please use 'PUBLIC_TENANT' or 'PRIVATE' instead.`
+        );
+      }
     }
 
     // Validate visibility level permissions
@@ -708,6 +829,7 @@ export class ObjectiveService {
           data: {
             objectiveId: createdObjective.id,
             keyResultId: createdKr.id,
+            tenantId: userTenantId!,
           },
         });
 
@@ -773,30 +895,58 @@ export class ObjectiveService {
 
   async update(id: string, data: any, userId: string, userTenantId: string | null) {
     // Verify objective exists and user has permission (already checked in controller)
-    const objective = await this.prisma.objective.findUnique({
+    // Get full entity snapshot BEFORE update for audit logging
+    const objectiveBefore = await this.prisma.objective.findUnique({
       where: { id },
-      select: {
-        id: true,
-        tenantId: true,
-        isPublished: true,
-        ownerId: true,
-        workspaceId: true,
-        parentId: true,
-        progress: true,
-        status: true,
-        title: true,
-      },
     });
 
-    if (!objective) {
+    if (!objectiveBefore) {
       throw new NotFoundException(`Objective with ID ${id} not found`);
+    }
+
+    // Extract key fields for governance checks
+    const objective = {
+      id: objectiveBefore.id,
+      tenantId: objectiveBefore.tenantId,
+      state: objectiveBefore.state,
+      isPublished: objectiveBefore.isPublished, // Legacy support
+      ownerId: objectiveBefore.ownerId,
+      workspaceId: objectiveBefore.workspaceId,
+      parentId: objectiveBefore.parentId,
+      progress: objectiveBefore.progress,
+      status: objectiveBefore.status,
+      title: objectiveBefore.title,
+    };
+
+    // Calculate current state if not set (for backward compatibility)
+    const currentState = objectiveBefore.state || 
+      this.stateTransitionService.calculateObjectiveStateFromLegacy(
+        objectiveBefore.status,
+        objectiveBefore.isPublished
+      );
+
+    // Handle state transitions: if state is provided in update, validate transition
+    if (data.state !== undefined) {
+      this.stateTransitionService.assertObjectiveStateTransition(currentState, data.state);
+    } else if (data.status !== undefined || data.isPublished !== undefined) {
+      // If status or isPublished changed, calculate new state
+      const newStatus = data.status !== undefined ? data.status : objectiveBefore.status;
+      const newIsPublished = data.isPublished !== undefined ? data.isPublished : objectiveBefore.isPublished;
+      const calculatedState = this.stateTransitionService.calculateObjectiveStateFromLegacy(newStatus, newIsPublished);
+      
+      // Validate transition if state would change
+      if (calculatedState !== currentState) {
+        this.stateTransitionService.assertObjectiveStateTransition(currentState, calculatedState);
+        data.state = calculatedState;
+      }
     }
 
     // Governance: Check all locks (cycle lock + publish lock) via OkrGovernanceService
     await this.okrGovernanceService.checkAllLocksForObjective({
       objective: {
         id: objective.id,
-        isPublished: objective.isPublished,
+        state: currentState,
+        isPublished: objective.isPublished, // Legacy support
       },
       actingUser: {
         id: userId,
@@ -806,6 +956,27 @@ export class ObjectiveService {
     });
     // TODO [phase7-hardening]: Governance logic moved to OkrGovernanceService
     // TODO [phase7-hardening]: Future version will allow "propose change" workflow instead of hard blocking
+
+    // Validate visibility level: reject legacy deprecated values
+    if (data.visibilityLevel) {
+      const legacyVisibilityLevels = ['WORKSPACE_ONLY', 'TEAM_ONLY', 'MANAGER_CHAIN', 'EXEC_ONLY'];
+      if (legacyVisibilityLevels.includes(data.visibilityLevel)) {
+        throw new BadRequestException(
+          `Legacy visibility level '${data.visibilityLevel}' is no longer supported. Please use 'PUBLIC_TENANT' or 'PRIVATE' instead.`
+        );
+      }
+    }
+
+    // Validate alignment with parent Objective if parentId is being set or changed
+    const parentIdToValidate = data.parentId !== undefined ? data.parentId : objectiveBefore.parentId;
+    if (parentIdToValidate) {
+      const childData = {
+        startDate: data.startDate !== undefined ? new Date(data.startDate) : objectiveBefore.startDate,
+        endDate: data.endDate !== undefined ? new Date(data.endDate) : objectiveBefore.endDate,
+        cycleId: data.cycleId !== undefined ? data.cycleId : objectiveBefore.cycleId,
+      };
+      await this.validateAlignment(childData, parentIdToValidate, userTenantId);
+    }
 
     // Additional validation: prevent changing ownership without permission
     if (data.ownerId && data.ownerId !== objective.ownerId) {
@@ -849,30 +1020,133 @@ export class ObjectiveService {
       },
     });
 
-    // Determine if this was a publish action
-    const wasPublish = objective.isPublished === false && updatedObjective.isPublished === true;
+    // Detect state changes
+    const statusChanged = objectiveBefore.status !== updatedObjective.status;
+    const stateChanged = (objectiveBefore.state || 
+      this.stateTransitionService.calculateObjectiveStateFromLegacy(objectiveBefore.status, objectiveBefore.isPublished)) !== 
+      (updatedObjective.state || 
+      this.stateTransitionService.calculateObjectiveStateFromLegacy(updatedObjective.status, updatedObjective.isPublished));
+    const publishStateChanged = objectiveBefore.isPublished !== updatedObjective.isPublished;
+    const wasPublish = objectiveBefore.isPublished === false && updatedObjective.isPublished === true;
+    const wasUnpublish = objectiveBefore.isPublished === true && updatedObjective.isPublished === false;
 
-    // Log activity for update
+    // Determine action type based on state changes
+    let action = 'UPDATED';
+    const finalState = updatedObjective.state || 
+      this.stateTransitionService.calculateObjectiveStateFromLegacy(updatedObjective.status, updatedObjective.isPublished);
+    
+    if (stateChanged) {
+      if (finalState === 'COMPLETED') {
+        action = 'COMPLETED';
+      } else if (finalState === 'CANCELLED') {
+        action = 'CANCELLED';
+      } else if (finalState === 'PUBLISHED' && currentState === 'DRAFT') {
+        action = 'PUBLISHED'; // New action type for publish transition
+      } else if (finalState === 'DRAFT' && currentState === 'PUBLISHED') {
+        action = 'UNPUBLISHED'; // New action type for unpublish transition
+      }
+    } else if (statusChanged && updatedObjective.status === 'COMPLETED') {
+      action = 'COMPLETED';
+    } else if (statusChanged && updatedObjective.status === 'CANCELLED') {
+      action = 'CANCELLED';
+    }
+
+    // Log activity for state transition if state changed
+    if (stateChanged) {
+      await this.activityService.createActivity({
+        entityType: 'OBJECTIVE',
+        entityId: updatedObjective.id,
+        userId: userId,
+        tenantId: updatedObjective.tenantId!,
+        action: action,
+        metadata: {
+          stateTransition: {
+            from: currentState,
+            to: finalState,
+          },
+          wasPublish: wasPublish,
+          wasUnpublish: wasUnpublish,
+          statusChanged: statusChanged,
+          publishStateChanged: publishStateChanged,
+        },
+      }).catch(err => {
+        console.error('Failed to log activity for state transition:', err);
+      });
+
+      // Emit separate STATE_CHANGE activity alongside the transition-specific action
+      await this.activityService.createActivity({
+        entityType: 'OBJECTIVE',
+        entityId: updatedObjective.id,
+        userId: userId,
+        tenantId: updatedObjective.tenantId!,
+        action: 'STATE_CHANGE',
+        metadata: {
+          from: currentState,
+          to: finalState,
+        },
+      }).catch(err => {
+        console.error('Failed to log STATE_CHANGE activity:', err);
+      });
+    }
+
+    // Log activity for update with full entity snapshots
     await this.activityService.createActivity({
       entityType: 'OBJECTIVE',
       entityId: updatedObjective.id,
       userId: userId,
-      tenantId: updatedObjective.tenantId!, // ADD THIS
-      action: 'UPDATED', // Using UPDATED for both regular updates and publish (isPublished change noted in metadata)
+      tenantId: updatedObjective.tenantId!,
+      action: action,
       metadata: {
         wasPublish: wasPublish,
+        wasUnpublish: wasUnpublish,
+        statusChanged: statusChanged,
+        publishStateChanged: publishStateChanged,
+        stateChanged: stateChanged,
         before: {
-          progress: objective.progress,
-          status: objective.status,
-          isPublished: objective.isPublished,
-          // Include minimal diff - title if changed
-          ...(data.title && data.title !== objective.title ? { title: objective.title } : {}),
+          id: objectiveBefore.id,
+          title: objectiveBefore.title,
+          description: objectiveBefore.description,
+          tenantId: objectiveBefore.tenantId,
+          workspaceId: objectiveBefore.workspaceId,
+          teamId: objectiveBefore.teamId,
+          pillarId: objectiveBefore.pillarId,
+          cycleId: objectiveBefore.cycleId,
+          ownerId: objectiveBefore.ownerId,
+          parentId: objectiveBefore.parentId,
+          startDate: objectiveBefore.startDate,
+          endDate: objectiveBefore.endDate,
+          status: objectiveBefore.status,
+          progress: objectiveBefore.progress,
+          visibilityLevel: objectiveBefore.visibilityLevel,
+          isPublished: objectiveBefore.isPublished,
+          state: objectiveBefore.state || currentState,
+          positionX: objectiveBefore.positionX,
+          positionY: objectiveBefore.positionY,
+          createdAt: objectiveBefore.createdAt,
+          updatedAt: objectiveBefore.updatedAt,
         },
         after: {
-          progress: updatedObjective.progress,
+          id: updatedObjective.id,
+          title: updatedObjective.title,
+          description: updatedObjective.description,
+          tenantId: updatedObjective.tenantId,
+          workspaceId: updatedObjective.workspaceId,
+          teamId: updatedObjective.teamId,
+          pillarId: updatedObjective.pillarId,
+          cycleId: updatedObjective.cycleId,
+          ownerId: updatedObjective.ownerId,
+          parentId: updatedObjective.parentId,
+          startDate: updatedObjective.startDate,
+          endDate: updatedObjective.endDate,
           status: updatedObjective.status,
+          progress: updatedObjective.progress,
+          visibilityLevel: updatedObjective.visibilityLevel,
           isPublished: updatedObjective.isPublished,
-          ...(data.title ? { title: updatedObjective.title } : {}),
+          state: updatedObjective.state || finalState,
+          positionX: updatedObjective.positionX,
+          positionY: updatedObjective.positionY,
+          createdAt: updatedObjective.createdAt,
+          updatedAt: updatedObjective.updatedAt,
         },
       },
     }).catch(err => {
@@ -882,14 +1156,19 @@ export class ObjectiveService {
 
     // If parentId changed or Objective itself changed, trigger roll-up
     if (data.parentId !== undefined || data.children !== undefined) {
-      await this.okrProgressService.refreshObjectiveProgressCascade(id);
+      await this.okrProgressService.refreshObjectiveProgressAndStatusCascade(id);
       // If parent changed, also update old and new parents
       if (objective.parentId && objective.parentId !== data.parentId) {
-        await this.okrProgressService.refreshObjectiveProgressCascade(objective.parentId);
+        await this.okrProgressService.refreshObjectiveProgressAndStatusCascade(objective.parentId);
       }
       if (data.parentId && data.parentId !== objective.parentId) {
-        await this.okrProgressService.refreshObjectiveProgressCascade(data.parentId);
+        await this.okrProgressService.refreshObjectiveProgressAndStatusCascade(data.parentId);
       }
+    }
+
+    // If status changed, trigger status roll-up for parent (if exists)
+    if (statusChanged && updatedObjective.parentId) {
+      await this.okrProgressService.recalculateObjectiveStatus(updatedObjective.parentId);
     }
 
     return updatedObjective;
@@ -929,20 +1208,58 @@ export class ObjectiveService {
       // Get parent ID before deletion (for progress roll-up)
       const parentId = objective.parentId;
 
-      // Log activity for deletion (before deletion)
+      // Log activity for deletion (before deletion) with full entity snapshot
       await this.activityService.createActivity({
         entityType: 'OBJECTIVE',
         entityId: objective.id,
         userId: userId,
-        tenantId: objective.tenantId!, // ADD THIS
+        tenantId: objective.tenantId!,
         action: 'DELETED',
         metadata: {
-          title: objective.title,
-          ownerId: objective.ownerId,
+          before: {
+            id: objective.id,
+            title: objective.title,
+            description: objective.description,
+            tenantId: objective.tenantId,
+            workspaceId: objective.workspaceId,
+            teamId: objective.teamId,
+            pillarId: objective.pillarId,
+            cycleId: objective.cycleId,
+            ownerId: objective.ownerId,
+            parentId: objective.parentId,
+            startDate: objective.startDate,
+            endDate: objective.endDate,
+            status: objective.status,
+            progress: objective.progress,
+            visibilityLevel: objective.visibilityLevel,
+            isPublished: objective.isPublished,
+            positionX: objective.positionX,
+            positionY: objective.positionY,
+            createdAt: objective.createdAt,
+            updatedAt: objective.updatedAt,
+          },
+          after: null, // No after state for deletion
         },
       }).catch(err => {
         // Log error but don't fail the request
         console.error('Failed to log activity for objective deletion:', err);
+      });
+
+      // Log audit entry for objective deletion
+      await this.auditLogService.record({
+        actorUserId: userId,
+        action: 'objective_deleted',
+        targetType: 'OKR',
+        targetId: objective.id,
+        tenantId: objective.tenantId || null,
+        metadata: {
+          title: objective.title,
+          ownerId: objective.ownerId,
+          cycleId: objective.cycleId,
+        },
+      }).catch(err => {
+        // Log error but don't fail the request
+        console.error('Failed to log audit entry for objective deletion:', err);
       });
 
       // Delete objective (cascades will handle related records)
@@ -950,9 +1267,9 @@ export class ObjectiveService {
         where: { id },
       });
 
-      // Trigger progress roll-up for parent Objective after deletion
+      // Trigger progress and status roll-up for parent Objective after deletion
       if (parentId) {
-        await this.okrProgressService.refreshObjectiveProgressCascade(parentId);
+        await this.okrProgressService.refreshObjectiveProgressAndStatusCascade(parentId);
       }
 
       return { id };
@@ -965,6 +1282,887 @@ export class ObjectiveService {
         `Failed to delete objective: ${error.message || 'Unknown error'}`
       );
     }
+  }
+
+  /**
+   * Validate alignment between child and parent Objectives.
+   * 
+   * Ensures:
+   * - Child dates fall within parent date range: parent.startDate ≤ child.startDate ≤ child.endDate ≤ parent.endDate
+   * - If both cycles are set, they must match: child.cycleId === parent.cycleId
+   * 
+   * @param childData - Child Objective data with startDate, endDate, cycleId
+   * @param parentId - Parent Objective ID
+   * @param userTenantId - User's tenant ID for tenant isolation check
+   * @throws BadRequestException with code 'ALIGNMENT_DATE_OUT_OF_RANGE' or 'ALIGNMENT_CYCLE_MISMATCH'
+   */
+  private async validateAlignment(
+    childData: { startDate: Date | string; endDate: Date | string; cycleId?: string | null },
+    parentId: string,
+    userTenantId: string | null | undefined,
+  ): Promise<void> {
+    // Load parent Objective
+    const parent = await this.prisma.objective.findUnique({
+      where: { id: parentId },
+      select: {
+        id: true,
+        startDate: true,
+        endDate: true,
+        cycleId: true,
+        tenantId: true,
+      },
+    });
+
+    if (!parent) {
+      throw new NotFoundException(`Parent Objective with ID ${parentId} not found`);
+    }
+
+    // Enforce tenant isolation: parent must belong to user's tenant
+    OkrTenantGuard.assertSameTenant(parent.tenantId, userTenantId);
+
+    // Convert dates to Date objects if strings
+    const parentStartDate = new Date(parent.startDate);
+    const parentEndDate = new Date(parent.endDate);
+    const childStartDate = new Date(childData.startDate);
+    const childEndDate = new Date(childData.endDate);
+
+    // Validate date alignment: parent.startDate ≤ child.startDate ≤ child.endDate ≤ parent.endDate
+    if (childStartDate < parentStartDate) {
+      throw new BadRequestException({
+        message: `Child Objective start date (${childStartDate.toISOString().split('T')[0]}) must be on or after parent start date (${parentStartDate.toISOString().split('T')[0]})`,
+        code: 'ALIGNMENT_DATE_OUT_OF_RANGE',
+      });
+    }
+
+    if (childEndDate > parentEndDate) {
+      throw new BadRequestException({
+        message: `Child Objective end date (${childEndDate.toISOString().split('T')[0]}) must be on or before parent end date (${parentEndDate.toISOString().split('T')[0]})`,
+        code: 'ALIGNMENT_DATE_OUT_OF_RANGE',
+      });
+    }
+
+    // Validate cycle alignment: if both cycles are set, they must match
+    if (childData.cycleId && parent.cycleId && childData.cycleId !== parent.cycleId) {
+      throw new BadRequestException({
+        message: `Child Objective cycle must match parent Objective cycle`,
+        code: 'ALIGNMENT_CYCLE_MISMATCH',
+      });
+    }
+  }
+
+  /**
+   * Update the weight of a Key Result link to an Objective.
+   * 
+   * Updates the weight field in the ObjectiveKeyResult junction table and triggers progress recalculation.
+   * Emits Activity log on the Objective with UPDATED action.
+   * 
+   * @param objectiveId - The Objective ID
+   * @param keyResultId - The Key Result ID
+   * @param weight - The weight value (0.0-3.0, default 1.0)
+   * @param userId - User ID performing the update
+   * @param userTenantId - User's tenant ID for isolation check
+   * @returns Updated junction record { objectiveId, keyResultId, weight }
+   */
+  async updateKeyResultWeight(
+    objectiveId: string,
+    keyResultId: string,
+    weight: number,
+    userId: string,
+    userTenantId: string | null | undefined,
+  ) {
+    // Validate weight is finite number
+    if (typeof weight !== 'number' || !isFinite(weight)) {
+      throw new BadRequestException({
+        message: 'Weight must be a finite number',
+        code: 'INVALID_WEIGHT',
+      });
+    }
+
+    // Validate weight range (0.0 to MAX_WEIGHT)
+    const MAX_WEIGHT = parseFloat(process.env.OKR_MAX_LINK_WEIGHT || '3.0');
+    if (weight < 0 || weight > MAX_WEIGHT) {
+      throw new BadRequestException({
+        message: `Weight must be between 0.0 and ${MAX_WEIGHT}`,
+        code: 'INVALID_WEIGHT',
+      });
+    }
+
+    // Load objective with tenantId for isolation check
+    const objective = await this.prisma.objective.findUnique({
+      where: { id: objectiveId },
+      select: { id: true, tenantId: true },
+    });
+
+    if (!objective) {
+      throw new NotFoundException(`Objective with ID ${objectiveId} not found`);
+    }
+
+    // Load key result with tenantId for isolation check
+    const keyResult = await this.prisma.keyResult.findUnique({
+      where: { id: keyResultId },
+      select: { id: true, tenantId: true },
+    });
+
+    if (!keyResult) {
+      throw new NotFoundException(`Key Result with ID ${keyResultId} not found`);
+    }
+
+    // Enforce tenant isolation: both Objective and KR must belong to user's tenant
+    OkrTenantGuard.assertSameTenant(objective.tenantId, userTenantId);
+    OkrTenantGuard.assertSameTenant(keyResult.tenantId, userTenantId);
+
+    // Check RBAC permission
+    const canEdit = await this.canEdit(userId, objectiveId, userTenantId ?? null);
+    if (!canEdit) {
+      throw new ForbiddenException('You do not have permission to edit this Objective');
+    }
+
+    // Verify junction exists and get current weight
+    const junction = await this.prisma.objectiveKeyResult.findUnique({
+      where: {
+        objectiveId_keyResultId: {
+          objectiveId,
+          keyResultId,
+        },
+      },
+      select: {
+        weight: true,
+      },
+    });
+
+    if (!junction) {
+      throw new NotFoundException({
+        message: `Key Result ${keyResultId} is not linked to Objective ${objectiveId}`,
+        code: 'LINK_NOT_FOUND',
+      });
+    }
+
+    const prevWeight = junction.weight;
+    const nextWeight = weight;
+
+    // Skip update if weight hasn't changed
+    if (prevWeight === nextWeight) {
+      return {
+        objectiveId,
+        keyResultId,
+        weight: prevWeight,
+      };
+    }
+
+    // Update weight
+    const updated = await this.prisma.objectiveKeyResult.update({
+      where: {
+        objectiveId_keyResultId: {
+          objectiveId,
+          keyResultId,
+        },
+      },
+      data: { weight: nextWeight },
+      select: {
+        objectiveId: true,
+        keyResultId: true,
+        weight: true,
+      },
+    });
+
+    // Emit Activity log on Objective with UPDATED action
+    await this.activityService.createActivity({
+      entityType: 'OBJECTIVE',
+      entityId: objectiveId,
+      userId: userId,
+      tenantId: objective.tenantId!,
+      action: 'UPDATED',
+      metadata: {
+        changedFields: ['weight'],
+        link: {
+          keyResultId,
+          prev: prevWeight,
+          next: nextWeight,
+        },
+      },
+    }).catch(err => {
+      console.error('Failed to log activity for weight update:', err);
+    });
+
+    // Trigger progress recalculation
+    await this.okrProgressService.refreshObjectiveProgressCascade(objectiveId);
+
+    return updated;
+  }
+
+  // ==========================================
+  // Tags Management
+  // ==========================================
+
+  /**
+   * Add a tag to an Objective
+   */
+  async addTag(
+    objectiveId: string,
+    tagId: string,
+    userId: string,
+    userTenantId: string | null | undefined,
+  ) {
+    // Load objective with tenantId for isolation check
+    const objective = await this.prisma.objective.findUnique({
+      where: { id: objectiveId },
+      select: { id: true, tenantId: true },
+    });
+
+    if (!objective) {
+      throw new NotFoundException(`Objective with ID ${objectiveId} not found`);
+    }
+
+    // Enforce tenant isolation
+    OkrTenantGuard.assertSameTenant(objective.tenantId, userTenantId);
+
+    // Check RBAC permission
+    const canEdit = await this.canEdit(userId, objectiveId, userTenantId ?? null);
+    if (!canEdit) {
+      throw new ForbiddenException('You do not have permission to edit this Objective');
+    }
+
+    // Verify tag exists and belongs to same tenant
+    const tag = await this.prisma.tag.findUnique({
+      where: { id: tagId },
+      select: { id: true, tenantId: true, name: true },
+    });
+
+    if (!tag) {
+      throw new NotFoundException(`Tag with ID ${tagId} not found`);
+    }
+
+    OkrTenantGuard.assertSameTenant(tag.tenantId, userTenantId);
+
+    // Check if tag already exists on objective
+    const existing = await this.prisma.objectiveTag.findUnique({
+      where: {
+        tenantId_objectiveId_tagId: {
+          tenantId: objective.tenantId!,
+          objectiveId,
+          tagId,
+        },
+      },
+    });
+
+    if (existing) {
+      throw new BadRequestException({
+        message: `Tag "${tag.name}" is already assigned to this Objective`,
+        code: 'DUPLICATE_TAG',
+      });
+    }
+
+    // Create tag link
+    const objectiveTag = await this.prisma.objectiveTag.create({
+      data: {
+        tenantId: objective.tenantId!,
+        objectiveId,
+        tagId,
+        createdBy: userId,
+      },
+      include: {
+        tag: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+          },
+        },
+      },
+    });
+
+    // Emit Activity log
+    await this.activityService.createActivity({
+      entityType: 'OBJECTIVE',
+      entityId: objectiveId,
+      userId: userId,
+      tenantId: objective.tenantId!,
+      action: 'TAG_ADDED',
+      metadata: {
+        tagId: tag.id,
+        tagName: tag.name,
+      },
+    }).catch(err => {
+      console.error('Failed to log activity for tag addition:', err);
+    });
+
+    return {
+      id: objectiveTag.id,
+      tag: objectiveTag.tag,
+      createdAt: objectiveTag.createdAt,
+    };
+  }
+
+  /**
+   * Remove a tag from an Objective
+   */
+  async removeTag(
+    objectiveId: string,
+    tagId: string,
+    userId: string,
+    userTenantId: string | null | undefined,
+  ) {
+    // Load objective with tenantId for isolation check
+    const objective = await this.prisma.objective.findUnique({
+      where: { id: objectiveId },
+      select: { id: true, tenantId: true },
+    });
+
+    if (!objective) {
+      throw new NotFoundException(`Objective with ID ${objectiveId} not found`);
+    }
+
+    // Enforce tenant isolation
+    OkrTenantGuard.assertSameTenant(objective.tenantId, userTenantId);
+
+    // Check RBAC permission
+    const canEdit = await this.canEdit(userId, objectiveId, userTenantId ?? null);
+    if (!canEdit) {
+      throw new ForbiddenException('You do not have permission to edit this Objective');
+    }
+
+    // Load tag for activity log
+    const tag = await this.prisma.tag.findUnique({
+      where: { id: tagId },
+      select: { id: true, name: true },
+    });
+
+    // Find and delete tag link
+    const objectiveTag = await this.prisma.objectiveTag.findUnique({
+      where: {
+        tenantId_objectiveId_tagId: {
+          tenantId: objective.tenantId!,
+          objectiveId,
+          tagId,
+        },
+      },
+    });
+
+    if (!objectiveTag) {
+      throw new NotFoundException({
+        message: `Tag is not assigned to this Objective`,
+        code: 'TAG_NOT_FOUND',
+      });
+    }
+
+    await this.prisma.objectiveTag.delete({
+      where: { id: objectiveTag.id },
+    });
+
+    // Emit Activity log
+    await this.activityService.createActivity({
+      entityType: 'OBJECTIVE',
+      entityId: objectiveId,
+      userId: userId,
+      tenantId: objective.tenantId!,
+      action: 'TAG_REMOVED',
+      metadata: {
+        tagId: tag?.id || tagId,
+        tagName: tag?.name || 'Unknown',
+      },
+    }).catch(err => {
+      console.error('Failed to log activity for tag removal:', err);
+    });
+
+    return { success: true };
+  }
+
+  /**
+   * List tags for an Objective
+   */
+  async listTags(
+    objectiveId: string,
+    userTenantId: string | null | undefined,
+  ) {
+    // Load objective with tenantId for isolation check
+    const objective = await this.prisma.objective.findUnique({
+      where: { id: objectiveId },
+      select: { id: true, tenantId: true },
+    });
+
+    if (!objective) {
+      throw new NotFoundException(`Objective with ID ${objectiveId} not found`);
+    }
+
+    // Enforce tenant isolation
+    OkrTenantGuard.assertSameTenant(objective.tenantId, userTenantId);
+
+    const tags = await this.prisma.objectiveTag.findMany({
+      where: {
+        objectiveId,
+        tenantId: objective.tenantId!,
+      },
+      include: {
+        tag: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    return tags.map(ot => ({
+      id: ot.tag.id,
+      name: ot.tag.name,
+      color: ot.tag.color,
+      addedAt: ot.createdAt,
+      addedBy: ot.createdBy,
+    }));
+  }
+
+  // ==========================================
+  // Contributors Management
+  // ==========================================
+
+  /**
+   * Add a contributor to an Objective
+   */
+  async addContributor(
+    objectiveId: string,
+    userIdToAdd: string,
+    userId: string,
+    userTenantId: string | null | undefined,
+  ) {
+    // Load objective with tenantId for isolation check
+    const objective = await this.prisma.objective.findUnique({
+      where: { id: objectiveId },
+      select: { id: true, tenantId: true },
+    });
+
+    if (!objective) {
+      throw new NotFoundException(`Objective with ID ${objectiveId} not found`);
+    }
+
+    // Enforce tenant isolation
+    OkrTenantGuard.assertSameTenant(objective.tenantId, userTenantId);
+
+    // Check RBAC permission
+    const canEdit = await this.canEdit(userId, objectiveId, userTenantId ?? null);
+    if (!canEdit) {
+      throw new ForbiddenException('You do not have permission to edit this Objective');
+    }
+
+    // Verify user exists and belongs to same tenant (users don't have tenantId, but we can check via organization membership)
+    const userToAdd = await this.prisma.user.findUnique({
+      where: { id: userIdToAdd },
+      select: { id: true, email: true, name: true },
+    });
+
+    if (!userToAdd) {
+      throw new NotFoundException(`User with ID ${userIdToAdd} not found`);
+    }
+
+    // Check if contributor already exists
+    const existing = await this.prisma.objectiveContributor.findUnique({
+      where: {
+        tenantId_objectiveId_userId: {
+          tenantId: objective.tenantId!,
+          objectiveId,
+          userId: userIdToAdd,
+        },
+      },
+    });
+
+    if (existing) {
+      throw new BadRequestException({
+        message: `User is already a contributor to this Objective`,
+        code: 'DUPLICATE_CONTRIBUTOR',
+      });
+    }
+
+    // Create contributor link
+    const contributor = await this.prisma.objectiveContributor.create({
+      data: {
+        tenantId: objective.tenantId!,
+        objectiveId,
+        userId: userIdToAdd,
+        role: 'CONTRIBUTOR',
+        createdBy: userId,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            avatar: true,
+          },
+        },
+      },
+    });
+
+    // Emit Activity log
+    await this.activityService.createActivity({
+      entityType: 'OBJECTIVE',
+      entityId: objectiveId,
+      userId: userId,
+      tenantId: objective.tenantId!,
+      action: 'CONTRIBUTOR_ADDED',
+      metadata: {
+        userId: userIdToAdd,
+        userEmail: userToAdd.email,
+        userName: userToAdd.name,
+      },
+    }).catch(err => {
+      console.error('Failed to log activity for contributor addition:', err);
+    });
+
+    return {
+      id: contributor.id,
+      user: contributor.user,
+      role: contributor.role,
+      addedAt: contributor.createdAt,
+    };
+  }
+
+  /**
+   * Remove a contributor from an Objective
+   */
+  async removeContributor(
+    objectiveId: string,
+    userIdToRemove: string,
+    userId: string,
+    userTenantId: string | null | undefined,
+  ) {
+    // Load objective with tenantId for isolation check
+    const objective = await this.prisma.objective.findUnique({
+      where: { id: objectiveId },
+      select: { id: true, tenantId: true },
+    });
+
+    if (!objective) {
+      throw new NotFoundException(`Objective with ID ${objectiveId} not found`);
+    }
+
+    // Enforce tenant isolation
+    OkrTenantGuard.assertSameTenant(objective.tenantId, userTenantId);
+
+    // Check RBAC permission
+    const canEdit = await this.canEdit(userId, objectiveId, userTenantId ?? null);
+    if (!canEdit) {
+      throw new ForbiddenException('You do not have permission to edit this Objective');
+    }
+
+    // Load user for activity log
+    const userToRemove = await this.prisma.user.findUnique({
+      where: { id: userIdToRemove },
+      select: { id: true, email: true, name: true },
+    });
+
+    // Find and delete contributor link
+    const contributor = await this.prisma.objectiveContributor.findUnique({
+      where: {
+        tenantId_objectiveId_userId: {
+          tenantId: objective.tenantId!,
+          objectiveId,
+          userId: userIdToRemove,
+        },
+      },
+    });
+
+    if (!contributor) {
+      throw new NotFoundException({
+        message: `User is not a contributor to this Objective`,
+        code: 'CONTRIBUTOR_NOT_FOUND',
+      });
+    }
+
+    await this.prisma.objectiveContributor.delete({
+      where: { id: contributor.id },
+    });
+
+    // Emit Activity log
+    await this.activityService.createActivity({
+      entityType: 'OBJECTIVE',
+      entityId: objectiveId,
+      userId: userId,
+      tenantId: objective.tenantId!,
+      action: 'CONTRIBUTOR_REMOVED',
+      metadata: {
+        userId: userIdToRemove,
+        userEmail: userToRemove?.email || 'Unknown',
+        userName: userToRemove?.name || 'Unknown',
+      },
+    }).catch(err => {
+      console.error('Failed to log activity for contributor removal:', err);
+    });
+
+    return { success: true };
+  }
+
+  /**
+   * List contributors for an Objective
+   */
+  async listContributors(
+    objectiveId: string,
+    userTenantId: string | null | undefined,
+  ) {
+    // Load objective with tenantId for isolation check
+    const objective = await this.prisma.objective.findUnique({
+      where: { id: objectiveId },
+      select: { id: true, tenantId: true },
+    });
+
+    if (!objective) {
+      throw new NotFoundException(`Objective with ID ${objectiveId} not found`);
+    }
+
+    // Enforce tenant isolation
+    OkrTenantGuard.assertSameTenant(objective.tenantId, userTenantId);
+
+    const contributors = await this.prisma.objectiveContributor.findMany({
+      where: {
+        objectiveId,
+        tenantId: objective.tenantId!,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            avatar: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    return contributors.map(c => ({
+      id: c.id,
+      user: c.user,
+      role: c.role,
+      addedAt: c.createdAt,
+      addedBy: c.createdBy,
+    }));
+  }
+
+  // ==========================================
+  // Sponsor Management
+  // ==========================================
+
+  /**
+   * Update sponsor for an Objective
+   */
+  async reviewObjective(
+    objectiveId: string,
+    dto: { confidence?: number; note?: string },
+    userId: string,
+    userTenantId: string | null | undefined,
+  ) {
+    // Verify objective exists and user has permission
+    const objective = await this.prisma.objective.findUnique({
+      where: { id: objectiveId },
+      select: {
+        id: true,
+        tenantId: true,
+        title: true,
+        confidence: true,
+      },
+    });
+
+    if (!objective) {
+      throw new NotFoundException(`Objective with ID ${objectiveId} not found`);
+    }
+
+    // Tenant isolation check
+    OkrTenantGuard.assertSameTenant(
+      objective.tenantId,
+      userTenantId,
+    );
+
+    // Validate confidence if provided
+    if (dto.confidence !== undefined) {
+      if (dto.confidence < 0 || dto.confidence > 100) {
+        throw new BadRequestException('Confidence must be between 0 and 100');
+      }
+    }
+
+    // Get previous confidence for activity log (before update)
+    const previousConfidence = objective.confidence ?? null;
+
+    // Update objective with confidence and lastReviewedAt
+    const updateData: any = {
+      lastReviewedAt: new Date(),
+    };
+
+    if (dto.confidence !== undefined) {
+      updateData.confidence = dto.confidence;
+    }
+
+    const updatedObjective = await this.prisma.objective.update({
+      where: { id: objectiveId },
+      data: updateData,
+    });
+
+    // Emit Activity 'REVIEWED'
+    await this.activityService.createActivity({
+      entityType: 'OBJECTIVE',
+      entityId: objectiveId,
+      userId,
+      tenantId: objective.tenantId,
+      action: 'REVIEWED',
+      metadata: {
+        confidence: dto.confidence ?? updatedObjective.confidence ?? null,
+        note: dto.note || null,
+        previousConfidence: previousConfidence,
+      },
+    }).catch(err => {
+      console.error('Failed to log activity for objective review:', err);
+    });
+
+    return updatedObjective;
+  }
+
+  async updateSponsor(
+    objectiveId: string,
+    sponsorId: string | null,
+    userId: string,
+    userTenantId: string | null | undefined,
+  ) {
+    // Load objective with tenantId for isolation check
+    const objective = await this.prisma.objective.findUnique({
+      where: { id: objectiveId },
+      select: { id: true, tenantId: true, sponsorId: true },
+    });
+
+    if (!objective) {
+      throw new NotFoundException(`Objective with ID ${objectiveId} not found`);
+    }
+
+    // Enforce tenant isolation
+    OkrTenantGuard.assertSameTenant(objective.tenantId, userTenantId);
+
+    // Check RBAC permission
+    const canEdit = await this.canEdit(userId, objectiveId, userTenantId ?? null);
+    if (!canEdit) {
+      throw new ForbiddenException('You do not have permission to edit this Objective');
+    }
+
+    // Verify sponsor user exists if provided
+    if (sponsorId) {
+      const sponsor = await this.prisma.user.findUnique({
+        where: { id: sponsorId },
+        select: { id: true, email: true, name: true },
+      });
+
+      if (!sponsor) {
+        throw new NotFoundException(`User with ID ${sponsorId} not found`);
+      }
+    }
+
+    const prevSponsorId = objective.sponsorId;
+
+    // Update sponsor
+    const updated = await this.prisma.objective.update({
+      where: { id: objectiveId },
+      data: { sponsorId },
+      select: {
+        id: true,
+        sponsorId: true,
+        sponsor: sponsorId ? {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            avatar: true,
+          },
+        } : undefined,
+      },
+    });
+
+    // Emit Activity log
+    await this.activityService.createActivity({
+      entityType: 'OBJECTIVE',
+      entityId: objectiveId,
+      userId: userId,
+      tenantId: objective.tenantId!,
+      action: 'UPDATED',
+      metadata: {
+        changedFields: ['sponsorId'],
+        sponsor: {
+          from: prevSponsorId,
+          to: sponsorId,
+        },
+      },
+    }).catch(err => {
+      console.error('Failed to log activity for sponsor update:', err);
+    });
+
+    return {
+      id: updated.id,
+      sponsorId: updated.sponsorId,
+      sponsor: updated.sponsor || null,
+    };
+  }
+
+  /**
+   * Get progress trend data for an Objective.
+   * 
+   * Returns historical progress snapshots ordered by timestamp (ASC).
+   * Tenant isolation: Verifies Objective belongs to user's tenant.
+   * 
+   * @param objectiveId - Objective ID
+   * @param userTenantId - User's tenant ID for isolation check
+   * @returns Array of trend points with timestamp, progress, and status
+   */
+  async getProgressTrend(
+    objectiveId: string,
+    userTenantId: string | null | undefined,
+  ): Promise<Array<{
+    timestamp: string;
+    progress: number;
+    status: string;
+    triggeredBy: string | null;
+  }>> {
+    // Tenant isolation: enforce read rules
+    OkrTenantGuard.assertCanMutateTenant(userTenantId);
+
+    // Verify objective exists and get tenant ID
+    const objective = await this.prisma.objective.findUnique({
+      where: { id: objectiveId },
+      select: {
+        id: true,
+        tenantId: true,
+      },
+    });
+
+    if (!objective) {
+      throw new NotFoundException(`Objective with ID ${objectiveId} not found`);
+    }
+
+    // Tenant isolation: verify org match
+    OkrTenantGuard.assertSameTenant(objective.tenantId, userTenantId);
+
+    // Fetch progress snapshots ordered by timestamp (ASC)
+    const snapshots = await this.prisma.objectiveProgressSnapshot.findMany({
+      where: {
+        objectiveId,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+      select: {
+        createdAt: true,
+        progress: true,
+        status: true,
+        triggeredBy: true,
+      },
+    });
+
+    return snapshots.map(snapshot => ({
+      timestamp: snapshot.createdAt.toISOString(),
+      progress: snapshot.progress,
+      status: snapshot.status,
+      triggeredBy: snapshot.triggeredBy,
+    }));
   }
 
   // NOTE: Reporting / analytics / export methods moved to OkrReportingService in Phase 4

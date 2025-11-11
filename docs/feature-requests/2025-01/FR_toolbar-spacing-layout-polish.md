@@ -130,3 +130,5 @@ Header density; "New Objective" & "Needs Attention" placement affects hierarchy.
 - Rollback: Revert component changes
 - Clean revert: No database changes; pure frontend change
 
+
+

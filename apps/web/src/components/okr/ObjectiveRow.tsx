@@ -1,20 +1,23 @@
 "use client"
 
 import * as React from "react"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { OkrBadge } from "./OkrBadge"
+import { PillarBadge } from "./PillarBadge"
 import { AvatarCircle } from "@/components/dashboard/AvatarCircle"
-import { Edit2, Trash2, History, Plus, ChevronDown, ChevronUp, MoreVertical } from "lucide-react"
+import { Edit2, Trash2, History, Plus, ChevronDown, ChevronUp, MoreVertical, Info } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { InlineInsightBar } from "./InlineInsightBar"
 import { RbacWhyTooltip } from "@/components/rbac/RbacWhyTooltip"
 import { WhyCantIInspector } from "./WhyCantIInspector"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { InlineTitleEditor } from "./inline-editors/InlineTitleEditor"
 import { InlineOwnerEditor } from "./inline-editors/InlineOwnerEditor"
 import { InlineStatusEditor } from "./inline-editors/InlineStatusEditor"
 import { InlineNumericEditor } from "./inline-editors/InlineNumericEditor"
+import { InlinePublishEditor } from "./inline-editors/InlinePublishEditor"
 import { useAuth } from "@/contexts/auth.context"
 import { usePermissions } from "@/hooks/usePermissions"
 import { useTenantPermissions } from "@/hooks/useTenantPermissions"
@@ -22,6 +25,11 @@ import { useWorkspace } from "@/contexts/workspace.context"
 import { useToast } from "@/hooks/use-toast"
 import api from "@/lib/api"
 import { mapErrorToMessage } from "@/lib/error-mapping"
+import { KeyResultTrendChart } from "./KeyResultTrendChart"
+import { ProgressBreakdownTooltip } from "./ProgressBreakdownTooltip"
+import { ObjectiveProgressTrendChart } from "./ObjectiveProgressTrendChart"
+import { KeyResultStatusTrendChart } from "./KeyResultStatusTrendChart"
+import { InitiativeStatusTrendChart } from "./InitiativeStatusTrendChart"
 
 export interface ObjectiveRowProps {
   objective: {
@@ -43,6 +51,7 @@ export interface ObjectiveRowProps {
     tenantId?: string | null
     workspaceId?: string | null
     teamId?: string | null
+    pillarId?: string | null
     overdueCountForObjective?: number
     lowestConfidence?: number | null
     keyResults?: Array<{
@@ -59,6 +68,7 @@ export interface ObjectiveRowProps {
       ownerId?: string
       lastCheckInDate?: string | null
       nextCheckInDue?: string | null
+      weight?: number // Weight from ObjectiveKeyResult junction table
     }>
     initiatives?: Array<{
       id: string
@@ -82,6 +92,7 @@ export interface ObjectiveRowProps {
   onOpenHistory?: () => void
   onAddInitiativeToKr?: (krId: string) => void
   onAddCheckIn?: (krId: string) => void
+  onEditKeyResult?: (krId: string) => void
   canEdit: boolean
   canDelete: boolean
   canEditKeyResult?: (krId: string) => boolean
@@ -361,29 +372,32 @@ const formatProgressLabel = (kr: {
 const getCyclePill = (cycleLabel: string, cycleStatus: string) => {
   const baseClasses = "px-2 py-1 rounded-full text-[11px] font-medium leading-none"
   
+  // Strip "(draft)" from cycle label to avoid confusion with objective publish status
+  const cleanCycleLabel = cycleLabel.replace(/\s*\(draft\)/i, '').trim()
+  
   if (cycleStatus === "DRAFT") {
     return {
-      text: cycleLabel,
+      text: cleanCycleLabel,
       className: cn(baseClasses, "bg-violet-100 text-violet-700 ring-1 ring-inset ring-violet-300"),
       activeChip: null,
     }
   }
   if (cycleStatus === "ARCHIVED") {
     return {
-      text: cycleLabel,
+      text: cleanCycleLabel,
       className: cn(baseClasses, "bg-neutral-200 text-neutral-600"),
       activeChip: null,
     }
   }
   if (cycleStatus === "ACTIVE") {
     return {
-      text: cycleLabel,
+      text: cleanCycleLabel,
       className: cn(baseClasses, "bg-neutral-100 text-neutral-700 ring-1 ring-inset ring-neutral-300"),
       activeChip: { text: "Active", className: cn(baseClasses, "bg-emerald-500 text-white") },
     }
   }
   return {
-    text: cycleLabel,
+    text: cleanCycleLabel,
     className: cn(baseClasses, "bg-neutral-100 text-neutral-700 ring-1 ring-inset ring-neutral-300"),
     activeChip: null,
   }
@@ -400,6 +414,7 @@ export function ObjectiveRow({
   onOpenHistory,
   onAddInitiativeToKr,
   onAddCheckIn,
+  onEditKeyResult,
   canEdit,
   canDelete,
   canEditKeyResult,
@@ -435,7 +450,7 @@ export function ObjectiveRow({
   }, [objective])
   
   const statusBadge = getStatusBadge(optimisticObjective.status)
-  const publishStateBadge = getPublishStateBadge(optimisticObjective.publishState, optimisticObjective.isPublished)
+  // Note: publishStateBadge removed - using InlinePublishEditor instead
   
   // Deduplicate arrays by ID to prevent duplicate key warnings
   // Directly use array references - React will handle memoization
@@ -539,6 +554,16 @@ export function ObjectiveRow({
   // Check if can edit (respecting SUPERUSER read-only)
   const canEditInline = canEdit && !isSuperuserReadOnly
   
+  // Check if user can publish/unpublish
+  const canPublish = useMemo(() => {
+    return permissions.isTenantAdminOrOwner(objectiveForHook.tenantId || undefined) || 
+      (objectiveForHook.workspaceId && canEditInline)
+  }, [permissions, objectiveForHook.tenantId, objectiveForHook.workspaceId, canEditInline])
+  
+  const canUnpublish = useMemo(() => {
+    return permissions.isTenantAdminOrOwner(objectiveForHook.tenantId || undefined) || canEditInline
+  }, [permissions, objectiveForHook.tenantId, canEditInline])
+  
   // Mutation handlers
   const handleUpdateObjectiveTitle = async (newTitle: string) => {
     // Optimistic update
@@ -632,6 +657,55 @@ export function ObjectiveRow({
       }
       toast({
         title: 'Could not save',
+        description: errorInfo.message,
+        variant: toastVariant,
+      })
+      
+      throw error
+    }
+  }
+  
+  const handleUpdateObjectivePublishStatus = async (isPublished: boolean) => {
+    // Optimistic update
+    setOptimisticObjective(prev => ({ 
+      ...prev, 
+      isPublished,
+      publishState: isPublished ? 'PUBLISHED' : 'DRAFT'
+    }))
+    
+    try {
+      const response = await api.patch(`/objectives/${optimisticObjective.id}`, { isPublished })
+      
+      // Update from server response
+      setOptimisticObjective(prev => ({ 
+        ...prev, 
+        isPublished: response.data.isPublished ?? isPublished,
+        publishState: (response.data.isPublished ?? isPublished) ? 'PUBLISHED' : 'DRAFT'
+      }))
+      
+      toast({
+        title: isPublished ? 'Objective published' : 'Objective unpublished',
+        description: isPublished 
+          ? 'This objective is now published and locked for editing.'
+          : 'This objective is now in draft mode and can be edited.',
+      })
+      
+      onUpdate?.()
+    } catch (error: any) {
+      // Revert on error
+      setOptimisticObjective(prev => ({ 
+        ...prev, 
+        isPublished: objective.isPublished,
+        publishState: objective.publishState || (objective.isPublished ? 'PUBLISHED' : 'DRAFT')
+      }))
+      
+      const errorInfo = mapErrorToMessage(error)
+      let toastVariant: 'default' | 'destructive' = 'default'
+      if (errorInfo.variant === 'destructive') {
+        toastVariant = 'destructive'
+      }
+      toast({
+        title: 'Could not update publish status',
         description: errorInfo.message,
         variant: toastVariant,
       })
@@ -865,7 +939,37 @@ export function ObjectiveRow({
     
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isExpanded, keyResults, expandedKeyResults])
+  }, [isExpanded, keyResults, expandedKeyResults, onEditKeyResult, canEditKeyResult])
+
+  // Keyboard shortcut: Ctrl/Cmd+E to edit focused KR
+  useEffect(() => {
+    if (!isExpanded || !onEditKeyResult) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle if within this objective row and a KR is focused
+      const rowElement = menuRef.current?.closest('section')
+      if (!rowElement || !rowElement.contains(document.activeElement)) return
+
+      // Check if focus is on a KR element
+      const activeElement = document.activeElement
+      const krElement = activeElement?.closest('[data-kr-id]')
+      if (!krElement) return
+
+      const krId = krElement.getAttribute('data-kr-id')
+      if (!krId) return
+
+      // Ctrl/Cmd+E: Edit focused KR
+      if ((e.key === 'e' || e.key === 'E') && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault()
+        if (canEditKeyResult && canEditKeyResult(krId)) {
+          onEditKeyResult(krId)
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isExpanded, onEditKeyResult, canEditKeyResult])
 
   // Keyboard shortcut: Alt+A (or Option+A on Mac) to open Add menu when row is focused
   useEffect(() => {
@@ -974,7 +1078,7 @@ export function ObjectiveRow({
               {/* Badges row - W4.M1: Separate Status and Publish State chips */}
               <div className="flex items-center gap-2 flex-wrap">
               {/* Status chip - Progress state - Inline Editor */}
-              <div onClick={(e) => e.stopPropagation()}>
+              <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
                 <InlineStatusEditor
                   currentStatus={optimisticObjective.status}
                   onSave={handleUpdateObjectiveStatus}
@@ -989,12 +1093,35 @@ export function ObjectiveRow({
                     </OkrBadge>
                   )}
                 />
+                {/* Show tooltip if status is auto-calculated from Key Results */}
+                {keyResults.length > 0 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-muted-foreground cursor-help" aria-label="Status information" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">Status calculated from Key Results</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
               </div>
               
-              {/* Publish State chip - Governance state */}
-              <OkrBadge tone={publishStateBadge.tone}>
-                {publishStateBadge.label}
-              </OkrBadge>
+              {/* Publish State chip - Governance state - Inline Editor */}
+              <div onClick={(e) => e.stopPropagation()}>
+                <InlinePublishEditor
+                  currentIsPublished={optimisticObjective.isPublished}
+                  onSave={handleUpdateObjectivePublishStatus}
+                  canEdit={canEditInline}
+                  canPublish={canPublish}
+                  canUnpublish={canUnpublish}
+                  lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                  ariaLabel="Edit objective publish status"
+                  resource={objectiveForHook}
+                  disabled={isSuperuserReadOnly}
+                />
+              </div>
               
               {/* Cycle pill */}
               {optimisticObjective.cycleLabel && (
@@ -1009,6 +1136,9 @@ export function ObjectiveRow({
                   )}
                 </>
               )}
+              
+              {/* Pillar badge */}
+              <PillarBadge pillarId={optimisticObjective.pillarId} />
               
               {/* Owner chip - Inline Editor */}
               <div onClick={(e) => e.stopPropagation()}>
@@ -1029,14 +1159,40 @@ export function ObjectiveRow({
 
           {/* Middle block: Progress bar and micro-metrics (hidden on mobile) */}
           <div className="hidden md:flex items-center gap-3 flex-1 max-w-md">
-            {/* Progress bar */}
-            <div className="flex-1 h-1 rounded-full bg-neutral-200 overflow-hidden" style={{ height: '4px' }}>
-              <motion.div
-                className={cn("h-full rounded-full", progressBarColor)}
-                initial={false}
-                animate={{ width: `${Math.min(100, Math.max(0, objective.progress))}%` }}
-                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-              />
+            {/* Progress bar with breakdown tooltip */}
+            <div className="flex items-center gap-1.5 flex-1">
+              <div className="flex-1 h-1 rounded-full bg-neutral-200 overflow-hidden" style={{ height: '4px' }}>
+                <motion.div
+                  className={cn("h-full rounded-full", progressBarColor)}
+                  initial={false}
+                  animate={{ width: `${Math.min(100, Math.max(0, objective.progress))}%` }}
+                  transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                />
+              </div>
+              {/* Show breakdown tooltip if Objective has Key Results */}
+              {keyResults.length > 0 && (
+                <div className="flex items-center gap-1">
+                  <ProgressBreakdownTooltip
+                    objectiveProgress={objective.progress}
+                    keyResults={keyResults.map(kr => ({
+                      id: kr.id,
+                      title: kr.title,
+                      progress: kr.progress ?? 0,
+                      weight: kr.weight ?? 1.0,
+                    }))}
+                  />
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-[10px] text-muted-foreground font-medium cursor-help">Auto</span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">Progress calculated from Key Results</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              )}
             </div>
             
             {/* Micro-metrics pills */}
@@ -1270,6 +1426,13 @@ export function ObjectiveRow({
             style={{ overflow: 'visible' }} // Ensure content is not clipped during animation
             className="bg-neutral-50/80 border-t border-neutral-200 px-4 py-4 rounded-b-xl"
           >
+            {/* Objective Progress Trend Chart */}
+            {keyResults.length > 0 && (
+              <div className="mb-4 pb-4 border-b border-neutral-200">
+                <ObjectiveProgressTrendChart objectiveId={objective.id} />
+              </div>
+            )}
+            
             {/* Key Results block */}
             <div className="mb-4">
               <h4 className="text-[13px] font-medium text-neutral-700 mb-2">
@@ -1288,6 +1451,7 @@ export function ObjectiveRow({
                         <div
                           key={`kr-${kr.id}`}
                           className="rounded-lg border border-neutral-200 bg-violet-50/40 overflow-hidden"
+                          data-kr-id={kr.id}
                         >
                           {/* Key Result collapsed header (always visible) */}
                           <div
@@ -1296,22 +1460,39 @@ export function ObjectiveRow({
                             onKeyDown={(e) => handleKeyResultKeyDown(e, kr.id)}
                             role="button"
                             tabIndex={0}
-                            aria-label={`${isKrExpanded ? 'Collapse' : 'Expand'} key result: ${kr.title}`}
+                            aria-label={`${isKrExpanded ? 'Collapse' : 'Expand'} key result: ${kr.title}. Press Ctrl+E to edit all fields.`}
+                            data-kr-id={kr.id}
                           >
                             <div className="flex items-center justify-between gap-3">
                               <div className="flex flex-col gap-2 flex-1 min-w-0">
-                                {/* Title - Inline Editor */}
-                                <div onClick={(e) => e.stopPropagation()}>
-                                  <InlineTitleEditor
-                                    value={kr.title}
-                                    onSave={(newTitle) => handleUpdateKeyResultTitle(kr.id, newTitle)}
-                                    canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
-                                    lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                                    ariaLabel="Edit key result title"
-                                    resource={objectiveForHook}
-                                    disabled={isSuperuserReadOnly}
-                                    className="text-[13px] font-medium text-neutral-900"
-                                  />
+                                {/* Title - Inline Editor with Edit button */}
+                                <div className="flex items-center gap-2 group">
+                                  <div onClick={(e) => e.stopPropagation()} className="flex-1 min-w-0">
+                                    <InlineTitleEditor
+                                      value={kr.title}
+                                      onSave={(newTitle) => handleUpdateKeyResultTitle(kr.id, newTitle)}
+                                      canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                      lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                      ariaLabel="Edit key result title"
+                                      resource={objectiveForHook}
+                                      disabled={isSuperuserReadOnly}
+                                      className="text-[13px] font-medium text-neutral-900"
+                                    />
+                                  </div>
+                                  {/* Edit button - visible when user can edit */}
+                                  {onEditKeyResult && canEditKeyResult && canEditKeyResult(kr.id) && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        onEditKeyResult(kr.id)
+                                      }}
+                                      className="opacity-60 hover:opacity-100 transition-opacity p-1 hover:bg-violet-100 rounded flex-shrink-0"
+                                      aria-label={`Edit all fields for key result: ${kr.title}`}
+                                      title="Edit all Key Result fields"
+                                    >
+                                      <Edit2 className="h-3.5 w-3.5 text-violet-600" />
+                                    </button>
+                                  )}
                                 </div>
                                 
                                 {/* Badges row */}
@@ -1373,10 +1554,27 @@ export function ObjectiveRow({
                                 <div className="p-4 space-y-4">
                                   {/* Metrics Section */}
                                   <div className="space-y-3">
-                                    <h5 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-600 flex items-center gap-2">
-                                      <span className="w-1 h-4 bg-violet-400 rounded-full"></span>
-                                      Metrics
-                                    </h5>
+                                    <div className="flex items-center justify-between">
+                                      <h5 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-600 flex items-center gap-2">
+                                        <span className="w-1 h-4 bg-violet-400 rounded-full"></span>
+                                        Metrics
+                                      </h5>
+                                      {onEditKeyResult && canEditKeyResult && canEditKeyResult(kr.id) && (
+                                        <div onClick={(e) => e.stopPropagation()}>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 px-2.5 text-[11px] font-medium text-violet-600 hover:text-violet-700 hover:bg-violet-50"
+                                            onClick={() => onEditKeyResult(kr.id)}
+                                            aria-label={`Edit all fields for key result: ${kr.title}`}
+                                            title="Edit all Key Result fields"
+                                          >
+                                            <Edit2 className="h-3.5 w-3.5 mr-1.5" />
+                                            Edit all
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </div>
                                     {(kr.currentValue !== undefined || kr.targetValue !== undefined) && (
                                       <div className="flex items-center gap-2 flex-wrap pl-3">
                                         <InlineNumericEditor
@@ -1466,6 +1664,22 @@ export function ObjectiveRow({
                                             </span>
                                           </div>
                                         )}
+                                      </div>
+                                    )}
+                                    
+                                    {/* Edit all fields link */}
+                                    {onEditKeyResult && canEditKeyResult && canEditKeyResult(kr.id) && (
+                                      <div className="pl-3 pt-1">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            onEditKeyResult(kr.id)
+                                          }}
+                                          className="text-xs text-violet-600 hover:text-violet-700 hover:underline font-medium transition-colors"
+                                          aria-label={`Edit all fields for key result: ${kr.title}`}
+                                        >
+                                          Edit all fields...
+                                        </button>
                                       </div>
                                     )}
                                   </div>
@@ -1627,6 +1841,10 @@ export function ObjectiveRow({
                                                                 </span>
                                                               </div>
                                                             )}
+                                                            {/* Status Trend Chart */}
+                                                            <div className="pt-2 border-t border-emerald-200">
+                                                              <InitiativeStatusTrendChart initiativeId={init.id} />
+                                                            </div>
                                                           </div>
                                                         </motion.div>
                                                       )}
@@ -1863,6 +2081,12 @@ export function ObjectiveRow({
                                       </div>
                                     )
                                   })()}
+                                  
+                                  {/* Trend Charts */}
+                                  <div className="pt-3 border-t border-neutral-200 space-y-3">
+                                    <KeyResultTrendChart keyResultId={kr.id} />
+                                    <KeyResultStatusTrendChart keyResultId={kr.id} />
+                                  </div>
                                   
                                   {/* Actions Section */}
                                   <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-200">

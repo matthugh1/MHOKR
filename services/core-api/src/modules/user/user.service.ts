@@ -549,10 +549,25 @@ export class UserService {
   }
 
   async resetPassword(userId: string, newPassword: string, userOrganizationId: string | null | undefined, actorUserId: string) {
-    // Tenant isolation: enforce mutation rules
-    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+    // Check if actor is superuser from database (source of truth)
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { isSuperuser: true },
+    });
 
-    // Check if user exists and belongs to caller's org (Phase 4: RBAC only)
+    if (!actor) {
+      throw new NotFoundException(`Actor user with ID ${actorUserId} not found`);
+    }
+
+    const isSuperuser = actor.isSuperuser || false;
+
+    // Tenant isolation: enforce mutation rules (unless superuser)
+    // Superusers can reset any user's password (they have manage_users permission)
+    if (!isSuperuser) {
+      OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+    }
+
+    // Check if target user exists
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -561,17 +576,19 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    // Tenant isolation: verify user belongs to caller's org via RBAC
-    const tenantAssignment = await this.prisma.roleAssignment.findFirst({
-      where: {
-        userId,
-        scopeType: 'TENANT',
-        scopeId: userOrganizationId || undefined,
-      },
-    });
+    // Tenant isolation: verify user belongs to caller's org via RBAC (unless superuser)
+    if (!isSuperuser) {
+      const tenantAssignment = await this.prisma.roleAssignment.findFirst({
+        where: {
+          userId,
+          scopeType: 'TENANT',
+          scopeId: userOrganizationId || undefined,
+        },
+      });
 
-    if (!tenantAssignment) {
-      throw new NotFoundException('User not found in your organization');
+      if (!tenantAssignment) {
+        throw new NotFoundException('User not found in your organization');
+      }
     }
 
     // Hash new password
@@ -583,13 +600,27 @@ export class UserService {
       data: { passwordHash: hashedPassword },
     });
 
+    // Determine tenant ID for audit log (use target user's tenant if superuser)
+    let auditTenantId = userOrganizationId || undefined;
+    if (isSuperuser && !auditTenantId) {
+      // For superuser actions, try to get target user's tenant for audit log
+      const targetTenantAssignment = await this.prisma.roleAssignment.findFirst({
+        where: {
+          userId,
+          scopeType: 'TENANT',
+        },
+        select: { scopeId: true },
+      });
+      auditTenantId = targetTenantAssignment?.scopeId || undefined;
+    }
+
     await this.auditLogService.record({
       action: 'RESET_PASSWORD',
       actorUserId,
       targetUserId: userId,
       targetId: userId,
       targetType: AuditTargetType.USER,
-      tenantId: userOrganizationId || undefined,
+      tenantId: auditTenantId,
     });
 
     return { message: 'Password reset successfully' };

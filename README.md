@@ -43,6 +43,7 @@ Dashboard-grade components with permission-aware UI:
 - **[Backend Overview](docs/architecture/BACKEND_OVERVIEW.md)** - Service layer architecture, tenant isolation, governance rules
 - **[Frontend Overview](docs/architecture/FRONTEND_OVERVIEW.md)** - Page flow, hooks, component architecture
 - **[Design System](docs/architecture/DESIGN_SYSTEM.md)** - Component library, tokens, styling standards
+- **[RBAC and Visibility Guide](docs/RBAC_VISIBILITY_GUIDE.md)** - PRIVATE visibility, whitelist management, "My OKRs" filter, share links
 
 ## Development
 

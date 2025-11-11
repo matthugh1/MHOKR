@@ -149,3 +149,5 @@
 - Tooltip uses existing Radix UI Tooltip component (already in use)
 - Governance Status Bar remains non-interactive (cursor-default, no onClick handlers)
 
+
+

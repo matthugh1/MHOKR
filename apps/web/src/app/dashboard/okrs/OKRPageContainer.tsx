@@ -27,11 +27,17 @@ interface OKRPageContainerProps {
   filterWorkspaceId: string
   filterTeamId: string
   filterOwnerId: string
+  filterOverdue?: boolean
   searchQuery: string
   selectedTimeframeKey: string | null
   selectedStatus: string | null
   selectedCycleId: string | null
   selectedScope: 'my' | 'team-workspace' | 'tenant'
+  // New filter props
+  myOkrsOnly?: boolean
+  selectedVisibility?: 'ALL' | 'PUBLIC_TENANT' | 'PRIVATE'
+  selectedOwnerId?: string | null
+  selectedPillarId?: string | null
   onAction: {
     onEdit: (okr: any) => void
     onDelete: (okr: any) => void
@@ -40,6 +46,7 @@ interface OKRPageContainerProps {
     onAddInitiativeToKr: (krId: string, krTitle: string, objectiveId: string) => void
     onAddCheckIn: (krId: string) => void
     onOpenHistory: (entityType: 'OBJECTIVE' | 'KEY_RESULT', entityId: string, entityTitle?: string) => void
+    onEditKeyResult?: (krId: string) => void
     // Story 5: Contextual Add menu handlers
     onOpenContextualAddMenu?: (objectiveId: string) => void
     onContextualAddKeyResult?: (objectiveId: string, objectiveTitle: string) => void
@@ -100,22 +107,29 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
   }
   
   const keyResults = (rawObj.keyResults || []).map((kr: any): any => {
-    const isOverdue = overdueCheckIns.some(item => item.krId === kr.keyResultId || item.krId === kr.id)
+    const krId = kr.keyResultId || kr.id
+    const isOverdue = overdueCheckIns.some(item => item.krId === krId)
+    
+    // Extract KR data - handle both junction table format and direct format
+    const krData = kr.keyResult || kr
+    const weight = kr.weight ?? 1.0 // Extract weight from junction table, default to 1.0
     
     // Calculate last check-in date and next check-in due from check-ins if available
     let lastCheckInDate: string | null = null
     let nextCheckInDue: string | null = null
     
-    if (kr.checkIns && Array.isArray(kr.checkIns) && kr.checkIns.length > 0) {
+    const checkIns = krData.checkIns || kr.checkIns
+    if (checkIns && Array.isArray(checkIns) && checkIns.length > 0) {
       // Get the most recent check-in
-      const latestCheckIn = kr.checkIns[0]
+      const latestCheckIn = checkIns[0]
       lastCheckInDate = latestCheckIn.createdAt || null
       
       // Calculate next check-in due based on cadence
-      if (kr.cadence && kr.cadence !== 'NONE' && lastCheckInDate) {
+      const cadence = krData.checkInCadence || kr.cadence
+      if (cadence && cadence !== 'NONE' && lastCheckInDate) {
         const lastCheckIn = new Date(lastCheckInDate)
         let daysBetween = 7
-        switch (kr.cadence) {
+        switch (cadence) {
           case 'WEEKLY':
             daysBetween = 7
             break
@@ -132,20 +146,21 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
     }
     
     return {
-      id: kr.keyResultId || kr.id,
-      title: kr.title,
-      status: kr.status,
-      progress: kr.progress,
-      currentValue: kr.currentValue,
-      targetValue: kr.targetValue,
-      startValue: kr.startValue,
-      unit: kr.unit,
-      checkInCadence: kr.cadence,
+      id: krId,
+      title: krData.title || kr.title,
+      status: krData.status || kr.status,
+      progress: krData.progress ?? kr.progress ?? 0,
+      currentValue: krData.currentValue ?? kr.currentValue,
+      targetValue: krData.targetValue ?? kr.targetValue,
+      startValue: krData.startValue ?? kr.startValue,
+      unit: krData.unit || kr.unit,
+      checkInCadence: krData.checkInCadence || kr.cadence,
       isOverdue,
-      ownerId: kr.ownerId,
+      ownerId: krData.ownerId || kr.ownerId,
       lastCheckInDate,
       nextCheckInDue,
       canCheckIn: kr.canCheckIn !== undefined ? kr.canCheckIn : false,
+      weight, // Include weight from junction table
     }
   })
   
@@ -232,6 +247,7 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
     workspaceId: rawObj.workspaceId,
     teamId: rawObj.teamId,
     cycleId: rawObj.cycle?.id || rawObj.cycleId,
+    pillarId: rawObj.pillarId || null,
     canEdit: rawObj.canEdit !== undefined ? rawObj.canEdit : false,
     canDelete: rawObj.canDelete !== undefined ? rawObj.canDelete : false,
   }
@@ -244,11 +260,16 @@ export function OKRPageContainer({
   filterWorkspaceId,
   filterTeamId,
   filterOwnerId,
+  filterOverdue = false,
   searchQuery,
   selectedTimeframeKey,
   selectedStatus,
   selectedCycleId,
   selectedScope,
+  myOkrsOnly = false,
+  selectedVisibility = 'ALL',
+  selectedOwnerId: selectedOwnerIdProp = null,
+  selectedPillarId: selectedPillarIdProp = null,
   onAction,
   expandedObjectiveId,
   onToggleObjective,
@@ -271,9 +292,13 @@ export function OKRPageContainer({
   const loadOKRs = useCallback(async () => {
     if (!currentOrganization?.id) {
       console.log('[OKR PAGE CONTAINER] Skipping loadOKRs - no organization ID')
+      setPermissionError('No organization selected. Please select an organization to view OKRs.')
+      setLoading(false)
+      setObjectivesPage([])
+      setTotalCount(0)
       return
     }
-    console.log('[OKR PAGE CONTAINER] Loading OKRs for organization:', currentOrganization.id, 'scope:', selectedScope)
+    console.log('[OKR PAGE CONTAINER] Loading OKRs for organization:', currentOrganization.id, 'scope:', selectedScope, 'user:', user?.email)
     try {
       setLoading(true)
       setPermissionError(null)
@@ -297,6 +322,26 @@ export function OKRPageContainer({
         params.set('scope', selectedScope)
       }
       
+      // Apply "My OKRs" filter: when enabled, filter by ownerId=me
+      // Note: This overrides scope='my' if both are set, but that's acceptable
+      // Future enhancement: include team-owned OKRs when myOkrsOnly=true
+      if (myOkrsOnly && user?.id) {
+        params.set('ownerId', user.id)
+      } else if (selectedOwnerIdProp) {
+        // Use explicit ownerId filter if provided
+        params.set('ownerId', selectedOwnerIdProp)
+      }
+      
+      // Apply visibility filter
+      if (selectedVisibility && selectedVisibility !== 'ALL') {
+        params.set('visibilityLevel', selectedVisibility)
+      }
+
+      // Apply pillar filter
+      if (selectedPillarIdProp) {
+        params.set('pillarId', selectedPillarIdProp)
+      }
+      
       console.log('[OKR PAGE CONTAINER] Fetching from:', `/okr/overview?${params.toString()}`)
       const response = await api.get(`/okr/overview?${params.toString()}`)
       
@@ -307,8 +352,17 @@ export function OKRPageContainer({
       console.log('[OKR PAGE CONTAINER] Received response:', {
         totalCount: envelope.totalCount,
         objectivesCount: objectives.length,
-        canCreateObjective: envelope.canCreateObjective
+        canCreateObjective: envelope.canCreateObjective,
+        organizationId: currentOrganization.id,
+        userId: user?.id,
+        userEmail: user?.email
       })
+      
+      // If no objectives found, show helpful message
+      if (objectives.length === 0 && envelope.totalCount === 0) {
+        console.warn('[OKR PAGE CONTAINER] No objectives found for organization:', currentOrganization.id)
+        // Don't set an error - just show empty state
+      }
       
       setTotalCount(envelope.totalCount || 0)
       
@@ -366,19 +420,28 @@ export function OKRPageContainer({
       setObjectivesPage(mapped)
     } catch (error: any) {
       console.error('[OKR PAGE CONTAINER] Failed to load OKRs', error)
-      if (error.response?.status === 403) {
+      const errorMessage = error.response?.data?.message || error.message || 'Unknown error'
+      
+      if (error.response?.status === 400) {
+        // Bad Request - likely tenant/organization issue
+        if (errorMessage.includes('organization') || errorMessage.includes('tenant') || errorMessage.includes('No organization assigned')) {
+          setPermissionError('You are not assigned to an organization. Please contact your administrator to assign you to an organization.')
+        } else {
+          setPermissionError(`Invalid request: ${errorMessage}`)
+        }
+      } else if (error.response?.status === 403) {
         setPermissionError('You do not have permission to view OKRs. Please contact your administrator.')
       } else if (error.response?.status === 404) {
         setPermissionError('OKR service not found. Please check that the API gateway is running.')
       } else {
-        setPermissionError('Failed to load OKRs. Please try again later.')
+        setPermissionError(`Failed to load OKRs: ${errorMessage}. Please try again later.`)
       }
       setObjectivesPage([])
       setTotalCount(0)
     } finally {
       setLoading(false)
     }
-  }, [currentOrganization?.id, selectedCycleId, selectedStatus, currentPage, filterWorkspaceId, filterTeamId, filterOwnerId, searchQuery, selectedTimeframeKey, selectedScope])
+  }, [currentOrganization?.id, selectedCycleId, selectedStatus, currentPage, filterWorkspaceId, filterTeamId, filterOwnerId, searchQuery, selectedTimeframeKey, selectedScope, myOkrsOnly, selectedVisibility, selectedOwnerIdProp, selectedPillarIdProp, user?.id])
   
   useEffect(() => {
     console.log('[OKR PAGE CONTAINER] useEffect triggered:', {
@@ -403,11 +466,19 @@ export function OKRPageContainer({
     return mapped
   }, [objectivesPage])
   
-  // Apply client-side filters (workspace, team, owner, search, timeframe)
+  // Apply client-side filters (workspace, team, owner, search, timeframe, overdue)
   // Note: Visibility filtering is now done server-side, but we still need to filter
-  // by workspace/team/owner/search/timeframe on the client since backend doesn't support these yet
+  // by workspace/team/owner/search/timeframe/overdue on the client since backend doesn't support these yet
   const filteredOKRs = useMemo(() => {
     const filtered = objectivesViewModel.filter(okr => {
+      // Overdue filter: only show objectives with overdue KRs
+      if (filterOverdue) {
+        const hasOverdueKr = overdueCheckIns.some(item => item.objectiveId === okr.id)
+        if (!hasOverdueKr) {
+          return false
+        }
+      }
+      
       if (!selectedTimeframeKey || selectedTimeframeKey === 'all') {
         // No timeframe filter - show all
       } else {
@@ -449,13 +520,14 @@ export function OKRPageContainer({
         filterWorkspaceId,
         filterTeamId,
         filterOwnerId,
+        filterOverdue,
         searchQuery,
         testObjectiveBeforeFilter: objectivesViewModel.find((okr: any) => okr.title === 'Test'),
       })
     }
     
     return filtered
-  }, [objectivesViewModel, filterWorkspaceId, filterTeamId, filterOwnerId, searchQuery, selectedTimeframeKey])
+  }, [objectivesViewModel, filterWorkspaceId, filterTeamId, filterOwnerId, filterOverdue, searchQuery, selectedTimeframeKey, overdueCheckIns])
   
   const totalPages = Math.ceil(totalCount / pageSize)
   

@@ -302,16 +302,39 @@ function canEditOKRAction(
 
   const okr = resourceContext.okr;
   // NOTE: tenantId is the canonical tenant identifier.
-  // tenantId is legacy and kept only for backward compatibility with pre-P0 data.
-  // Do not reintroduce tenantId in new code.
-  const tenantId = okr.tenantId || (okr as any).tenantId || '';
+  // Use resourceContext.tenantId as primary source (set from objective.tenantId)
+  // Fallback to okr.tenantId for backward compatibility
+  const tenantId = resourceContext.tenantId || okr.tenantId || (okr as any).tenantId || '';
+  
+  // Debug logging
+  console.log('[RBAC] canEditOKRAction: Checking edit permission', {
+    userId: userContext.userId,
+    okrId: okr.id,
+    tenantId,
+    resourceContextTenantId: resourceContext.tenantId,
+    okrTenantId: okr.tenantId,
+    isPublished: okr.isPublished,
+    ownerId: okr.ownerId,
+    userTenantRoles: Array.from(userContext.tenantRoles.entries()),
+    hasTenantRoleForTenantId: userContext.tenantRoles.has(tenantId),
+    tenantRolesForTenantId: userContext.tenantRoles.get(tenantId) || [],
+  });
 
   // PUBLISH LOCK: If OKR is published, only TENANT_OWNER and TENANT_ADMIN can edit
   if (okr.isPublished === true) {
-    if (hasTenantOwnerRole(userContext, tenantId)) {
+    const hasOwner = hasTenantOwnerRole(userContext, tenantId);
+    const hasAdmin = hasTenantAdminRole(userContext, tenantId);
+    console.log('[RBAC] canEditOKRAction: Published OKR check', {
+      tenantId,
+      hasOwner,
+      hasAdmin,
+      tenantRoles: userContext.tenantRoles.get(tenantId) || [],
+    });
+    
+    if (hasOwner) {
       return true;
     }
-    if (hasTenantAdminRole(userContext, tenantId)) {
+    if (hasAdmin) {
       // TENANT_ADMIN can edit published OKRs (but not EXEC_ONLY unless allowed)
       if (okr.visibilityLevel === 'EXEC_ONLY' && !resourceContext.tenant?.allowTenantAdminExecVisibility) {
         return false;
@@ -319,38 +342,58 @@ function canEditOKRAction(
       return true;
     }
     // All other roles (including owner) cannot edit published OKRs
+    console.log('[RBAC] canEditOKRAction: Published OKR denied - user lacks TENANT_OWNER or TENANT_ADMIN role', {
+      tenantId,
+      userRoles: userContext.tenantRoles.get(tenantId) || [],
+    });
     return false;
   }
 
   // For draft (unpublished) OKRs, apply normal RBAC rules
   // Owner can always edit their own OKRs
   if (okr.ownerId === userContext.userId) {
+    console.log('[RBAC] canEditOKRAction: Allowed - user is owner');
     return true;
   }
 
   // TENANT_OWNER can edit any OKR in their tenant
-  if (hasTenantOwnerRole(userContext, tenantId)) {
+  const hasOwner = hasTenantOwnerRole(userContext, tenantId);
+  if (hasOwner) {
+    console.log('[RBAC] canEditOKRAction: Allowed - user has TENANT_OWNER role', { tenantId });
     return true;
   }
 
   // TENANT_ADMIN can edit OKRs in their tenant (but not EXEC_ONLY unless allowed)
-  if (hasTenantAdminRole(userContext, tenantId)) {
+  const hasAdmin = hasTenantAdminRole(userContext, tenantId);
+  if (hasAdmin) {
     if (okr.visibilityLevel === 'EXEC_ONLY' && !resourceContext.tenant?.allowTenantAdminExecVisibility) {
+      console.log('[RBAC] canEditOKRAction: Denied - EXEC_ONLY visibility and tenant admin exec visibility not allowed');
       return false;
     }
+    console.log('[RBAC] canEditOKRAction: Allowed - user has TENANT_ADMIN role', { tenantId });
     return true;
   }
 
   // WORKSPACE_LEAD can edit workspace-level OKRs
   if (okr.workspaceId && hasWorkspaceLeadRole(userContext, okr.workspaceId)) {
+    console.log('[RBAC] canEditOKRAction: Allowed - user has WORKSPACE_LEAD role', { workspaceId: okr.workspaceId });
     return true;
   }
 
   // TEAM_LEAD can edit team-level OKRs
   if (okr.teamId && hasTeamLeadRole(userContext, okr.teamId)) {
+    console.log('[RBAC] canEditOKRAction: Allowed - user has TEAM_LEAD role', { teamId: okr.teamId });
     return true;
   }
 
+  console.log('[RBAC] canEditOKRAction: Denied - no matching role', {
+    tenantId,
+    workspaceId: okr.workspaceId,
+    teamId: okr.teamId,
+    userTenantRoles: Array.from(userContext.tenantRoles.entries()),
+    userWorkspaceRoles: Array.from(userContext.workspaceRoles.entries()),
+    userTeamRoles: Array.from(userContext.teamRoles.entries()),
+  });
   return false;
 }
 

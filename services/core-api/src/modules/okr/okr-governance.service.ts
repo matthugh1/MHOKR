@@ -28,24 +28,31 @@ export class OkrGovernanceService {
    * Extracted from objective.service.ts:update() and delete()
    * 
    * Logic:
-   * - If objective.isPublished === true:
+   * - If objective.state === 'PUBLISHED' or 'COMPLETED' or 'CANCELLED' or 'ARCHIVED':
    *   - Superuser (userOrganizationId === null) => reject (read-only)
    *   - Check RBAC: require TENANT_OWNER or TENANT_ADMIN via rbacService.canPerformAction(userId, 'edit_okr', resourceContext)
    *   - Else throw ForbiddenException
-   * - If not published, no lock
+   * - If state is DRAFT, no lock
    * 
    * @param params - { objective, actingUser, rbacService }
    * @throws ForbiddenException if locked and user cannot bypass
    */
   async checkPublishLockForObjective(params: {
-    objective: { id: string; isPublished: boolean };
+    objective: { id: string; state?: string; isPublished?: boolean }; // Support both state and legacy isPublished
     actingUser: { id: string; tenantId: string | null };
     rbacService: RBACService;
   }): Promise<void> {
     const { objective, actingUser } = params;
     
-    // If not published, no lock
-    if (objective.isPublished !== true) {
+    // Determine if published/locked: use state if available, fallback to isPublished for backward compatibility
+    const isLocked = objective.state === 'PUBLISHED' || 
+                     objective.state === 'COMPLETED' || 
+                     objective.state === 'CANCELLED' || 
+                     objective.state === 'ARCHIVED' ||
+                     (objective.state === undefined && objective.isPublished === true);
+    
+    // If not published/locked, no lock
+    if (!isLocked) {
       return;
     }
 
@@ -71,25 +78,32 @@ export class OkrGovernanceService {
    * Extracted from key-result.service.ts:update(), delete(), and createCheckIn()
    * 
    * Logic:
-   * - Checks parent Objective's publish status
-   * - If parentObjective.isPublished === true:
+   * - Checks parent Objective's state
+   * - If parentObjective.state === 'PUBLISHED' or 'COMPLETED' or 'CANCELLED' or 'ARCHIVED':
    *   - Superuser (userOrganizationId === null) => reject (read-only)
    *   - Check RBAC: require TENANT_OWNER or TENANT_ADMIN via rbacService.canPerformAction(userId, 'edit_okr', resourceContext)
    *   - Else throw ForbiddenException
-   * - If not published, no lock
+   * - If state is DRAFT, no lock
    * 
    * @param params - { parentObjective, actingUser, rbacService }
    * @throws ForbiddenException if locked and user cannot bypass
    */
   async checkPublishLockForKeyResult(params: {
-    parentObjective: { id: string; isPublished: boolean };
+    parentObjective: { id: string; state?: string; isPublished?: boolean }; // Support both state and legacy isPublished
     actingUser: { id: string; tenantId: string | null };
     rbacService: RBACService;
   }): Promise<void> {
     const { parentObjective, actingUser } = params;
 
-    // If parent objective not published, no lock
-    if (parentObjective.isPublished !== true) {
+    // Determine if published/locked: use state if available, fallback to isPublished for backward compatibility
+    const isLocked = parentObjective.state === 'PUBLISHED' || 
+                     parentObjective.state === 'COMPLETED' || 
+                     parentObjective.state === 'CANCELLED' || 
+                     parentObjective.state === 'ARCHIVED' ||
+                     (parentObjective.state === undefined && parentObjective.isPublished === true);
+
+    // If parent objective not published/locked, no lock
+    if (!isLocked) {
       return;
     }
 
@@ -264,7 +278,7 @@ export class OkrGovernanceService {
    * @throws ForbiddenException if any lock prevents the operation
    */
   async checkAllLocksForObjective(params: {
-    objective: { id: string; isPublished: boolean };
+    objective: { id: string; state?: string; isPublished?: boolean }; // Support both state and legacy isPublished
     actingUser: { id: string; tenantId: string | null };
     rbacService: RBACService;
   }): Promise<void> {
@@ -287,7 +301,7 @@ export class OkrGovernanceService {
    * @throws ForbiddenException if any lock prevents the operation
    */
   async checkAllLocksForKeyResult(params: {
-    parentObjective: { id: string; isPublished: boolean };
+    parentObjective: { id: string; state?: string; isPublished?: boolean }; // Support both state and legacy isPublished
     actingUser: { id: string; tenantId: string | null };
     rbacService: RBACService;
   }): Promise<void> {

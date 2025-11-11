@@ -43,9 +43,27 @@ export class RBACGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    const resourceContextFn = this.reflector.getAllAndOverride<
+    // Try to get resourceContextFn from handler first, then class
+    // Use getAllAndOverride to check both handler and class, but prefer handler
+    let resourceContextFn = this.reflector.getAllAndOverride<
       (request: any) => ResourceContext | Promise<ResourceContext>
     >(RBAC_RESOURCE_CONTEXT_KEY, [context.getHandler(), context.getClass()]);
+    
+    // Debug logging - check what metadata exists
+    const handlerMetadata = this.reflector.get(RBAC_RESOURCE_CONTEXT_KEY, context.getHandler());
+    const classMetadata = this.reflector.get(RBAC_RESOURCE_CONTEXT_KEY, context.getClass());
+    
+    this.logger.log(`[RBAC Guard] canActivate`, {
+      action,
+      hasResourceContextFn: !!resourceContextFn,
+      hasHandlerMetadata: !!handlerMetadata,
+      hasClassMetadata: !!classMetadata,
+      handler: context.getHandler().name,
+      className: context.getClass().name,
+      resourceContextFnType: resourceContextFn ? typeof resourceContextFn : 'undefined',
+      handlerMetadataType: handlerMetadata ? typeof handlerMetadata : 'undefined',
+      classMetadataType: classMetadata ? typeof classMetadata : 'undefined',
+    });
 
     // If no action is specified, allow access (use @Public() or other guards)
     if (!action) {
@@ -121,8 +139,37 @@ export class RBACGuard implements CanActivate {
     // Build resource context
     let resourceContext: ResourceContext;
     if (resourceContextFn) {
-      resourceContext = await resourceContextFn(request);
+      this.logger.log(`[RBAC Guard] Using resourceContextFn from decorator`, {
+        action,
+        userId: user.id,
+        hasResourceContextFn: !!resourceContextFn,
+      });
+      try {
+        resourceContext = await resourceContextFn(request);
+        this.logger.log(`[RBAC Guard] Built resourceContext from decorator function`, {
+          action,
+          userId: user.id,
+          resourceContext: {
+            tenantId: resourceContext.tenantId,
+            workspaceId: resourceContext.workspaceId,
+            teamId: resourceContext.teamId,
+            hasOkr: !!resourceContext.okr,
+          },
+        });
+      } catch (error) {
+        this.logger.error(`[RBAC Guard] Error building resourceContext from decorator function`, {
+          action,
+          userId: user.id,
+          error: (error as Error).message,
+          stack: (error as Error).stack,
+        });
+        throw error;
+      }
     } else {
+      this.logger.debug(`[RBAC Guard] No resourceContextFn found, using fallback`, {
+        action,
+        userId: user.id,
+      });
       // Try to extract from request params/body
       try {
         resourceContext = buildResourceContextFromRequest(request);

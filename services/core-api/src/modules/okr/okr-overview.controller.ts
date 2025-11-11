@@ -1,5 +1,5 @@
 import { Controller, Get, Query, UseGuards, Req, BadRequestException, Post, Body, HttpCode } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
@@ -10,6 +10,21 @@ import { RBACService } from '../rbac/rbac.service';
 import { buildResourceContextFromOKR } from '../rbac/helpers';
 import { ObjectiveService } from './objective.service';
 import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
+import { Logger } from '@nestjs/common';
+
+// Simple telemetry helper for list filtering
+const listTelemetry = {
+  enabled: process.env.LIST_TELEMETRY !== 'off',
+  logger: new Logger('ListTelemetry'),
+  recordCounter(metric: string, tags?: Record<string, string | number>): void {
+    if (!this.enabled) return;
+    this.logger.log(`[TELEMETRY] Counter: ${metric}`, {
+      metric,
+      tags: tags || {},
+      timestamp: new Date().toISOString(),
+    });
+  },
+};
 
 /**
  * OKR Overview Controller
@@ -41,18 +56,41 @@ export class OkrOverviewController {
 
   @Get('overview')
   @RequireAction('view_okr')
-  @ApiOperation({ summary: 'Get unified OKR overview with nested Key Results and Initiatives' })
+  @ApiOperation({ 
+    summary: 'Get unified OKR overview with nested Key Results and Initiatives',
+    description: 'Returns paginated list of objectives with their key results and initiatives. Only returns objectives visible to the requester based on RBAC and visibility rules. Supports filtering by cycle, status, scope, visibility level, and owner.'
+  })
   @ApiQuery({ name: 'tenantId', required: true, description: 'Organization ID for tenant filtering' })
   @ApiQuery({ name: 'cycleId', required: false, description: 'Filter by cycle ID' })
   @ApiQuery({ name: 'status', required: false, enum: ['ON_TRACK', 'AT_RISK', 'BLOCKED', 'COMPLETED', 'CANCELLED'], description: 'Filter by objective status' })
   @ApiQuery({ name: 'scope', required: false, enum: ['my', 'team-workspace', 'tenant'], description: 'Filter by scope: my (owned by user), team-workspace (user manages), tenant (all tenant OKRs)' })
+  @ApiQuery({ name: 'visibilityLevel', required: false, enum: ['ALL', 'PUBLIC_TENANT', 'PRIVATE'], description: 'Filter by visibility level (ALL shows all visible OKRs)' })
+  @ApiQuery({ name: 'ownerId', required: false, type: String, description: 'Filter by owner user ID' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
   @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Items per page (default: 20, max: 50)' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Paginated list of objectives with key results and initiatives',
+    schema: {
+      type: 'object',
+      properties: {
+        objectives: { type: 'array', items: { type: 'object' } },
+        totalCount: { type: 'number' },
+        page: { type: 'number' },
+        pageSize: { type: 'number' },
+        canCreateObjective: { type: 'boolean' }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Bad request - invalid parameters' })
+  @ApiResponse({ status: 403, description: 'Forbidden - user lacks view_okr permission' })
   async getOverview(
     @Query('tenantId') tenantId: string | undefined,
     @Query('cycleId') cycleId: string | undefined,
     @Query('status') status: string | undefined,
     @Query('scope') scope: string | undefined,
+    @Query('visibilityLevel') visibilityLevel: string | undefined,
+    @Query('ownerId') ownerId: string | undefined,
     @Query('page') page: string | undefined,
     @Query('pageSize') pageSize: string | undefined,
     @Req() req: any,
@@ -174,6 +212,31 @@ export class OkrOverviewController {
         where.status = status;
       }
 
+      // Apply visibility level filter (before fetching, but visibility policy still enforced after)
+      if (visibilityLevel && visibilityLevel !== 'ALL') {
+        const validVisibilityLevels = ['PUBLIC_TENANT', 'PRIVATE'];
+        if (!validVisibilityLevels.includes(visibilityLevel)) {
+          throw new BadRequestException(`Invalid visibilityLevel. Must be one of: ALL, ${validVisibilityLevels.join(', ')}`);
+        }
+        where.visibilityLevel = visibilityLevel;
+      }
+
+      // Apply owner filter
+      if (ownerId) {
+        // Validate ownerId belongs to the same tenant (tenant isolation)
+        const owner = await this.prisma.user.findUnique({
+          where: { id: ownerId },
+          select: { id: true },
+        });
+        if (!owner) {
+          throw new BadRequestException(`Owner with ID ${ownerId} not found`);
+        }
+        // Note: We don't explicitly check tenant membership here because tenant isolation
+        // is already enforced by the where.tenantId clause. If ownerId is from another tenant,
+        // the query will return empty results.
+        where.ownerId = ownerId;
+      }
+
       // Fetch ALL objectives matching filters (before visibility filtering)
       let allObjectives;
       try {
@@ -181,7 +244,9 @@ export class OkrOverviewController {
         where,
         include: {
           keyResults: {
-            include: {
+            select: {
+              id: true,
+              weight: true,
               keyResult: {
                 select: {
                   id: true,
@@ -256,6 +321,17 @@ export class OkrOverviewController {
 
     // Calculate total count AFTER visibility filtering
     const totalCount = visibleObjectives.length;
+    
+    // Record telemetry for filtered list
+    const filteredCount = allObjectives.length - visibleObjectives.length;
+    if (filteredCount > 0) {
+      listTelemetry.recordCounter('list.filtered', {
+        tenantId: userOrganizationId || 'null',
+        filteredCount,
+        totalCount: allObjectives.length,
+        requesterUserId,
+      });
+    }
     
     // Removed debug logging - use structured logging service in production
 

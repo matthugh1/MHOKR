@@ -16,7 +16,7 @@ import {
   Request,
   NotFoundException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { RBACService } from './rbac.service';
 import { ExecWhitelistService } from './exec-whitelist.service';
 import { UserService } from '../user/user.service';
@@ -362,7 +362,14 @@ export class ExecWhitelistController {
   @Post(':tenantId/add')
   @UseGuards(RateLimitGuard)
   @RequireAction('manage_tenant_settings')
-  @ApiOperation({ summary: 'Add user to EXEC_ONLY whitelist' })
+  @ApiOperation({ 
+    summary: 'Add user to EXEC_ONLY whitelist',
+    description: 'Adds a user to the PRIVATE/EXEC_ONLY whitelist, granting them access to view PRIVATE OKRs. Requires manage_tenant_settings permission.'
+  })
+  @ApiResponse({ status: 200, description: 'User added to whitelist successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden - user lacks manage_tenant_settings permission' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  @ApiResponse({ status: 429, description: 'Too Many Requests - rate limit exceeded' })
   async addToWhitelist(
     @Param('tenantId') tenantId: string,
     @Body() body: { userId: string },
@@ -384,7 +391,14 @@ export class ExecWhitelistController {
   @Post(':tenantId/remove')
   @UseGuards(RateLimitGuard)
   @RequireAction('manage_tenant_settings')
-  @ApiOperation({ summary: 'Remove user from EXEC_ONLY whitelist' })
+  @ApiOperation({ 
+    summary: 'Remove user from EXEC_ONLY whitelist',
+    description: 'Removes a user from the PRIVATE/EXEC_ONLY whitelist, revoking their access to view PRIVATE OKRs. Requires manage_tenant_settings permission.'
+  })
+  @ApiResponse({ status: 200, description: 'User removed from whitelist successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden - user lacks manage_tenant_settings permission' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  @ApiResponse({ status: 429, description: 'Too Many Requests - rate limit exceeded' })
   async removeFromWhitelist(
     @Param('tenantId') tenantId: string,
     @Body() body: { userId: string },

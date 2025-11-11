@@ -1,7 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OkrTenantGuard } from './tenant-guard';
 import { OkrVisibilityService } from './okr-visibility.service';
+import { calculateCheckInDueStatus } from './check-in-due-calculator';
+import { isAtRisk } from './risk-calculator';
 
 /**
  * OKR Reporting Service
@@ -23,6 +26,7 @@ export class OkrReportingService {
   constructor(
     private prisma: PrismaService,
     private visibilityService: OkrVisibilityService,
+    private configService: ConfigService,
   ) {}
 
   /**
@@ -515,6 +519,167 @@ export class OkrReportingService {
   }
 
   /**
+   * Get pillar roll-up statistics.
+   * 
+   * Returns aggregated statistics for each pillar in the tenant:
+   * - objectiveCount: number of non-archived objectives linked to the pillar
+   * - byState: counts by ObjectiveState (or status if state not present)
+   * - avgProgress: average Objective.progress
+   * - avgConfidence: average Objective.confidence (if present)
+   * - atRiskCount: count of objectives with AT_RISK status
+   * 
+   * Optional filters: cycleId, teamId, workspaceId
+   * 
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org
+   * @param filters - Optional filters: cycleId, teamId, workspaceId
+   * @returns Array of pillar roll-up statistics
+   */
+  async getPillarRollup(
+    userOrganizationId: string | null | undefined,
+    filters?: { cycleId?: string; teamId?: string; workspaceId?: string },
+  ): Promise<Array<{
+    pillarId: string;
+    pillarName: string;
+    pillarColor: string | null;
+    objectiveCount: number;
+    byState: Record<string, number>;
+    avgProgress: number | null;
+    avgConfidence: number | null;
+    atRiskCount: number;
+  }>> {
+    const where: any = {};
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (orgFilter === null && userOrganizationId !== null) {
+      return [];
+    }
+    if (orgFilter) {
+      where.tenantId = orgFilter.tenantId;
+    }
+
+    // Build objective filter
+    const objectiveWhere: any = {
+      pillarId: { not: null },
+      state: { not: 'ARCHIVED' },
+    };
+
+    if (filters?.cycleId) {
+      objectiveWhere.cycleId = filters.cycleId;
+    }
+    if (filters?.teamId) {
+      objectiveWhere.teamId = filters.teamId;
+    }
+    if (filters?.workspaceId) {
+      objectiveWhere.workspaceId = filters.workspaceId;
+    }
+
+    // Get all pillars for tenant
+    const pillars = await this.prisma.strategicPillar.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        color: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    });
+
+    // Get objectives grouped by pillarId with aggregations
+    const objectives = await this.prisma.objective.groupBy({
+      by: ['pillarId'],
+      where: objectiveWhere,
+      _count: {
+        id: true,
+      },
+      _avg: {
+        progress: true,
+        confidence: true,
+      },
+    });
+
+    // Get state/status breakdown per pillar
+    const objectivesByPillar = await this.prisma.objective.findMany({
+      where: objectiveWhere,
+      select: {
+        pillarId: true,
+        state: true,
+        status: true,
+      },
+    });
+
+    // Build roll-up data
+    const rollupMap = new Map<string, {
+      pillarId: string;
+      pillarName: string;
+      pillarColor: string | null;
+      objectiveCount: number;
+      byState: Record<string, number>;
+      progressSum: number;
+      progressCount: number;
+      confidenceSum: number;
+      confidenceCount: number;
+      atRiskCount: number;
+    }>();
+
+    // Initialize map with pillars
+    for (const pillar of pillars) {
+      rollupMap.set(pillar.id, {
+        pillarId: pillar.id,
+        pillarName: pillar.name,
+        pillarColor: pillar.color,
+        objectiveCount: 0,
+        byState: {},
+        progressSum: 0,
+        progressCount: 0,
+        confidenceSum: 0,
+        confidenceCount: 0,
+        atRiskCount: 0,
+      });
+    }
+
+    // Aggregate from grouped data
+    for (const group of objectives) {
+      if (group.pillarId && rollupMap.has(group.pillarId)) {
+        const rollup = rollupMap.get(group.pillarId)!;
+        rollup.objectiveCount = group._count.id;
+        if (group._avg.progress !== null && group._avg.progress !== undefined) {
+          rollup.progressSum = (group._avg.progress || 0) * group._count.id;
+          rollup.progressCount = group._count.id;
+        }
+        if (group._avg.confidence !== null && group._avg.confidence !== undefined) {
+          rollup.confidenceSum = (group._avg.confidence || 0) * group._count.id;
+          rollup.confidenceCount = group._count.id;
+        }
+      }
+    }
+
+    // Process state/status breakdown
+    for (const obj of objectivesByPillar) {
+      if (obj.pillarId && rollupMap.has(obj.pillarId)) {
+        const rollup = rollupMap.get(obj.pillarId)!;
+        const stateKey = obj.state || obj.status || 'UNKNOWN';
+        rollup.byState[stateKey] = (rollup.byState[stateKey] || 0) + 1;
+        if (obj.status === 'AT_RISK') {
+          rollup.atRiskCount++;
+        }
+      }
+    }
+
+    // Convert to final format
+    return Array.from(rollupMap.values()).map(rollup => ({
+      pillarId: rollup.pillarId,
+      pillarName: rollup.pillarName,
+      pillarColor: rollup.pillarColor,
+      objectiveCount: rollup.objectiveCount,
+      byState: rollup.byState,
+      avgProgress: rollup.progressCount > 0 ? rollup.progressSum / rollup.progressCount : null,
+      avgConfidence: rollup.confidenceCount > 0 ? rollup.confidenceSum / rollup.confidenceCount : null,
+      atRiskCount: rollup.atRiskCount,
+    }));
+  }
+
+  /**
    * Get all cycles for an organization (ACTIVE, DRAFT, ARCHIVED, etc.).
    * 
    * Returns all cycles for filtering dropdowns and cycle selection.
@@ -864,19 +1029,31 @@ export class OkrReportingService {
    * @param requesterUserId - User ID of the requester (for visibility checks)
    * @returns Array of overdue Key Results with KR details, owner info, last check-in, and days late
    */
-  async getOverdueCheckIns(userOrganizationId: string | null | undefined, requesterUserId: string): Promise<Array<{
+  async getOverdueCheckIns(
+    userOrganizationId: string | null | undefined,
+    requesterUserId: string | undefined,
+    filters?: {
+      cycleId?: string;
+      ownerId?: string;
+      teamId?: string;
+      pillarId?: string;
+      limit?: number;
+    },
+  ): Promise<Array<{
     krId: string;
     krTitle: string;
     objectiveId: string;
     objectiveTitle: string;
-    ownerId: string;
-    ownerName: string | null;
-    ownerEmail: string;
-    lastCheckInAt: Date | null;
-    daysLate: number;
+    owner: {
+      id: string;
+      name: string | null;
+    };
     cadence: string | null;
+    lastCheckInAt: Date | null;
+    daysOverdue: number;
+    status: 'DUE' | 'OVERDUE';
   }>> {
-    console.log('[OKR REPORTING] getOverdueCheckIns called:', { userOrganizationId, requesterUserId });
+    console.log('[OKR REPORTING] getOverdueCheckIns called:', { userOrganizationId, requesterUserId, filters });
     try {
       // Tenant isolation: if user has no org, return empty
       if (userOrganizationId === undefined || userOrganizationId === '') {
@@ -891,113 +1068,104 @@ export class OkrReportingService {
       }
       // Superuser (null): no filter, see all orgs
 
-      // TODO [phase7-performance]: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
-      // Future optimization: use SQL window functions or subqueries to calculate overdue in database.
+      // Apply filters
+      if (filters?.cycleId) {
+        objectiveWhere.cycleId = filters.cycleId;
+      }
+      if (filters?.pillarId) {
+        objectiveWhere.pillarId = filters.pillarId;
+      }
+      if (filters?.teamId) {
+        objectiveWhere.teamId = filters.teamId;
+      }
 
-      // Fetch all Key Results in scope with their objectives and latest check-in
-      const keyResults = await this.prisma.keyResult.findMany({
-      where: {
+      // Build KR where clause
+      const krWhere: any = {
         objectives: {
           some: {
             objective: objectiveWhere,
           },
         },
-        // Only include KRs with a cadence set (or filter out NONE)
+        // Only include KRs with a cadence set (not NONE or null)
         checkInCadence: {
           not: null,
+          notIn: ['NONE'],
         },
-      },
-      include: {
-        objectives: {
-          include: {
-            objective: {
-              select: {
-                id: true,
-                title: true,
-                ownerId: true,
-                tenantId: true,
-                visibilityLevel: true,
+        // Only active KRs (not COMPLETED or CANCELLED)
+        status: {
+          notIn: ['COMPLETED', 'CANCELLED'],
+        },
+      };
+
+      // Apply owner filter
+      if (filters?.ownerId) {
+        krWhere.ownerId = filters.ownerId;
+      }
+
+      // TODO [phase7-performance]: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
+      // Future optimization: use SQL window functions or subqueries to calculate overdue in database.
+
+      // Fetch all Key Results in scope with their objectives and latest check-in
+      const keyResults = await this.prisma.keyResult.findMany({
+        where: krWhere,
+        include: {
+          objectives: {
+            include: {
+              objective: {
+                select: {
+                  id: true,
+                  title: true,
+                  ownerId: true,
+                  tenantId: true,
+                  visibilityLevel: true,
+                  cycleId: true,
+                  pillarId: true,
+                  teamId: true,
+                },
               },
             },
+            take: 1, // Use first parent objective for context
           },
-          take: 1, // Use first parent objective for context
-        },
-        checkIns: {
-          orderBy: {
-            createdAt: 'desc',
+          checkIns: {
+            orderBy: {
+              createdAt: 'desc',
+            },
+            take: 1, // Get latest check-in only
           },
-          take: 1, // Get latest check-in only
         },
-      },
-    });
+      });
 
-    // Fetch owners for all unique owner IDs
-    const ownerIds = [...new Set(keyResults.map(kr => kr.ownerId))];
-    const owners = await this.prisma.user.findMany({
-      where: {
-        id: { in: ownerIds },
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
-    });
-    const ownerMap = new Map(owners.map(u => [u.id, u]));
+      // Fetch owners for all unique owner IDs
+      const ownerIds = [...new Set(keyResults.map(kr => kr.ownerId))];
+      const owners = await this.prisma.user.findMany({
+        where: {
+          id: { in: ownerIds },
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
+      const ownerMap = new Map(owners.map(u => [u.id, u]));
 
-    const now = new Date();
-    const overdueResults: Array<{
-      krId: string;
-      krTitle: string;
-      objectiveId: string;
-      objectiveTitle: string;
-      ownerId: string;
-      ownerName: string | null;
-      ownerEmail: string;
-      lastCheckInAt: Date | null;
-      daysLate: number;
-      cadence: string | null;
-    }> = [];
+      const now = new Date();
+      const graceDays = 2; // Default grace period
+      const overdueResults: Array<{
+        krId: string;
+        krTitle: string;
+        objectiveId: string;
+        objectiveTitle: string;
+        owner: {
+          id: string;
+          name: string | null;
+        };
+        cadence: string | null;
+        lastCheckInAt: Date | null;
+        daysOverdue: number;
+        status: 'DUE' | 'OVERDUE';
+      }> = [];
 
-    for (const kr of keyResults) {
-      // Skip if cadence is NONE or null
-      if (!kr.checkInCadence || kr.checkInCadence === 'NONE') {
-        continue;
-      }
-
-      // Determine max age based on cadence
-      let maxAgeDays: number;
-      switch (kr.checkInCadence) {
-        case 'WEEKLY':
-          maxAgeDays = 7;
-          break;
-        case 'BIWEEKLY':
-          maxAgeDays = 14;
-          break;
-        case 'MONTHLY':
-          maxAgeDays = 31;
-          break;
-        default:
-          continue; // Skip unknown cadence
-      }
-
-      // Get latest check-in timestamp
-      const lastCheckIn = kr.checkIns[0];
-      const lastCheckInAt = lastCheckIn?.createdAt || null;
-
-      // If no check-in exists, consider it overdue (use KR creation date as baseline)
-      let daysSinceLastCheckIn: number;
-      if (!lastCheckInAt) {
-        // No check-in ever - use KR creation date
-        const daysSinceCreation = Math.floor((now.getTime() - kr.createdAt.getTime()) / (1000 * 60 * 60 * 24));
-        daysSinceLastCheckIn = daysSinceCreation;
-      } else {
-        // Calculate days since last check-in
-        daysSinceLastCheckIn = Math.floor((now.getTime() - lastCheckInAt.getTime()) / (1000 * 60 * 60 * 24));
-      }
-
-      // Check if overdue
-      if (daysSinceLastCheckIn > maxAgeDays) {
+      for (const kr of keyResults) {
         const objective = kr.objectives[0]?.objective;
         if (!objective) {
           continue; // Skip KRs without parent objective
@@ -1008,19 +1176,21 @@ export class OkrReportingService {
         }
 
         // Filter by visibility
-        const canSee = await this.visibilityService.canUserSeeObjective({
-          objective: {
-            id: objective.id,
-            ownerId: objective.ownerId,
-            tenantId: objective.tenantId,
-            visibilityLevel: objective.visibilityLevel,
-          },
-          requesterUserId,
-          requesterOrgId: userOrganizationId ?? null,
-        });
+        if (requesterUserId) {
+          const canSee = await this.visibilityService.canUserSeeObjective({
+            objective: {
+              id: objective.id,
+              ownerId: objective.ownerId,
+              tenantId: objective.tenantId,
+              visibilityLevel: objective.visibilityLevel,
+            },
+            requesterUserId,
+            requesterOrgId: userOrganizationId ?? null,
+          });
 
-        if (!canSee) {
-          continue; // Skip KRs whose parent objective is not visible
+          if (!canSee) {
+            continue; // Skip KRs whose parent objective is not visible
+          }
         }
 
         const owner = ownerMap.get(kr.ownerId);
@@ -1028,25 +1198,42 @@ export class OkrReportingService {
           continue; // Skip if owner not found
         }
 
-        overdueResults.push({
-          krId: kr.id,
-          krTitle: kr.title,
-          objectiveId: objective.id,
-          objectiveTitle: objective.title,
-          ownerId: kr.ownerId,
-          ownerName: owner.name,
-          ownerEmail: owner.email,
+        // Use shared calculator
+        const lastCheckIn = kr.checkIns[0];
+        const lastCheckInAt = lastCheckIn?.createdAt || null;
+        const dueStatus = calculateCheckInDueStatus(
+          kr.checkInCadence,
           lastCheckInAt,
-          daysLate: daysSinceLastCheckIn - maxAgeDays,
-          cadence: kr.checkInCadence,
-        });
+          kr.createdAt,
+          graceDays,
+          now,
+        );
+
+        // Only include DUE or OVERDUE
+        if (dueStatus.isDue || dueStatus.isOverdue) {
+          overdueResults.push({
+            krId: kr.id,
+            krTitle: kr.title,
+            objectiveId: objective.id,
+            objectiveTitle: objective.title,
+            owner: {
+              id: kr.ownerId,
+              name: owner.name,
+            },
+            cadence: kr.checkInCadence,
+            lastCheckInAt,
+            daysOverdue: Math.max(0, dueStatus.daysSinceLastCheckIn - dueStatus.cadenceDays),
+            status: dueStatus.isOverdue ? 'OVERDUE' : 'DUE',
+          });
+        }
       }
-    }
 
-      // Sort by days late (most overdue first)
-      overdueResults.sort((a, b) => b.daysLate - a.daysLate);
+      // Sort by days overdue (most overdue first)
+      overdueResults.sort((a, b) => b.daysOverdue - a.daysOverdue);
 
-      return overdueResults;
+      // Apply limit
+      const limit = filters?.limit || 50;
+      return overdueResults.slice(0, limit);
     } catch (error: any) {
       console.error('[OKR REPORTING] Error in getOverdueCheckIns:');
       console.error('[OKR REPORTING] Message:', error?.message || 'Unknown error');
@@ -1152,5 +1339,708 @@ export class OkrReportingService {
         objectiveTitle: objective?.title || null,
       };
     });
+  }
+
+  /**
+   * Get time-series trend data for a Key Result.
+   * 
+   * Returns all check-ins for the KR ordered by timestamp (ASC) with value and confidence.
+   * Tenant isolation: Verifies KR belongs to user's tenant via parent Objective.
+   * RBAC: User must have view_okr permission (checked in controller).
+   * 
+   * @param keyResultId - Key Result ID
+   * @param userTenantId - User's tenant ID for isolation check
+   * @returns Array of trend points with timestamp, value, and confidence
+   */
+  async getKeyResultTrend(
+    keyResultId: string,
+    userTenantId: string | null | undefined,
+  ): Promise<Array<{
+    timestamp: string;
+    value: number | null;
+    confidence: number | null;
+  }>> {
+    // Tenant isolation: enforce read rules
+    OkrTenantGuard.assertCanMutateTenant(userTenantId);
+
+    // Verify key result exists and get tenant ID via parent objective
+    const krWithParent = await this.prisma.keyResult.findUnique({
+      where: { id: keyResultId },
+      select: {
+        id: true,
+        tenantId: true,
+        cycleId: true,
+        cycle: {
+          select: {
+            startDate: true,
+            endDate: true,
+          },
+        },
+        objectives: {
+          select: {
+            objective: {
+              select: {
+                id: true,
+                tenantId: true,
+              },
+            },
+          },
+          take: 1,
+        },
+      },
+    });
+
+    if (!krWithParent) {
+      throw new NotFoundException(`Key Result with ID ${keyResultId} not found`);
+    }
+
+    const objective = krWithParent.objectives[0]?.objective;
+    const objectiveOrgId = objective?.tenantId;
+
+    // Tenant isolation: verify org match
+    OkrTenantGuard.assertSameTenant(objectiveOrgId, userTenantId);
+
+    // Build where clause for check-ins
+    const where: any = {
+      keyResultId,
+    };
+
+    // Optionally filter by cycle dates if KR has a cycle
+    if (krWithParent.cycle?.startDate && krWithParent.cycle?.endDate) {
+      where.createdAt = {
+        gte: krWithParent.cycle.startDate,
+        lte: krWithParent.cycle.endDate,
+      };
+    }
+
+    // Fetch all check-ins ordered by createdAt ASC (oldest first)
+    const checkIns = await this.prisma.checkIn.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      select: {
+        value: true,
+        confidence: true,
+        createdAt: true,
+      },
+    });
+
+    // Transform to response format
+    return checkIns.map(checkIn => ({
+      timestamp: checkIn.createdAt.toISOString(),
+      value: checkIn.value,
+      confidence: checkIn.confidence,
+    }));
+  }
+
+  /**
+   * Get health heatmap data grouped by dimension (team or pillar) and status.
+   * 
+   * Returns counts of objectives grouped by the chosen dimension and their status.
+   * Tenant isolation: Only includes objectives visible to the requester.
+   * RBAC: User must have view_okr permission (checked in controller).
+   * 
+   * @param by - Dimension to group by: 'team' or 'pillar'
+   * @param cycleId - Optional cycle ID to filter objectives
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org
+   * @param requesterUserId - User ID of the requester (for visibility checks)
+   * @returns Array of buckets with dimensionId, dimensionName, status, and count, plus totals per dimension
+   */
+  async getHealthHeatmap(
+    by: 'team' | 'pillar',
+    cycleId: string | undefined,
+    userOrganizationId: string | null | undefined,
+    requesterUserId: string,
+  ): Promise<{
+    buckets: Array<{
+      dimensionId: string;
+      dimensionName: string;
+      status: string;
+      count: number;
+    }>;
+    totals: Array<{
+      dimensionId: string;
+      dimensionName: string;
+      total: number;
+    }>;
+  }> {
+    // Tenant isolation: if user has no org, return empty
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      return { buckets: [], totals: [] };
+    }
+
+    // Build where clause for objectives
+    const where: any = {};
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (orgFilter) {
+      where.tenantId = orgFilter.tenantId;
+    }
+    // Superuser (null): no filter, see all orgs
+
+    if (cycleId) {
+      where.cycleId = cycleId;
+    }
+
+    // Fetch objectives with their dimension and status
+    const objectives = await this.prisma.objective.findMany({
+      where,
+      select: {
+        id: true,
+        status: true,
+        teamId: true,
+        team: by === 'team' ? {
+          select: {
+            id: true,
+            name: true,
+          },
+        } : undefined,
+        pillarId: true,
+        pillar: by === 'pillar' ? {
+          select: {
+            id: true,
+            name: true,
+          },
+        } : undefined,
+        ownerId: true,
+        tenantId: true,
+        visibilityLevel: true,
+      },
+    });
+
+    // Filter by visibility
+    const visibleObjectives = [];
+    for (const obj of objectives) {
+      if (!obj.tenantId) {
+        continue;
+      }
+      const canSee = await this.visibilityService.canUserSeeObjective({
+        objective: {
+          id: obj.id,
+          ownerId: obj.ownerId,
+          tenantId: obj.tenantId,
+          visibilityLevel: obj.visibilityLevel,
+        },
+        requesterUserId,
+        requesterOrgId: userOrganizationId ?? null,
+      });
+
+      if (canSee) {
+        visibleObjectives.push(obj);
+      }
+    }
+
+    // Group by dimension and status
+    const bucketsMap = new Map<string, Map<string, number>>();
+    const dimensionNames = new Map<string, string>();
+
+    for (const obj of visibleObjectives) {
+      const dimensionId = by === 'team' ? obj.teamId : obj.pillarId;
+      const dimensionName = by === 'team' 
+        ? (obj.team?.name || 'Unassigned')
+        : (obj.pillar?.name || 'Unassigned');
+
+      if (!dimensionId) {
+        // Handle null dimension (unassigned)
+        const key = 'unassigned';
+        if (!dimensionNames.has(key)) {
+          dimensionNames.set(key, 'Unassigned');
+        }
+        if (!bucketsMap.has(key)) {
+          bucketsMap.set(key, new Map());
+        }
+        const statusMap = bucketsMap.get(key)!;
+        const status = obj.status || 'ON_TRACK';
+        statusMap.set(status, (statusMap.get(status) || 0) + 1);
+        continue;
+      }
+
+      dimensionNames.set(dimensionId, dimensionName);
+      if (!bucketsMap.has(dimensionId)) {
+        bucketsMap.set(dimensionId, new Map());
+      }
+      const statusMap = bucketsMap.get(dimensionId)!;
+      const status = obj.status || 'ON_TRACK';
+      statusMap.set(status, (statusMap.get(status) || 0) + 1);
+    }
+
+    // Convert to response format
+    const buckets: Array<{
+      dimensionId: string;
+      dimensionName: string;
+      status: string;
+      count: number;
+    }> = [];
+
+    for (const [dimensionId, statusMap] of bucketsMap.entries()) {
+      const dimensionName = dimensionNames.get(dimensionId) || 'Unknown';
+      for (const [status, count] of statusMap.entries()) {
+        buckets.push({
+          dimensionId: dimensionId === 'unassigned' ? '' : dimensionId,
+          dimensionName,
+          status,
+          count,
+        });
+      }
+    }
+
+    // Calculate totals per dimension
+    const totalsMap = new Map<string, number>();
+    for (const bucket of buckets) {
+      const current = totalsMap.get(bucket.dimensionId) || 0;
+      totalsMap.set(bucket.dimensionId, current + bucket.count);
+    }
+
+    const totals: Array<{
+      dimensionId: string;
+      dimensionName: string;
+      total: number;
+    }> = [];
+
+    for (const [dimensionId, total] of totalsMap.entries()) {
+      const dimensionName = dimensionNames.get(dimensionId === '' ? 'unassigned' : dimensionId) || 'Unknown';
+      totals.push({
+        dimensionId: dimensionId === 'unassigned' ? '' : dimensionId,
+        dimensionName,
+        total,
+      });
+    }
+
+    return { buckets, totals };
+  }
+
+  /**
+   * Get at-risk Objectives and Key Results.
+   * 
+   * Returns entities that are at-risk based on:
+   * - Status in {AT_RISK, OFF_TRACK, BLOCKED}
+   * - OR latest check-in confidence below threshold (default 50, configurable via CONFIDENCE_AT_RISK_THRESHOLD)
+   * 
+   * Tenant isolation: Only includes entities visible to the requester.
+   * RBAC: User must have view_okr permission (checked in controller).
+   * 
+   * @param filters - Optional filters: cycleId, ownerId, teamId, pillarId
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org
+   * @param requesterUserId - User ID of the requester (for visibility checks)
+   * @returns Array of at-risk entities with type, id, title, owner, status, confidence, lastUpdatedAt, dimensionRefs
+   */
+  async getAtRisk(
+    filters: {
+      cycleId?: string;
+      ownerId?: string;
+      teamId?: string;
+      pillarId?: string;
+    },
+    userOrganizationId: string | null | undefined,
+    requesterUserId: string,
+  ): Promise<Array<{
+    entityType: 'OBJECTIVE' | 'KEY_RESULT';
+    id: string;
+    title: string;
+    owner: {
+      id: string;
+      name: string | null;
+    };
+    status: string;
+    confidence: number | null;
+    lastUpdatedAt: string;
+    dimensionRefs: {
+      objectiveId?: string;
+      objectiveTitle?: string;
+      teamId?: string;
+      teamName?: string | null;
+      pillarId?: string;
+      pillarName?: string | null;
+      cycleId?: string;
+      cycleName?: string | null;
+    };
+  }>> {
+    // Tenant isolation: if user has no org, return empty
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      return [];
+    }
+
+    // Get confidence threshold from config (default 50)
+    const confidenceThreshold = parseInt(
+      this.configService.get<string>('CONFIDENCE_AT_RISK_THRESHOLD') || '50',
+      10,
+    );
+
+    // Build where clause for objectives
+    const objectiveWhere: any = {};
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (orgFilter) {
+      objectiveWhere.tenantId = orgFilter.tenantId;
+    }
+    // Superuser (null): no filter, see all orgs
+
+    if (filters.cycleId) {
+      objectiveWhere.cycleId = filters.cycleId;
+    }
+    if (filters.ownerId) {
+      objectiveWhere.ownerId = filters.ownerId;
+    }
+    if (filters.teamId) {
+      objectiveWhere.teamId = filters.teamId;
+    }
+    if (filters.pillarId) {
+      objectiveWhere.pillarId = filters.pillarId;
+    }
+
+    // Fetch objectives with their KRs and latest check-ins
+    const objectives = await this.prisma.objective.findMany({
+      where: objectiveWhere,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        ownerId: true,
+        owner: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        tenantId: true,
+        visibilityLevel: true,
+        teamId: true,
+        team: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        pillarId: true,
+        pillar: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        cycleId: true,
+        cycle: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        updatedAt: true,
+        keyResults: {
+          select: {
+            keyResult: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                ownerId: true,
+                updatedAt: true,
+                checkIns: {
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                  select: {
+                    confidence: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Filter by visibility and check risk
+    const atRiskEntities: Array<{
+      entityType: 'OBJECTIVE' | 'KEY_RESULT';
+      id: string;
+      title: string;
+      owner: { id: string; name: string | null };
+      status: string;
+      confidence: number | null;
+      lastUpdatedAt: string;
+      dimensionRefs: {
+        objectiveId?: string;
+        objectiveTitle?: string;
+        teamId?: string;
+        teamName?: string | null;
+        pillarId?: string;
+        pillarName?: string | null;
+        cycleId?: string;
+        cycleName?: string | null;
+      };
+    }> = [];
+
+    for (const obj of objectives) {
+      if (!obj.tenantId) {
+        continue;
+      }
+
+      const canSee = await this.visibilityService.canUserSeeObjective({
+        objective: {
+          id: obj.id,
+          ownerId: obj.ownerId,
+          tenantId: obj.tenantId,
+          visibilityLevel: obj.visibilityLevel,
+        },
+        requesterUserId,
+        requesterOrgId: userOrganizationId ?? null,
+      });
+
+      if (!canSee) {
+        continue;
+      }
+
+      // Check if objective is at-risk
+      const objectiveRisk = isAtRisk({
+        status: obj.status,
+        latestConfidence: null, // Objectives don't have confidence
+        confidenceThreshold,
+      });
+
+      if (objectiveRisk.isAtRisk) {
+        atRiskEntities.push({
+          entityType: 'OBJECTIVE',
+          id: obj.id,
+          title: obj.title,
+          owner: obj.owner,
+          status: obj.status,
+          confidence: null,
+          lastUpdatedAt: obj.updatedAt.toISOString(),
+          dimensionRefs: {
+            teamId: obj.teamId || undefined,
+            teamName: obj.team?.name || null,
+            pillarId: obj.pillarId || undefined,
+            pillarName: obj.pillar?.name || null,
+            cycleId: obj.cycleId || undefined,
+            cycleName: obj.cycle?.name || null,
+          },
+        });
+      }
+
+      // Check Key Results
+      for (const krLink of obj.keyResults) {
+        const kr = krLink.keyResult;
+        const latestConfidence = kr.checkIns[0]?.confidence ?? null;
+
+        const krRisk = isAtRisk({
+          status: kr.status,
+          latestConfidence,
+          confidenceThreshold,
+        });
+
+        if (krRisk.isAtRisk) {
+          // Fetch owner separately since KeyResult doesn't have owner relation
+          const krOwner = await this.prisma.user.findUnique({
+            where: { id: kr.ownerId },
+            select: { id: true, name: true },
+          });
+
+          atRiskEntities.push({
+            entityType: 'KEY_RESULT',
+            id: kr.id,
+            title: kr.title,
+            owner: krOwner || { id: kr.ownerId, name: null },
+            status: kr.status,
+            confidence: latestConfidence,
+            lastUpdatedAt: kr.updatedAt.toISOString(),
+            dimensionRefs: {
+              objectiveId: obj.id,
+              objectiveTitle: obj.title,
+              teamId: obj.teamId || undefined,
+              teamName: obj.team?.name || null,
+              pillarId: obj.pillarId || undefined,
+              pillarName: obj.pillar?.name || null,
+              cycleId: obj.cycleId || undefined,
+              cycleName: obj.cycle?.name || null,
+            },
+          });
+        }
+      }
+    }
+
+    return atRiskEntities;
+  }
+
+  /**
+   * Get cycle health summary for a specific cycle.
+   * 
+   * Returns four KPIs:
+   * 1. Totals by status (objectives grouped by status)
+   * 2. Average confidence (from latest check-ins across all KRs)
+   * 3. % objectives with ≥2 KRs
+   * 4. % KRs with ≥1 check-in in last 14 days
+   * 
+   * Tenant isolation: Only includes entities visible to the requester.
+   * RBAC: User must have view_okr permission (checked in controller).
+   * 
+   * @param cycleId - Cycle ID to filter by
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org
+   * @param requesterUserId - User ID of the requester (for visibility checks)
+   * @returns Cycle health summary with totalsByStatus, avgConfidence, coverage
+   */
+  async getCycleHealth(
+    cycleId: string,
+    userOrganizationId: string | null | undefined,
+    requesterUserId: string,
+  ): Promise<{
+    totalsByStatus: {
+      ON_TRACK: number;
+      AT_RISK: number;
+      OFF_TRACK: number;
+      BLOCKED: number;
+      COMPLETED: number;
+      CANCELLED: number;
+    };
+    avgConfidence: number | null;
+    coverage: {
+      objectivesWith2PlusKRsPct: number;
+      krsWithRecentCheckInPct: number;
+    };
+  }> {
+    // Tenant isolation: if user has no org, return empty
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      return {
+        totalsByStatus: {
+          ON_TRACK: 0,
+          AT_RISK: 0,
+          OFF_TRACK: 0,
+          BLOCKED: 0,
+          COMPLETED: 0,
+          CANCELLED: 0,
+        },
+        avgConfidence: null,
+        coverage: {
+          objectivesWith2PlusKRsPct: 0,
+          krsWithRecentCheckInPct: 0,
+        },
+      };
+    }
+
+    // Build where clause for objectives
+    const objectiveWhere: any = { cycleId };
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (orgFilter) {
+      objectiveWhere.tenantId = orgFilter.tenantId;
+    }
+    // Superuser (null): no filter, see all orgs
+
+    // Fetch objectives with their KRs and latest check-ins
+    const objectives = await this.prisma.objective.findMany({
+      where: objectiveWhere,
+      select: {
+        id: true,
+        status: true,
+        ownerId: true,
+        tenantId: true,
+        visibilityLevel: true,
+        keyResults: {
+          select: {
+            keyResult: {
+              select: {
+                id: true,
+                checkIns: {
+                  orderBy: { createdAt: 'desc' },
+                  take: 1,
+                  select: {
+                    confidence: true,
+                    createdAt: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Filter by visibility
+    const visibleObjectives = [];
+    for (const obj of objectives) {
+      if (!obj.tenantId) {
+        continue;
+      }
+      const canSee = await this.visibilityService.canUserSeeObjective({
+        objective: {
+          id: obj.id,
+          ownerId: obj.ownerId,
+          tenantId: obj.tenantId,
+          visibilityLevel: obj.visibilityLevel,
+        },
+        requesterUserId,
+        requesterOrgId: userOrganizationId ?? null,
+      });
+
+      if (canSee) {
+        visibleObjectives.push(obj);
+      }
+    }
+
+    // KPI 1: Totals by status
+    const totalsByStatus = {
+      ON_TRACK: 0,
+      AT_RISK: 0,
+      OFF_TRACK: 0,
+      BLOCKED: 0,
+      COMPLETED: 0,
+      CANCELLED: 0,
+    };
+
+    for (const obj of visibleObjectives) {
+      const status = obj.status || 'ON_TRACK';
+      if (status in totalsByStatus) {
+        totalsByStatus[status as keyof typeof totalsByStatus]++;
+      }
+    }
+
+    // KPI 2: Average confidence (from latest check-ins)
+    const confidences: number[] = [];
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    let krsWithRecentCheckIn = 0;
+    let totalKRs = 0;
+
+    for (const obj of visibleObjectives) {
+      const krCount = obj.keyResults.length;
+      totalKRs += krCount;
+
+      for (const krLink of obj.keyResults) {
+        const kr = krLink.keyResult;
+        const latestCheckIn = kr.checkIns[0];
+
+        if (latestCheckIn) {
+          // Collect confidence for average
+          if (latestCheckIn.confidence !== null && latestCheckIn.confidence !== undefined) {
+            confidences.push(latestCheckIn.confidence);
+          }
+
+          // Check if check-in is within last 14 days
+          if (latestCheckIn.createdAt >= fourteenDaysAgo) {
+            krsWithRecentCheckIn++;
+          }
+        }
+      }
+    }
+
+    const avgConfidence = confidences.length > 0
+      ? confidences.reduce((sum, c) => sum + c, 0) / confidences.length
+      : null;
+
+    // KPI 3: % objectives with ≥2 KRs
+    const objectivesWith2PlusKRs = visibleObjectives.filter(
+      (obj) => obj.keyResults.length >= 2
+    ).length;
+    const objectivesWith2PlusKRsPct = visibleObjectives.length > 0
+      ? (objectivesWith2PlusKRs / visibleObjectives.length) * 100
+      : 0;
+
+    // KPI 4: % KRs with ≥1 check-in in last 14 days
+    const krsWithRecentCheckInPct = totalKRs > 0
+      ? (krsWithRecentCheckIn / totalKRs) * 100
+      : 0;
+
+    return {
+      totalsByStatus,
+      avgConfidence: avgConfidence !== null ? Math.round(avgConfidence * 100) / 100 : null,
+      coverage: {
+        objectivesWith2PlusKRsPct: Math.round(objectivesWith2PlusKRsPct * 100) / 100,
+        krsWithRecentCheckInPct: Math.round(krsWithRecentCheckInPct * 100) / 100,
+      },
+    };
   }
 }

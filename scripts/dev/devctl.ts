@@ -13,7 +13,7 @@
  *   logs [svc]    Tail logs for a service (api|web)
  */
 
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import * as http from 'http';
 import * as readline from 'readline';
 import { join } from 'path';
@@ -205,6 +205,177 @@ function getServiceConfigs(pm: 'pnpm' | 'npm'): ServiceConfig[] {
 }
 
 // ============================================================================
+// Docker Management
+// ============================================================================
+
+async function checkDockerRunning(): Promise<boolean> {
+  try {
+    execSync('docker info', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function checkDockerContainer(containerName: string): Promise<boolean> {
+  try {
+    const output = execSync(`docker ps --filter "name=${containerName}" --format "{{.Names}}"`, {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    });
+    return output.trim() === containerName;
+  } catch {
+    return false;
+  }
+}
+
+async function startDockerDesktop(): Promise<boolean> {
+  const platform = process.platform;
+  
+  try {
+    if (platform === 'darwin') {
+      // macOS: Try to start Docker Desktop
+      console.log(colorize.dim('🐳 Attempting to start Docker Desktop...\n'));
+      execSync('open -a Docker', { stdio: 'ignore' });
+      return true;
+    } else if (platform === 'win32') {
+      // Windows: Try to start Docker Desktop
+      console.log(colorize.dim('🐳 Attempting to start Docker Desktop...\n'));
+      execSync('start "" "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"', { stdio: 'ignore' });
+      return true;
+    } else if (platform === 'linux') {
+      // Linux: Try to start Docker daemon
+      console.log(colorize.dim('🐳 Attempting to start Docker daemon...\n'));
+      try {
+        execSync('sudo systemctl start docker', { stdio: 'ignore' });
+        return true;
+      } catch {
+        // Might not have sudo or systemctl
+        return false;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForDockerReady(maxWaitSeconds = 60): Promise<boolean> {
+  console.log(colorize.dim(`⏳ Waiting for Docker to be ready (max ${maxWaitSeconds}s)...\n`));
+  
+  const startTime = Date.now();
+  const maxWait = maxWaitSeconds * 1000;
+  
+  while (Date.now() - startTime < maxWait) {
+    if (await checkDockerRunning()) {
+      console.log(colorize.success('✅ Docker is ready!\n'));
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // Check every 2 seconds
+    process.stdout.write('.');
+  }
+  
+  process.stdout.write('\n');
+  return false;
+}
+
+async function ensureDockerServices(): Promise<void> {
+  // Check if Docker is running
+  let dockerRunning = await checkDockerRunning();
+  
+  if (!dockerRunning) {
+    console.log(colorize.warn('\n⚠️  Docker is not running!\n'));
+    
+    // Try to start Docker Desktop
+    const started = await startDockerDesktop();
+    
+    if (started) {
+      // Wait for Docker to be ready
+      dockerRunning = await waitForDockerReady(60);
+      
+      if (!dockerRunning) {
+        console.error(colorize.error('\n❌ Docker Desktop took too long to start.\n'));
+        console.error(colorize.warn('Please start Docker Desktop manually and try again.\n'));
+        process.exit(1);
+      }
+    } else {
+      console.error(colorize.error('\n❌ Could not start Docker Desktop automatically.\n'));
+      console.error(colorize.warn('Please start Docker Desktop manually and try again.\n'));
+      process.exit(1);
+    }
+  }
+
+  // Check required infrastructure containers
+  const postgresRunning = await checkDockerContainer('okr-nexus-postgres');
+  const redisRunning = await checkDockerContainer('okr-nexus-redis');
+  const keycloakRunning = await checkDockerContainer('okr-nexus-keycloak');
+
+  const requiredServices = [];
+  if (!postgresRunning) requiredServices.push('postgres');
+  if (!redisRunning) requiredServices.push('redis');
+  if (!keycloakRunning) requiredServices.push('keycloak');
+
+  if (requiredServices.length > 0) {
+    console.log(colorize.dim(`\n🐳 Starting Docker infrastructure services (${requiredServices.join(', ')})...\n`));
+    
+    try {
+      // Start infrastructure services
+      const servicesToStart = requiredServices.join(' ');
+      execSync(`docker-compose up -d ${servicesToStart}`, {
+        stdio: 'inherit',
+        cwd: join(__dirname, '..', '..'),
+      });
+      
+      // Wait for services to be healthy
+      console.log(colorize.dim('⏳ Waiting for infrastructure services to be ready...\n'));
+      
+      let attempts = 0;
+      const maxAttempts = 90; // 90 seconds max wait (keycloak can take a while)
+      
+      while (attempts < maxAttempts) {
+        const postgresReady = postgresRunning || await checkDockerContainer('okr-nexus-postgres');
+        const redisReady = redisRunning || await checkDockerContainer('okr-nexus-redis');
+        const keycloakReady = keycloakRunning || await checkDockerContainer('okr-nexus-keycloak');
+        
+        if (postgresReady && redisReady && keycloakReady) {
+          // Additional check: verify postgres is actually accepting connections
+          try {
+            execSync('docker exec okr-nexus-postgres pg_isready -U okr_user', {
+              stdio: 'ignore',
+            });
+            // Check redis
+            execSync('docker exec okr-nexus-redis redis-cli ping', {
+              stdio: 'ignore',
+            });
+            console.log(colorize.success('✅ Docker infrastructure services are ready!\n'));
+            return;
+          } catch {
+            // Services exist but not ready yet
+          }
+        }
+        
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        attempts++;
+        
+        // Show progress every 10 seconds
+        if (attempts % 10 === 0) {
+          process.stdout.write('.');
+        }
+      }
+      
+      process.stdout.write('\n');
+      console.error(colorize.error('\n⚠️  Docker services took too long to start. Continuing anyway...\n'));
+    } catch (error: any) {
+      console.error(colorize.error(`\n❌ Failed to start Docker services: ${error.message}\n`));
+      console.error(colorize.warn('You may need to start them manually: npm run docker:up\n'));
+      process.exit(1);
+    }
+  } else {
+    console.log(colorize.dim('✅ Docker infrastructure services (postgres, redis, keycloak) are running\n'));
+  }
+}
+
+// ============================================================================
 // Service Management
 // ============================================================================
 
@@ -216,6 +387,7 @@ class DevOrchestrator {
   private rl?: readline.Interface;
   private focusedService: ServiceId | 'all' = 'all';
   private isInteractive = false;
+  private sigintHandlerSetup = false;
 
   constructor() {
     this.pm = detectPackageManager();
@@ -229,7 +401,26 @@ class DevOrchestrator {
     }
   }
 
+  private setupSigintHandler() {
+    if (this.sigintHandlerSetup) return;
+    this.sigintHandlerSetup = true;
+
+    // Handle Ctrl+C - set up immediately so it works from the start
+    process.on('SIGINT', async () => {
+      process.stdout.write('\n\n');
+      console.log(colorize.dim('Shutting down...\n'));
+      await this.stop();
+      process.exit(0);
+    });
+  }
+
   async start(serviceId?: ServiceId) {
+    // Set up SIGINT handler immediately so Ctrl+C works from the start
+    this.setupSigintHandler();
+
+    // Ensure Docker services are running before starting app services
+    await ensureDockerServices();
+
     const targets = serviceId ? [serviceId] : (['api', 'web'] as ServiceId[]);
 
     console.log(colorize.dim(`\n📦 Package manager: ${this.pm}`));
@@ -309,9 +500,26 @@ class DevOrchestrator {
     for (const id of targets) {
       const svc = this.services.get(id);
       if (svc?.process) {
-        svc.process.kill('SIGTERM');
-        svc.process = undefined;
-        console.log(colorize.dim(`✅ Stopped ${svc.config.name}`));
+        const proc = svc.process;
+        svc.process = undefined; // Clear reference immediately
+        
+        try {
+          // Try graceful shutdown first
+          proc.kill('SIGTERM');
+          
+          // Wait a bit for graceful shutdown
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          
+          // Force kill if still running
+          if (!proc.killed) {
+            proc.kill('SIGKILL');
+          }
+          
+          console.log(colorize.dim(`✅ Stopped ${svc.config.name}`));
+        } catch (error) {
+          // Process might already be dead
+          console.log(colorize.dim(`✅ Stopped ${svc.config.name}`));
+        }
       }
     }
 
@@ -323,6 +531,11 @@ class DevOrchestrator {
     if (this.rl) {
       this.rl.close();
       this.rl = undefined;
+    }
+
+    // Restore stdin if raw mode was enabled
+    if (process.stdin.isTTY && process.stdin.isRaw) {
+      process.stdin.setRawMode(false);
     }
   }
 
@@ -530,13 +743,8 @@ class DevOrchestrator {
       }
     });
 
-    // Handle Ctrl+C
-    process.on('SIGINT', async () => {
-      process.stdout.write('\n\n');
-      console.log(colorize.dim('Shutting down...\n'));
-      await this.stop();
-      process.exit(0);
-    });
+    // Note: SIGINT handler is already set up in setupSigintHandler()
+    // This method only handles interactive keypress events
   }
 }
 

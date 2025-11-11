@@ -252,8 +252,9 @@ export function AttentionDrawer({
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent side="right" className="w-full sm:max-w-lg" ref={sheetContentRef} aria-labelledby="attention-drawer-title" aria-describedby="attention-drawer-description">
+        {/* SheetTitle must be a direct child of SheetContent for Radix UI accessibility */}
+        <SheetTitle id="attention-drawer-title">Needs Attention</SheetTitle>
         <SheetHeader>
-          <SheetTitle id="attention-drawer-title">Needs Attention</SheetTitle>
           <SheetDescription id="attention-drawer-description">
             Items requiring attention in {cycleId ? 'this cycle' : 'all cycles'}
           </SheetDescription>

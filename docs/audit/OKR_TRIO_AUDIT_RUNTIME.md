@@ -96,3 +96,5 @@ docker exec okr-nexus-postgres psql -U okr_user -d okr_nexus
 6. ⏭️ Network capture (HAR file)
 7. ⏭️ Decision log and backlog creation
 
+
+

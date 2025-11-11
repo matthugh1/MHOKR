@@ -15,10 +15,10 @@ datasource db {
 // ==========================================
 
 model Organization {
-  id                             String            @id @default(cuid())
+  id                             String               @id @default(cuid())
   name                           String
-  slug                           String            @unique
-  allowTenantAdminExecVisibility Boolean           @default(false) // Config flag for TENANT_ADMIN access to EXEC_ONLY
+  slug                           String               @unique
+  allowTenantAdminExecVisibility Boolean              @default(false) // Config flag for TENANT_ADMIN access to EXEC_ONLY
   execOnlyWhitelist              Json? // Array of user IDs allowed to view EXEC_ONLY OKRs: ["userId1", "userId2"]
   metadata                       Json? // Additional tenant configuration
   workspaces                     Workspace[]
@@ -27,11 +27,14 @@ model Organization {
   initiatives                    Initiative[] // Initiatives belonging to this organization
   strategicPillars               StrategicPillar[] // Strategic pillars/themes for this organization
   cycles                         Cycle[] // OKR cycles/quarters for this organization
+  tags                           Tag[] // Tags for this organization
+  objectiveKeyResults            ObjectiveKeyResult[] // Objective-KeyResult junctions
   checkInRequests                CheckInRequest[] // Async check-in requests for this organization
   activities                     Activity[] // Activities belonging to this organization
   userLayouts                    UserLayout[] // User layouts belonging to this organization
-  createdAt                      DateTime          @default(now())
-  updatedAt                      DateTime          @updatedAt
+  shareLinks                     ShareLink[]          @relation("ShareLinkTenant")
+  createdAt                      DateTime             @default(now())
+  updatedAt                      DateTime             @updatedAt
 
   @@map("organizations")
 }
@@ -69,28 +72,35 @@ model Team {
 }
 
 model User {
-  id                         String            @id @default(cuid())
-  email                      String            @unique
-  keycloakId                 String?           @unique
+  id                         String                  @id @default(cuid())
+  email                      String                  @unique
+  keycloakId                 String?                 @unique
   name                       String
   passwordHash               String?
   avatar                     String?
-  isSuperuser                Boolean           @default(false) // System-wide superuser
-  settings                   Json?             @default("{}") // User settings including debug flags (e.g. debug.rbacInspectorEnabled)
+  isSuperuser                Boolean                 @default(false) // System-wide superuser
+  settings                   Json?                   @default("{}") // User settings including debug flags (e.g. debug.rbacInspectorEnabled)
   managerId                  String? // Direct manager for MANAGER_CHAIN visibility
-  manager                    User?             @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
-  directReports              User[]            @relation("UserManager")
-  roleAssignments            RoleAssignment[]  @relation("RoleAssignmentUser")
-  objectives                 Objective[]       @relation("ObjectiveOwner")
-  permissionAudits           PermissionAudit[] @relation("PermissionAuditUser")
-  permissionAuditsPerformed  PermissionAudit[] @relation("PermissionAuditPerformedBy")
-  auditLogsActor             AuditLog[]        @relation("AuditLogActor")
-  auditLogsImpersonated      AuditLog[]        @relation("AuditLogImpersonated")
-  checkInRequestsAsRequester CheckInRequest[]  @relation("CheckInRequestRequester")
-  checkInRequestsAsTarget    CheckInRequest[]  @relation("CheckInRequestTarget")
-  checkInResponses           CheckInResponse[] @relation("CheckInResponseUser")
-  createdAt                  DateTime          @default(now())
-  updatedAt                  DateTime          @updatedAt
+  manager                    User?                   @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
+  directReports              User[]                  @relation("UserManager")
+  roleAssignments            RoleAssignment[]        @relation("RoleAssignmentUser")
+  objectives                 Objective[]             @relation("ObjectiveOwner")
+  sponsoredObjectives        Objective[]             @relation("ObjectiveSponsor")
+  objectiveContributions     ObjectiveContributor[]  @relation("ObjectiveContributor")
+  keyResultContributions     KeyResultContributor[]  @relation("KeyResultContributor")
+  initiativeContributions    InitiativeContributor[] @relation("InitiativeContributor")
+  ownedPillars               StrategicPillar[]       @relation("StrategicPillarOwner")
+  permissionAudits           PermissionAudit[]       @relation("PermissionAuditUser")
+  permissionAuditsPerformed  PermissionAudit[]       @relation("PermissionAuditPerformedBy")
+  auditLogsActor             AuditLog[]              @relation("AuditLogActor")
+  auditLogsImpersonated      AuditLog[]              @relation("AuditLogImpersonated")
+  checkInRequestsAsRequester CheckInRequest[]        @relation("CheckInRequestRequester")
+  checkInRequestsAsTarget    CheckInRequest[]        @relation("CheckInRequestTarget")
+  checkInResponses           CheckInResponse[]       @relation("CheckInResponseUser")
+  okrAccessWhitelistCreated  OkrAccessWhitelist[]    @relation("OkrAccessWhitelistCreator")
+  shareLinksCreated          ShareLink[]             @relation("ShareLinkCreator")
+  createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt
 
   @@index([email])
   @@index([keycloakId])
@@ -143,11 +153,14 @@ model StrategicPillar {
   name        String
   description String?      @db.Text
   color       String? // Hex color for badge/visual representation (optional)
+  ownerId     String? // Optional owner (user responsible for this pillar)
+  owner       User?        @relation("StrategicPillarOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   objectives  Objective[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
   @@index([tenantId])
+  @@index([tenantId, ownerId])
   @@map("strategic_pillars")
 }
 
@@ -186,121 +199,292 @@ enum CycleStatus {
 }
 
 model Objective {
-  id              String               @id @default(cuid())
+  id              String                 @id @default(cuid())
   title           String
-  description     String?              @db.Text
+  description     String?                @db.Text
   tenantId        String // For organization-level OKRs (NOT NULL)
-  tenant          Organization        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant          Organization           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   workspaceId     String? // For workspace-level OKRs (optional now)
-  workspace       Workspace?           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace       Workspace?             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   teamId          String? // For team-level OKRs
-  team            Team?                @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  team            Team?                  @relation(fields: [teamId], references: [id], onDelete: SetNull)
   pillarId        String? // Optional link to strategic pillar/theme
-  pillar          StrategicPillar?     @relation(fields: [pillarId], references: [id], onDelete: SetNull)
+  pillar          StrategicPillar?       @relation(fields: [pillarId], references: [id], onDelete: SetNull)
   cycleId         String? // Optional link to OKR cycle/quarter
-  cycle           Cycle?               @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  cycle           Cycle?                 @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   ownerId         String // Always has an owner
-  owner           User                 @relation("ObjectiveOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  owner           User                   @relation("ObjectiveOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  sponsorId       String? // Optional sponsor (executive sponsor or stakeholder)
+  sponsor         User?                  @relation("ObjectiveSponsor", fields: [sponsorId], references: [id], onDelete: SetNull)
   parentId        String?
-  parent          Objective?           @relation("ObjectiveHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children        Objective[]          @relation("ObjectiveHierarchy")
+  parent          Objective?             @relation("ObjectiveHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children        Objective[]            @relation("ObjectiveHierarchy")
+  tags            ObjectiveTag[]
+  contributors    ObjectiveContributor[]
   keyResults      ObjectiveKeyResult[]
   initiatives     Initiative[]
+  progressSnapshots ObjectiveProgressSnapshot[]
   startDate       DateTime
   endDate         DateTime
-  status          OKRStatus            @default(ON_TRACK)
-  progress        Float                @default(0)
-  visibilityLevel VisibilityLevel      @default(PUBLIC_TENANT) // Visibility level for access control
-  isPublished     Boolean              @default(false) // Whether OKR is published (draft vs published)
+  status          OKRStatus              @default(ON_TRACK)
+  progress        Float                  @default(0)
+  visibilityLevel VisibilityLevel        @default(PUBLIC_TENANT) // Visibility level for access control
+  isPublished     Boolean                @default(false) // DEPRECATED: Use state field instead
+  state           ObjectiveState         @default(DRAFT) // Combined state (publish + completion)
   positionX       Float?
   positionY       Float?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  confidence      Int?                   @db.SmallInt // Review confidence (0-100)
+  reviewFrequency ReviewFrequency? // How often this objective should be reviewed
+  lastReviewedAt  DateTime? // Timestamp of last review
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
 
   @@index([tenantId])
   @@index([workspaceId])
   @@index([teamId])
   @@index([ownerId])
+  @@index([sponsorId])
   @@index([parentId])
   @@index([pillarId])
   @@index([cycleId])
   @@index([visibilityLevel])
   @@index([isPublished])
+  @@index([state])
   @@map("objectives")
 }
 
 model KeyResult {
-  id              String               @id @default(cuid())
+  id              String                 @id @default(cuid())
   title           String
-  description     String?              @db.Text
+  description     String?                @db.Text
   ownerId         String
   tenantId        String // Tenant scoping: KR belongs to one organization
-  tenant          Organization         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant          Organization           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   metricType      MetricType
   startValue      Float
   targetValue     Float
   currentValue    Float
   unit            String?
-  status          OKRStatus            @default(ON_TRACK)
-  progress        Float                @default(0)
-  visibilityLevel VisibilityLevel      @default(PUBLIC_TENANT) // Visibility level for access control
-  isPublished     Boolean              @default(false) // Whether KR is published (draft vs published)
+  status          OKRStatus              @default(ON_TRACK)
+  progress        Float                  @default(0)
+  visibilityLevel VisibilityLevel        @default(PUBLIC_TENANT) // Visibility level for access control
+  isPublished     Boolean                @default(false) // DEPRECATED: Use state field instead
+  state           KeyResultState         @default(DRAFT) // Combined state (publish + completion)
   checkInCadence  CheckInCadence? // Optional check-in cadence for overdue tracking
   cycleId         String? // Optional link to OKR cycle/quarter (inherited from parent Objective but can be set directly)
-  cycle           Cycle?               @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  cycle           Cycle?                 @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   startDate       DateTime?
   endDate         DateTime?
   positionX       Float?
   positionY       Float?
   objectives      ObjectiveKeyResult[]
+  tags            KeyResultTag[]
+  contributors    KeyResultContributor[]
   checkIns        CheckIn[]
   integrations    KRIntegration[]
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  statusSnapshots KeyResultStatusSnapshot[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
 
   @@index([ownerId])
   @@index([tenantId])
   @@index([visibilityLevel])
   @@index([isPublished])
+  @@index([state])
   @@index([cycleId])
   @@map("key_results")
 }
 
 // Junction table for many-to-many relationship between Objectives and Key Results
 model ObjectiveKeyResult {
-  id          String    @id @default(cuid())
+  id          String       @id @default(cuid())
+  tenantId    String // Tenant scoping for isolation
+  tenant      Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   objectiveId String
-  objective   Objective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  objective   Objective    @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
   keyResultId String
-  keyResult   KeyResult @relation(fields: [keyResultId], references: [id], onDelete: Cascade)
-  createdAt   DateTime  @default(now())
+  keyResult   KeyResult    @relation(fields: [keyResultId], references: [id], onDelete: Cascade)
+  weight      Float        @default(1.0) // Weight for weighted progress roll-up (default 1.0 = equal weight)
+  createdAt   DateTime     @default(now())
 
   @@unique([objectiveId, keyResultId])
   @@index([objectiveId])
   @@index([keyResultId])
+  @@index([tenantId])
   @@map("objective_key_results")
 }
 
+// Per-object access whitelist for PRIVATE OKRs
+model OkrAccessWhitelist {
+  id            String        @id @default(cuid())
+  entityType    EntityType // OBJECTIVE, KEY_RESULT, or INITIATIVE
+  entityId      String // ID of the OKR entity
+  principalType PrincipalType // USER or TEAM
+  principalId   String // User ID or Team ID
+  createdAt     DateTime      @default(now())
+  createdBy     String // User who added this entry
+  createdByUser User          @relation("OkrAccessWhitelistCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@unique([entityType, entityId, principalType, principalId])
+  @@index([entityType, entityId])
+  @@index([principalType, principalId])
+  @@map("okr_access_whitelist")
+}
+
+enum PrincipalType {
+  USER
+  TEAM
+}
+
+// ==========================================
+// Tags & Contributors Models
+// ==========================================
+
+model Tag {
+  id             String          @id @default(cuid())
+  tenantId       String // Tenant scoping: tag belongs to one organization
+  tenant         Organization    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name           String
+  color          String? // Hex color for badge/visual representation (optional)
+  objectiveTags  ObjectiveTag[]
+  keyResultTags  KeyResultTag[]
+  initiativeTags InitiativeTag[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([tenantId, name]) // Tag names must be unique per tenant
+  @@index([tenantId])
+  @@map("tags")
+}
+
+model ObjectiveTag {
+  id          String    @id @default(cuid())
+  tenantId    String // Tenant scoping for isolation
+  objectiveId String
+  objective   Objective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  tagId       String
+  tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdBy   String // User ID who added the tag
+  createdAt   DateTime  @default(now())
+
+  @@unique([tenantId, objectiveId, tagId]) // Prevent duplicate tags on same objective
+  @@index([objectiveId])
+  @@index([tagId])
+  @@index([tenantId])
+  @@map("objective_tags")
+}
+
+model KeyResultTag {
+  id          String    @id @default(cuid())
+  tenantId    String // Tenant scoping for isolation
+  keyResultId String
+  keyResult   KeyResult @relation(fields: [keyResultId], references: [id], onDelete: Cascade)
+  tagId       String
+  tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdBy   String // User ID who added the tag
+  createdAt   DateTime  @default(now())
+
+  @@unique([tenantId, keyResultId, tagId]) // Prevent duplicate tags on same key result
+  @@index([keyResultId])
+  @@index([tagId])
+  @@index([tenantId])
+  @@map("key_result_tags")
+}
+
+model InitiativeTag {
+  id           String     @id @default(cuid())
+  tenantId     String // Tenant scoping for isolation
+  initiativeId String
+  initiative   Initiative @relation(fields: [initiativeId], references: [id], onDelete: Cascade)
+  tagId        String
+  tag          Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdBy    String // User ID who added the tag
+  createdAt    DateTime   @default(now())
+
+  @@unique([tenantId, initiativeId, tagId]) // Prevent duplicate tags on same initiative
+  @@index([initiativeId])
+  @@index([tagId])
+  @@index([tenantId])
+  @@map("initiative_tags")
+}
+
+model ObjectiveContributor {
+  id          String    @id @default(cuid())
+  tenantId    String // Tenant scoping for isolation
+  objectiveId String
+  objective   Objective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation("ObjectiveContributor", fields: [userId], references: [id], onDelete: Cascade)
+  role        String    @default("CONTRIBUTOR") // Role: CONTRIBUTOR
+  createdBy   String // User ID who added the contributor
+  createdAt   DateTime  @default(now())
+
+  @@unique([tenantId, objectiveId, userId]) // Prevent duplicate contributors on same objective
+  @@index([objectiveId])
+  @@index([userId])
+  @@index([tenantId])
+  @@map("objective_contributors")
+}
+
+model KeyResultContributor {
+  id          String    @id @default(cuid())
+  tenantId    String // Tenant scoping for isolation
+  keyResultId String
+  keyResult   KeyResult @relation(fields: [keyResultId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation("KeyResultContributor", fields: [userId], references: [id], onDelete: Cascade)
+  role        String    @default("CONTRIBUTOR") // Role: CONTRIBUTOR
+  createdBy   String // User ID who added the contributor
+  createdAt   DateTime  @default(now())
+
+  @@unique([tenantId, keyResultId, userId]) // Prevent duplicate contributors on same key result
+  @@index([keyResultId])
+  @@index([userId])
+  @@index([tenantId])
+  @@map("key_result_contributors")
+}
+
+model InitiativeContributor {
+  id           String     @id @default(cuid())
+  tenantId     String // Tenant scoping for isolation
+  initiativeId String
+  initiative   Initiative @relation(fields: [initiativeId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation("InitiativeContributor", fields: [userId], references: [id], onDelete: Cascade)
+  role         String     @default("CONTRIBUTOR") // Role: CONTRIBUTOR
+  createdBy    String // User ID who added the contributor
+  createdAt    DateTime   @default(now())
+
+  @@unique([tenantId, initiativeId, userId]) // Prevent duplicate contributors on same initiative
+  @@index([initiativeId])
+  @@index([userId])
+  @@index([tenantId])
+  @@map("initiative_contributors")
+}
+
 model Initiative {
-  id          String           @id @default(cuid())
-  title       String
-  description String?          @db.Text
-  keyResultId String?
-  objectiveId String?
-  objective   Objective?       @relation(fields: [objectiveId], references: [id], onDelete: SetNull)
-  tenantId    String // Tenant scoping: initiative belongs to one organization
-  tenant      Organization     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  cycleId     String? // Optional link to OKR cycle/quarter (inherited from parent Objective but can be set directly)
-  cycle       Cycle?           @relation(fields: [cycleId], references: [id], onDelete: SetNull)
-  ownerId     String
-  status      InitiativeStatus
-  startDate   DateTime?
-  endDate     DateTime?
-  dueDate     DateTime?
-  positionX   Float?
-  positionY   Float?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id           String                  @id @default(cuid())
+  title        String
+  description  String?                 @db.Text
+  keyResultId  String?
+  objectiveId  String?
+  objective    Objective?              @relation(fields: [objectiveId], references: [id], onDelete: SetNull)
+  tenantId     String // Tenant scoping: initiative belongs to one organization
+  tenant       Organization            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  cycleId      String? // Optional link to OKR cycle/quarter (inherited from parent Objective but can be set directly)
+  cycle        Cycle?                  @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  ownerId      String
+  tags         InitiativeTag[]
+  contributors InitiativeContributor[]
+  status       InitiativeStatus
+  statusSnapshots InitiativeStatusSnapshot[]
+  startDate    DateTime?
+  endDate      DateTime?
+  dueDate      DateTime?
+  positionX    Float?
+  positionY    Float?
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
 
   @@index([keyResultId])
   @@index([objectiveId])
@@ -316,6 +500,22 @@ enum OKRStatus {
   OFF_TRACK
   COMPLETED
   CANCELLED
+}
+
+enum ObjectiveState {
+  DRAFT // isPublished=false, status not COMPLETED/CANCELLED
+  PUBLISHED // isPublished=true, status not COMPLETED/CANCELLED
+  COMPLETED // status=COMPLETED (regardless of isPublished)
+  CANCELLED // status=CANCELLED (regardless of isPublished)
+  ARCHIVED // Future: archived state (read-only)
+}
+
+enum KeyResultState {
+  DRAFT // isPublished=false, status not COMPLETED/CANCELLED
+  PUBLISHED // isPublished=true, status not COMPLETED/CANCELLED
+  COMPLETED // status=COMPLETED (regardless of isPublished)
+  CANCELLED // status=CANCELLED (regardless of isPublished)
+  ARCHIVED // Future: archived state (read-only)
 }
 
 enum MetricType {
@@ -437,6 +637,37 @@ enum AuditTargetType {
   TEAM
   TENANT
   VISIBILITY_CHANGE
+  SHARE_LINK
+}
+
+// ==========================================
+// Share Link Model
+// ==========================================
+
+model ShareLink {
+  id         String          @id @default(cuid())
+  entityType ShareEntityType // OBJECTIVE or KEY_RESULT
+  entityId   String
+  tenantId   String
+  tenant     Organization    @relation("ShareLinkTenant", fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy  String
+  creator    User            @relation("ShareLinkCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  note       String?         @db.Text
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([entityType, entityId])
+  @@index([tenantId])
+  @@index([createdBy])
+  @@index([expiresAt])
+  @@map("share_links")
+}
+
+enum ShareEntityType {
+  OBJECTIVE
+  KEY_RESULT
 }
 
 // ==========================================
@@ -457,6 +688,47 @@ model CheckIn {
   @@index([keyResultId])
   @@index([userId])
   @@map("check_ins")
+}
+
+model ObjectiveProgressSnapshot {
+  id          String    @id @default(cuid())
+  objectiveId String
+  objective   Objective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  progress    Float     // Progress at snapshot time (0-100)
+  status      OKRStatus // Status at snapshot time
+  triggeredBy String?   // What triggered this snapshot (e.g., "KR_CHECKIN", "KR_UPDATE", "KR_CREATE", "KR_DELETE", "OBJECTIVE_UPDATE")
+  createdAt   DateTime  @default(now())
+
+  @@index([objectiveId])
+  @@index([createdAt])
+  @@map("objective_progress_snapshots")
+}
+
+model KeyResultStatusSnapshot {
+  id          String    @id @default(cuid())
+  keyResultId String
+  keyResult   KeyResult @relation(fields: [keyResultId], references: [id], onDelete: Cascade)
+  status      OKRStatus // Status at snapshot time
+  progress    Float?    // Progress at snapshot time (0-100) - optional for status-only tracking
+  triggeredBy String?   // What triggered this snapshot (e.g., "KR_UPDATE", "KR_CHECKIN", "STATUS_ROLLUP")
+  createdAt   DateTime  @default(now())
+
+  @@index([keyResultId])
+  @@index([createdAt])
+  @@map("key_result_status_snapshots")
+}
+
+model InitiativeStatusSnapshot {
+  id           String           @id @default(cuid())
+  initiativeId String
+  initiative   Initiative       @relation(fields: [initiativeId], references: [id], onDelete: Cascade)
+  status       InitiativeStatus // Status at snapshot time
+  triggeredBy  String?          // What triggered this snapshot (e.g., "INITIATIVE_UPDATE", "MANUAL_CHANGE")
+  createdAt    DateTime         @default(now())
+
+  @@index([initiativeId])
+  @@index([createdAt])
+  @@map("initiative_status_snapshots")
 }
 
 // ==========================================
@@ -527,11 +799,18 @@ model Activity {
   @@map("activities")
 }
 
+enum ReviewFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+}
+
 enum EntityType {
   OBJECTIVE
   KEY_RESULT
   INITIATIVE
   CHECK_IN
+  PILLAR
 }
 
 enum ActivityAction {
@@ -541,6 +820,15 @@ enum ActivityAction {
   COMPLETED
   ALIGNED
   COMMENTED
+  REMINDER_SENT
+  ADD_ACCESS
+  REMOVE_ACCESS
+  STATE_CHANGE
+  TAG_ADDED
+  TAG_REMOVED
+  CONTRIBUTOR_ADDED
+  CONTRIBUTOR_REMOVED
+  REVIEWED
 }
 
 // ==========================================
@@ -613,16 +901,16 @@ enum IntegrationSource {
 // ==========================================
 
 model UserLayout {
-  id         String         @id @default(cuid())
+  id         String       @id @default(cuid())
   userId     String
   entityType EntityType // OBJECTIVE, KEY_RESULT, INITIATIVE
   entityId   String // The ID of the OKR entity
   tenantId   String // Tenant scoping: layout belongs to one organization
-  tenant     Organization   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant     Organization @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   positionX  Float
   positionY  Float
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
   @@unique([userId, entityType, entityId])
   @@index([userId])

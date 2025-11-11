@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SearchableUserSelect } from '@/components/okr/SearchableUserSelect'
 import { useAuth } from '@/contexts/auth.context'
 import { usePermissions } from '@/hooks/usePermissions'
 import api from '@/lib/api'
@@ -27,6 +28,9 @@ import { useToast } from '@/hooks/use-toast'
 import { AlertCircle, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { StandardCycleSelector } from '@/components/okr/StandardCycleSelector'
 import { Badge } from '@/components/ui/badge'
+import { TagSelector } from '@/components/okr/TagSelector'
+import { ContributorSelector } from '@/components/okr/ContributorSelector'
+import { SponsorSelector } from '@/components/okr/SponsorSelector'
 import { trapFocus, returnFocus, getActiveElement } from '@/lib/focus-trap'
 import { mapErrorToMessage } from '@/lib/error-mapping'
 import { useUxTiming } from '@/hooks/useUxTiming'
@@ -59,6 +63,7 @@ type Step = 'basics' | 'visibility' | 'key-results' | 'review'
     ownerId: string
     cycleId: string
     parentId?: string
+    pillarId?: string
     visibilityLevel: 'PUBLIC_TENANT' | 'PRIVATE' // W4.M1: EXEC_ONLY removed
     whitelist?: string[]
   }
@@ -98,6 +103,11 @@ export function OKRCreationDrawer({
     visibilityLevel: 'PUBLIC_TENANT',
   })
   const [draftKRs, setDraftKRs] = useState<DraftKeyResult[]>([])
+  const [alignmentError, setAlignmentError] = useState<{ code?: string; message?: string } | null>(null)
+  const [draftTags, setDraftTags] = useState<Array<{ id: string; name: string; color?: string | null }>>([])
+  const [draftContributors, setDraftContributors] = useState<Array<{ id: string; user: { id: string; name: string; email?: string; avatar?: string | null }; role: string }>>([])
+  const [draftSponsorId, setDraftSponsorId] = useState<string | null>(null)
+  const [createdEntityId, setCreatedEntityId] = useState<string | null>(null)
   // Story 5: Determine parent from parentContext or preselectedObjectiveId
   const effectiveParentObjectiveId = useMemo(() => {
     if (mode === 'kr' && parentContext?.type === 'objective') {
@@ -129,6 +139,7 @@ export function OKRCreationDrawer({
     startValue: number
     unit: string
     metricType: 'INCREASE' | 'DECREASE' | 'MAINTAIN' | 'PERCENTAGE' | 'CUSTOM'
+    weight?: number
   }>({
     title: '',
     objectiveId: effectiveParentObjectiveId,
@@ -138,6 +149,7 @@ export function OKRCreationDrawer({
     startValue: 0,
     unit: 'units',
     metricType: 'INCREASE',
+    weight: 1.0,
   })
   // Initiative mode state
   const [initiativeData, setInitiativeData] = useState<{
@@ -167,6 +179,7 @@ export function OKRCreationDrawer({
   const [allowedOwners, setAllowedOwners] = useState<Array<{ id: string; name: string; email: string }>>([])
   const [canAssignOthers, setCanAssignOthers] = useState(false)
   const [availableCyclesForCreation, setAvailableCyclesForCreation] = useState<Array<{ id: string; name: string; status: string }>>([])
+  const [availablePillars, setAvailablePillars] = useState<Array<{ id: string; name: string; color: string | null }>>([])
   // Objectives and Key Results for parent selection (KR/Initiative modes)
   const [availableObjectives, setAvailableObjectives] = useState<Array<{ id: string; title: string }>>([])
   const [availableKeyResults, setAvailableKeyResults] = useState<Array<{ id: string; title: string; objectiveId: string }>>([])
@@ -341,6 +354,10 @@ export function OKRCreationDrawer({
         status: 'NOT_STARTED',
         dueDate: '',
       })
+      setDraftTags([])
+      setDraftContributors([])
+      setDraftSponsorId(null)
+      setCreatedEntityId(null)
       setIsSubmitting(false)
     }
   }, [isOpen, user?.id, activeCycles, effectiveParentObjectiveId, effectiveParentForInitiative])
@@ -463,6 +480,7 @@ export function OKRCreationDrawer({
         tenantId: currentOrganization.id,
         visibilityLevel: draftObjective.visibilityLevel,
         parentId: draftObjective.parentId || undefined,
+        pillarId: draftObjective.pillarId || undefined,
       // W4.M1: period removed - not sent to backend
       startDate,
       endDate,
@@ -470,6 +488,40 @@ export function OKRCreationDrawer({
       })
       
       const objectiveId = objectiveRes.data.id
+      setCreatedEntityId(objectiveId)
+      
+      // Apply tags, contributors, and sponsor after creation
+      if (mode === 'objective') {
+        // Apply tags
+        for (const tag of draftTags) {
+          try {
+            await api.post(`/objectives/${objectiveId}/tags`, { tagId: tag.id })
+          } catch (error: any) {
+            console.error('Failed to add tag after creation:', error)
+            // Don't fail the whole operation
+          }
+        }
+        
+        // Apply contributors
+        for (const contributor of draftContributors) {
+          try {
+            await api.post(`/objectives/${objectiveId}/contributors`, { userId: contributor.user.id })
+          } catch (error: any) {
+            console.error('Failed to add contributor after creation:', error)
+            // Don't fail the whole operation
+          }
+        }
+        
+        // Apply sponsor
+        if (draftSponsorId) {
+          try {
+            await api.patch(`/objectives/${objectiveId}/sponsor`, { sponsorId: draftSponsorId })
+          } catch (error: any) {
+            console.error('Failed to set sponsor after creation:', error)
+            // Don't fail the whole operation
+          }
+        }
+      }
       
       // Create Key Results sequentially
       for (const kr of draftKRs) {
@@ -505,11 +557,20 @@ export function OKRCreationDrawer({
       onSuccess()
     } catch (err: any) {
       console.error('Failed to save draft', err)
-      toast({
-        title: 'Failed to save draft',
-        description: err.response?.data?.message || 'Please try again.',
-        variant: 'destructive',
-      })
+      
+      // Extract alignment error codes for inline display
+      const errorCode = err.response?.data?.code
+      const errorMessage = err.response?.data?.message
+      if (errorCode === 'ALIGNMENT_DATE_OUT_OF_RANGE' || errorCode === 'ALIGNMENT_CYCLE_MISMATCH') {
+        setAlignmentError({ code: errorCode, message: errorMessage })
+      } else {
+        setAlignmentError(null)
+        toast({
+          title: 'Failed to save draft',
+          description: err.response?.data?.message || 'Please try again.',
+          variant: 'destructive',
+        })
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -550,6 +611,7 @@ export function OKRCreationDrawer({
             ? (draftObjective.whitelist || [])
             : undefined,
           parentId: draftObjective.parentId || undefined,
+          pillarId: draftObjective.pillarId || undefined,
         },
         keyResults: draftKRs.map(kr => ({
           title: kr.title,
@@ -567,6 +629,42 @@ export function OKRCreationDrawer({
       
       console.log('[OKR CREATION] OKR created successfully:', response.data)
       
+      const objectiveId = response.data.objectiveId
+      setCreatedEntityId(objectiveId)
+      
+      // Apply tags, contributors, and sponsor after publish
+      if (objectiveId) {
+        // Apply tags
+        for (const tag of draftTags) {
+          try {
+            await api.post(`/objectives/${objectiveId}/tags`, { tagId: tag.id })
+          } catch (error: any) {
+            console.error('Failed to add tag after publish:', error)
+            // Don't fail the whole operation
+          }
+        }
+        
+        // Apply contributors
+        for (const contributor of draftContributors) {
+          try {
+            await api.post(`/objectives/${objectiveId}/contributors`, { userId: contributor.user.id })
+          } catch (error: any) {
+            console.error('Failed to add contributor after publish:', error)
+            // Don't fail the whole operation
+          }
+        }
+        
+        // Apply sponsor
+        if (draftSponsorId) {
+          try {
+            await api.patch(`/objectives/${objectiveId}/sponsor`, { sponsorId: draftSponsorId })
+          } catch (error: any) {
+            console.error('Failed to set sponsor after publish:', error)
+            // Don't fail the whole operation
+          }
+        }
+      }
+      
       const publishDurationMs = publishTiming.end()
       
       toast({
@@ -582,13 +680,22 @@ export function OKRCreationDrawer({
         publishDurationMs,
         totalDuration,
         krCount: draftKRs.length,
-        objectiveId: response.data.objectiveId,
+        objectiveId: objectiveId,
         timestamp: new Date().toISOString(),
       })
       
       onSuccess()
     } catch (err: any) {
       console.error('Failed to publish OKR', err)
+      
+      // Extract alignment error codes for inline display
+      const errorCode = err.response?.data?.code
+      const errorMessage = err.response?.data?.message
+      if (errorCode === 'ALIGNMENT_DATE_OUT_OF_RANGE' || errorCode === 'ALIGNMENT_CYCLE_MISMATCH') {
+        setAlignmentError({ code: errorCode, message: errorMessage })
+      } else {
+        setAlignmentError(null)
+      }
       
       const errorInfo = mapErrorToMessage(err)
       
@@ -613,11 +720,14 @@ export function OKRCreationDrawer({
         timestamp: new Date().toISOString(),
       })
       
-      toast({
-        title: errorInfo.variant === 'warning' ? 'Cannot publish' : 'Failed to publish OKR',
-        description: errorInfo.message,
-        variant: errorInfo.variant === 'warning' ? 'default' : (errorInfo.variant || 'destructive'),
-      })
+      // Only show toast for non-alignment errors (alignment errors shown inline)
+      if (errorCode !== 'ALIGNMENT_DATE_OUT_OF_RANGE' && errorCode !== 'ALIGNMENT_CYCLE_MISMATCH') {
+        toast({
+          title: errorInfo.variant === 'warning' ? 'Cannot publish' : 'Failed to publish OKR',
+          description: errorInfo.message,
+          variant: errorInfo.variant === 'warning' ? 'default' : (errorInfo.variant || 'destructive'),
+        })
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -663,22 +773,15 @@ export function OKRCreationDrawer({
           <Label htmlFor="owner">
             Owner <span className="text-red-500">*</span>
           </Label>
-          <Select
+          <SearchableUserSelect
             value={draftObjective.ownerId}
             onValueChange={(value) => setDraftObjective((prev) => ({ ...prev, ownerId: value }))}
+            availableUsers={usersForOwner}
+            placeholder="Select owner"
             disabled={!canAssignOthers}
-          >
-            <SelectTrigger id="owner">
-              <SelectValue placeholder="Select owner" />
-            </SelectTrigger>
-            <SelectContent>
-              {usersForOwner.map((u) => (
-                <SelectItem key={u.id} value={u.id}>
-                  {u.name || u.email || u.id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            id="owner"
+            required
+          />
           {!canAssignOthers && (
             <p className="text-xs text-muted-foreground">You can only assign yourself as owner.</p>
           )}
@@ -690,7 +793,13 @@ export function OKRCreationDrawer({
           </Label>
           <StandardCycleSelector
             value={draftObjective.cycleId}
-            onValueChange={(cycleId) => setDraftObjective((prev) => ({ ...prev, cycleId }))}
+            onValueChange={(cycleId) => {
+              setDraftObjective((prev) => ({ ...prev, cycleId }))
+              // Clear alignment error when cycle changes
+              if (alignmentError?.code === 'ALIGNMENT_CYCLE_MISMATCH') {
+                setAlignmentError(null)
+              }
+            }}
             currentOrganizationId={currentOrganization?.id}
             disabled={isSubmitting}
           />
@@ -698,6 +807,12 @@ export function OKRCreationDrawer({
             <div className="mt-2 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
               <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
               <p>{cycleWarning}</p>
+            </div>
+          )}
+          {alignmentError?.code === 'ALIGNMENT_CYCLE_MISMATCH' && (
+            <div className="mt-2 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <p>{alignmentError.message || 'Cycle must match the parent objective cycle.'}</p>
             </div>
           )}
         </div>
@@ -708,7 +823,11 @@ export function OKRCreationDrawer({
           </Label>
           <Select
             value={draftObjective.parentId || '__none__'}
-            onValueChange={(value) => setDraftObjective((prev) => ({ ...prev, parentId: value === '__none__' ? undefined : value }))}
+            onValueChange={(value: string) => {
+              setDraftObjective((prev) => ({ ...prev, parentId: value === '__none__' ? undefined : value }))
+              // Clear alignment errors when parent changes
+              setAlignmentError(null)
+            }}
           >
             <SelectTrigger id="parent">
               <SelectValue placeholder="None (top-level objective)" />
@@ -723,7 +842,76 @@ export function OKRCreationDrawer({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">Link this objective to a parent objective to create a hierarchy.</p>
+          {alignmentError?.code === 'ALIGNMENT_DATE_OUT_OF_RANGE' && (
+            <div className="mt-2 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+              <p>{alignmentError.message || 'Dates must be within the parent objective\'s date range.'}</p>
+            </div>
+          )}
         </div>
+
+        {/* Tags, Contributors, and Sponsor for Objectives */}
+        {mode === 'objective' && (
+          <>
+            <div className="space-y-2">
+              <Label>Tags</Label>
+              {createdEntityId ? (
+                <TagSelector
+                  entityType="objective"
+                  entityId={createdEntityId}
+                  selectedTags={draftTags}
+                  onTagsChange={setDraftTags}
+                  currentOrganizationId={currentOrganization?.id || null}
+                  canEdit={true}
+                  disabled={isSubmitting}
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">Tags can be added after the objective is created.</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Contributors</Label>
+              {createdEntityId ? (
+                <ContributorSelector
+                  entityType="objective"
+                  entityId={createdEntityId}
+                  selectedContributors={draftContributors}
+                  onContributorsChange={setDraftContributors}
+                  availableUsers={availableUsers.map(u => ({ id: u.id, name: u.name || '', email: u.email, avatar: null }))}
+                  currentOrganizationId={currentOrganization?.id || null}
+                  canEdit={true}
+                  disabled={isSubmitting}
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">Contributors can be added after the objective is created.</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Sponsor</Label>
+              {createdEntityId ? (
+                <SponsorSelector
+                  objectiveId={createdEntityId}
+                  sponsorId={draftSponsorId}
+                  onSponsorChange={setDraftSponsorId}
+                  availableUsers={availableUsers.map(u => ({ id: u.id, name: u.name || '', email: u.email }))}
+                  currentOrganizationId={currentOrganization?.id || null}
+                  canEdit={true}
+                  disabled={isSubmitting}
+                />
+              ) : (
+                <SearchableUserSelect
+                  value={draftSponsorId || ''}
+                  onValueChange={(value: string) => setDraftSponsorId(value || null)}
+                  availableUsers={availableUsers.map(u => ({ id: u.id, name: u.name || '', email: u.email }))}
+                  placeholder="Select sponsor (optional)"
+                  disabled={isSubmitting}
+                />
+              )}
+            </div>
+          </>
+        )}
       </div>
     )
   }
@@ -917,22 +1105,15 @@ export function OKRCreationDrawer({
               <Label htmlFor={`kr-owner-${kr.id}`}>
                 KR Owner <span className="text-red-500">*</span>
               </Label>
-              <Select
+              <SearchableUserSelect
                 value={kr.ownerId}
                 onValueChange={(value) => updateKeyResult(kr.id, { ownerId: value })}
+                availableUsers={usersForKROwner}
+                placeholder="Select owner"
                 disabled={!canAssignOthers}
-              >
-                <SelectTrigger id={`kr-owner-${kr.id}`}>
-                  <SelectValue placeholder="Select owner" />
-                </SelectTrigger>
-                <SelectContent>
-                  {usersForKROwner.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>
-                      {u.name || u.email || u.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                id={`kr-owner-${kr.id}`}
+                required
+              />
             </div>
           </div>
         ))}
@@ -1065,6 +1246,26 @@ export function OKRCreationDrawer({
           tenantId: currentOrganization?.id,
         })
 
+        // Update weight if it's not the default (1.0) and KR is linked to an Objective
+        const weightToSet = krData.weight ?? 1.0
+        if (objectiveIdToUse && weightToSet !== 1.0) {
+          try {
+            await api.patch(`/objectives/${objectiveIdToUse}/key-results/${response.data.id}/weight`, {
+              weight: weightToSet,
+            })
+          } catch (weightError: any) {
+            console.error('Failed to set weight after KR creation:', weightError)
+            // Don't fail the whole creation - weight can be set later
+            toast({
+              title: 'Key Result created',
+              description: `"${krData.title}" was created, but weight update failed. You can set it later.`,
+              variant: 'default',
+            })
+            onSuccess()
+            return
+          }
+        }
+
         toast({
           title: 'Key Result created',
           description: `"${krData.title}" has been created successfully.`,
@@ -1141,7 +1342,7 @@ export function OKRCreationDrawer({
             <>
               <Select
                 value={krData.objectiveId}
-                onValueChange={(value) => setKrData(prev => ({ ...prev, objectiveId: value }))}
+                onValueChange={(value: string) => setKrData(prev => ({ ...prev, objectiveId: value }))}
               >
                 <SelectTrigger id="kr-objective">
                   <SelectValue placeholder="Select objective" />
@@ -1159,26 +1360,44 @@ export function OKRCreationDrawer({
           )}
         </div>
 
+        {/* Weight input - only show when parent Objective is selected */}
+        {(krData.objectiveId || (parentContext && parentContext.type === 'objective')) && (
+          <div className="space-y-2">
+            <Label htmlFor="kr-weight">
+              Weight
+            </Label>
+            <Input
+              id="kr-weight"
+              type="number"
+              min="0"
+              max="3"
+              step="0.1"
+              value={krData.weight ?? 1.0}
+              onChange={(e) => {
+                const value = parseFloat(e.target.value)
+                setKrData(prev => ({ ...prev, weight: isNaN(value) ? 1.0 : value }))
+              }}
+              aria-label={`Weight for ${krData.title || 'this key result'}`}
+            />
+            <p className="text-xs text-muted-foreground">
+              Influence of this KR on objective progress (0.0–3.0). Default 1.0.
+            </p>
+          </div>
+        )}
+
         <div className="space-y-2">
           <Label htmlFor="kr-owner">
             Owner <span className="text-red-500">*</span>
           </Label>
-          <Select
+          <SearchableUserSelect
             value={krData.ownerId}
             onValueChange={(value) => setKrData(prev => ({ ...prev, ownerId: value }))}
+            availableUsers={usersForOwner}
+            placeholder="Select owner"
             disabled={!canAssignOthers}
-          >
-            <SelectTrigger id="kr-owner">
-              <SelectValue placeholder="Select owner" />
-            </SelectTrigger>
-            <SelectContent>
-              {usersForOwner.map((u) => (
-                <SelectItem key={u.id} value={u.id}>
-                  {u.name || u.email || u.id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            id="kr-owner"
+            required
+          />
         </div>
 
         <div className="space-y-2">
@@ -1187,7 +1406,7 @@ export function OKRCreationDrawer({
           </Label>
           <Select
             value={krData.cycleId}
-            onValueChange={(value) => setKrData(prev => ({ ...prev, cycleId: value }))}
+            onValueChange={(value: string) => setKrData(prev => ({ ...prev, cycleId: value }))}
           >
             <SelectTrigger id="kr-cycle">
               <SelectValue placeholder="Select cycle" />
@@ -1384,7 +1603,7 @@ export function OKRCreationDrawer({
               <div className="space-y-3">
                 <Select
                   value={initiativeData.objectiveId || '__none__'}
-                  onValueChange={(value) => setInitiativeData(prev => ({ ...prev, objectiveId: value === '__none__' ? null : value, keyResultId: null }))}
+                  onValueChange={(value: string) => setInitiativeData(prev => ({ ...prev, objectiveId: value === '__none__' ? null : value, keyResultId: null }))}
                 >
                   <SelectTrigger id="init-parent">
                     <SelectValue placeholder="Select objective (or key result below)" />
@@ -1400,7 +1619,7 @@ export function OKRCreationDrawer({
                 </Select>
                 <Select
                   value={initiativeData.keyResultId || '__none__'}
-                  onValueChange={(value) => setInitiativeData(prev => ({ ...prev, keyResultId: value === '__none__' ? null : value, objectiveId: null }))}
+                  onValueChange={(value: string) => setInitiativeData(prev => ({ ...prev, keyResultId: value === '__none__' ? null : value, objectiveId: null }))}
                 >
                   <SelectTrigger id="init-kr">
                     <SelectValue placeholder="Or select key result" />
@@ -1424,22 +1643,15 @@ export function OKRCreationDrawer({
           <Label htmlFor="init-owner">
             Owner <span className="text-red-500">*</span>
           </Label>
-          <Select
+          <SearchableUserSelect
             value={initiativeData.ownerId}
             onValueChange={(value) => setInitiativeData(prev => ({ ...prev, ownerId: value }))}
+            availableUsers={usersForOwner}
+            placeholder="Select owner"
             disabled={!canAssignOthers}
-          >
-            <SelectTrigger id="init-owner">
-              <SelectValue placeholder="Select owner" />
-            </SelectTrigger>
-            <SelectContent>
-              {usersForOwner.map((u) => (
-                <SelectItem key={u.id} value={u.id}>
-                  {u.name || u.email || u.id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            id="init-owner"
+            required
+          />
         </div>
 
         <div className="space-y-2">
@@ -1499,16 +1711,14 @@ export function OKRCreationDrawer({
     <Sheet open={isOpen} onOpenChange={handleCancel}>
       <SheetContent 
         side="right" 
-        className="w-full sm:max-w-lg flex flex-col" 
-        ref={sheetContentRef}
-        aria-labelledby="creation-drawer-title"
-        aria-describedby="creation-drawer-description"
+        className="w-full sm:max-w-lg flex flex-col"
       >
+        <div ref={sheetContentRef} className="flex flex-col h-full">
         <SheetHeader>
-          <SheetTitle id="creation-drawer-title">
+          <SheetTitle>
             {titleText}
           </SheetTitle>
-          <SheetDescription id="creation-drawer-description">
+          <SheetDescription>
             {descriptionText}
           </SheetDescription>
         </SheetHeader>
@@ -1692,6 +1902,7 @@ export function OKRCreationDrawer({
             </>
           )}
         </SheetFooter>
+        </div>
       </SheetContent>
     </Sheet>
   )

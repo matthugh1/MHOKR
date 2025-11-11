@@ -139,3 +139,5 @@ Two layers (summary bar + filters) feel redundant; users expect clickable badges
 - Rollback: Disable feature flag; revert to separate components
 - Clean revert: No database migrations; pure frontend change
 
+
+

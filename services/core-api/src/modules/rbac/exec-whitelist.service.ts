@@ -9,6 +9,21 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { OkrTenantGuard } from '../okr/tenant-guard';
 import { AuditLogService } from '../audit/audit-log.service';
 import { AuditTargetType } from '@prisma/client';
+import { Logger } from '@nestjs/common';
+
+// Simple telemetry helper for whitelist operations
+const whitelistTelemetry = {
+  enabled: process.env.WHITELIST_TELEMETRY !== 'off',
+  logger: new Logger('WhitelistTelemetry'),
+  recordCounter(metric: string, tags?: Record<string, string | number>): void {
+    if (!this.enabled) return;
+    this.logger.log(`[TELEMETRY] Counter: ${metric}`, {
+      metric,
+      tags: tags || {},
+      timestamp: new Date().toISOString(),
+    });
+  },
+};
 
 @Injectable()
 export class ExecWhitelistService {
@@ -66,6 +81,12 @@ export class ExecWhitelistService {
         metadata: { tenantId },
       });
       
+      // Record telemetry
+      whitelistTelemetry.recordCounter('whitelist.add', {
+        tenantId,
+        actorUserId,
+      });
+      
       return updated;
     }
 
@@ -99,6 +120,12 @@ export class ExecWhitelistService {
       targetType: AuditTargetType.USER,
       tenantId: tenantId,
       metadata: { tenantId },
+    });
+
+    // Record telemetry
+    whitelistTelemetry.recordCounter('whitelist.remove', {
+      tenantId,
+      actorUserId,
     });
 
     return updated;

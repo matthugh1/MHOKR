@@ -29,6 +29,7 @@ import {
   SearchCheck
 } from 'lucide-react'
 import { useFeatureFlags } from '@/hooks/useFeatureFlags'
+import { ProfilePopup } from '@/components/ProfilePopup'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -60,6 +61,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
   // Collapsible sidebar state
   const [isCollapsed, setIsCollapsed] = useState(false)
+  // Profile popup state
+  const [isProfilePopupOpen, setIsProfilePopupOpen] = useState(false)
 
   // Load collapsed state from localStorage on mount
   useEffect(() => {
@@ -260,7 +263,11 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
         <div className="p-4 border-t border-slate-200">
           {!isCollapsed && (
-            <div className="flex items-center gap-3 mb-3 px-3 py-2">
+            <button
+              onClick={() => setIsProfilePopupOpen(true)}
+              className="flex items-center gap-3 mb-3 px-3 py-2 w-full rounded-md hover:bg-slate-50 transition-colors text-left"
+              aria-label="View profile and permissions"
+            >
               <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-sm font-medium">
                 {user?.firstName?.[0]}{user?.lastName?.[0]}
               </div>
@@ -270,14 +277,18 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
                 </p>
                 <p className="text-xs text-slate-500 truncate">{user?.email}</p>
               </div>
-            </div>
+            </button>
           )}
           {isCollapsed && (
-            <div className="flex items-center justify-center mb-3">
+            <button
+              onClick={() => setIsProfilePopupOpen(true)}
+              className="flex items-center justify-center mb-3 w-full rounded-md hover:bg-slate-50 transition-colors"
+              aria-label="View profile and permissions"
+            >
               <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-sm font-medium">
                 {user?.firstName?.[0]}{user?.lastName?.[0]}
               </div>
-            </div>
+            </button>
           )}
           <Button
             variant="ghost"
@@ -307,6 +318,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
         <ImpersonationBanner />
         {children}
       </main>
+
+      {/* Profile Popup */}
+      <ProfilePopup isOpen={isProfilePopupOpen} onClose={() => setIsProfilePopupOpen(false)} />
     </div>
   )
 }

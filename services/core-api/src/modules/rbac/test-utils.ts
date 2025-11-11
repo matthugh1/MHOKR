@@ -173,11 +173,7 @@ export class RBACTestHelper {
     await this.prisma.team.deleteMany({
       where: {
         workspace: {
-<<<<<<< HEAD
           tenantId: tenantId,
-=======
-          organizationId: { equals: tenantId },
->>>>>>> origin/fix/aikido-security-sast-9793690-2uTF
         },
       },
     });

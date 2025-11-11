@@ -58,6 +58,7 @@ export default function BuilderPage() {
   // TODO [phase7-hardening]: tighten typing - replace Record<string, unknown> with proper node types
   const [editingNode, setEditingNode] = useState<{ id: string; data: Record<string, unknown> } | null>(null)
   const [editingFormData, setEditingFormData] = useState<EditFormState | null>(null)
+  const [alignmentError, setAlignmentError] = useState<{ code?: string; message?: string } | null>(null)
   const [showNodeCreator, setShowNodeCreator] = useState(false)
   const [legendExpanded, setLegendExpanded] = useState(false)
   const [_loading, setLoading] = useState(false)
@@ -601,6 +602,9 @@ export default function BuilderPage() {
   }
 
   const handleSaveNode = async (nodeId: string, updatedData: any) => {
+    // Clear previous alignment errors
+    setAlignmentError(null)
+    
     try {
       console.log('Saving node:', nodeId, updatedData)
       const nodeTypePrefix = nodeId.split('-')[0]
@@ -784,6 +788,17 @@ export default function BuilderPage() {
       console.log('Node saved successfully!')
     } catch (error: any) {
       console.error('Failed to save node:', error)
+      
+      // Extract alignment error codes for inline display
+      const errorCode = error.response?.data?.code
+      const errorMessage = error.response?.data?.message
+      if (errorCode === 'ALIGNMENT_DATE_OUT_OF_RANGE' || errorCode === 'ALIGNMENT_CYCLE_MISMATCH') {
+        setAlignmentError({ code: errorCode, message: errorMessage })
+        // Don't show alert for alignment errors - they're shown inline
+        return
+      }
+      
+      // Show alert for other errors
       alert(`Failed to save: ${error.response?.data?.message || error.message || 'Unknown error'}`)
     }
   }
@@ -1421,6 +1436,7 @@ export default function BuilderPage() {
               formData={editingFormData}
               setFormData={setEditingFormData}
               onSave={() => handleSaveNode(editingNode.id, editingFormData)}
+              alignmentError={alignmentError}
             />
           )}
         </EditPanel>

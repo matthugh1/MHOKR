@@ -43,7 +43,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 // W4.M1: Period utilities removed - Cycle is canonical
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
@@ -57,6 +57,7 @@ import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
 import { PublishLockWarningModal } from './components/PublishLockWarningModal'
 import { NewObjectiveModal } from '@/components/okr/NewObjectiveModal'
 import { EditObjectiveModal } from '@/components/okr/EditObjectiveModal'
+import { EditKeyResultDrawer } from '@/components/okr/EditKeyResultDrawer'
 import { NewKeyResultModal } from '@/components/okr/NewKeyResultModal'
 import { NewCheckInModal } from '@/components/okr/NewCheckInModal'
 import { NewInitiativeModal } from '@/components/okr/NewInitiativeModal'
@@ -99,11 +100,54 @@ export default function OKRsPage() {
   const [_viewMode, _setViewMode] = useState<'grid' | 'list'>('list')
   // W4.M1: Period removed - Cycle is canonical
   
+  // Read filter=overdue from URL
+  const filterOverdue = searchParams.get('filter') === 'overdue'
+  
   // Filter states
   const [filterWorkspaceId, setFilterWorkspaceId] = useState<string>('all')
   const [filterTeamId, setFilterTeamId] = useState<string>('all')
   const [filterOwnerId, setFilterOwnerId] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  
+  // New filter states with URL persistence
+  const myOkrsOnly = searchParams.get('myOkrs') === 'true'
+  const selectedVisibility = (searchParams.get('visibility') as 'ALL' | 'PUBLIC_TENANT' | 'PRIVATE') || 'ALL'
+  const selectedOwnerIdFromUrl = searchParams.get('ownerId')
+  const [selectedOwnerId, setSelectedOwnerId] = useState<string | null>(selectedOwnerIdFromUrl || null)
+  const selectedPillarIdFromUrl = searchParams.get('pillarId')
+  const [selectedPillarId, setSelectedPillarId] = useState<string | null>(selectedPillarIdFromUrl || null)
+  const [availablePillars, setAvailablePillars] = useState<Array<{ id: string; name: string; color: string | null }>>([])
+  
+  // Sync ownerId from URL
+  useEffect(() => {
+    if (selectedOwnerIdFromUrl) {
+      setSelectedOwnerId(selectedOwnerIdFromUrl)
+    } else if (!selectedOwnerIdFromUrl && selectedOwnerId) {
+      // URL cleared but state still has value - clear state
+      setSelectedOwnerId(null)
+    }
+  }, [selectedOwnerIdFromUrl])
+
+  // Sync pillarId from URL
+  useEffect(() => {
+    if (selectedPillarIdFromUrl) {
+      setSelectedPillarId(selectedPillarIdFromUrl)
+    } else if (!selectedPillarIdFromUrl && selectedPillarId) {
+      // URL cleared but state still has value - clear state
+      setSelectedPillarId(null)
+    }
+  }, [selectedPillarIdFromUrl])
+
+  // Load available pillars for filter chips
+  useEffect(() => {
+    api.get('/pillars')
+      .then((res) => {
+        setAvailablePillars(res.data || [])
+      })
+      .catch((err) => {
+        console.error('Failed to load pillars:', err)
+      })
+  }, [])
   
   const { workspaces, teams, currentOrganization, isSuperuser } = useWorkspace()
   const { user } = useAuth()
@@ -116,7 +160,7 @@ export default function OKRsPage() {
     
     // Check if user has TENANT_OWNER or TENANT_ADMIN role for this organization
     const tenantRoles = permissions.rolesByScope?.tenant?.find(
-      (t) => t.organizationId === currentOrganization.id
+      (t) => t.tenantId === currentOrganization.id
     )
     return tenantRoles !== undefined && (
       tenantRoles.roles.includes('TENANT_OWNER') || 
@@ -142,13 +186,34 @@ export default function OKRsPage() {
       scopes.push('team-workspace')
     }
     
-    // "Tenant" if user has TENANT_ADMIN / TENANT_OWNER / SUPERUSER
-    if (isTenantAdminForCurrentOrg) {
-      scopes.push('tenant')
+    // "Tenant" if user has any tenant-level role (TENANT_VIEWER, TENANT_ADMIN, TENANT_OWNER) or SUPERUSER
+    // TENANT_VIEWER should be able to see all tenant OKRs (read-only)
+    if (currentOrganization?.id) {
+      const tenantRoles = permissions.rolesByScope?.tenant?.find(
+        (t) => t.tenantId === currentOrganization.id
+      )
+      const hasTenantRole = tenantRoles !== undefined && tenantRoles.roles.length > 0
+      
+      // Debug logging
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[OKR Page] Tenant scope check:', {
+          currentOrgId: currentOrganization.id,
+          tenantRoles: tenantRoles,
+          hasTenantRole,
+          isSuperuser,
+          permissionsIsSuperuser: permissions.isSuperuser,
+          isTenantAdminForCurrentOrg,
+          allTenantRoles: permissions.rolesByScope?.tenant,
+        })
+      }
+      
+      if (hasTenantRole || isSuperuser || permissions.isSuperuser || isTenantAdminForCurrentOrg) {
+        scopes.push('tenant')
+      }
     }
     
     return scopes
-  }, [permissions.rolesByScope, isTenantAdminForCurrentOrg])
+  }, [permissions.rolesByScope, isTenantAdminForCurrentOrg, currentOrganization?.id, isSuperuser, permissions.isSuperuser])
   
   // Read scope from URL or determine default
   const scopeFromUrl = searchParams.get('scope') as 'my' | 'team-workspace' | 'tenant' | null
@@ -177,7 +242,60 @@ export default function OKRsPage() {
     }
   }, [scopeFromUrl, availableScopes])
   
-  // Handler to update scope and URL
+  const handleMyOkrsToggle = (enabled: boolean) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (enabled) {
+      params.set('myOkrs', 'true')
+      // Clear ownerId filter when My OKRs is enabled (My OKRs replaces owner filter)
+      params.delete('ownerId')
+      setSelectedOwnerId(null)
+    } else {
+      params.delete('myOkrs')
+    }
+    router.push(`/dashboard/okrs?${params.toString()}`)
+  }
+
+  const handleVisibilityChange = (visibility: 'ALL' | 'PUBLIC_TENANT' | 'PRIVATE') => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (visibility === 'ALL') {
+      params.delete('visibility')
+    } else {
+      params.set('visibility', visibility)
+    }
+    router.push(`/dashboard/okrs?${params.toString()}`)
+  }
+
+  const handleOwnerChange = (ownerId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString())
+    // If My OKRs is enabled, disable it when user selects a different owner
+    if (myOkrsOnly) {
+      params.delete('myOkrs')
+    }
+    if (ownerId === 'me' && user?.id) {
+      params.set('ownerId', user.id)
+      setSelectedOwnerId(user.id)
+    } else if (ownerId) {
+      params.set('ownerId', ownerId)
+      setSelectedOwnerId(ownerId)
+    } else {
+      params.delete('ownerId')
+      setSelectedOwnerId(null)
+    }
+    router.push(`/dashboard/okrs?${params.toString()}`)
+  }
+
+  const handlePillarChange = (pillarId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (pillarId) {
+      params.set('pillarId', pillarId)
+      setSelectedPillarId(pillarId)
+    } else {
+      params.delete('pillarId')
+      setSelectedPillarId(null)
+    }
+    router.push(`/dashboard/okrs?${params.toString()}`)
+  }
+  
   const handleScopeChange = (newScope: 'my' | 'team-workspace' | 'tenant') => {
     const previousScope = selectedScope
     setSelectedScope(newScope)
@@ -241,6 +359,9 @@ export default function OKRsPage() {
   const [showEditObjective, setShowEditObjective] = useState(false)
   const [editObjectiveId, setEditObjectiveId] = useState<string | null>(null)
   const [editObjectiveData, setEditObjectiveData] = useState<any | null>(null)
+  const [showEditKeyResult, setShowEditKeyResult] = useState(false)
+  const [editKeyResultId, setEditKeyResultId] = useState<string | null>(null)
+  const [editKeyResultData, setEditKeyResultData] = useState<any | null>(null)
   
   // Key Result creation
   const [showNewKeyResult, setShowNewKeyResult] = useState(false)
@@ -487,9 +608,42 @@ export default function OKRsPage() {
     setFilterTeamId('all')
     setFilterOwnerId('all')
     setSearchQuery('')
+    // Clear URL-based filters
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('myOkrs')
+    params.delete('visibility')
+    params.delete('ownerId')
+    router.push(`/dashboard/okrs?${params.toString()}`)
   }
   
-  const hasActiveFilters = filterWorkspaceId !== 'all' || filterTeamId !== 'all' || filterOwnerId !== 'all' || searchQuery.length > 0;
+  const hasActiveFilters = filterWorkspaceId !== 'all' || filterTeamId !== 'all' || filterOwnerId !== 'all' || searchQuery.length > 0 || myOkrsOnly || selectedVisibility !== 'ALL' || selectedOwnerId !== null || selectedPillarId !== null;
+
+  const handleEditKeyResult = (krId: string) => {
+    // Find the KR in the objectives data
+    const findKR = (objectives: any[]): any => {
+      for (const obj of objectives) {
+        if (obj.keyResults) {
+          for (const krJunction of obj.keyResults) {
+            const kr = krJunction.keyResult || krJunction
+            if (kr.id === krId) {
+              return {
+                ...kr,
+                tenantId: obj.tenantId,
+                objectiveIds: [obj.id],
+              }
+            }
+          }
+        }
+      }
+      return null
+    }
+
+    // Try to find KR in current data (if available)
+    // For now, we'll load it from the API when drawer opens
+    setEditKeyResultId(krId)
+    setEditKeyResultData(null) // Will be loaded by drawer
+    setShowEditKeyResult(true)
+  }
 
   const handleEditOKR = (okr: any) => {
     const objectiveForHook = okr.objectiveForHook || {
@@ -534,9 +688,12 @@ export default function OKRsPage() {
       title: okr.title,
       ownerId: okr.ownerId,
       workspaceId: okr.workspaceId,
+      teamId: okr.teamId,
+      tenantId: okr.organizationId,
       cycleId: okr.cycleId,
       status: okr.status,
       visibilityLevel: okr.visibilityLevel,
+      isPublished: okr.isPublished,
       pillarId: okr.pillarId,
     })
     setShowEditObjective(true)
@@ -758,22 +915,29 @@ export default function OKRsPage() {
     }
     
     // Map key results from unified response (already includes nested initiatives)
+    // Handle both direct KR objects and junction table format (keyResults array with weight)
     const keyResults = (rawObj.keyResults || []).map((kr: any): any => {
       // Check if this KR is overdue
-      const isOverdue = overdueCheckIns.some(item => item.krId === kr.id)
+      const krId = kr.keyResultId || kr.id
+      const isOverdue = overdueCheckIns.some(item => item.krId === krId)
+      
+      // Extract KR data - handle both junction table format and direct format
+      const krData = kr.keyResult || kr
+      const weight = kr.weight ?? 1.0 // Extract weight from junction table, default to 1.0
       
       return {
-        id: kr.id,
-        title: kr.title,
-        status: kr.status,
-        progress: kr.progress,
-        currentValue: kr.currentValue,
-        targetValue: kr.targetValue,
-        startValue: kr.startValue,
-        unit: kr.unit,
-        checkInCadence: kr.cadence,
+        id: krId,
+        title: krData.title || kr.title,
+        status: krData.status || kr.status,
+        progress: krData.progress ?? kr.progress ?? 0,
+        currentValue: krData.currentValue ?? kr.currentValue,
+        targetValue: krData.targetValue ?? kr.targetValue,
+        startValue: krData.startValue ?? kr.startValue,
+        unit: krData.unit || kr.unit,
+        checkInCadence: krData.checkInCadence || kr.cadence,
         isOverdue,
-        ownerId: kr.ownerId,
+        ownerId: krData.ownerId || kr.ownerId,
+        weight, // Include weight from junction table
       }
     })
     
@@ -941,98 +1105,246 @@ export default function OKRsPage() {
 
           {/* Filters and Search Toolbar */}
           <div className="mb-6">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              {/* Left: Filters */}
-              <div className="flex items-center gap-4 flex-wrap flex-1 min-w-0">
-                <OKRFilterBar
-                  searchQuery={searchQuery}
-                  onSearchChange={setSearchQuery}
-                  selectedStatus={selectedStatus}
-                  onStatusChange={setSelectedStatus}
-                  selectedScope={selectedScope}
-                  selectedCycleId={selectedCycleId}
-                  normalizedCycles={normalizedCycles}
-                  legacyPeriods={legacyPeriods}
-                  selectedTimeframeKey={selectedTimeframeKey}
-                  onCycleSelect={(opt: { key: string; label: string }) => {
-                    const previousCycleId = selectedCycleId
-                    setSelectedTimeframeKey(opt.key)
-                    setSelectedTimeframeLabel(opt.label)
-                    if (opt.key && opt.key !== 'all' && opt.key !== 'unassigned' && normalizedCycles.some(c => c.id === opt.key)) {
-                      setSelectedCycleId(opt.key)
-                      // Telemetry: cycle changed
-                      track('cycle_changed', {
-                        scope: selectedScope,
-                        cycle_id_prev: previousCycleId,
-                        cycle_id: opt.key,
-                        ts: new Date().toISOString(),
-                      })
-                    } else {
-                      // User selected "All Cycles" or "Unassigned" - clear cycle filter
-                      setSelectedCycleId(null)
-                      // Mark as initialized so loadActiveCycles doesn't reset it
-                      cycleInitializedRef.current = true
-                      // Telemetry: cycle changed (cleared)
-                      track('cycle_changed', {
-                        scope: selectedScope,
-                        cycle_id_prev: previousCycleId,
-                        cycle_id: null,
-                        ts: new Date().toISOString(),
-                      })
-                    }
-                  }}
-                  onManageCycles={isTenantAdminForCurrentOrg ? () => setCycleManagementDrawerOpen(true) : undefined}
-                  hasActiveFilters={hasActiveFilters}
-                  onClearFilters={clearFilters}
-                />
-              </div>
+            <div className="flex items-start justify-between gap-3">
+              {/* Left: Filters - Two-row layout */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <OKRFilterBar
+                      searchQuery={searchQuery}
+                      onSearchChange={setSearchQuery}
+                      selectedStatus={selectedStatus}
+                      onStatusChange={setSelectedStatus}
+                      selectedScope={selectedScope}
+                      onScopeChange={handleScopeChange}
+                      availableScopes={availableScopes}
+                      selectedCycleId={selectedCycleId}
+                      normalizedCycles={normalizedCycles}
+                      legacyPeriods={legacyPeriods}
+                      selectedTimeframeKey={selectedTimeframeKey}
+                      onCycleSelect={(opt: { key: string; label: string }) => {
+                        const previousCycleId = selectedCycleId
+                        setSelectedTimeframeKey(opt.key)
+                        setSelectedTimeframeLabel(opt.label)
+                        if (opt.key && opt.key !== 'all' && opt.key !== 'unassigned' && normalizedCycles.some(c => c.id === opt.key)) {
+                          setSelectedCycleId(opt.key)
+                          // Telemetry: cycle changed
+                          track('cycle_changed', {
+                            scope: selectedScope,
+                            cycle_id_prev: previousCycleId,
+                            cycle_id: opt.key,
+                            ts: new Date().toISOString(),
+                          })
+                        } else {
+                          // User selected "All Cycles" or "Unassigned" - clear cycle filter
+                          setSelectedCycleId(null)
+                          // Mark as initialized so loadActiveCycles doesn't reset it
+                          cycleInitializedRef.current = true
+                          // Telemetry: cycle changed (cleared)
+                          track('cycle_changed', {
+                            scope: selectedScope,
+                            cycle_id_prev: previousCycleId,
+                            cycle_id: null,
+                            ts: new Date().toISOString(),
+                          })
+                        }
+                      }}
+                      onManageCycles={isTenantAdminForCurrentOrg ? () => setCycleManagementDrawerOpen(true) : undefined}
+                      hasActiveFilters={hasActiveFilters}
+                      onClearFilters={clearFilters}
+                      myOkrsOnly={myOkrsOnly}
+                      onMyOkrsToggle={handleMyOkrsToggle}
+                      selectedVisibility={selectedVisibility}
+                      onVisibilityChange={handleVisibilityChange}
+                      selectedOwnerId={selectedOwnerId}
+                      onOwnerChange={handleOwnerChange}
+                      selectedPillarId={selectedPillarId}
+                      onPillarChange={handlePillarChange}
+                      availableUsers={availableUsers}
+                      currentUserId={user?.id}
+                    />
+                  </div>
 
-              {/* Right: Scope Toggle + Actions */}
-              <OKRToolbar
-                availableScopes={availableScopes}
-                selectedScope={selectedScope}
-                onScopeChange={handleScopeChange}
-                attentionCount={attentionCount}
-                onOpenAttentionDrawer={() => setAttentionDrawerOpen(true)}
-                canCreateObjective={canCreateObjective}
-                canEditOKR={permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || null })}
-                isSuperuser={isSuperuser}
-                onCreateObjective={() => {
-                  setCreationDrawerMode('objective')
-                  setIsCreateDrawerOpen(true)
-                }}
-                onCreateKeyResult={() => {
-                  setCreationDrawerMode('kr')
-                  setIsCreateDrawerOpen(true)
-                }}
-                onCreateInitiative={() => {
-                  setCreationDrawerMode('initiative')
-                  setIsCreateDrawerOpen(true)
-                }}
-                onOpenCycleManagement={() => setCycleManagementDrawerOpen(true)}
-                canManageCycles={isTenantAdminForCurrentOrg}
-              />
+                  {/* Right: Actions */}
+                  <OKRToolbar
+                    attentionCount={attentionCount}
+                    onOpenAttentionDrawer={() => setAttentionDrawerOpen(true)}
+                    canCreateObjective={canCreateObjective}
+                    canEditOKR={permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || null })}
+                    isSuperuser={isSuperuser}
+                    onCreateObjective={() => {
+                      setCreationDrawerMode('objective')
+                      setIsCreateDrawerOpen(true)
+                    }}
+                    onCreateKeyResult={() => {
+                      setCreationDrawerMode('kr')
+                      setIsCreateDrawerOpen(true)
+                    }}
+                    onCreateInitiative={() => {
+                      setCreationDrawerMode('initiative')
+                      setIsCreateDrawerOpen(true)
+                    }}
+                    onOpenCycleManagement={() => setCycleManagementDrawerOpen(true)}
+                    canManageCycles={isTenantAdminForCurrentOrg}
+                  />
+                </div>
+              </div>
             </div>
             
             {/* Active Filters Display */}
             {hasActiveFilters && (
               <div className="flex items-center gap-2 flex-wrap mt-3">
                 <span className="text-sm text-slate-600">Active filters:</span>
+                
+                {/* Scope filter chip */}
+                {selectedScope && (
+                  <Badge variant="secondary" className="text-xs">
+                    Scope: {selectedScope === 'my' ? 'My OKRs' : selectedScope === 'team-workspace' ? 'Team/Workspace OKRs' : 'Company OKRs'}
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams.toString())
+                        params.delete('scope')
+                        router.push(`/dashboard/okrs?${params.toString()}`)
+                      }}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label="Remove scope filter"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                )}
+                
+                {/* Status filter chip */}
+                {selectedStatus && (
+                  <Badge variant="secondary" className="text-xs">
+                    Status: {selectedStatus.replace('_', ' ')}
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams.toString())
+                        params.delete('status')
+                        router.push(`/dashboard/okrs?${params.toString()}`)
+                      }}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label="Remove status filter"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                )}
+                
+                {/* Visibility filter chip */}
+                {selectedVisibility && selectedVisibility !== 'ALL' && (
+                  <Badge variant="secondary" className="text-xs">
+                    Visibility: {selectedVisibility === 'PUBLIC_TENANT' ? 'Public' : 'Private'}
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams.toString())
+                        params.delete('visibility')
+                        router.push(`/dashboard/okrs?${params.toString()}`)
+                      }}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label="Remove visibility filter"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                )}
+                
+                {/* Cycle filter chip */}
+                {selectedCycleId && (
+                  <Badge variant="secondary" className="text-xs">
+                    Cycle: {normalizedCycles.find(c => c.id === selectedCycleId)?.name || selectedTimeframeLabel || 'Selected'}
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams.toString())
+                        params.delete('cycleId')
+                        router.push(`/dashboard/okrs?${params.toString()}`)
+                      }}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label="Remove cycle filter"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                )}
+                
                 {filterWorkspaceId !== 'all' && (
                   <Badge variant="secondary" className="text-xs">
                     Workspace: {workspaces.find(w => w.id === filterWorkspaceId)?.name}
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams.toString())
+                        params.delete('workspaceId')
+                        router.push(`/dashboard/okrs?${params.toString()}`)
+                      }}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label="Remove workspace filter"
+                    >
+                      ×
+                    </button>
                   </Badge>
                 )}
                 {filterTeamId !== 'all' && (
                   <Badge variant="secondary" className="text-xs">
                     Team: {teams.find(t => t.id === filterTeamId)?.name}
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams.toString())
+                        params.delete('teamId')
+                        router.push(`/dashboard/okrs?${params.toString()}`)
+                      }}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label="Remove team filter"
+                    >
+                      ×
+                    </button>
                   </Badge>
                 )}
-                {filterOwnerId !== 'all' && (
+                {filterOwnerId !== 'all' && selectedScope !== 'my' && (
                   <Badge variant="secondary" className="text-xs">
                     Owner: {availableUsers.find(u => u.id === filterOwnerId)?.name}
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams.toString())
+                        params.delete('ownerId')
+                        router.push(`/dashboard/okrs?${params.toString()}`)
+                      }}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label="Remove owner filter"
+                    >
+                      ×
+                    </button>
                   </Badge>
                 )}
+                {selectedPillarId && (
+                  <Badge 
+                    variant="secondary" 
+                    className="text-xs"
+                    style={{
+                      backgroundColor: availablePillars.find(p => p.id === selectedPillarId)?.color || undefined,
+                    }}
+                  >
+                    Pillar: {availablePillars.find(p => p.id === selectedPillarId)?.name || 'Unknown'}
+                    <button
+                      onClick={() => handlePillarChange(null)}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label={`Remove pillar filter ${availablePillars.find(p => p.id === selectedPillarId)?.name || ''}`}
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                )}
+                
+                {/* Clear All Filters Button */}
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={clearFilters}
+                  className="h-6 px-2 text-xs text-slate-600 hover:text-slate-900"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Clear all
+                </Button>
               </div>
             )}
           </div>
@@ -1059,6 +1371,7 @@ export default function OKRsPage() {
                 filterWorkspaceId={filterWorkspaceId}
                 filterTeamId={filterTeamId}
                 filterOwnerId={filterOwnerId}
+                filterOverdue={filterOverdue}
                 searchQuery={searchQuery}
                 selectedTimeframeKey={selectedTimeframeKey}
                 selectedStatus={selectedStatus}
@@ -1072,6 +1385,7 @@ export default function OKRsPage() {
                   onAddInitiativeToKr: handleAddInitiativeToKrClick,
                   onAddCheckIn: handleAddCheckIn,
                   onOpenHistory: handleOpenActivityDrawer,
+                  onEditKeyResult: handleEditKeyResult,
                   onOpenContextualAddMenu: handleOpenContextualAddMenu,
                   onContextualAddKeyResult: handleContextualAddKeyResult,
                   onContextualAddInitiative: handleContextualAddInitiative,
@@ -1089,11 +1403,15 @@ export default function OKRsPage() {
                 filterWorkspaceId={filterWorkspaceId}
                 filterTeamId={filterTeamId}
                 filterOwnerId={filterOwnerId}
+                filterOverdue={filterOverdue}
                 searchQuery={searchQuery}
                 selectedTimeframeKey={selectedTimeframeKey}
                 selectedStatus={selectedStatus}
                 selectedCycleId={selectedCycleId}
                 selectedScope={selectedScope}
+                myOkrsOnly={myOkrsOnly}
+                selectedVisibility={selectedVisibility}
+                selectedOwnerId={selectedOwnerId}
                 onAction={{
                   onEdit: handleEditOKR,
                   onDelete: handleDeleteOKR,
@@ -1102,6 +1420,7 @@ export default function OKRsPage() {
                   onAddInitiativeToKr: handleAddInitiativeToKrClick,
                   onAddCheckIn: handleAddCheckIn,
                   onOpenHistory: handleOpenActivityDrawer,
+                  onEditKeyResult: handleEditKeyResult,
                   // Story 5: Contextual Add menu handlers
                   onOpenContextualAddMenu: handleOpenContextualAddMenu,
                   onContextualAddKeyResult: handleContextualAddKeyResult,
@@ -1205,6 +1524,24 @@ export default function OKRsPage() {
             availablePillars={[]}
           />
 
+          {/* Edit Key Result Drawer */}
+          <EditKeyResultDrawer
+            isOpen={showEditKeyResult}
+            keyResultId={editKeyResultId}
+            keyResultData={editKeyResultData}
+            availableUsers={availableUsers}
+            activeCycles={activeCycles}
+            currentOrganization={currentOrganization}
+            onClose={() => {
+              setShowEditKeyResult(false)
+              setEditKeyResultId(null)
+              setEditKeyResultData(null)
+            }}
+            onSuccess={() => {
+              handleReloadOKRs()
+            }}
+          />
+
           {/* Edit Objective Modal */}
           <EditObjectiveModal
             isOpen={showEditObjective}
@@ -1230,8 +1567,24 @@ export default function OKRsPage() {
                 setEditObjectiveId(null)
                 setEditObjectiveData(null)
                 handleReloadOKRs()
-              } catch (err) {
+              } catch (err: any) {
                 console.error('Failed to update objective', err)
+                const errorMessage = err.response?.data?.message || err.message || 'Failed to update objective'
+                
+                // Check if it's a permission error
+                if (err.response?.status === 403) {
+                  toast({
+                    variant: 'destructive',
+                    title: 'Permission denied',
+                    description: errorMessage || 'You do not have permission to edit this objective. Published objectives can only be edited by organization administrators.',
+                  })
+                } else {
+                  toast({
+                    variant: 'destructive',
+                    title: 'Failed to update objective',
+                    description: errorMessage,
+                  })
+                }
               }
             }}
             availableUsers={availableUsers}

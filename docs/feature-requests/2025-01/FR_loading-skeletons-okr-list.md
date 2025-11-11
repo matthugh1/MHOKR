@@ -130,3 +130,5 @@ Content flash / perceived lag on slower networks. When OKR list loads, there's n
 - Rollback: Remove skeleton rendering logic
 - Clean revert: No database changes; pure frontend change
 
+
+

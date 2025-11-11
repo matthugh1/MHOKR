@@ -55,6 +55,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useEffectivePermissions } from '@/hooks/useEffectivePermissions'
 import { usePermissions } from '@/hooks/usePermissions'
 import { useFeatureFlags } from '@/hooks/useFeatureFlags'
+import { RoleAssignmentDialog } from '@/components/user/RoleAssignmentDialog'
 
 export default function PeoplePage() {
   return (
@@ -133,6 +134,25 @@ function PeopleSettings() {
   const [resettingPassword, setResettingPassword] = useState<any>(null)
   const [newPassword, setNewPassword] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  
+  // User info editing
+  const [editingUserInfo, setEditingUserInfo] = useState(false)
+  const [editedUserName, setEditedUserName] = useState('')
+  const [editedUserEmail, setEditedUserEmail] = useState('')
+  const [savingUserInfo, setSavingUserInfo] = useState(false)
+  
+  // Role assignment dialog state
+  const [roleAssignmentDialog, setRoleAssignmentDialog] = useState<{
+    isOpen: boolean
+    scopeType: 'TENANT' | 'WORKSPACE' | 'TEAM' | null
+    scopeId: string | null
+    currentRole: string | null
+  }>({
+    isOpen: false,
+    scopeType: null,
+    scopeId: null,
+    currentRole: null,
+  })
 
   useEffect(() => {
     loadAllData()
@@ -304,6 +324,9 @@ function PeopleSettings() {
   const handleUserClick = async (user: any) => {
     setSelectedUser(user)
     setDrawerOpen(true)
+    setEditingUserInfo(false)
+    setEditedUserName(user.name || '')
+    setEditedUserEmail(user.email || '')
     // Fetch user's inspector setting if caller has manage_users
     if (permissions.canInviteMembers({ organizationId: organization?.id })) {
       try {
@@ -316,6 +339,65 @@ function PeopleSettings() {
       }
     } else {
       setInspectorEnabled(false)
+    }
+  }
+  
+  const handleUpdateUserInfo = async () => {
+    if (!selectedUser) return
+    
+    if (!editedUserName.trim() || !editedUserEmail.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing fields',
+        description: 'Name and email are required',
+      })
+      return
+    }
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(editedUserEmail)) {
+      toast({
+        variant: 'destructive',
+        title: 'Invalid email',
+        description: 'Please enter a valid email address',
+      })
+      return
+    }
+    
+    setSavingUserInfo(true)
+    try {
+      await api.patch(`/users/${selectedUser.id}`, {
+        name: editedUserName.trim(),
+        email: editedUserEmail.trim(),
+      })
+      
+      // Update local state
+      setSelectedUser({
+        ...selectedUser,
+        name: editedUserName.trim(),
+        email: editedUserEmail.trim(),
+      })
+      setEditingUserInfo(false)
+      
+      // Refresh people list
+      await loadPeople()
+      
+      toast({
+        variant: 'success',
+        title: 'User updated',
+        description: 'User information has been updated successfully.',
+      })
+    } catch (error: any) {
+      console.error('Failed to update user:', error)
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to update user'
+      toast({
+        variant: 'destructive',
+        title: 'Failed to update user',
+        description: errorMessage,
+      })
+    } finally {
+      setSavingUserInfo(false)
     }
   }
 
@@ -351,9 +433,12 @@ function PeopleSettings() {
     if (!selectedUser || !selectedOrgId) return
     setActionLoading(true)
     try {
-      await api.post(`/organizations/${selectedOrgId}/members`, {
+      // Use RBAC endpoint directly
+      await api.post('/rbac/assignments/assign', {
         userId: selectedUser.id,
         role: selectedRole,
+        scopeType: 'TENANT',
+        scopeId: selectedOrgId,
       })
       await loadPeople()
       await refreshContext()
@@ -372,10 +457,20 @@ function PeopleSettings() {
       }
       setAssigningToOrg(false)
       setSelectedOrgId('')
-      setSelectedRole('MEMBER')
-    } catch (error) {
+      setSelectedRole('TENANT_VIEWER')
+      toast({
+        variant: 'success',
+        title: 'Role assigned',
+        description: `${selectedUser.name} has been assigned the ${selectedRole} role.`,
+      })
+    } catch (error: any) {
       console.error('Failed to add to organization:', error)
-      alert('Failed to add to organization')
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to add to organization'
+      toast({
+        variant: 'destructive',
+        title: 'Failed to assign role',
+        description: errorMessage,
+      })
     } finally {
       setActionLoading(false)
     }
@@ -385,26 +480,29 @@ function PeopleSettings() {
     if (!selectedUser || !selectedWorkspaceId) return
     setActionLoading(true)
     try {
-      await api.post(`/workspaces/${selectedWorkspaceId}/members`, {
+      // Use RBAC endpoint directly
+      await api.post('/rbac/assignments/assign', {
         userId: selectedUser.id,
         role: selectedRole,
+        scopeType: 'WORKSPACE',
+        scopeId: selectedWorkspaceId,
       })
       await loadPeople()
       await refreshContext()
       setAssigningToWorkspace(false)
       setSelectedWorkspaceId('')
-      setSelectedRole('MEMBER')
+      setSelectedRole('WORKSPACE_MEMBER')
       toast({
         variant: 'success',
-        title: 'User added',
-        description: `${selectedUser?.name} has been added to the workspace.`,
+        title: 'Role assigned',
+        description: `${selectedUser?.name} has been assigned the ${selectedRole} role.`,
       })
     } catch (error: any) {
       console.error('Failed to add to workspace:', error)
       const errorMessage = error.response?.data?.message || error.message || 'Failed to add to workspace'
       toast({
         variant: 'destructive',
-        title: 'Failed to add user',
+        title: 'Failed to assign role',
         description: errorMessage,
       })
     } finally {
@@ -416,25 +514,28 @@ function PeopleSettings() {
     if (!selectedUser || !selectedTeamId) return
     setActionLoading(true)
     try {
-      await api.post(`/teams/${selectedTeamId}/members`, {
+      // Use RBAC endpoint directly
+      await api.post('/rbac/assignments/assign', {
         userId: selectedUser.id,
         role: selectedRole,
+        scopeType: 'TEAM',
+        scopeId: selectedTeamId,
       })
       await loadPeople()
       setAssigningToTeam(false)
       setSelectedTeamId('')
-      setSelectedRole('MEMBER')
+      setSelectedRole('TEAM_CONTRIBUTOR')
       toast({
         variant: 'success',
-        title: 'User added',
-        description: `${selectedUser?.name} has been added to the team.`,
+        title: 'Role assigned',
+        description: `${selectedUser?.name} has been assigned the ${selectedRole} role.`,
       })
     } catch (error: any) {
       console.error('Failed to add to team:', error)
       const errorMessage = error.response?.data?.message || error.message || 'Failed to add to team'
       toast({
         variant: 'destructive',
-        title: 'Failed to add user',
+        title: 'Failed to assign role',
         description: errorMessage,
       })
     } finally {
@@ -629,14 +730,44 @@ function PeopleSettings() {
     return filtered
   }, [people, searchQuery, showEditRightsOnly])
 
-  // Role descriptions for tooltips
-  const roleDescriptions = {
+  // RBAC Role constants
+  const TENANT_ROLES = [
+    { value: 'TENANT_OWNER', label: 'Tenant Owner', description: 'Full commercial and operational control over organization' },
+    { value: 'TENANT_ADMIN', label: 'Tenant Admin', description: 'Administrative control within organization' },
+    { value: 'TENANT_VIEWER', label: 'Tenant Viewer', description: 'Read-only access to organization OKRs' },
+  ]
+  
+  const WORKSPACE_ROLES = [
+    { value: 'WORKSPACE_LEAD', label: 'Workspace Lead', description: 'Primary owner of workspace OKRs' },
+    { value: 'WORKSPACE_ADMIN', label: 'Workspace Admin', description: 'Administrative control within workspace' },
+    { value: 'WORKSPACE_MEMBER', label: 'Workspace Member', description: 'Contributor access to workspace OKRs' },
+  ]
+  
+  const TEAM_ROLES = [
+    { value: 'TEAM_LEAD', label: 'Team Lead', description: 'Owner of team OKRs' },
+    { value: 'TEAM_CONTRIBUTOR', label: 'Team Contributor', description: 'Can update key results and submit check-ins' },
+    { value: 'TEAM_VIEWER', label: 'Team Viewer', description: 'Read-only access to team OKRs' },
+  ]
+
+  // Role descriptions for tooltips (legacy + RBAC)
+  const roleDescriptions: Record<string, string> = {
+    // Legacy roles (for backward compatibility)
     'ORG_ADMIN': 'Can manage organization settings, members, and all workspaces within the organization.',
     'MEMBER': 'Can view and contribute to organization content. Full access to assigned workspaces.',
     'VIEWER': 'Read-only access. Can view organization content but cannot make changes.',
     'WORKSPACE_OWNER': 'Full control over workspace settings, members, and all OKRs within this workspace.',
     'WORKSPACE_ADMIN': 'Can manage workspace members and settings, create and edit OKRs.',
     'TEAM_LEAD': 'Can manage team members and team-level OKRs.',
+    // RBAC roles
+    'TENANT_OWNER': 'Full commercial and operational control over organization. Can bypass publish/cycle locks, manage users/workspaces/teams, export data, manage tenant settings.',
+    'TENANT_ADMIN': 'Administrative control within organization. Can bypass locks, manage users/workspaces, export data.',
+    'TENANT_VIEWER': 'Read-only access. Can view organization OKRs (subject to visibility rules).',
+    'WORKSPACE_LEAD': 'Primary owner of workspace OKRs. Can create, edit, and delete workspace-level OKRs, view all workspace OKRs, manage workspace members.',
+    'WORKSPACE_ADMIN': 'Administrative control within workspace. Can create and edit workspace OKRs, manage workspace members.',
+    'WORKSPACE_MEMBER': 'Contributor access. Can view workspace OKRs, contribute to OKRs, update key results and submit check-ins.',
+    'TEAM_LEAD': 'Owner of team OKRs. Can create, edit, and delete team-level OKRs, view all team OKRs, manage team members.',
+    'TEAM_CONTRIBUTOR': 'Contributor access. Can update key results, submit check-ins, view team OKRs.',
+    'TEAM_VIEWER': 'Read-only access. Can view team OKRs (subject to visibility rules).',
   }
 
   if (!workspace && !organization) {
@@ -1178,16 +1309,67 @@ function PeopleSettings() {
                 <div className="mt-6 space-y-6">
                   {/* Basic Info */}
                   <div>
-                    <h3 className="text-sm font-semibold mb-3">User Information</h3>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold">User Information</h3>
+                      {!editingUserInfo && permissions.canInviteMembers({ organizationId: organization?.id }) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditingUserInfo(true)
+                            setEditedUserName(selectedUser.name || '')
+                            setEditedUserEmail(selectedUser.email || '')
+                          }}
+                        >
+                          <Edit2 className="h-4 w-4 mr-1" />
+                          Edit
+                        </Button>
+                      )}
+                    </div>
                     <div className="space-y-2">
                       <div>
                         <Label>Name</Label>
-                        <Input value={selectedUser.name} disabled />
+                        <Input 
+                          value={editingUserInfo ? editedUserName : selectedUser.name} 
+                          disabled={!editingUserInfo}
+                          onChange={(e) => editingUserInfo && setEditedUserName(e.target.value)}
+                        />
                       </div>
                       <div>
                         <Label>Email</Label>
-                        <Input value={selectedUser.email} disabled />
+                        <Input 
+                          type="email"
+                          value={editingUserInfo ? editedUserEmail : selectedUser.email} 
+                          disabled={!editingUserInfo}
+                          onChange={(e) => editingUserInfo && setEditedUserEmail(e.target.value)}
+                        />
                       </div>
+                      {editingUserInfo && (
+                        <div className="flex gap-2 pt-2">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={handleUpdateUserInfo}
+                            disabled={savingUserInfo}
+                            className="flex-1"
+                          >
+                            {savingUserInfo ? 'Saving...' : 'Save Changes'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditingUserInfo(false)
+                              setEditedUserName(selectedUser.name || '')
+                              setEditedUserEmail(selectedUser.email || '')
+                            }}
+                            disabled={savingUserInfo}
+                            className="flex-1"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      )}
                       {isSuperuser && !impersonating && selectedUser.id !== currentUser?.id && (
                         <Button
                           variant="default"
@@ -1232,11 +1414,11 @@ function PeopleSettings() {
                               variant="outline"
                               size="sm"
                               onClick={() => {
-                                // TODO: Open role assignment dialog
-                                toast({
-                                  variant: 'default',
-                                  title: 'Role Assignment',
-                                  description: 'Role assignment UI coming soon. Use the existing assignment controls below.',
+                                setRoleAssignmentDialog({
+                                  isOpen: true,
+                                  scopeType: null,
+                                  scopeId: null,
+                                  currentRole: null,
                                 })
                               }}
                             >
@@ -1423,7 +1605,7 @@ function PeopleSettings() {
                         onClick={async () => {
                           setAssigningToOrg(true)
                           setSelectedOrgId(organization?.id || '')
-                          setSelectedRole('MEMBER')
+                          setSelectedRole('TENANT_VIEWER')
                           // Load workspaces for all organizations if superuser
                           if (isSuperuser) {
                             const orgs = getAvailableOrganizations()
@@ -1446,16 +1628,35 @@ function PeopleSettings() {
                             {organization?.name || 'Organization'} - {selectedUser.orgRole}
                           </Badge>
                         </div>
-                        {organization && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveFromOrg(organization.id)}
-                            disabled={actionLoading}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {permissions.canInviteMembers({ organizationId: organization?.id }) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setRoleAssignmentDialog({
+                                  isOpen: true,
+                                  scopeType: 'TENANT',
+                                  scopeId: organization?.id || null,
+                                  currentRole: selectedUser.orgRole || null,
+                                })
+                              }}
+                              disabled={actionLoading}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {organization && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveFromOrg(organization.id)}
+                              disabled={actionLoading}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <p className="text-sm text-slate-500">No organization memberships</p>
@@ -1475,7 +1676,7 @@ function PeopleSettings() {
                         onClick={async () => {
                           setAssigningToWorkspace(true)
                           setSelectedWorkspaceId(workspace?.id || '')
-                          setSelectedRole('MEMBER')
+                          setSelectedRole('WORKSPACE_MEMBER')
                           // Load workspaces for organization if superuser
                           if (isSuperuser && organization) {
                             const workspaces = await getAvailableWorkspaces(organization.id)
@@ -1494,16 +1695,35 @@ function PeopleSettings() {
                             {workspace?.name || 'Workspace'} - {selectedUser.workspaceRole}
                           </Badge>
                         </div>
-                        {workspace && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveFromWorkspace(workspace.id)}
-                            disabled={actionLoading}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {permissions.canInviteMembers({ workspaceId: workspace?.id }) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setRoleAssignmentDialog({
+                                  isOpen: true,
+                                  scopeType: 'WORKSPACE',
+                                  scopeId: workspace?.id || null,
+                                  currentRole: selectedUser.workspaceRole || null,
+                                })
+                              }}
+                              disabled={actionLoading}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {workspace && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveFromWorkspace(workspace.id)}
+                              disabled={actionLoading}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <p className="text-sm text-slate-500">No workspace memberships</p>
@@ -1523,7 +1743,7 @@ function PeopleSettings() {
                         onClick={() => {
                           setAssigningToTeam(true)
                           setSelectedTeamId('')
-                          setSelectedRole('MEMBER')
+                          setSelectedRole('TEAM_CONTRIBUTOR')
                         }}
                         disabled={!workspace}
                       >
@@ -1536,14 +1756,33 @@ function PeopleSettings() {
                         {selectedUser.teams.map((team: any) => (
                           <div key={team.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                             <Badge variant="secondary">{team.name} - {team.role}</Badge>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveFromTeam(team.id)}
-                              disabled={actionLoading}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              {permissions.canInviteMembers({ workspaceId: workspace?.id }) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setRoleAssignmentDialog({
+                                      isOpen: true,
+                                      scopeType: 'TEAM',
+                                      scopeId: team.id,
+                                      currentRole: team.role || null,
+                                    })
+                                  }}
+                                  disabled={actionLoading}
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveFromTeam(team.id)}
+                                disabled={actionLoading}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1611,9 +1850,11 @@ function PeopleSettings() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MEMBER">Member</SelectItem>
-                    <SelectItem value="ORG_ADMIN">Admin</SelectItem>
-                    <SelectItem value="VIEWER">Viewer</SelectItem>
+                    {TENANT_ROLES.map((role) => (
+                      <SelectItem key={role.value} value={role.value}>
+                        {role.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -1675,9 +1916,11 @@ function PeopleSettings() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MEMBER">Member</SelectItem>
-                    <SelectItem value="WORKSPACE_OWNER">Owner</SelectItem>
-                    <SelectItem value="VIEWER">Viewer</SelectItem>
+                    {WORKSPACE_ROLES.map((role) => (
+                      <SelectItem key={role.value} value={role.value}>
+                        {role.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -1725,10 +1968,11 @@ function PeopleSettings() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MEMBER">Member</SelectItem>
-                    <SelectItem value="TEAM_LEAD">Team Lead</SelectItem>
-                    <SelectItem value="WORKSPACE_ADMIN">Workspace Admin</SelectItem>
-                    <SelectItem value="ORG_ADMIN">Org Admin</SelectItem>
+                    {TEAM_ROLES.map((role) => (
+                      <SelectItem key={role.value} value={role.value}>
+                        {role.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -1743,6 +1987,36 @@ function PeopleSettings() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Role Assignment Dialog */}
+        {roleAssignmentDialog.isOpen && selectedUser && (
+          <RoleAssignmentDialog
+            isOpen={roleAssignmentDialog.isOpen}
+            onClose={() => setRoleAssignmentDialog({ isOpen: false, scopeType: null, scopeId: null, currentRole: null })}
+            userId={selectedUser.id}
+            userName={selectedUser.name}
+            scopeType={roleAssignmentDialog.scopeType}
+            scopeId={roleAssignmentDialog.scopeId}
+            currentRole={roleAssignmentDialog.currentRole}
+            availableOrganizations={getAvailableOrganizations()}
+            availableWorkspaces={isSuperuser ? availableWorkspacesForOrg : workspaces.filter(w => !organization || w.organizationId === organization.id)}
+            availableTeams={teams}
+            onSuccess={async () => {
+              await loadPeople()
+              await refreshContext()
+              // Refresh selected user data
+              if (workspace) {
+                const wsRes = await api.get(`/workspaces/${workspace.id}/members`)
+                const updatedUser = wsRes.data.find((u: any) => u.id === selectedUser.id)
+                if (updatedUser) setSelectedUser(updatedUser)
+              } else if (organization) {
+                const orgRes = await api.get(`/organizations/${organization.id}/members`)
+                const updatedUser = orgRes.data.find((u: any) => u.id === selectedUser.id)
+                if (updatedUser) setSelectedUser(updatedUser)
+              }
+            }}
+          />
+        )}
 
         {/* Reset Password Dialog */}
         <Dialog open={!!resettingPassword} onOpenChange={() => setResettingPassword(null)}>

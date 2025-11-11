@@ -12,9 +12,6 @@ import {
 import { cn } from '@/lib/utils'
 
 interface OKRToolbarProps {
-  availableScopes: Array<'my' | 'team-workspace' | 'tenant'>
-  selectedScope: 'my' | 'team-workspace' | 'tenant'
-  onScopeChange: (scope: 'my' | 'team-workspace' | 'tenant') => void
   attentionCount: number
   onOpenAttentionDrawer: () => void
   canCreateObjective: boolean
@@ -28,9 +25,6 @@ interface OKRToolbarProps {
 }
 
 export function OKRToolbar({
-  availableScopes,
-  selectedScope,
-  onScopeChange,
   attentionCount,
   onOpenAttentionDrawer,
   canCreateObjective,
@@ -43,63 +37,14 @@ export function OKRToolbar({
   canManageCycles = false,
 }: OKRToolbarProps) {
   return (
-    <div className="flex items-center gap-3 flex-shrink-0">
-      {/* Scope Toggle */}
-      {availableScopes.length > 1 && (
-        <div className="flex items-center gap-1 rounded-lg border border-neutral-300 bg-neutral-50 p-1" role="group" aria-label="Scope filter">
-          {availableScopes.includes('my') && (
-            <button
-              className={cn(
-                "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                selectedScope === 'my'
-                  ? "bg-white text-neutral-900 shadow-sm"
-                  : "text-neutral-600 hover:text-neutral-900"
-              )}
-              onClick={() => onScopeChange('my')}
-              aria-pressed={selectedScope === 'my'}
-            >
-              My
-            </button>
-          )}
-          {availableScopes.includes('team-workspace') && (
-            <button
-              className={cn(
-                "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                selectedScope === 'team-workspace'
-                  ? "bg-white text-neutral-900 shadow-sm"
-                  : "text-neutral-600 hover:text-neutral-900"
-              )}
-              onClick={() => onScopeChange('team-workspace')}
-              aria-pressed={selectedScope === 'team-workspace'}
-            >
-              Team/Workspace
-            </button>
-          )}
-          {availableScopes.includes('tenant') && (
-            <button
-              className={cn(
-                "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
-                selectedScope === 'tenant'
-                  ? "bg-white text-neutral-900 shadow-sm"
-                  : "text-neutral-600 hover:text-neutral-900"
-              )}
-              onClick={() => onScopeChange('tenant')}
-              aria-pressed={selectedScope === 'tenant'}
-            >
-              Tenant
-            </button>
-          )}
-        </div>
-      )}
-      
-      {/* Actions */}
+    <div className="flex items-center gap-2 flex-shrink-0 h-9">
       {/* Needs Attention - Icon button with badge */}
       <Button
         variant="outline"
-        size="default"
+        size="sm"
         onClick={onOpenAttentionDrawer}
         aria-label={attentionCount > 0 ? `Attention (${attentionCount})` : 'Attention items'}
-        className="relative focus:ring-2 focus:ring-ring focus:outline-none"
+        className="relative h-9 focus:ring-2 focus:ring-ring focus:outline-none"
       >
         <Bell className="h-4 w-4 mr-2" />
         {attentionCount > 0 ? `Attention (${attentionCount})` : 'Attention'}
@@ -115,19 +60,6 @@ export function OKRToolbar({
         )}
       </Button>
 
-      {/* Manage Cycles - Only visible to TENANT_OWNER / TENANT_ADMIN */}
-      {canManageCycles && onOpenCycleManagement && (
-        <Button
-          variant="outline"
-          size="default"
-          onClick={onOpenCycleManagement}
-          aria-label="Manage cycles"
-          className="focus:ring-2 focus:ring-ring focus:outline-none"
-        >
-          Manage Cycles
-        </Button>
-      )}
-
       {/* Add - RBAC-aware split-button */}
       {(canCreateObjective || canEditOKR) && !isSuperuser && (
         <DropdownMenu>
@@ -135,7 +67,8 @@ export function OKRToolbar({
             <Button
               onClick={onCreateObjective}
               aria-label="Add"
-              className="focus:ring-2 focus:ring-ring focus:outline-none rounded-r-none border-r-0"
+              size="sm"
+              className="h-9 focus:ring-2 focus:ring-ring focus:outline-none rounded-r-none border-r-0"
             >
               <Plus className="h-4 w-4 mr-2" />
               Add
@@ -143,8 +76,8 @@ export function OKRToolbar({
             <DropdownMenuTrigger asChild>
               <Button
                 variant="default"
-                size="default"
-                className="rounded-l-none px-2 focus:ring-2 focus:ring-ring focus:outline-none"
+                size="sm"
+                className="h-9 rounded-l-none px-2 focus:ring-2 focus:ring-ring focus:outline-none"
                 aria-label="Add options"
               >
                 <ChevronDown className="h-4 w-4" />

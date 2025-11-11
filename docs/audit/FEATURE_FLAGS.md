@@ -169,3 +169,5 @@ ON "users" USING GIN (("settings" -> 'debug' -> 'rbacInspectorEnabled'));
 - **Auth Context:** `apps/web/src/contexts/auth.context.tsx`
 - **Schema:** `services/core-api/prisma/schema.prisma`
 
+
+
