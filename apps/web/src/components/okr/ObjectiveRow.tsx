@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { OkrBadge } from "./OkrBadge"
 import { AvatarCircle } from "@/components/dashboard/AvatarCircle"
-import { Edit2, Trash2, History, Plus, ChevronDown } from "lucide-react"
+import { Edit2, Trash2, History, Plus, ChevronDown, CheckCircle, TrendingUp, Calendar } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export interface ObjectiveRowProps {
@@ -268,44 +268,37 @@ export function ObjectiveRow({
               />
             </div>
             
-            {/* Badges row */}
+            {/* Badges row - Simplified to show only critical information */}
             <div className="flex items-center gap-2 flex-wrap">
               {/* Status */}
               <OkrBadge tone={statusBadge.tone}>
                 {statusBadge.label}
               </OkrBadge>
-              
-              {/* Publication */}
-              <OkrBadge tone={objective.isPublished ? 'neutral' : 'warn'}>
-                {objective.isPublished ? 'Published' : 'Draft'}
-              </OkrBadge>
-              
-              {/* Cycle name */}
-              {objective.cycleName && (
-                <OkrBadge tone="neutral">
-                  {objective.cycleName}
+
+              {/* Publication status - only show if Draft */}
+              {!objective.isPublished && (
+                <OkrBadge tone="warn">
+                  Draft
                 </OkrBadge>
               )}
-              
-              {/* Visibility */}
-              {objective.visibilityLevel && (
-                <OkrBadge tone="neutral">
-                  {getVisibilityLabel(objective.visibilityLevel)}
-                </OkrBadge>
-              )}
-              
+
+              {/* Progress percentage */}
+              <span className="text-xs font-medium text-neutral-700">
+                {objective.progress}%
+              </span>
+
               {/* Owner avatar chip */}
               <div className="flex items-center gap-1.5">
                 <AvatarCircle name={objective.owner.name} size="sm" />
                 <span className="text-xs text-neutral-600">
-                  <span className="text-neutral-500">Owner:</span> {objective.owner.name}
+                  {objective.owner.name}
                 </span>
               </div>
-              
-              {/* Overdue badge */}
+
+              {/* Overdue badge - only show if count > 0 */}
               {overdueCount > 0 && (
                 <OkrBadge tone="bad">
-                  {overdueCount} overdue check-in{overdueCount !== 1 ? 's' : ''}
+                  {overdueCount} overdue
                 </OkrBadge>
               )}
             </div>
@@ -316,19 +309,49 @@ export function ObjectiveRow({
           {/* TODO [phase6-polish]: animate pill colour on status changes with framer-motion layout + animate prop. */}
           <div className="hidden lg:flex items-center gap-2 ml-auto text-[11px]" onClick={(e) => e.stopPropagation()}>
             {/* Check-in discipline */}
-            <span className={cn("px-2 py-1 rounded-full font-medium leading-none whitespace-nowrap", checkInPill.className)}>
-              {checkInPill.text}
-            </span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className={cn("px-2 py-1 rounded-full font-medium leading-none whitespace-nowrap flex items-center gap-1", checkInPill.className)}>
+                    <CheckCircle className="h-3 w-3" />
+                    {checkInPill.text}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Check-in status for all Key Results</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             {/* Confidence level */}
             {/* TODO [phase6-polish]: Add a tiny ▲ / ▼ arrow based on change vs previous check-in. */}
             {/* TODO [phase7-hardening]: surface tooltip on hover explaining where the numbers come from. */}
-            <span className={cn("px-2 py-1 rounded-full font-medium leading-none whitespace-nowrap", confidencePill.className)}>
-              {confidencePill.text}
-            </span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className={cn("px-2 py-1 rounded-full font-medium leading-none whitespace-nowrap flex items-center gap-1", confidencePill.className)}>
+                    <TrendingUp className="h-3 w-3" />
+                    {confidencePill.text}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Latest confidence rating from check-ins</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             {/* Cycle period */}
-            <span className={cn("px-2 py-1 rounded-full font-medium leading-none whitespace-nowrap", cyclePill.className)}>
-              {cyclePill.text}
-            </span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className={cn("px-2 py-1 rounded-full font-medium leading-none whitespace-nowrap flex items-center gap-1", cyclePill.className)}>
+                    <Calendar className="h-3 w-3" />
+                    {cyclePill.text}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Planning cycle for this objective</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
 
           {/* Right side: Action buttons */}

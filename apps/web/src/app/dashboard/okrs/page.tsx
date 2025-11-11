@@ -44,7 +44,6 @@ import { ObjectiveRow } from '@/components/okr/ObjectiveRow'
 import Link from 'next/link'
 import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
 import { PublishLockWarningModal } from './components/PublishLockWarningModal'
-import { CycleSelector } from '@/components/ui/CycleSelector'
 import { NewObjectiveModal } from '@/components/okr/NewObjectiveModal'
 import { EditObjectiveModal } from '@/components/okr/EditObjectiveModal'
 import { NewKeyResultModal } from '@/components/okr/NewKeyResultModal'
@@ -1176,17 +1175,7 @@ export default function OKRsPage() {
                   ))}
                 </SelectContent>
               </Select>
-              
-              <CycleSelector
-                cycles={normalizedCycles}
-                legacyPeriods={legacyPeriods}
-                selectedId={selectedTimeframeKey}
-                onSelect={(opt: { key: string; label: string }) => {
-                  setSelectedTimeframeKey(opt.key)
-                  setSelectedTimeframeLabel(opt.label)
-                }}
-              />
-              
+
               {hasActiveFilters && (
                 <Button variant="outline" size="sm" onClick={clearFilters}>
                   <X className="h-4 w-4 mr-1" />
@@ -1326,52 +1315,6 @@ export default function OKRsPage() {
                   </div>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* Pagination Controls */}
-          {totalCount > 0 && (
-            <div className="mt-6 flex flex-col items-start justify-between gap-4 border-t border-neutral-200 pt-4 text-sm text-neutral-700 md:flex-row md:items-center">
-              <div className="flex items-center gap-2">
-                <span className="text-neutral-600">Rows per page:</span>
-                <select
-                  className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  value={limit}
-                  onChange={(e) => {
-                    const newLimit = Number(e.target.value)
-                    setLimit(newLimit)
-                    setPage(1)
-                  }}
-                >
-                  {[5, 10, 25, 50].map(opt => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-4">
-                <button
-                  className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  disabled={page <= 1}
-                  onClick={() => {
-                    setPage(p => Math.max(1, p - 1))
-                  }}
-                >
-                  ‹ Prev
-                </button>
-                <div className="tabular-nums text-neutral-600">
-                  Page {page} of {Math.ceil(totalCount / limit) || 1}
-                </div>
-                <button
-                  className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  disabled={page >= Math.ceil(totalCount / limit)}
-                  onClick={() => {
-                    const totalPages = Math.ceil(totalCount / limit)
-                    setPage(p => (p < totalPages ? p + 1 : p))
-                  }}
-                >
-                  Next ›
-                </button>
-              </div>
             </div>
           )}
 
