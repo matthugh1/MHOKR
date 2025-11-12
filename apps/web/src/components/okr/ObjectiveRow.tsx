@@ -1060,39 +1060,6 @@ export function ObjectiveRow({
         aria-label={`${isExpanded ? 'Collapse' : 'Expand'} objective: ${objective.title}`}
       >
         <div className="flex items-center justify-between gap-4">
-<<<<<<< HEAD
-          {/* Left side: Title and badges */}
-          <div className="flex flex-col gap-2 flex-1 min-w-0">
-            {/* Title */}
-            <h3 className="text-base font-semibold text-neutral-900 truncate">
-              {objective.title}
-            </h3>
-            
-            {/* Progress bar */}
-            <div className="w-full h-1 rounded-full bg-neutral-200 overflow-hidden">
-              {/* TODO [phase6-polish]: Animate progress bar changes with spring transition. */}
-              <motion.div
-                className={cn("h-full rounded-full", progressBarColor)}
-                initial={false}
-                animate={{ width: `${Math.min(100, Math.max(0, objective.progress))}%` }}
-                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-              />
-            </div>
-            
-            {/* Badges row - Simplified to show only critical information */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Status */}
-              <OkrBadge tone={statusBadge.tone}>
-                {statusBadge.label}
-              </OkrBadge>
-
-              {/* Publication status - only show if Draft */}
-              {!objective.isPublished && (
-                <OkrBadge tone="warn">
-                  Draft
-                </OkrBadge>
-              )}
-
           {/* Left block: Title, status, publication, cycle, owner */}
           <div className="flex flex-col md:flex-row md:items-center gap-2 flex-1 min-w-0">
             {/* Title - Inline Editor */}
@@ -1190,57 +1157,6 @@ export function ObjectiveRow({
             </div>
           </div>
 
-<<<<<<< HEAD
-          {/* Execution metadata chips (responsive visibility) */}
-          {/* TODO [phase6-polish]: Add subtle fade/slide-in of these pills on row hover for visual focus without clutter. */}
-          {/* TODO [phase6-polish]: animate pill colour on status changes with framer-motion layout + animate prop. */}
-          <div className="hidden lg:flex items-center gap-2 ml-auto text-[11px]" onClick={(e) => e.stopPropagation()}>
-            {/* Check-in discipline */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className={cn("px-2 py-1 rounded-full font-medium leading-none whitespace-nowrap flex items-center gap-1", checkInPill.className)}>
-                    <CheckCircle className="h-3 w-3" />
-                    {checkInPill.text}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Check-in status for all Key Results</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            {/* Confidence level */}
-            {/* TODO [phase6-polish]: Add a tiny ▲ / ▼ arrow based on change vs previous check-in. */}
-            {/* TODO [phase7-hardening]: surface tooltip on hover explaining where the numbers come from. */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className={cn("px-2 py-1 rounded-full font-medium leading-none whitespace-nowrap flex items-center gap-1", confidencePill.className)}>
-                    <TrendingUp className="h-3 w-3" />
-                    {confidencePill.text}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Latest confidence rating from check-ins</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            {/* Cycle period */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className={cn("px-2 py-1 rounded-full font-medium leading-none whitespace-nowrap flex items-center gap-1", cyclePill.className)}>
-                    <Calendar className="h-3 w-3" />
-                    {cyclePill.text}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Planning cycle for this objective</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-
           {/* Middle block: Progress bar and micro-metrics (hidden on mobile) */}
           <div className="hidden md:flex items-center gap-3 flex-1 max-w-md">
             {/* Progress bar with breakdown tooltip */}
@@ -1318,7 +1234,6 @@ export function ObjectiveRow({
                 />
               </div>
             )}
->>>>>>> main
           </div>
 
           {/* Right block: Action buttons */}
