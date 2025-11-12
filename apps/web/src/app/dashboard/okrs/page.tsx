@@ -1189,50 +1189,6 @@ export default function OKRsPage() {
                   />
                 </div>
               </div>
-<<<<<<< HEAD
-              
-              <Select value={filterWorkspaceId} onValueChange={setFilterWorkspaceId}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All Workspaces" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Workspaces</SelectItem>
-                  {workspaces.map(ws => (
-                    <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              <Select value={filterTeamId} onValueChange={setFilterTeamId}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All Teams" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Teams</SelectItem>
-                  {teams.map(team => (
-                    <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              <Select value={filterOwnerId} onValueChange={setFilterOwnerId}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All Owners" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Owners</SelectItem>
-                  {availableUsers.map(u => (
-                    <SelectItem key={u.id} value={u.id}>{u.name || u.email}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {hasActiveFilters && (
-                <Button variant="outline" size="sm" onClick={clearFilters}>
-                  <X className="h-4 w-4 mr-1" />
-                  Clear Filters
-                </Button>
-              )}
             </div>
             
             {/* Active Filters Display */}
@@ -1404,37 +1360,6 @@ export default function OKRsPage() {
             {liveRegionMessage}
           </div>
 
-<<<<<<< HEAD
-              {/* Active Objectives group */}
-              {groupedObjectives.active.length > 0 && (
-                <div>
-                  {groupedObjectives.needsAttention.length > 0 && <div className="mb-4 md:mb-6" />}
-                  <SectionHeader tone="good" label="Active Objectives" />
-                  <div className="space-y-4 md:space-y-6">
-                    {groupedObjectives.active.map((okr) => {
-                      return renderObjectiveRow(okr)
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Completed / Archived group */}
-              {groupedObjectives.completed.length > 0 && (
-                <div>
-                  {(groupedObjectives.needsAttention.length > 0 || groupedObjectives.active.length > 0) && (
-                    <div className="mb-4 md:mb-6" />
-                  )}
-                  <SectionHeader tone="neutral" label="Completed / Archived" />
-                  <div className="space-y-4 md:space-y-6">
-                    {groupedObjectives.completed.map((okr) => {
-                      return renderObjectiveRow(okr)
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          
           {/* OKRs List or Tree View */}
           <main role="main" aria-busy={false} aria-label={viewMode === 'tree' ? 'OKRs tree' : 'OKRs list'}>
             {viewMode === 'tree' ? (
@@ -1511,7 +1436,6 @@ export default function OKRsPage() {
               />
             )}
           </main>
->>>>>>> main
 
           {/* Activity Timeline Drawer */}
           <ActivityDrawer
