@@ -57,13 +57,6 @@ export interface TeamMember {
 // OKR Types
 // ==========================================
 
-export enum Period {
-  MONTHLY = 'MONTHLY',
-  QUARTERLY = 'QUARTERLY',
-  ANNUAL = 'ANNUAL',
-  CUSTOM = 'CUSTOM',
-}
-
 export enum OKRStatus {
   ON_TRACK = 'ON_TRACK',
   AT_RISK = 'AT_RISK',
@@ -77,6 +70,13 @@ export enum MetricType {
   DECREASE = 'DECREASE',
   REACH = 'REACH',
   MAINTAIN = 'MAINTAIN',
+}
+
+export enum Period {
+  MONTHLY = 'MONTHLY',
+  QUARTERLY = 'QUARTERLY',
+  ANNUAL = 'ANNUAL',
+  CUSTOM = 'CUSTOM',
 }
 
 export enum InitiativeStatus {
@@ -94,7 +94,6 @@ export interface Objective {
   teamId?: string;
   ownerId: string;
   parentId?: string;
-  period: Period;
   startDate: Date;
   endDate: Date;
   status: OKRStatus;
@@ -117,7 +116,6 @@ export interface KeyResult {
   unit?: string;
   status: OKRStatus;
   progress: number;
-  period?: Period;
   startDate?: Date;
   endDate?: Date;
   createdAt: Date;
@@ -132,7 +130,6 @@ export interface Initiative {
   objectiveId?: string;
   ownerId: string;
   status: InitiativeStatus;
-  period?: Period;
   startDate?: Date;
   endDate?: Date;
   dueDate?: Date;

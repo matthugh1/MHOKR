@@ -19,9 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { SearchableUserSelect } from "@/components/okr/SearchableUserSelect"
+import { useTenantAdmin } from "@/hooks/useTenantAdmin"
+import { useTenantPermissions } from "@/hooks/useTenantPermissions"
+import { useToast } from "@/hooks/use-toast"
+import api from "@/lib/api"
 
 type OKRStatus = "ON_TRACK" | "AT_RISK" | "OFF_TRACK" | "COMPLETED" | "CANCELLED"
-type VisibilityLevel = "PUBLIC_TENANT" | "PRIVATE" | "WORKSPACE_ONLY" | "TEAM_ONLY" | "MANAGER_CHAIN" | "EXEC_ONLY"
+type VisibilityLevel = "PUBLIC_TENANT" | "PRIVATE"
 
 export interface EditObjectiveModalProps {
   isOpen: boolean
@@ -30,10 +35,13 @@ export interface EditObjectiveModalProps {
     title: string
     ownerId: string
     workspaceId?: string
+    teamId?: string
+    tenantId?: string | null
     cycleId?: string
     status: OKRStatus
     visibilityLevel: VisibilityLevel
-    pillarId?: string
+    isPublished?: boolean
+    // W4.M1: pillarId removed - deprecated
   }
   onClose: () => void
   onSubmit: (data: {
@@ -43,13 +51,13 @@ export interface EditObjectiveModalProps {
     cycleId?: string
     status: OKRStatus
     visibilityLevel: VisibilityLevel
-    pillarId?: string
+    // W4.M1: pillarId removed - deprecated
   }) => Promise<void>
   // Options for dropdowns (parent should provide these)
   availableUsers?: Array<{ id: string; name: string; email?: string }>
   availableWorkspaces?: Array<{ id: string; name: string }>
   availableCycles?: Array<{ id: string; name: string }>
-  availablePillars?: Array<{ id: string; name: string }>
+  availablePillars?: Array<{ id: string; name: string }> // W4.M1: Deprecated - not used
 }
 
 export function EditObjectiveModal({
@@ -69,8 +77,14 @@ export function EditObjectiveModal({
   const [cycleId, setCycleId] = React.useState<string>("")
   const [status, setStatus] = React.useState<OKRStatus>("ON_TRACK")
   const [visibilityLevel, setVisibilityLevel] = React.useState<VisibilityLevel>("PUBLIC_TENANT")
-  const [pillarId, setPillarId] = React.useState<string>("")
+  const [isPublished, setIsPublished] = React.useState(false)
+  // W4.M1: pillarId removed - deprecated
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+  const [isTogglingPublish, setIsTogglingPublish] = React.useState(false)
+  
+  const { isTenantAdmin } = useTenantAdmin()
+  const tenantPermissions = useTenantPermissions()
+  const { toast } = useToast()
 
   // Load objective data when modal opens or data changes
   React.useEffect(() => {
@@ -81,9 +95,40 @@ export function EditObjectiveModal({
       setCycleId(objectiveData.cycleId || "")
       setStatus(objectiveData.status || "ON_TRACK")
       setVisibilityLevel(objectiveData.visibilityLevel || "PUBLIC_TENANT")
-      setPillarId(objectiveData.pillarId || "")
+      setIsPublished(objectiveData.isPublished || false)
+      // W4.M1: pillarId removed
     }
   }, [isOpen, objectiveData])
+  
+  // Check if user can publish/unpublish
+  const canPublish = React.useMemo(() => {
+    if (!objectiveData || !objectiveId) return false
+    return isTenantAdmin || 
+      (objectiveData.workspaceId && tenantPermissions.canEditObjective({
+        id: objectiveId,
+        ownerId: objectiveData.ownerId,
+        tenantId: objectiveData.tenantId || null,
+        workspaceId: objectiveData.workspaceId || null,
+        teamId: objectiveData.teamId || null,
+        isPublished: false,
+        cycle: null,
+        cycleStatus: null,
+      }))
+  }, [isTenantAdmin, objectiveData, objectiveId, tenantPermissions])
+  
+  const canUnpublish = React.useMemo(() => {
+    if (!objectiveData || !objectiveId) return false
+    return isTenantAdmin || tenantPermissions.canEditObjective({
+      id: objectiveId,
+      ownerId: objectiveData.ownerId,
+      tenantId: objectiveData.tenantId || null,
+      workspaceId: objectiveData.workspaceId || null,
+      teamId: objectiveData.teamId || null,
+      isPublished: isPublished,
+      cycle: null,
+      cycleStatus: null,
+    })
+  }, [isTenantAdmin, objectiveData, objectiveId, isPublished, tenantPermissions])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -102,7 +147,7 @@ export function EditObjectiveModal({
         cycleId: cycleId || undefined,
         status,
         visibilityLevel,
-        pillarId: pillarId || undefined,
+        // W4.M1: pillarId removed
       })
       // Don't reset form here - let parent handle closing
       onClose()
@@ -149,29 +194,25 @@ export function EditObjectiveModal({
             <Label htmlFor="edit-owner">
               Owner <span className="text-red-500">*</span>
             </Label>
-            <Select value={ownerId} onValueChange={setOwnerId} required>
-              <SelectTrigger id="edit-owner">
-                <SelectValue placeholder="Select owner" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableUsers.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.name || user.email || user.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableUserSelect
+              value={ownerId}
+              onValueChange={setOwnerId}
+              availableUsers={availableUsers}
+              placeholder="Select owner"
+              id="edit-owner"
+              required
+            />
           </div>
 
           {availableWorkspaces.length > 0 && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="edit-workspace">Workspace</Label>
-              <Select value={workspaceId} onValueChange={setWorkspaceId}>
+              <Select value={workspaceId || "none"} onValueChange={(value) => setWorkspaceId(value === "none" ? "" : value)}>
                 <SelectTrigger id="edit-workspace">
                   <SelectValue placeholder="Select workspace" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {availableWorkspaces.map((workspace) => (
                     <SelectItem key={workspace.id} value={workspace.id}>
                       {workspace.name}
@@ -185,12 +226,12 @@ export function EditObjectiveModal({
           {availableCycles.length > 0 && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="edit-cycle">Cycle / Period</Label>
-              <Select value={cycleId} onValueChange={setCycleId}>
+              <Select value={cycleId || "none"} onValueChange={(value) => setCycleId(value === "none" ? "" : value)}>
                 <SelectTrigger id="edit-cycle">
                   <SelectValue placeholder="Select cycle" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {availableCycles.map((cycle) => (
                     <SelectItem key={cycle.id} value={cycle.id}>
                       {cycle.name}
@@ -234,32 +275,124 @@ export function EditObjectiveModal({
               <SelectContent>
                 <SelectItem value="PUBLIC_TENANT">Public (Tenant)</SelectItem>
                 <SelectItem value="PRIVATE">Private</SelectItem>
-                <SelectItem value="WORKSPACE_ONLY">Workspace Only</SelectItem>
-                <SelectItem value="TEAM_ONLY">Team Only</SelectItem>
-                <SelectItem value="MANAGER_CHAIN">Manager Chain</SelectItem>
-                <SelectItem value="EXEC_ONLY">Executive Only</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {availablePillars.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="edit-pillar">Strategic Theme / Pillar (Optional)</Label>
-              <Select value={pillarId} onValueChange={setPillarId}>
-                <SelectTrigger id="edit-pillar">
-                  <SelectValue placeholder="Select strategic theme" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">None</SelectItem>
-                  {availablePillars.map((pillar) => (
-                    <SelectItem key={pillar.id} value={pillar.id}>
-                      {pillar.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Publish Status Toggle */}
+          {objectiveId && (
+            <div className="border-t pt-4">
+              <Label>Publish Status</Label>
+              <div className="flex items-center justify-between mt-2 p-3 rounded-md border bg-slate-50">
+                <div className="flex-1">
+                  <div className="text-sm font-medium">
+                    {isPublished ? 'Published' : 'Draft'}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {isPublished 
+                      ? 'This objective is published and locked. Only organization administrators can edit published objectives.'
+                      : 'This objective is in draft mode and can be edited freely.'}
+                  </p>
+                </div>
+                <div className="ml-4">
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      
+                      console.log('[EditObjectiveModal] Publish button clicked', {
+                        objectiveId,
+                        isTogglingPublish,
+                        isPublished,
+                        canPublish,
+                        canUnpublish,
+                      })
+                      
+                      if (!objectiveId || isTogglingPublish) {
+                        console.log('[EditObjectiveModal] Early return - no objectiveId or already toggling')
+                        return
+                      }
+                      
+                      const canToggle = isPublished ? canUnpublish : canPublish
+                      
+                      console.log('[EditObjectiveModal] Permission check', {
+                        canToggle,
+                        isPublished,
+                        canPublish,
+                        canUnpublish,
+                      })
+                      
+                      if (!canToggle) {
+                        console.log('[EditObjectiveModal] Permission denied')
+                        toast({
+                          title: 'Permission denied',
+                          description: isPublished
+                            ? 'Only organization administrators can unpublish objectives.'
+                            : 'Only organization administrators or workspace leads can publish objectives.',
+                          variant: 'destructive',
+                        })
+                        return
+                      }
+
+                      const newIsPublished = !isPublished
+                      console.log('[EditObjectiveModal] Toggling publish status', { newIsPublished })
+                      setIsTogglingPublish(true)
+                      
+                      try {
+                        const response = await api.patch(`/objectives/${objectiveId}`, { 
+                          isPublished: newIsPublished 
+                        })
+                        
+                        console.log('[EditObjectiveModal] Publish status updated successfully', response.data)
+                        setIsPublished(newIsPublished)
+                        
+                        toast({
+                          title: newIsPublished ? 'Objective published' : 'Objective unpublished',
+                          description: newIsPublished 
+                            ? 'This objective is now published and locked for editing.'
+                            : 'This objective is now in draft mode and can be edited.',
+                        })
+                      } catch (error: any) {
+                        console.error('[EditObjectiveModal] Failed to update publish status:', error)
+                        const errorMessage = error.response?.data?.message || error.message || 'Failed to update publish status'
+                        toast({
+                          title: 'Error',
+                          description: errorMessage,
+                          variant: 'destructive',
+                        })
+                      } finally {
+                        setIsTogglingPublish(false)
+                      }
+                    }}
+                    disabled={isTogglingPublish || (isPublished ? !canUnpublish : !canPublish)}
+                    className={`
+                      px-4 py-2 rounded-md text-sm font-medium transition-colors
+                      ${isPublished
+                        ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                        : 'bg-violet-600 text-white hover:bg-violet-700'
+                      }
+                      disabled:opacity-50 disabled:cursor-not-allowed
+                    `}
+                  >
+                    {isTogglingPublish ? 'Updating...' : (isPublished ? 'Unpublish' : 'Publish')}
+                  </button>
+                </div>
+              </div>
+              {!isTenantAdmin && !isPublished && objectiveData?.workspaceId && (
+                <p className="text-xs text-slate-500 mt-2">
+                  Only organization administrators or workspace leads can publish objectives.
+                </p>
+              )}
+              {!isTenantAdmin && !isPublished && !objectiveData?.workspaceId && (
+                <p className="text-xs text-slate-500 mt-2">
+                  Only organization administrators can publish organization-level objectives.
+                </p>
+              )}
             </div>
           )}
+
+          {/* W4.M1: Pillar UI removed - deprecated */}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>

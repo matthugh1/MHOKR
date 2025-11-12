@@ -29,7 +29,7 @@ export class ObjectiveServiceExample {
    */
   async findAll(userId: string, tenantId: string, workspaceId?: string) {
     // Build base query
-    const where: any = { organizationId: tenantId };
+    const where: any = { tenantId: tenantId };
     if (workspaceId) {
       where.workspaceId = workspaceId;
     }
@@ -39,7 +39,7 @@ export class ObjectiveServiceExample {
       where,
       include: {
         owner: true,
-        organization: true,
+        tenant: true,
         workspace: true,
         team: true,
       },
@@ -50,7 +50,7 @@ export class ObjectiveServiceExample {
       const okr = {
         id: objective.id,
         ownerId: objective.ownerId,
-        tenantId: objective.organizationId || '',
+        tenantId: objective.tenantId || '',
         workspaceId: objective.workspaceId,
         teamId: objective.teamId,
         visibilityLevel: objective.visibilityLevel,
@@ -68,8 +68,8 @@ export class ObjectiveServiceExample {
         this.rbacService,
         userId,
         okr,
-        objective.organization ? {
-          allowTenantAdminExecVisibility: objective.organization.allowTenantAdminExecVisibility || false,
+        objective.tenant ? {
+          allowTenantAdminExecVisibility: objective.tenant.allowTenantAdminExecVisibility || false,
         } : undefined,
       );
     });
@@ -85,7 +85,7 @@ export class ObjectiveServiceExample {
       where: { id },
       include: {
         owner: true,
-        organization: true,
+        tenant: true,
         workspace: true,
         team: true,
       },
@@ -118,7 +118,7 @@ export class ObjectiveServiceExample {
   async create(data: any, userId: string) {
     // Build resource context from creation data
     const resourceContext = this.contextBuilder.fromValues(
-      data.organizationId,
+      data.tenantId,
       data.workspaceId,
       data.teamId,
     );
@@ -138,12 +138,12 @@ export class ObjectiveServiceExample {
     }
 
     // Validate organization exists
-    if (data.organizationId) {
+    if (data.tenantId) {
       const org = await this.prisma.organization.findUnique({
-        where: { id: data.organizationId },
+        where: { id: data.tenantId },
       });
       if (!org) {
-        throw new NotFoundException(`Organization ${data.organizationId} not found`);
+        throw new NotFoundException(`Organization ${data.tenantId} not found`);
       }
     }
 

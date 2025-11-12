@@ -14,7 +14,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-okr_password}
       POSTGRES_DB: ${POSTGRES_DB:-okr_nexus}
     ports:
-      - "5432:5432"
+      - "5433:5432"  # Changed to 5433 to avoid conflict with local PostgreSQL
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -60,11 +60,11 @@ services:
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      test: ["CMD-SHELL", "sh -c 'exec 3<>/dev/tcp/localhost/8080 && echo -e \"GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3 && (cat <&3 | head -1 | grep -q \"200\" || exit 1)'"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 90s
     networks:
       - okr-network
 
@@ -98,8 +98,9 @@ services:
       keycloak:
         condition: service_healthy
     volumes:
-      - ./services/core-api/src:/app/src
+      - ./services/core-api/src:/app/services/core-api/src
       - /app/node_modules
+      - /app/services/core-api/dist
     networks:
       - okr-network
 
@@ -203,8 +204,8 @@ services:
 
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./apps/web/Dockerfile
     container_name: okr-nexus-web
     restart: unless-stopped
     environment:
@@ -217,9 +218,16 @@ services:
     depends_on:
       - api-gateway
     volumes:
-      - ./apps/web:/app
+      - ./apps/web/src:/app/apps/web/src
+      - ./apps/web/public:/app/apps/web/public
+      - ./apps/web/next.config.js:/app/apps/web/next.config.js
+      - ./apps/web/tailwind.config.ts:/app/apps/web/tailwind.config.ts
+      - ./apps/web/postcss.config.js:/app/apps/web/postcss.config.js
+      - ./apps/web/tsconfig.json:/app/apps/web/tsconfig.json
+      - ./apps/web/components.json:/app/apps/web/components.json
       - /app/node_modules
       - /app/.next
+    command: npm run dev
     networks:
       - okr-network
 

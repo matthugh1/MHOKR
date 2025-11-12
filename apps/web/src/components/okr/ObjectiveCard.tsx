@@ -4,10 +4,14 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { OkrBadge } from "./OkrBadge"
+import { PillarBadge } from "./PillarBadge"
 import { AvatarCircle } from "@/components/dashboard/AvatarCircle"
-import { Edit2, Trash2, History, Lock, Plus } from "lucide-react"
+import { Edit2, Trash2, History, Lock, Plus, Info } from "lucide-react"
+import { ProgressBreakdownTooltip } from "./ProgressBreakdownTooltip"
+import { ObjectiveProgressTrendChart } from "./ObjectiveProgressTrendChart"
 
 export interface ObjectiveCardProps {
+  objectiveId?: string // Optional - needed for trend chart
   title: string
   ownerName: string
   ownerAvatarUrl?: string
@@ -16,6 +20,7 @@ export interface ObjectiveCardProps {
   isPublished: boolean
   cycleName?: string
   visibilityLevel?: string
+  pillarId?: string | null
   keyResults?: Array<{
     id: string
     title: string
@@ -27,6 +32,7 @@ export interface ObjectiveCardProps {
     unit?: string
     checkInCadence?: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'NONE'
     isOverdue?: boolean
+    weight?: number // Weight from ObjectiveKeyResult junction table
   }>
   initiatives?: Array<{
     id: string
@@ -128,14 +134,16 @@ const isDueSoon = (dateString?: string) => {
 }
 
 export function ObjectiveCard({
+  objectiveId,
   title,
   ownerName,
-  ownerAvatarUrl,
+  ownerAvatarUrl: _ownerAvatarUrl,
   status,
   progressPct,
   isPublished,
   cycleName,
   visibilityLevel,
+  pillarId,
   keyResults = [],
   initiatives = [],
   onOpenHistory,
@@ -164,9 +172,24 @@ export function ObjectiveCard({
             </h3>
             <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-600">
               {/* Status badge */}
-              <OkrBadge tone={statusBadge.tone}>
-                {statusBadge.label}
-              </OkrBadge>
+              <div className="flex items-center gap-1">
+                <OkrBadge tone={statusBadge.tone}>
+                  {statusBadge.label}
+                </OkrBadge>
+                {/* Show tooltip if status is auto-calculated from Key Results */}
+                {keyResults.length > 0 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-muted-foreground cursor-help" aria-label="Status information" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">Status calculated from Key Results</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
               
               {/* Published/Locked badge */}
               <OkrBadge tone={publishedBadgeTone}>
@@ -186,6 +209,9 @@ export function ObjectiveCard({
                   {getVisibilityLabel(visibilityLevel)}
                 </OkrBadge>
               )}
+              
+              {/* Pillar badge */}
+              <PillarBadge pillarId={pillarId} />
               
               {/* Owner chip */}
               <div className="flex items-center gap-1.5">
@@ -321,9 +347,35 @@ export function ObjectiveCard({
         <div>
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs text-neutral-600">Progress</span>
-            <span className="text-sm font-semibold text-neutral-900">
-              {Math.round(progressPct)}%
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-semibold text-neutral-900">
+                {Math.round(progressPct)}%
+              </span>
+              {/* Show breakdown tooltip if Objective has Key Results */}
+              {keyResults.length > 0 && (
+                <div className="flex items-center gap-1">
+                  <ProgressBreakdownTooltip
+                    objectiveProgress={progressPct}
+                    keyResults={keyResults.map(kr => ({
+                      id: kr.id,
+                      title: kr.title,
+                      progress: kr.progress ?? 0,
+                      weight: kr.weight ?? 1.0,
+                    }))}
+                  />
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-[10px] text-muted-foreground font-medium cursor-help">Auto</span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">Progress calculated from Key Results</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              )}
+            </div>
           </div>
           <div className="w-full h-2 rounded-full bg-neutral-200 overflow-hidden">
             <div
@@ -332,6 +384,13 @@ export function ObjectiveCard({
             />
           </div>
         </div>
+
+        {/* Objective Progress Trend Chart */}
+        {keyResults.length > 0 && objectiveId && (
+          <div className="mb-4 pb-4 border-b border-neutral-200">
+            <ObjectiveProgressTrendChart objectiveId={objectiveId} />
+          </div>
+        )}
 
         {/* Key Results */}
         <div>

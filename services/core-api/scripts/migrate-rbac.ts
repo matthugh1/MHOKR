@@ -14,12 +14,14 @@ import { PrismaClient } from '@prisma/client';
 import { RBACService } from '../src/modules/rbac/rbac.service';
 import { RBACMigrationService } from '../src/modules/rbac/migration.service';
 import { PrismaService } from '../src/common/prisma/prisma.service';
+import { AuditLogService } from '../src/modules/audit/audit-log.service';
 
 async function main() {
   const prisma = new PrismaClient();
   const prismaService = new PrismaService();
-  const rbacService = new RBACService(prismaService as any);
-  const migrationService = new RBACMigrationService(prismaService as any, rbacService);
+  const auditLogService = new AuditLogService(prismaService);
+  const rbacService = new RBACService(prismaService, auditLogService);
+  const migrationService = new RBACMigrationService(prismaService, rbacService);
 
   const userId = process.argv[2];
 

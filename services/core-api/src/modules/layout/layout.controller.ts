@@ -17,7 +17,8 @@ export class LayoutController {
   @ApiOperation({ summary: 'Save user layout positions' })
   async saveLayout(@Request() req: any, @Body() body: SaveLayoutRequest) {
     const userId = req.user.id;
-    return this.layoutService.saveUserLayout(userId, body.layouts);
+    const userTenantId = req.user?.tenantId; // Get from JWT
+    return this.layoutService.saveUserLayout(userId, body.layouts, userTenantId);
   }
 
   @Get()
@@ -31,7 +32,8 @@ export class LayoutController {
     @Query('entityIds') entityIds?: string[]
   ) {
     const userId = req.user.id;
-    return this.layoutService.getUserLayout(userId, entityType, entityIds);
+    const userTenantId = req.user?.tenantId; // Get from JWT
+    return this.layoutService.getUserLayout(userId, entityType, entityIds, userTenantId);
   }
 
   @Delete(':entityType/:entityId')
@@ -43,7 +45,8 @@ export class LayoutController {
     @Param('entityId') entityId: string
   ) {
     const userId = req.user.id;
-    return this.layoutService.deleteUserLayout(userId, entityType, entityId);
+    const userTenantId = req.user?.tenantId; // Get from JWT
+    return this.layoutService.deleteUserLayout(userId, entityType, entityId, userTenantId);
   }
 
   @Delete('clear')
@@ -51,7 +54,8 @@ export class LayoutController {
   @ApiOperation({ summary: 'Clear all user layout positions' })
   async clearLayouts(@Request() req: any) {
     const userId = req.user.id;
-    return this.layoutService.clearUserLayouts(userId);
+    const userTenantId = req.user?.tenantId; // Get from JWT
+    return this.layoutService.clearUserLayouts(userId, userTenantId);
   }
 }
 

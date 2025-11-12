@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { PageContainer } from '@/components/ui/PageContainer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,7 +42,7 @@ export default function WorkspacesPage() {
 }
 
 function WorkspacesSettings() {
-  const { organization, workspaces: contextWorkspaces, refreshContext } = useWorkspace()
+  const { currentOrganization: organization, workspaces: contextWorkspaces, refreshContext } = useWorkspace()
   const [workspaces, setWorkspaces] = useState<any[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [newWorkspaceName, setNewWorkspaceName] = useState('')
@@ -62,7 +64,7 @@ function WorkspacesSettings() {
     try {
       await api.post('/workspaces', {
         name: newWorkspaceName,
-        organizationId: organization.id,
+        tenantId: organization.id,
       })
       setNewWorkspaceName('')
       setShowCreate(false)
@@ -115,25 +117,24 @@ function WorkspacesSettings() {
   }
 
   return (
-    <div className="p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Workspaces</h1>
-            <p className="text-slate-600 mt-1">
-              Workspaces are major departments or divisions in <strong>{organization?.name}</strong>
-            </p>
-            <div className="mt-2 text-xs text-slate-500 flex items-center gap-2">
-              <Building2 className="h-3 w-3" />
-              <span>{organization?.name}</span>
-              <span>→</span>
-              <Briefcase className="h-3 w-3" />
-              <span className="font-medium">Workspaces</span>
-              <span>→</span>
-              <Users className="h-3 w-3" />
-              <span>Teams</span>
-            </div>
-          </div>
+    <PageContainer variant="form">
+      <PageHeader
+        title="Workspaces"
+        subtitle={`Workspaces are major departments or divisions in ${organization?.name || 'your organization'}`}
+      />
+      <div className="space-y-6">
+        <div className="text-xs text-slate-500 flex items-center gap-2">
+          <Building2 className="h-3 w-3" />
+          <span>{organization?.name}</span>
+          <span>→</span>
+          <Briefcase className="h-3 w-3" />
+          <span className="font-medium">Workspaces</span>
+          <span>→</span>
+          <Users className="h-3 w-3" />
+          <span>Teams</span>
+        </div>
+
+        <div className="flex items-center justify-end">
           <Button onClick={() => setShowCreate(!showCreate)}>
             <Plus className="h-4 w-4 mr-2" />
             New Workspace
@@ -278,7 +279,7 @@ function WorkspacesSettings() {
           </AlertDialogContent>
         </AlertDialog>
       </div>
-    </div>
+    </PageContainer>
   )
 }
 

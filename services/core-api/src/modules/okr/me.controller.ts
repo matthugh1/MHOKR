@@ -21,18 +21,18 @@ export class MeController {
   async getSummary(@Req() req: any) {
     // TODO [phase7-hardening]: Expose this data in a dedicated 'My dashboard' view in frontend
     const userId = req.user.id;
-    const userOrganizationId = req.user.organizationId;
+    const userOrganizationId = req.user.tenantId;
 
     // Get user's owned Objectives and Key Results
     const [ownedObjectives, ownedKeyResults, recentActivity, allOverdueCheckIns] = await Promise.all([
       this.reportingService.getUserOwnedObjectives(userId, userOrganizationId),
       this.reportingService.getUserOwnedKeyResults(userId, userOrganizationId),
       this.activityService.getRecentActivityForUserScope(userId, userOrganizationId),
-      this.reportingService.getOverdueCheckIns(userOrganizationId),
+      this.reportingService.getOverdueCheckIns(userOrganizationId, userId, { ownerId: userId }),
     ]);
 
-    // Filter overdue check-ins to only those owned by this user
-    const overdueCheckIns = allOverdueCheckIns.filter((item: { ownerId: string }) => item.ownerId === userId);
+    // Filter overdue check-ins to only those owned by this user (already filtered by ownerId above, but keep for safety)
+    const overdueCheckIns = allOverdueCheckIns.filter((item: { owner: { id: string } }) => item.owner.id === userId);
 
     return {
       ownedObjectives,

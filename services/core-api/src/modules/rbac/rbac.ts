@@ -112,6 +112,9 @@ export function can(
     case 'create_okr':
       return canCreateOKRAction(userContext, resourceContext);
     
+    case 'request_checkin':
+      return canRequestCheckinAction(userContext, resourceContext);
+    
     case 'publish_okr':
       return canPublishOKRAction(userContext, resourceContext);
     
@@ -175,8 +178,8 @@ function canSuperuser(
     return true;
   }
 
-  // SUPERUSER CANNOT edit/delete/create OKRs
-  if (action === 'edit_okr' || action === 'delete_okr' || action === 'create_okr' || action === 'publish_okr') {
+  // SUPERUSER CANNOT edit/delete/create OKRs or request check-ins
+  if (action === 'edit_okr' || action === 'delete_okr' || action === 'create_okr' || action === 'publish_okr' || action === 'request_checkin') {
     return false;
   }
 
@@ -219,7 +222,7 @@ function hasTenantOwnerRole(userContext: UserContext, tenantId: string): boolean
  * - Operational admin for the tenant
  * - Invite/remove users from the tenant
  * - Assign workspace and team roles
- * - Create/close OKR periods / quarters
+ * - Create/close OKR cycles / quarters
  * - Run reporting across the whole tenant
  * - View all PUBLIC / TEAM / MANAGER-CHAIN OKRs across the tenant
  * - May or may not see EXEC_ONLY OKRs depending on tenant setting
@@ -298,17 +301,40 @@ function canEditOKRAction(
   }
 
   const okr = resourceContext.okr;
-  // NOTE: organizationId is the canonical tenant identifier.
-  // tenantId is legacy and kept only for backward compatibility with pre-P0 data.
-  // Do not reintroduce tenantId in new code.
-  const tenantId = okr.organizationId || (okr as any).tenantId || '';
+  // NOTE: tenantId is the canonical tenant identifier.
+  // Use resourceContext.tenantId as primary source (set from objective.tenantId)
+  // Fallback to okr.tenantId for backward compatibility
+  const tenantId = resourceContext.tenantId || okr.tenantId || (okr as any).tenantId || '';
+  
+  // Debug logging
+  console.log('[RBAC] canEditOKRAction: Checking edit permission', {
+    userId: userContext.userId,
+    okrId: okr.id,
+    tenantId,
+    resourceContextTenantId: resourceContext.tenantId,
+    okrTenantId: okr.tenantId,
+    isPublished: okr.isPublished,
+    ownerId: okr.ownerId,
+    userTenantRoles: Array.from(userContext.tenantRoles.entries()),
+    hasTenantRoleForTenantId: userContext.tenantRoles.has(tenantId),
+    tenantRolesForTenantId: userContext.tenantRoles.get(tenantId) || [],
+  });
 
   // PUBLISH LOCK: If OKR is published, only TENANT_OWNER and TENANT_ADMIN can edit
   if (okr.isPublished === true) {
-    if (hasTenantOwnerRole(userContext, tenantId)) {
+    const hasOwner = hasTenantOwnerRole(userContext, tenantId);
+    const hasAdmin = hasTenantAdminRole(userContext, tenantId);
+    console.log('[RBAC] canEditOKRAction: Published OKR check', {
+      tenantId,
+      hasOwner,
+      hasAdmin,
+      tenantRoles: userContext.tenantRoles.get(tenantId) || [],
+    });
+    
+    if (hasOwner) {
       return true;
     }
-    if (hasTenantAdminRole(userContext, tenantId)) {
+    if (hasAdmin) {
       // TENANT_ADMIN can edit published OKRs (but not EXEC_ONLY unless allowed)
       if (okr.visibilityLevel === 'EXEC_ONLY' && !resourceContext.tenant?.allowTenantAdminExecVisibility) {
         return false;
@@ -316,38 +342,58 @@ function canEditOKRAction(
       return true;
     }
     // All other roles (including owner) cannot edit published OKRs
+    console.log('[RBAC] canEditOKRAction: Published OKR denied - user lacks TENANT_OWNER or TENANT_ADMIN role', {
+      tenantId,
+      userRoles: userContext.tenantRoles.get(tenantId) || [],
+    });
     return false;
   }
 
   // For draft (unpublished) OKRs, apply normal RBAC rules
   // Owner can always edit their own OKRs
   if (okr.ownerId === userContext.userId) {
+    console.log('[RBAC] canEditOKRAction: Allowed - user is owner');
     return true;
   }
 
   // TENANT_OWNER can edit any OKR in their tenant
-  if (hasTenantOwnerRole(userContext, tenantId)) {
+  const hasOwner = hasTenantOwnerRole(userContext, tenantId);
+  if (hasOwner) {
+    console.log('[RBAC] canEditOKRAction: Allowed - user has TENANT_OWNER role', { tenantId });
     return true;
   }
 
   // TENANT_ADMIN can edit OKRs in their tenant (but not EXEC_ONLY unless allowed)
-  if (hasTenantAdminRole(userContext, tenantId)) {
+  const hasAdmin = hasTenantAdminRole(userContext, tenantId);
+  if (hasAdmin) {
     if (okr.visibilityLevel === 'EXEC_ONLY' && !resourceContext.tenant?.allowTenantAdminExecVisibility) {
+      console.log('[RBAC] canEditOKRAction: Denied - EXEC_ONLY visibility and tenant admin exec visibility not allowed');
       return false;
     }
+    console.log('[RBAC] canEditOKRAction: Allowed - user has TENANT_ADMIN role', { tenantId });
     return true;
   }
 
   // WORKSPACE_LEAD can edit workspace-level OKRs
   if (okr.workspaceId && hasWorkspaceLeadRole(userContext, okr.workspaceId)) {
+    console.log('[RBAC] canEditOKRAction: Allowed - user has WORKSPACE_LEAD role', { workspaceId: okr.workspaceId });
     return true;
   }
 
   // TEAM_LEAD can edit team-level OKRs
   if (okr.teamId && hasTeamLeadRole(userContext, okr.teamId)) {
+    console.log('[RBAC] canEditOKRAction: Allowed - user has TEAM_LEAD role', { teamId: okr.teamId });
     return true;
   }
 
+  console.log('[RBAC] canEditOKRAction: Denied - no matching role', {
+    tenantId,
+    workspaceId: okr.workspaceId,
+    teamId: okr.teamId,
+    userTenantRoles: Array.from(userContext.tenantRoles.entries()),
+    userWorkspaceRoles: Array.from(userContext.workspaceRoles.entries()),
+    userTeamRoles: Array.from(userContext.teamRoles.entries()),
+  });
   return false;
 }
 
@@ -366,10 +412,10 @@ function canDeleteOKRAction(
   }
 
   const okr = resourceContext.okr;
-  // NOTE: organizationId is the canonical tenant identifier.
+  // NOTE: tenantId is the canonical tenant identifier.
   // tenantId is legacy and kept only for backward compatibility with pre-P0 data.
   // Do not reintroduce tenantId in new code.
-  const tenantId = okr.organizationId || (okr as any).tenantId || '';
+  const tenantId = okr.tenantId || (okr as any).tenantId || '';
 
   // PUBLISH LOCK: If OKR is published, only TENANT_OWNER and TENANT_ADMIN can delete
   if (okr.isPublished === true) {
@@ -431,6 +477,17 @@ function canCreateOKRAction(
 ): boolean {
   const tenantId = resourceContext.tenantId;
 
+  // CRITICAL: tenantId must be present for tenant-level checks
+  // If tenantId is missing, this indicates a bug in resource context building
+  if (!tenantId || tenantId === '') {
+    console.error('[RBAC] canCreateOKRAction: tenantId is missing from resourceContext', {
+      userId: userContext.userId,
+      resourceContext,
+      tenantRolesKeys: Array.from(userContext.tenantRoles.keys()),
+    });
+    return false;
+  }
+
   // Check if user has any role in the tenant
   const tenantRoles = userContext.tenantRoles.get(tenantId) || [];
   if (tenantRoles.length > 0) {
@@ -461,6 +518,53 @@ function canCreateOKRAction(
 }
 
 /**
+ * Check if user can request a check-in from another user.
+ * 
+ * Basic RBAC check: user must have tenant membership.
+ * Detailed authorization (manager relationship, workspace/team leads) is handled
+ * in the service layer via canRequestCheckinForUser().
+ */
+function canRequestCheckinAction(
+  userContext: UserContext,
+  resourceContext: ResourceContext,
+): boolean {
+  const tenantId = resourceContext.tenantId;
+
+  if (!tenantId) {
+    return false;
+  }
+
+  // Check if user has any role in the tenant (except TENANT_VIEWER alone)
+  const tenantRoles = userContext.tenantRoles.get(tenantId) || [];
+  if (tenantRoles.length > 0) {
+    // TENANT_VIEWER alone cannot request check-ins
+    if (tenantRoles.includes('TENANT_VIEWER') && tenantRoles.length === 1) {
+      return false;
+    }
+    return true;
+  }
+
+  // Check workspace membership
+  if (resourceContext.workspaceId) {
+    const workspaceRoles = userContext.workspaceRoles.get(resourceContext.workspaceId) || [];
+    if (workspaceRoles.length > 0) {
+      return true;
+    }
+  }
+
+  // Check team membership
+  if (resourceContext.teamId) {
+    const teamRoles = userContext.teamRoles.get(resourceContext.teamId) || [];
+    if (teamRoles.length > 0 && !teamRoles.includes('TEAM_VIEWER')) {
+      return true;
+    }
+  }
+
+  // User has no tenant/workspace/team membership - cannot request check-ins
+  return false;
+}
+
+/**
  * Check if user can publish an OKR
  */
 function canPublishOKRAction(
@@ -472,10 +576,10 @@ function canPublishOKRAction(
   }
 
   const okr = resourceContext.okr;
-  // NOTE: organizationId is the canonical tenant identifier.
+  // NOTE: tenantId is the canonical tenant identifier.
   // tenantId is legacy and kept only for backward compatibility with pre-P0 data.
   // Do not reintroduce tenantId in new code.
-  const tenantId = okr.organizationId || (okr as any).tenantId || '';
+  const tenantId = okr.tenantId || (okr as any).tenantId || '';
 
   // TENANT_OWNER can publish any OKR
   if (hasTenantOwnerRole(userContext, tenantId)) {
@@ -576,7 +680,11 @@ function canManageWorkspaces(
     return true;
   }
 
-  // TENANT_ADMIN cannot delete workspaces (but can create/edit?)
+  // TENANT_ADMIN can create/edit workspaces (but cannot delete)
+  if (hasTenantAdminRole(userContext, tenantId)) {
+    return true;
+  }
+
   // WORKSPACE_LEAD can create/manage teams within workspace
 
   return false;

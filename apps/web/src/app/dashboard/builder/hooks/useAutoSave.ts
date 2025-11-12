@@ -22,7 +22,7 @@ export function useAutoSave(
     onSaveError,
   } = options
 
-  const timeoutRef = useRef<NodeJS.Timeout>()
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const lastSavedPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map())
   const isSavingRef = useRef(false)
 

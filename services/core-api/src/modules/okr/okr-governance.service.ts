@@ -28,29 +28,36 @@ export class OkrGovernanceService {
    * Extracted from objective.service.ts:update() and delete()
    * 
    * Logic:
-   * - If objective.isPublished === true:
+   * - If objective.state === 'PUBLISHED' or 'COMPLETED' or 'CANCELLED' or 'ARCHIVED':
    *   - Superuser (userOrganizationId === null) => reject (read-only)
    *   - Check RBAC: require TENANT_OWNER or TENANT_ADMIN via rbacService.canPerformAction(userId, 'edit_okr', resourceContext)
    *   - Else throw ForbiddenException
-   * - If not published, no lock
+   * - If state is DRAFT, no lock
    * 
    * @param params - { objective, actingUser, rbacService }
    * @throws ForbiddenException if locked and user cannot bypass
    */
   async checkPublishLockForObjective(params: {
-    objective: { id: string; isPublished: boolean };
-    actingUser: { id: string; organizationId: string | null };
+    objective: { id: string; state?: string; isPublished?: boolean }; // Support both state and legacy isPublished
+    actingUser: { id: string; tenantId: string | null };
     rbacService: RBACService;
   }): Promise<void> {
     const { objective, actingUser } = params;
     
-    // If not published, no lock
-    if (objective.isPublished !== true) {
+    // Determine if published/locked: use state if available, fallback to isPublished for backward compatibility
+    const isLocked = objective.state === 'PUBLISHED' || 
+                     objective.state === 'COMPLETED' || 
+                     objective.state === 'CANCELLED' || 
+                     objective.state === 'ARCHIVED' ||
+                     (objective.state === undefined && objective.isPublished === true);
+    
+    // If not published/locked, no lock
+    if (!isLocked) {
       return;
     }
 
     // Superuser cannot edit even published OKRs (read-only)
-    if (actingUser.organizationId === null) {
+    if (actingUser.tenantId === null) {
       throw new ForbiddenException('This OKR is published and can only be modified by admin roles');
     }
 
@@ -71,30 +78,37 @@ export class OkrGovernanceService {
    * Extracted from key-result.service.ts:update(), delete(), and createCheckIn()
    * 
    * Logic:
-   * - Checks parent Objective's publish status
-   * - If parentObjective.isPublished === true:
+   * - Checks parent Objective's state
+   * - If parentObjective.state === 'PUBLISHED' or 'COMPLETED' or 'CANCELLED' or 'ARCHIVED':
    *   - Superuser (userOrganizationId === null) => reject (read-only)
    *   - Check RBAC: require TENANT_OWNER or TENANT_ADMIN via rbacService.canPerformAction(userId, 'edit_okr', resourceContext)
    *   - Else throw ForbiddenException
-   * - If not published, no lock
+   * - If state is DRAFT, no lock
    * 
    * @param params - { parentObjective, actingUser, rbacService }
    * @throws ForbiddenException if locked and user cannot bypass
    */
   async checkPublishLockForKeyResult(params: {
-    parentObjective: { id: string; isPublished: boolean };
-    actingUser: { id: string; organizationId: string | null };
+    parentObjective: { id: string; state?: string; isPublished?: boolean }; // Support both state and legacy isPublished
+    actingUser: { id: string; tenantId: string | null };
     rbacService: RBACService;
   }): Promise<void> {
     const { parentObjective, actingUser } = params;
 
-    // If parent objective not published, no lock
-    if (parentObjective.isPublished !== true) {
+    // Determine if published/locked: use state if available, fallback to isPublished for backward compatibility
+    const isLocked = parentObjective.state === 'PUBLISHED' || 
+                     parentObjective.state === 'COMPLETED' || 
+                     parentObjective.state === 'CANCELLED' || 
+                     parentObjective.state === 'ARCHIVED' ||
+                     (parentObjective.state === undefined && parentObjective.isPublished === true);
+
+    // If parent objective not published/locked, no lock
+    if (!isLocked) {
       return;
     }
 
     // Superuser cannot edit even if parent is published (read-only)
-    if (actingUser.organizationId === null) {
+    if (actingUser.tenantId === null) {
       throw new ForbiddenException('This Key Result belongs to a published OKR and can only be modified by admin roles');
     }
 
@@ -126,7 +140,7 @@ export class OkrGovernanceService {
    */
   async checkCycleLockForObjective(params: {
     objective: { id: string };
-    actingUser: { id: string; organizationId: string | null };
+    actingUser: { id: string; tenantId: string | null };
   }): Promise<void> {
     const { objective, actingUser } = params;
 
@@ -139,7 +153,7 @@ export class OkrGovernanceService {
             id: true,
             name: true,
             status: true,
-            organizationId: true,
+            tenantId: true,
           },
         },
       },
@@ -161,7 +175,7 @@ export class OkrGovernanceService {
     // LOCKED or ARCHIVED cycles require admin override
     if (cycleStatus === 'LOCKED' || cycleStatus === 'ARCHIVED') {
       // Superuser is read-only, cannot bypass cycle lock
-      if (actingUser.organizationId === null) {
+      if (actingUser.tenantId === null) {
         throw new ForbiddenException(`This cycle (${cycle.name || 'locked'}) is locked and can only be modified by admin roles`);
       }
 
@@ -200,7 +214,7 @@ export class OkrGovernanceService {
    */
   async checkCycleLockForKeyResult(params: {
     parentObjective: { id: string };
-    actingUser: { id: string; organizationId: string | null };
+    actingUser: { id: string; tenantId: string | null };
   }): Promise<void> {
     const { parentObjective, actingUser } = params;
 
@@ -213,7 +227,7 @@ export class OkrGovernanceService {
             id: true,
             name: true,
             status: true,
-            organizationId: true,
+            tenantId: true,
           },
         },
       },
@@ -235,7 +249,7 @@ export class OkrGovernanceService {
     // LOCKED or ARCHIVED cycles require admin override
     if (cycleStatus === 'LOCKED' || cycleStatus === 'ARCHIVED') {
       // Superuser is read-only, cannot bypass cycle lock
-      if (actingUser.organizationId === null) {
+      if (actingUser.tenantId === null) {
         throw new ForbiddenException(`This cycle (${cycle.name || 'locked'}) is locked and can only be modified by admin roles`);
       }
 
@@ -264,8 +278,8 @@ export class OkrGovernanceService {
    * @throws ForbiddenException if any lock prevents the operation
    */
   async checkAllLocksForObjective(params: {
-    objective: { id: string; isPublished: boolean };
-    actingUser: { id: string; organizationId: string | null };
+    objective: { id: string; state?: string; isPublished?: boolean }; // Support both state and legacy isPublished
+    actingUser: { id: string; tenantId: string | null };
     rbacService: RBACService;
   }): Promise<void> {
     // Check cycle lock first
@@ -287,8 +301,8 @@ export class OkrGovernanceService {
    * @throws ForbiddenException if any lock prevents the operation
    */
   async checkAllLocksForKeyResult(params: {
-    parentObjective: { id: string; isPublished: boolean };
-    actingUser: { id: string; organizationId: string | null };
+    parentObjective: { id: string; state?: string; isPublished?: boolean }; // Support both state and legacy isPublished
+    actingUser: { id: string; tenantId: string | null };
     rbacService: RBACService;
   }): Promise<void> {
     // Check cycle lock first

@@ -16,7 +16,7 @@ export class AuthController {
       password: string; 
       firstName: string; 
       lastName: string;
-      organizationId: string; // REQUIRED
+      tenantId: string; // REQUIRED
       workspaceId: string; // REQUIRED
     },
   ) {

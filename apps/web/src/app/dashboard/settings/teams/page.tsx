@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { PageContainer } from '@/components/ui/PageContainer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -198,25 +199,24 @@ function TeamsSettings() {
   }
 
   return (
-    <div className="p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Teams</h1>
-            <p className="text-slate-600 mt-1">
-              Small groups within the <strong>{workspace?.name}</strong> workspace
-            </p>
-            <div className="mt-2 text-xs text-slate-500 flex items-center gap-2">
-              <Building2 className="h-3 w-3" />
-              <span>{organization?.name}</span>
-              <span>→</span>
-              <Briefcase className="h-3 w-3" />
-              <span>{workspace?.name}</span>
-              <span>→</span>
-              <Users className="h-3 w-3" />
-              <span className="font-medium">Teams</span>
-            </div>
-          </div>
+    <PageContainer variant="form">
+      <PageHeader
+        title="Teams"
+        subtitle={`Small groups within the ${workspace?.name || 'selected'} workspace`}
+      />
+      <div className="space-y-6">
+        <div className="text-xs text-slate-500 flex items-center gap-2">
+          <Building2 className="h-3 w-3" />
+          <span>{organization?.name}</span>
+          <span>→</span>
+          <Briefcase className="h-3 w-3" />
+          <span>{workspace?.name}</span>
+          <span>→</span>
+          <Users className="h-3 w-3" />
+          <span className="font-medium">Teams</span>
+        </div>
+
+        <div className="flex items-center justify-end">
           <Button onClick={() => setShowCreate(!showCreate)} disabled={!workspace}>
             <Plus className="h-4 w-4 mr-2" />
             New Team
@@ -312,11 +312,11 @@ function TeamsSettings() {
                 <CardContent>
                   <div className="space-y-3">
                     <div className="text-sm text-slate-600">
-                      {team.members?.length || 0} members
+                      {(team as any).members?.length || 0} members
                     </div>
-                    {team.members && team.members.length > 0 && (
+                    {(team as any).members && (team as any).members.length > 0 && (
                       <div className="space-y-2">
-                        {team.members.map((member: any) => (
+                        {(team as any).members.map((member: any) => (
                           <div key={member.id} className="flex items-center justify-between p-2 bg-slate-50 rounded">
                             <div className="flex items-center gap-2">
                               <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium">
@@ -450,7 +450,7 @@ function TeamsSettings() {
           </AlertDialogContent>
         </AlertDialog>
       </div>
-    </div>
+    </PageContainer>
   )
 }
 

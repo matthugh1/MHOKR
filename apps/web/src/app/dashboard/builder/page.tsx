@@ -13,9 +13,6 @@ import ReactFlow, {
   Controls,
   MiniMap,
   Panel,
-  NodeProps,
-  Handle,
-  Position,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { ProtectedRoute } from '@/components/protected-route'
@@ -26,33 +23,25 @@ import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Plus, Save, Target, CheckCircle, Lightbulb, X, Trash2, Building2, Users, User, Search, ChevronDown, Briefcase, Calendar } from 'lucide-react'
+import { Plus, Target, CheckCircle, Lightbulb, X, Trash2, Building2, Users, User, Search, ChevronDown, Calendar, HelpCircle } from 'lucide-react'
 import api from '@/lib/api'
 import { Period } from '@okr-nexus/types'
 import { createHierarchicalLayout, getDefaultNodePosition } from '@/lib/auto-layout'
 import { EditPanel } from './components/EditPanel'
-import { EditFormTabs } from './components/EditFormTabs'
+import { EditFormTabs, EditFormState } from './components/EditFormTabs'
 import { ObjectiveNode, KeyResultNode, InitiativeNode } from './components/EnhancedNodes'
 import { useAutoSave } from './hooks/useAutoSave'
 import { CycleSelector } from '@/components/ui/CycleSelector'
 import { 
   calculateEndDate, 
   formatDateForInput, 
-  getPeriodLabel, 
   formatPeriod, 
   getQuarterFromDate, 
   getQuarterDates, 
   getMonthDates, 
   getYearDates,
-  getCurrentYear,
   getAvailableYears,
   getMonthName,
-  getAvailablePeriodFilters,
-  getCurrentPeriodFilter,
-  doesOKRMatchPeriod,
-  type PeriodFilterOption
 } from '@/lib/date-utils'
 
 // Node components are now imported from EnhancedNodes.tsx
@@ -68,19 +57,19 @@ export default function BuilderPage() {
   const [edges, setEdges, onEdgesChangeBase] = useEdgesState([])
   // TODO [phase7-hardening]: tighten typing - replace Record<string, unknown> with proper node types
   const [editingNode, setEditingNode] = useState<{ id: string; data: Record<string, unknown> } | null>(null)
-  const [editingFormData, setEditingFormData] = useState<Record<string, unknown> | null>(null)
+  const [editingFormData, setEditingFormData] = useState<EditFormState | null>(null)
+  const [alignmentError, setAlignmentError] = useState<{ code?: string; message?: string } | null>(null)
   const [showNodeCreator, setShowNodeCreator] = useState(false)
-  const [loading, setLoading] = useState(false)
+  const [legendExpanded, setLegendExpanded] = useState(false)
+  const [_loading, setLoading] = useState(false)
   const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved'>('idle')
-  const [periodFilter, setPeriodFilter] = useState<string>(getCurrentPeriodFilter())
-  const availablePeriods = getAvailablePeriodFilters()
   const [activeCycles, setActiveCycles] = useState<Array<{
     id: string
     name: string
     status: string
     startDate: string
     endDate: string
-    organizationId: string
+    tenantId: string
   }>>([])
 
   // Auto-save positions - Temporarily disabled until endpoint is verified
@@ -103,6 +92,7 @@ export default function BuilderPage() {
     loading: workspaceLoading 
   } = useWorkspace()
   const { user } = useAuth()
+  const tenantPermissions = useTenantPermissions()
 
   const getOKRLevelDisplay = () => {
     switch (currentOKRLevel) {
@@ -285,7 +275,7 @@ export default function BuilderPage() {
 
   const loadActiveCycles = async () => {
     try {
-      const response = await api.get('/objectives/cycles/active')
+      const response = await api.get('/reports/cycles/active')
       const cycles = response.data || []
       setActiveCycles(cycles)
       // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
@@ -306,7 +296,7 @@ export default function BuilderPage() {
   const loadOKRs = async () => {
     try {
       // Build query params with organizationId if available
-      const queryParams = currentOrganization?.id ? `?organizationId=${currentOrganization.id}` : ''
+      const queryParams = currentOrganization?.id ? `?tenantId=${currentOrganization.id}` : ''
       
       // Load objectives, key results, initiatives, and user layout
       const [objectivesRes, , initiativesRes, userLayoutRes] = await Promise.all([
@@ -334,6 +324,28 @@ export default function BuilderPage() {
 
       // Add objectives as nodes
       objectivesRes.data.forEach((obj: any, index: number) => {
+        // Check visibility first - only create nodes for visible objectives
+        const objectiveForPerms = {
+          id: obj.id,
+          ownerId: obj.ownerId,
+          tenantId: obj.tenantId,
+          workspaceId: obj.workspaceId,
+          teamId: obj.teamId,
+          isPublished: obj.isPublished || false,
+          visibilityLevel: obj.visibilityLevel,
+          cycle: obj.cycleId && activeCycles.find(c => c.id === obj.cycleId)
+            ? { id: obj.cycleId, status: activeCycles.find(c => c.id === obj.cycleId)!.status }
+            : null,
+          cycleStatus: obj.cycleId && activeCycles.find(c => c.id === obj.cycleId)
+            ? activeCycles.find(c => c.id === obj.cycleId)!.status
+            : null,
+        }
+        
+        const canView = tenantPermissions.canViewObjective(objectiveForPerms)
+        if (!canView) {
+          return // Skip this objective entirely - don't create node or edges
+        }
+        
         const defaultPosition = obj.positionX !== null && obj.positionY !== null 
           ? { x: obj.positionX, y: obj.positionY }
           : getDefaultNodePosition('objective', index)
@@ -343,30 +355,38 @@ export default function BuilderPage() {
         // Map objective to view model to get timeframeKey
         const objectiveViewModel = mapObjectiveToViewModel(obj)
         
+        // Check permissions for this objective
+        const canEditObjective = tenantPermissions.canEditObjective(objectiveForPerms)
+        
         loadedNodes.push({
           id: `obj-${obj.id}`,
           type: 'objective',
           position,
-            data: {
-              label: obj.title,
-              description: obj.description,
-              progress: obj.progress || 0,
-              owner: obj.ownerId,
-              ownerId: obj.ownerId,
-              ownerName: obj.owner?.name,
-              parentId: obj.parentId,
-              organizationId: obj.organizationId,
-              workspaceId: obj.workspaceId,
-              teamId: obj.teamId,
-              period: obj.period,
-              startDate: obj.startDate ? formatDateForInput(obj.startDate) : undefined,
-              endDate: obj.endDate ? formatDateForInput(obj.endDate) : undefined,
-              cycleId: obj.cycleId || null,
-              timeframeKey: objectiveViewModel.timeframeKey,
-              onEdit: handleEditNode,
-              onQuickSave: handleQuickSave,
-              okrId: obj.id,
-            },
+          data: {
+            label: obj.title,
+            description: obj.description,
+            progress: obj.progress || 0,
+            owner: obj.ownerId,
+            ownerId: obj.ownerId,
+            ownerName: obj.owner?.name,
+            parentId: obj.parentId,
+            tenantId: obj.tenantId,
+            workspaceId: obj.workspaceId,
+            teamId: obj.teamId,
+            period: obj.period,
+            startDate: obj.startDate ? formatDateForInput(obj.startDate) : undefined,
+            endDate: obj.endDate ? formatDateForInput(obj.endDate) : undefined,
+            cycleId: obj.cycleId || null,
+            timeframeKey: objectiveViewModel.timeframeKey,
+            onEdit: handleEditNode,
+            onQuickSave: handleQuickSave,
+            okrId: obj.id,
+            canEdit: canEditObjective,
+            canView: canView,
+            isPublished: obj.isPublished || false,
+            cycle: objectiveForPerms.cycle,
+            cycleStatus: objectiveForPerms.cycleStatus,
+          },
         })
 
         // Add key results as nodes and connect to objectives
@@ -377,12 +397,29 @@ export default function BuilderPage() {
             const kr = krJunction.keyResult
             if (!kr) return // Skip if keyResult is missing
             
+            // Check if user can view this key result (inherits from parent objective)
+            const canViewKR = tenantPermissions.canSeeKeyResult(kr, objectiveForPerms)
+            if (!canViewKR) {
+              return // Skip this key result entirely
+            }
+            
             const krNodeId = `kr-${kr.id}`
             const defaultPosition = kr.positionX !== null && kr.positionY !== null
               ? { x: kr.positionX, y: kr.positionY }
               : getDefaultNodePosition('keyResult', krIndex, index)
             
             const position = getNodePosition('KEY_RESULT', kr.id, defaultPosition)
+            
+            // Check permissions for this key result
+            const krForPerms = {
+              id: kr.id,
+              ownerId: kr.ownerId || obj.ownerId,
+              tenantId: obj.tenantId,
+              workspaceId: obj.workspaceId,
+              teamId: obj.teamId,
+              parentObjective: objectiveForPerms,
+            }
+            const canEditKR = tenantPermissions.canEditKeyResult(krForPerms)
             
             loadedNodes.push({
               id: krNodeId,
@@ -400,11 +437,18 @@ export default function BuilderPage() {
                 endDate: kr.endDate ? formatDateForInput(kr.endDate) : undefined,
                 onEdit: handleEditNode,
                 onQuickSave: handleQuickSave,
-                okrId: kr.id, // Use the actual KeyResult ID, not the junction table ID
+                okrId: kr.id,
+                canEdit: canEditKR,
+                canView: canViewKR,
+                ownerId: kr.ownerId || obj.ownerId,
+                tenantId: obj.tenantId,
+                workspaceId: obj.workspaceId,
+                teamId: obj.teamId,
+                parentObjective: objectiveForPerms,
               },
             })
             
-            // Connect KR to Objective
+            // Connect KR to Objective (only if both nodes exist)
             loadedEdges.push({
               id: `e-${obj.id}-${kr.id}`,
               source: `obj-${obj.id}`,
@@ -415,9 +459,10 @@ export default function BuilderPage() {
         }
       })
 
-      // Create parent-child edges between objectives
+      // Create parent-child edges between objectives (only if both nodes are visible)
+      const visibleObjectiveIds = new Set(loadedNodes.filter(n => n.type === 'objective').map(n => n.id.replace('obj-', '')))
       objectivesRes.data.forEach((obj: any) => {
-        if (obj.parentId) {
+        if (obj.parentId && visibleObjectiveIds.has(obj.parentId) && visibleObjectiveIds.has(obj.id)) {
           loadedEdges.push({
             id: `edge-obj-${obj.parentId}-obj-${obj.id}`,
             source: `obj-${obj.parentId}`,
@@ -465,9 +510,9 @@ export default function BuilderPage() {
         }
       })
 
-      // If no user layout exists and we have nodes, apply auto-layout
-      const hasUserLayout = Object.keys(userLayoutMap).length > 0
-      if (!hasUserLayout && loadedNodes.length > 0) {
+      // Always apply auto-layout if we have nodes (for better UX)
+      // Users can manually rearrange after if needed
+      if (loadedNodes.length > 0) {
         const { nodes: layoutedNodes } = createHierarchicalLayout(loadedNodes, loadedEdges)
         setNodes(layoutedNodes)
       } else {
@@ -488,13 +533,18 @@ export default function BuilderPage() {
     const initStartDate = data.startDate ? new Date(data.startDate) : new Date()
     const initPeriod = data.period || Period.QUARTERLY
     
+    const fallbackOwnerName =
+      (user?.firstName && user?.lastName)
+        ? `${user.firstName} ${user.lastName}`
+        : user?.email || ''
+    
     setEditingFormData({
       label: data.label || '',
       description: data.description || '',
       okrId: data.okrId || '',
       ownerId: data.ownerId || user?.id || '',
-      ownerName: data.ownerName || user?.name || '',
-      organizationId: data.organizationId || defaultOKRContext.organizationId || '',
+      ownerName: data.ownerName || fallbackOwnerName,
+      tenantId: data.tenantId || defaultOKRContext.tenantId || '',
       workspaceId: data.workspaceId || defaultOKRContext.workspaceId || '',
       teamId: data.teamId || defaultOKRContext.teamId || '',
       parentId: data.parentId || '',
@@ -511,6 +561,10 @@ export default function BuilderPage() {
       month: initStartDate.getMonth(),
       year: initStartDate.getFullYear(),
       visibilityLevel: data.visibilityLevel || 'PUBLIC_TENANT',
+      isPublished: data.isPublished || false,
+      cycle: data.cycle || null,
+      cycleStatus: data.cycleStatus || null,
+      parentObjective: data.parentObjective || null,
     })
   }
 
@@ -537,8 +591,8 @@ export default function BuilderPage() {
       }
 
       // Update node in canvas
-      setNodes((nds) =>
-        nds.map((n) =>
+      setNodes((nds: Node[]) =>
+        nds.map((n: Node) =>
           n.id === nodeId ? { ...n, data: { ...n.data, ...quickData } } : n
         )
       )
@@ -548,6 +602,9 @@ export default function BuilderPage() {
   }
 
   const handleSaveNode = async (nodeId: string, updatedData: any) => {
+    // Clear previous alignment errors
+    setAlignmentError(null)
+    
     try {
       console.log('Saving node:', nodeId, updatedData)
       const nodeTypePrefix = nodeId.split('-')[0]
@@ -560,7 +617,7 @@ export default function BuilderPage() {
             title: updatedData.label,
             description: updatedData.description,
             ownerId: updatedData.ownerId,
-            organizationId: updatedData.organizationId && updatedData.organizationId !== '' ? updatedData.organizationId : null,
+            tenantId: updatedData.tenantId && updatedData.tenantId !== '' ? updatedData.tenantId : null,
             workspaceId: updatedData.workspaceId && updatedData.workspaceId !== '' ? updatedData.workspaceId : null,
             teamId: updatedData.teamId && updatedData.teamId !== '' ? updatedData.teamId : null,
             parentId: updatedData.parentId && updatedData.parentId !== '' ? updatedData.parentId : null,
@@ -580,9 +637,9 @@ export default function BuilderPage() {
           if (oldParentId !== newParentId) {
             // Remove old parent edge if it exists
             if (oldParentId) {
-              setEdges(prev => prev.filter(e => 
-                !(e.source.endsWith(oldParentId) && e.target === nodeId && e.data?.type === 'parent-child')
-              ))
+            setEdges((prev: Edge[]) => prev.filter((e: Edge) => 
+              !(e.source.endsWith(oldParentId) && e.target === nodeId && e.data?.type === 'parent-child')
+            ))
             }
             
             // Add new parent edge if parent is set
@@ -598,7 +655,7 @@ export default function BuilderPage() {
                   style: { stroke: '#3b82f6', strokeWidth: 2 },
                   data: { type: 'parent-child' }
                 }
-                setEdges(prev => [...prev, newEdge])
+                setEdges((prev: Edge[]) => [...prev, newEdge])
               }
             }
           }
@@ -607,7 +664,7 @@ export default function BuilderPage() {
           const res = await api.post('/objectives', {
             title: updatedData.label,
             description: updatedData.description,
-            organizationId: (updatedData.organizationId && updatedData.organizationId !== '') ? updatedData.organizationId : (defaultOKRContext.organizationId || null),
+            tenantId: (updatedData.tenantId && updatedData.tenantId !== '') ? updatedData.tenantId : (defaultOKRContext.tenantId || null),
             workspaceId: (updatedData.workspaceId && updatedData.workspaceId !== '') ? updatedData.workspaceId : (defaultOKRContext.workspaceId || null),
             teamId: (updatedData.teamId && updatedData.teamId !== '') ? updatedData.teamId : (defaultOKRContext.teamId || null),
             ownerId: updatedData.ownerId || defaultOKRContext.ownerId,
@@ -632,7 +689,7 @@ export default function BuilderPage() {
                 style: { stroke: '#3b82f6', strokeWidth: 2 },
                 data: { type: 'parent-child' }
               }
-              setEdges(prev => [...prev, newEdge])
+              setEdges((prev: Edge[]) => [...prev, newEdge])
             }
           }
         }
@@ -722,7 +779,7 @@ export default function BuilderPage() {
       }
 
       // Update node in canvas
-      setNodes((nds) =>
+      setNodes((nds: Node[]) =>
         nds.map((node) =>
           node.id === nodeId ? { ...node, data: { ...node.data, ...updatedData } } : node
         )
@@ -731,6 +788,17 @@ export default function BuilderPage() {
       console.log('Node saved successfully!')
     } catch (error: any) {
       console.error('Failed to save node:', error)
+      
+      // Extract alignment error codes for inline display
+      const errorCode = error.response?.data?.code
+      const errorMessage = error.response?.data?.message
+      if (errorCode === 'ALIGNMENT_DATE_OUT_OF_RANGE' || errorCode === 'ALIGNMENT_CYCLE_MISMATCH') {
+        setAlignmentError({ code: errorCode, message: errorMessage })
+        // Don't show alert for alignment errors - they're shown inline
+        return
+      }
+      
+      // Show alert for other errors
       alert(`Failed to save: ${error.response?.data?.message || error.message || 'Unknown error'}`)
     }
   }
@@ -744,8 +812,8 @@ export default function BuilderPage() {
 
     // If node hasn't been saved yet, just remove from canvas
     if (!node.data.okrId) {
-      setNodes((nds) => nds.filter((n) => n.id !== nodeId))
-      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId))
+      setNodes((nds: Node[]) => nds.filter((n: Node) => n.id !== nodeId))
+      setEdges((eds: Edge[]) => eds.filter((e: Edge) => e.source !== nodeId && e.target !== nodeId))
       setEditingNode(null)
       return
     }
@@ -758,8 +826,8 @@ export default function BuilderPage() {
 
       if (!okrId) {
         // Just remove from canvas if no ID
-        setNodes((nds) => nds.filter((n) => n.id !== nodeId))
-        setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId))
+        setNodes((nds: Node[]) => nds.filter((n) => n.id !== nodeId))
+        setEdges((eds: Edge[]) => eds.filter((e: Edge) => e.source !== nodeId && e.target !== nodeId))
         setEditingNode(null)
         return
       }
@@ -776,8 +844,8 @@ export default function BuilderPage() {
       }
 
       // Remove from canvas on success
-      setNodes((nds) => nds.filter((n) => n.id !== nodeId))
-      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId))
+      setNodes((nds: Node[]) => nds.filter((n: Node) => n.id !== nodeId))
+      setEdges((eds: Edge[]) => eds.filter((e: Edge) => e.source !== nodeId && e.target !== nodeId))
       setEditingNode(null)
     } catch (error: any) {
       console.error('Failed to delete node:', error)
@@ -805,16 +873,19 @@ export default function BuilderPage() {
       newNode.data.progress = 0
       newNode.data.description = ''
       newNode.data.owner = ''
+      newNode.data.canEdit = true
     } else if (type === 'keyResult') {
       newNode.data.current = 0
       newNode.data.target = 100
       newNode.data.unit = 'units'
       newNode.data.progress = 0
+      newNode.data.canEdit = true
     } else if (type === 'initiative') {
       newNode.data.status = 'Not Started'
+      newNode.data.canEdit = true
     }
 
-    setNodes((nds) => [...nds, newNode])
+    setNodes((nds: Node[]) => [...nds, newNode])
     setShowNodeCreator(false)
     // Auto-open edit dialog
     setTimeout(() => handleEditNode(newNode.id, newNode.data), 100)
@@ -834,7 +905,7 @@ export default function BuilderPage() {
         edgeStyle = { stroke: '#3b82f6', strokeWidth: 2 }
       }
       
-      setEdges((eds) => addEdge({ 
+      setEdges((eds: Edge[]) => addEdge({ 
         ...params, 
         animated: true, 
         style: edgeStyle,
@@ -903,7 +974,7 @@ export default function BuilderPage() {
     [edges, nodes, onEdgesChangeBase]
   )
 
-  const handleSaveLayout = async () => {
+  const _handleSaveLayout = async () => {
     setLoading(true)
     try {
       // Collect all node positions for batch save
@@ -936,75 +1007,88 @@ export default function BuilderPage() {
     }
   }
 
+  // Build badges array
+  const badges = []
+  if (selectedTimeframeLabel) {
+    badges.push({ label: `Viewing: ${selectedTimeframeLabel}`, tone: 'neutral' as const })
+  }
+  if (!workspaceLoading && currentWorkspace && currentOrganization && 
+      currentWorkspace.tenantId === currentOrganization.id) {
+    const workspaceBadge = currentTeam && currentTeam.workspaceId === currentWorkspace.id
+      ? `${currentWorkspace.name} • ${currentTeam.name}`
+      : currentWorkspace.name
+    badges.push({ label: workspaceBadge, tone: 'neutral' as const })
+  }
+
+  // Handle auto-layout
+  const handleAutoLayout = () => {
+    if (nodes.length > 0) {
+      const { nodes: layoutedNodes } = createHierarchicalLayout(nodes, edges)
+      setNodes(layoutedNodes)
+    }
+  }
+
+  const isEmpty = nodes.length === 0
+
   return (
     <ProtectedRoute>
       <DashboardLayout>
-        <div className="h-full flex flex-col">
-            <div className="p-6 border-b bg-white">
-            {/* TODO[phase6-polish]: align header spacing with analytics/okrs headers if design tweaks */}
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex flex-col">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Visual OKR Builder</h1>
-                    <div className="flex items-center gap-3 mt-2">
-                      <p className="text-slate-600 text-sm">
-                        Drag from the circles on nodes to connect them
-                      </p>
-                      {selectedTimeframeLabel && (
-                        <p className="text-xs text-neutral-500">
-                          Viewing: {selectedTimeframeLabel}
-                        </p>
-                      )}
-                      {!workspaceLoading && currentWorkspace && currentOrganization && 
-                       currentWorkspace.organizationId === currentOrganization.id && (
-                        <div className="flex items-center gap-2 text-xs bg-slate-100 px-3 py-1 rounded-full">
-                          <Building2 className="h-3 w-3 text-slate-600" />
-                          <span className="text-slate-700">{currentWorkspace.name}</span>
-                          {currentTeam && currentTeam.workspaceId === currentWorkspace.id && (
-                            <>
-                              <span className="text-slate-400">•</span>
-                              <Users className="h-3 w-3 text-slate-600" />
-                              <span className="text-slate-700">{currentTeam.name}</span>
-                            </>
-                          )}
-                        </div>
-                      )}
+        <div className="h-full flex flex-col bg-neutral-50">
+          {/* Integrated Header - Seamless with canvas */}
+          <div className="absolute top-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-sm border-b border-neutral-200">
+            <div className="max-w-[1600px] mx-auto px-6 py-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <h1 className="text-xl font-semibold text-neutral-900">Visual OKR Builder</h1>
+                  {badges.length > 0 && (
+                    <div className="flex items-center gap-2">
+                      {badges.map((badge, idx) => (
+                        <span key={idx} className="text-xs px-2 py-1 rounded-full bg-neutral-100 text-neutral-600">
+                          {badge.label}
+                        </span>
+                      ))}
                     </div>
-                  </div>
-                  <div className="flex gap-2 items-center">
-                <CycleSelector
-                  cycles={normalizedCycles}
-                  legacyPeriods={legacyPeriods}
-                  selectedId={selectedTimeframeKey}
-                  onSelect={(opt: { key: string; label: string }) => {
-                    setSelectedTimeframeKey(opt.key)
-                    setSelectedTimeframeLabel(opt.label)
-                  }}
-                />
-                <Button variant="outline" onClick={() => setShowNodeCreator(!showNodeCreator)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Node
-                </Button>
-                {savingState === 'saving' && (
-                  <div className="flex items-center gap-2 text-sm text-slate-600">
-                    <div className="animate-spin h-4 w-4 border-2 border-slate-400 border-t-transparent rounded-full"></div>
-                    Saving...
-                  </div>
-                )}
-                {savingState === 'saved' && (
-                  <div className="flex items-center gap-2 text-sm text-green-600">
-                    <CheckCircle className="h-4 w-4" />
-                    Saved
-                  </div>
-                )}
-                  </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <CycleSelector
+                    cycles={normalizedCycles}
+                    legacyPeriods={legacyPeriods}
+                    selectedId={selectedTimeframeKey}
+                    onSelect={(opt: { key: string; label: string }) => {
+                      setSelectedTimeframeKey(opt.key)
+                      setSelectedTimeframeLabel(opt.label)
+                    }}
+                  />
+                  {!isEmpty && (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleAutoLayout}
+                      className="gap-2"
+                    >
+                      <Target className="h-4 w-4" />
+                      Auto-Layout
+                    </Button>
+                  )}
+                  {savingState === 'saving' && (
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <div className="animate-spin h-4 w-4 border-2 border-slate-400 border-t-transparent rounded-full"></div>
+                      Saving...
+                    </div>
+                  )}
+                  {savingState === 'saved' && (
+                    <div className="flex items-center gap-2 text-sm text-green-600">
+                      <CheckCircle className="h-4 w-4" />
+                      Saved
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="flex-1 relative">
+          <div className="flex-1 relative pt-16">
             <ReactFlow
               nodes={filteredNodes}
               edges={edges}
@@ -1023,56 +1107,132 @@ export default function BuilderPage() {
               <Controls />
               <MiniMap />
               
-              {/* Legend */}
-              <Panel position="top-left" className="space-y-3">
-                {/* OKR Level Context */}
-                <div className="bg-white p-4 rounded-lg shadow-lg">
-                  <div className="text-xs font-semibold text-slate-500 mb-2">CREATING OKRS FOR</div>
-                  <div className="flex items-center gap-2">
-                    {levelDisplay && (
-                      <>
-                        <levelDisplay.icon className={`h-5 w-5 ${levelDisplay.color}`} />
-                        <div>
-                          <div className="text-sm font-semibold">{levelDisplay.name}</div>
-                          <div className="text-xs text-slate-500">{levelDisplay.label} Level</div>
+              {/* Empty State */}
+              {isEmpty && (
+                <Panel position="top-center" className="bg-transparent">
+                  <div className="bg-white rounded-xl shadow-lg border border-neutral-200 p-8 max-w-md text-center">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-100 flex items-center justify-center">
+                      <Target className="h-8 w-8 text-blue-600" />
+                    </div>
+                    <h2 className="text-xl font-semibold text-neutral-900 mb-2">Create Your First OKR</h2>
+                    <p className="text-sm text-neutral-600 mb-6">
+                      Build your OKR structure visually. Start with an Objective, then add Key Results and Initiatives.
+                    </p>
+                    <Button 
+                      onClick={() => setShowNodeCreator(true)}
+                      className="gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Create Objective
+                    </Button>
+                    <div className="mt-6 pt-6 border-t border-neutral-200">
+                      <div className="text-xs font-semibold text-neutral-500 mb-3">How it works</div>
+                      <div className="space-y-2 text-xs text-neutral-600 text-left">
+                        <div className="flex items-start gap-2">
+                          <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 flex-shrink-0"></div>
+                          <span>Objectives are your main goals</span>
                         </div>
-                      </>
-                    )}
+                        <div className="flex items-start gap-2">
+                          <div className="w-2 h-2 rounded-full bg-green-500 mt-1.5 flex-shrink-0"></div>
+                          <span>Key Results measure progress</span>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <div className="w-2 h-2 rounded-full bg-purple-500 mt-1.5 flex-shrink-0"></div>
+                          <span>Initiatives are the actions you take</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                </Panel>
+              )}
 
-                {/* Legend */}
-                <div className="bg-white p-4 rounded-lg shadow-lg">
-                  <div className="space-y-2">
-                    <div className="text-sm font-semibold mb-3">Node Types</div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                      <span className="text-xs">Objective</span>
+              {/* Collapsible Legend */}
+              <Panel position="top-left">
+                <div className="relative">
+                  {!legendExpanded ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setLegendExpanded(true)}
+                      className="bg-white shadow-lg gap-2"
+                    >
+                      <HelpCircle className="h-4 w-4" />
+                      Help
+                    </Button>
+                  ) : (
+                    <div className="bg-white rounded-lg shadow-lg border border-neutral-200 p-4 space-y-3 min-w-[240px]">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold">Legend</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setLegendExpanded(false)}
+                          className="h-6 w-6 p-0"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      
+                      {/* OKR Level Context */}
+                      {levelDisplay && (
+                        <div className="pb-3 border-b border-neutral-200">
+                          <div className="text-xs font-semibold text-neutral-500 mb-2">CREATING OKRS FOR</div>
+                          <div className="flex items-center gap-2">
+                            <levelDisplay.icon className={`h-4 w-4 ${levelDisplay.color}`} />
+                            <div>
+                              <div className="text-sm font-semibold">{levelDisplay.name}</div>
+                              <div className="text-xs text-neutral-500">{levelDisplay.label} Level</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Node Types */}
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-neutral-500 mb-2">Node Types</div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                          <span className="text-xs">Objective</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                          <span className="text-xs">Key Result</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                          <span className="text-xs">Initiative</span>
+                        </div>
+                      </div>
+                      
+                      {/* Instructions */}
+                      <div className="pt-3 border-t border-neutral-200 space-y-1.5">
+                        <div className="flex items-start gap-2 text-xs text-neutral-600">
+                          <span>•</span>
+                          <span>Drag from circles to connect nodes</span>
+                        </div>
+                        <div className="flex items-start gap-2 text-xs text-neutral-600">
+                          <span>•</span>
+                          <span>Click nodes to edit details</span>
+                        </div>
+                        <div className="flex items-start gap-2 text-xs text-neutral-600">
+                          <span>•</span>
+                          <span>Use Auto-Layout to reorganize</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                      <span className="text-xs">Key Result</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                      <span className="text-xs">Initiative</span>
-                    </div>
-                    <div className="text-xs text-slate-500 mt-3 pt-3 border-t">
-                      💡 Drag from circles to connect
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      ✏️ Hover and click to edit
-                    </div>
-                  </div>
+                  )}
                 </div>
               </Panel>
 
-              {/* Node Creator */}
+              {/* Node Creator - Floating Panel */}
               {showNodeCreator && (
-                <Panel position="top-right" className="bg-white p-4 rounded-lg shadow-lg min-w-[200px]">
+                <Panel position="top-right" className="bg-white p-4 rounded-lg shadow-lg border border-neutral-200 min-w-[220px]">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold">Add Node</h3>
-                    <button onClick={() => setShowNodeCreator(false)}>
+                    <h3 className="font-semibold text-sm">Add Node</h3>
+                    <button 
+                      onClick={() => setShowNodeCreator(false)}
+                      className="text-neutral-400 hover:text-neutral-600"
+                    >
                       <X className="h-4 w-4" />
                     </button>
                   </div>
@@ -1080,34 +1240,66 @@ export default function BuilderPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full justify-start"
-                      onClick={() => handleAddNode('objective')}
+                      className="w-full justify-start gap-2"
+                      onClick={() => {
+                        handleAddNode('objective')
+                        setShowNodeCreator(false)
+                      }}
                     >
-                      <Target className="h-4 w-4 mr-2 text-blue-500" />
+                      <Target className="h-4 w-4 text-blue-500" />
                       Objective
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full justify-start"
-                      onClick={() => handleAddNode('keyResult')}
+                      className="w-full justify-start gap-2"
+                      onClick={() => {
+                        handleAddNode('keyResult')
+                        setShowNodeCreator(false)
+                      }}
                     >
-                      <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                      <CheckCircle className="h-4 w-4 text-green-500" />
                       Key Result
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full justify-start"
-                      onClick={() => handleAddNode('initiative')}
+                      className="w-full justify-start gap-2"
+                      onClick={() => {
+                        handleAddNode('initiative')
+                        setShowNodeCreator(false)
+                      }}
                     >
-                      <Lightbulb className="h-4 w-4 mr-2 text-purple-500" />
+                      <Lightbulb className="h-4 w-4 text-purple-500" />
                       Initiative
                     </Button>
                   </div>
                 </Panel>
               )}
             </ReactFlow>
+          </div>
+
+          {/* Floating Action Button (FAB) */}
+          <div className="absolute bottom-6 right-6 z-30">
+            <div className="relative">
+              {showNodeCreator ? (
+                <Button
+                  size="icon"
+                  className="h-14 w-14 rounded-full shadow-lg bg-blue-600 hover:bg-blue-700"
+                  onClick={() => setShowNodeCreator(false)}
+                >
+                  <X className="h-6 w-6" />
+                </Button>
+              ) : (
+                <Button
+                  size="icon"
+                  className="h-14 w-14 rounded-full shadow-lg bg-blue-600 hover:bg-blue-700"
+                  onClick={() => setShowNodeCreator(true)}
+                >
+                  <Plus className="h-6 w-6" />
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1145,7 +1337,7 @@ export default function BuilderPage() {
               return tenantPermissions.canEditObjective({
                 id: editingFormData.okrId as string || '',
                 ownerId: editingFormData.ownerId as string || '',
-                organizationId: editingFormData.organizationId as string | null || null,
+                tenantId: editingFormData.tenantId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
                 isPublished: editingFormData.isPublished as boolean || false,
@@ -1156,10 +1348,18 @@ export default function BuilderPage() {
               return tenantPermissions.canEditKeyResult({
                 id: editingFormData.okrId as string || '',
                 ownerId: editingFormData.ownerId as string || '',
-                organizationId: editingFormData.organizationId as string | null || null,
+                tenantId: editingFormData.tenantId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
-                parentObjective: editingFormData.parentObjective as Record<string, unknown> || null,
+                parentObjective: editingFormData.parentObjective && typeof editingFormData.parentObjective === 'object' && 'id' in editingFormData.parentObjective
+                  ? {
+                      id: (editingFormData.parentObjective as any).id as string,
+                      tenantId: (editingFormData.parentObjective as any).tenantId as string | null | undefined,
+                      isPublished: (editingFormData.parentObjective as any).isPublished as boolean | undefined,
+                      cycle: (editingFormData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
+                      cycleStatus: (editingFormData.parentObjective as any).cycleStatus as string | null | undefined,
+                    }
+                  : null,
               })
             }
             return true // Initiatives don't have lock logic yet
@@ -1170,7 +1370,7 @@ export default function BuilderPage() {
               return tenantPermissions.canDeleteObjective({
                 id: editingFormData.okrId as string || '',
                 ownerId: editingFormData.ownerId as string || '',
-                organizationId: editingFormData.organizationId as string | null || null,
+                tenantId: editingFormData.tenantId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
                 isPublished: editingFormData.isPublished as boolean || false,
@@ -1182,7 +1382,7 @@ export default function BuilderPage() {
               return tenantPermissions.canDeleteObjective({
                 id: (editingFormData.parentObjective as Record<string, unknown>)?.id as string || '',
                 ownerId: editingFormData.ownerId as string || '',
-                organizationId: editingFormData.organizationId as string | null || null,
+                tenantId: editingFormData.tenantId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
                 isPublished: (editingFormData.parentObjective as Record<string, unknown>)?.isPublished as boolean || false,
@@ -1198,7 +1398,7 @@ export default function BuilderPage() {
               const lockInfo = tenantPermissions.getLockInfoForObjective({
                 id: editingFormData.okrId as string || '',
                 ownerId: editingFormData.ownerId as string || '',
-                organizationId: editingFormData.organizationId as string | null || null,
+                tenantId: editingFormData.tenantId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
                 isPublished: editingFormData.isPublished as boolean || false,
@@ -1210,10 +1410,18 @@ export default function BuilderPage() {
               const lockInfo = tenantPermissions.getLockInfoForKeyResult({
                 id: editingFormData.okrId as string || '',
                 ownerId: editingFormData.ownerId as string || '',
-                organizationId: editingFormData.organizationId as string | null || null,
+                tenantId: editingFormData.tenantId as string | null || null,
                 workspaceId: editingFormData.workspaceId as string | null || null,
                 teamId: editingFormData.teamId as string | null || null,
-                parentObjective: editingFormData.parentObjective as Record<string, unknown> || null,
+                parentObjective: editingFormData.parentObjective && typeof editingFormData.parentObjective === 'object' && 'id' in editingFormData.parentObjective
+                  ? {
+                      id: (editingFormData.parentObjective as any).id as string,
+                      tenantId: (editingFormData.parentObjective as any).tenantId as string | null | undefined,
+                      isPublished: (editingFormData.parentObjective as any).isPublished as boolean | undefined,
+                      cycle: (editingFormData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
+                      cycleStatus: (editingFormData.parentObjective as any).cycleStatus as string | null | undefined,
+                    }
+                  : null,
               })
               return lockInfo.isLocked ? lockInfo.message : undefined
             }
@@ -1228,6 +1436,7 @@ export default function BuilderPage() {
               formData={editingFormData}
               setFormData={setEditingFormData}
               onSave={() => handleSaveNode(editingNode.id, editingFormData)}
+              alignmentError={alignmentError}
             />
           )}
         </EditPanel>
@@ -1236,7 +1445,7 @@ export default function BuilderPage() {
   )
 }
 
-function EditNodeForm({
+function _EditNodeForm({
   nodeId,
   data,
   onSave,
@@ -1253,7 +1462,8 @@ function EditNodeForm({
     organizations,
     workspaces, 
     teams,
-    defaultOKRContext 
+    defaultOKRContext,
+    currentOrganization
   } = useWorkspace()
   const { user } = useAuth()
   
@@ -1261,13 +1471,18 @@ function EditNodeForm({
   const initStartDate = data.startDate ? new Date(data.startDate) : new Date()
   const initPeriod = data.period || Period.QUARTERLY
   
+  const fallbackOwnerName =
+    (user?.firstName && user?.lastName)
+      ? `${user.firstName} ${user.lastName}`
+      : user?.email || ''
+  
   const [formData, setFormData] = useState({
     label: data.label || '',
     description: data.description || '',
     okrId: data.okrId || '', // CRITICAL: Must preserve okrId to distinguish update vs create
     ownerId: data.ownerId || user?.id || '',
-    ownerName: data.ownerName || user?.name || '',
-    organizationId: data.organizationId || defaultOKRContext.organizationId || '',
+    ownerName: data.ownerName || fallbackOwnerName,
+    tenantId: data.tenantId || defaultOKRContext.tenantId || '',
     workspaceId: data.workspaceId || defaultOKRContext.workspaceId || '',
     teamId: data.teamId || defaultOKRContext.teamId || '',
     parentId: data.parentId || '',
@@ -1315,7 +1530,7 @@ function EditNodeForm({
   useEffect(() => {
     const loadObjectives = async () => {
       try {
-        const queryParams = currentOrganization?.id ? `?organizationId=${currentOrganization.id}` : ''
+        const queryParams = currentOrganization?.id ? `?tenantId=${currentOrganization.id}` : ''
         const response = await api.get(`/objectives${queryParams}`)
         setAvailableObjectives(response.data)
       } catch (error) {
@@ -1340,8 +1555,8 @@ function EditNodeForm({
   }, [])
 
   const getContextDisplay = () => {
-    if (formData.organizationId && !formData.workspaceId && !formData.teamId) {
-      const org = organizations.find(o => o.id === formData.organizationId)
+    if (formData.tenantId && !formData.workspaceId && !formData.teamId) {
+      const org = organizations.find(o => o.id === formData.tenantId)
       return `🏢 ${org?.name || 'Organization'}`
     }
     if (formData.workspaceId && !formData.teamId) {
@@ -1357,7 +1572,10 @@ function EditNodeForm({
 
   const getOwnerDisplay = () => {
     if (formData.ownerId === user?.id) {
-      return `👤 ${user?.name || 'You'}`
+      const userName = user?.firstName && user?.lastName 
+        ? `${user.firstName} ${user.lastName}` 
+        : user?.email || 'You'
+      return `👤 ${userName}`
     }
     const selectedUser = availableUsers.find(u => u.id === formData.ownerId)
     return selectedUser ? `👤 ${selectedUser.name}` : 'Select owner...'
@@ -1427,13 +1645,18 @@ function EditNodeForm({
                     {/* Current user option */}
                     <button
                       onClick={() => {
-                        setFormData({ ...formData, ownerId: user?.id || '', ownerName: user?.name || '' })
+                        const userName = user?.firstName && user?.lastName 
+                          ? `${user.firstName} ${user.lastName}` 
+                          : user?.email || ''
+                        setFormData({ ...formData, ownerId: user?.id || '', ownerName: userName })
                         setShowOwnerDropdown(false)
                       }}
                       className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
                     >
                       <User className="h-4 w-4" />
-                      {user?.name || 'You'} (You)
+                      {user?.firstName && user?.lastName 
+                        ? `${user.firstName} ${user.lastName}` 
+                        : user?.email || 'You'} (You)
                     </button>
                     {/* Other users */}
                     {availableUsers
@@ -1486,7 +1709,7 @@ function EditNodeForm({
                     {/* Personal */}
                     <button
                       onClick={() => {
-                        setFormData({ ...formData, organizationId: '', workspaceId: '', teamId: '' })
+                        setFormData({ ...formData, tenantId: '', workspaceId: '', teamId: '' })
                         setShowContextDropdown(false)
                       }}
                       className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
@@ -1502,7 +1725,7 @@ function EditNodeForm({
                         <button
                           key={org.id}
                           onClick={() => {
-                            setFormData({ ...formData, organizationId: org.id, workspaceId: '', teamId: '' })
+                            setFormData({ ...formData, tenantId: org.id, workspaceId: '', teamId: '' })
                             setShowContextDropdown(false)
                           }}
                           className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
@@ -1519,7 +1742,7 @@ function EditNodeForm({
                         <button
                           key={ws.id}
                           onClick={() => {
-                            setFormData({ ...formData, organizationId: '', workspaceId: ws.id, teamId: '' })
+                            setFormData({ ...formData, tenantId: '', workspaceId: ws.id, teamId: '' })
                             setShowContextDropdown(false)
                           }}
                           className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
@@ -1536,7 +1759,7 @@ function EditNodeForm({
                         <button
                           key={team.id}
                           onClick={() => {
-                            setFormData({ ...formData, organizationId: '', workspaceId: '', teamId: team.id })
+                            setFormData({ ...formData, tenantId: '', workspaceId: '', teamId: team.id })
                             setShowContextDropdown(false)
                           }}
                           className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
@@ -1893,13 +2116,18 @@ function EditNodeForm({
                     {/* Current user option */}
                     <button
                       onClick={() => {
-                        setFormData({ ...formData, ownerId: user?.id || '', ownerName: user?.name || '' })
+                        const userName = user?.firstName && user?.lastName 
+                          ? `${user.firstName} ${user.lastName}` 
+                          : user?.email || ''
+                        setFormData({ ...formData, ownerId: user?.id || '', ownerName: userName })
                         setShowOwnerDropdown(false)
                       }}
                       className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
                     >
                       <User className="h-4 w-4" />
-                      {user?.name || 'You'} (You)
+                      {user?.firstName && user?.lastName 
+                        ? `${user.firstName} ${user.lastName}` 
+                        : user?.email || 'You'} (You)
                     </button>
                     {/* Other users */}
                     {availableUsers
@@ -2142,13 +2370,18 @@ function EditNodeForm({
                     {/* Current user option */}
                     <button
                       onClick={() => {
-                        setFormData({ ...formData, ownerId: user?.id || '', ownerName: user?.name || '' })
+                        const userName = user?.firstName && user?.lastName 
+                          ? `${user.firstName} ${user.lastName}` 
+                          : user?.email || ''
+                        setFormData({ ...formData, ownerId: user?.id || '', ownerName: userName })
                         setShowOwnerDropdown(false)
                       }}
                       className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
                     >
                       <User className="h-4 w-4" />
-                      {user?.name || 'You'} (You)
+                      {user?.firstName && user?.lastName 
+                        ? `${user.firstName} ${user.lastName}` 
+                        : user?.email || 'You'} (You)
                     </button>
                     {/* Other users */}
                     {availableUsers

@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { SearchableUserSelect } from "@/components/okr/SearchableUserSelect"
 
 type InitiativeStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "BLOCKED"
 
@@ -138,18 +139,14 @@ export function NewInitiativeModal({
             <Label htmlFor="owner">
               Owner <span className="text-red-500">*</span>
             </Label>
-            <Select value={ownerId} onValueChange={setOwnerId} required>
-              <SelectTrigger id="owner">
-                <SelectValue placeholder="Select owner" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableUsers.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.name || user.email || user.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableUserSelect
+              value={ownerId}
+              onValueChange={setOwnerId}
+              availableUsers={availableUsers}
+              placeholder="Select owner"
+              id="owner"
+              required
+            />
           </div>
 
           <div className="flex flex-col gap-2">
@@ -194,4 +191,7 @@ export function NewInitiativeModal({
     </Dialog>
   )
 }
+
+
+
 

@@ -43,6 +43,10 @@ export class RBACMigrationService {
    * 
    * This should be run once to populate the new RoleAssignment table from
    * the existing OrganizationMember, WorkspaceMember, and TeamMember tables.
+   * 
+   * Note: Superusers are skipped since they have implicit access via isSuperuser flag.
+   * 
+   * Note: Uses raw SQL queries because legacy tables may not be in Prisma schema
    */
   async migrateAllMemberships(migratedBy: string = 'system'): Promise<{
     organizationMembers: number;
@@ -56,12 +60,37 @@ export class RBACMigrationService {
     let workspaceCount = 0;
     let teamCount = 0;
 
-    // Migrate organization memberships
-    const orgMembers = await this.prisma.organizationMember.findMany({
-      include: { organization: true },
+    // Get all superuser IDs to skip them
+    const superusers = await this.prisma.user.findMany({
+      where: { isSuperuser: true },
+      select: { id: true },
     });
+    const superuserIds = new Set(superusers.map(u => u.id));
+
+    // Migrate organization memberships - use raw SQL if Prisma schema doesn't have the table
+    let orgMembers: Array<{id: string, userId: string, tenantId: string, role: string}> = [];
+    try {
+      // Try Prisma first
+      orgMembers = await this.prisma.$queryRaw`
+        SELECT id, "userId", "tenantId", role::text
+        FROM organization_members
+      `;
+    } catch (error) {
+      // If table doesn't exist in Prisma schema, use raw SQL
+      const result = await this.prisma.$queryRaw<Array<{id: string, userId: string, tenantId: string, role: string}>>`
+        SELECT id, "userId", "tenantId", role::text
+        FROM organization_members
+      `;
+      orgMembers = result;
+    }
 
     for (const member of orgMembers) {
+      // Skip superusers - they don't need role assignments
+      if (superuserIds.has(member.userId)) {
+        this.logger.debug(`Skipping superuser ${member.userId} for org membership migration`);
+        continue;
+      }
+
       const newRole = this.mapOrganizationRole(member.role);
       if (newRole) {
         try {
@@ -69,8 +98,9 @@ export class RBACMigrationService {
             member.userId,
             newRole,
             'TENANT',
-            member.organizationId,
+            member.tenantId,
             migratedBy,
+            member.tenantId, // Use the organization being migrated, not null
           );
           orgCount++;
         } catch (error) {
@@ -82,11 +112,29 @@ export class RBACMigrationService {
     }
 
     // Migrate workspace memberships
-    const workspaceMembers = await this.prisma.workspaceMember.findMany({
-      include: { workspace: true },
-    });
+    let workspaceMembers: Array<{id: string, userId: string, workspaceId: string, role: string, tenantId: string}> = [];
+    try {
+      workspaceMembers = await this.prisma.$queryRaw`
+        SELECT wm.id, wm."userId", wm."workspaceId", wm.role::text, w."tenantId"
+        FROM workspace_members wm
+        JOIN workspaces w ON wm."workspaceId" = w.id
+      `;
+    } catch (error) {
+      const result = await this.prisma.$queryRaw<Array<{id: string, userId: string, workspaceId: string, role: string, tenantId: string}>>`
+        SELECT wm.id, wm."userId", wm."workspaceId", wm.role::text, w."tenantId"
+        FROM workspace_members wm
+        JOIN workspaces w ON wm."workspaceId" = w.id
+      `;
+      workspaceMembers = result;
+    }
 
     for (const member of workspaceMembers) {
+      // Skip superusers - they don't need role assignments
+      if (superuserIds.has(member.userId)) {
+        this.logger.debug(`Skipping superuser ${member.userId} for workspace membership migration`);
+        continue;
+      }
+
       const newRole = this.mapWorkspaceRole(member.role);
       if (newRole) {
         try {
@@ -96,6 +144,7 @@ export class RBACMigrationService {
             'WORKSPACE',
             member.workspaceId,
             migratedBy,
+            member.tenantId, // Use the workspace's organization
           );
           workspaceCount++;
         } catch (error) {
@@ -107,11 +156,31 @@ export class RBACMigrationService {
     }
 
     // Migrate team memberships
-    const teamMembers = await this.prisma.teamMember.findMany({
-      include: { team: true },
-    });
+    let teamMembers: Array<{id: string, userId: string, teamId: string, role: string, tenantId: string}> = [];
+    try {
+      teamMembers = await this.prisma.$queryRaw`
+        SELECT tm.id, tm."userId", tm."teamId", tm.role::text, w."tenantId"
+        FROM team_members tm
+        JOIN teams t ON tm."teamId" = t.id
+        JOIN workspaces w ON t."workspaceId" = w.id
+      `;
+    } catch (error) {
+      const result = await this.prisma.$queryRaw<Array<{id: string, userId: string, teamId: string, role: string, tenantId: string}>>`
+        SELECT tm.id, tm."userId", tm."teamId", tm.role::text, w."tenantId"
+        FROM team_members tm
+        JOIN teams t ON tm."teamId" = t.id
+        JOIN workspaces w ON t."workspaceId" = w.id
+      `;
+      teamMembers = result;
+    }
 
     for (const member of teamMembers) {
+      // Skip superusers - they don't need role assignments
+      if (superuserIds.has(member.userId)) {
+        this.logger.debug(`Skipping superuser ${member.userId} for team membership migration`);
+        continue;
+      }
+
       const newRole = this.mapTeamRole(member.role);
       if (newRole) {
         try {
@@ -121,6 +190,7 @@ export class RBACMigrationService {
             'TEAM',
             member.teamId,
             migratedBy,
+            member.tenantId, // Use the team's workspace organization
           );
           teamCount++;
         } catch (error) {
@@ -134,7 +204,7 @@ export class RBACMigrationService {
     const total = orgCount + workspaceCount + teamCount;
 
     this.logger.log(
-      `Migration complete: ${orgCount} org members, ${workspaceCount} workspace members, ${teamCount} team members (${total} total)`,
+      `Migration complete: ${orgCount} org members, ${workspaceCount} workspace members, ${teamCount} team members (${total} total). Superusers skipped (they have implicit access).`,
     );
 
     return {
@@ -152,11 +222,24 @@ export class RBACMigrationService {
     userId: string,
     migratedBy: string = 'system',
   ): Promise<void> {
-    // Organization memberships
-    const orgMembers = await this.prisma.organizationMember.findMany({
-      where: { userId },
-      include: { organization: true },
+    // Get all superuser IDs to skip them
+    const superusers = await this.prisma.user.findMany({
+      where: { isSuperuser: true },
+      select: { id: true },
     });
+    const superuserIds = new Set(superusers.map(u => u.id));
+    
+    if (superuserIds.has(userId)) {
+      this.logger.debug(`Skipping superuser ${userId} for migration`);
+      return;
+    }
+
+    // Organization memberships - use raw SQL
+    const orgMembers = await this.prisma.$queryRaw<Array<{id: string, userId: string, tenantId: string, role: string}>>`
+      SELECT id, "userId", "tenantId", role::text
+      FROM organization_members
+      WHERE "userId" = ${userId}
+    `;
 
     for (const member of orgMembers) {
       const newRole = this.mapOrganizationRole(member.role);
@@ -165,17 +248,20 @@ export class RBACMigrationService {
           userId,
           newRole,
           'TENANT',
-          member.organizationId,
+          member.tenantId,
           migratedBy,
+          member.tenantId,
         );
       }
     }
 
-    // Workspace memberships
-    const workspaceMembers = await this.prisma.workspaceMember.findMany({
-      where: { userId },
-      include: { workspace: true },
-    });
+    // Workspace memberships - use raw SQL
+    const workspaceMembers = await this.prisma.$queryRaw<Array<{id: string, userId: string, workspaceId: string, role: string, tenantId: string}>>`
+      SELECT wm.id, wm."userId", wm."workspaceId", wm.role::text, w."tenantId"
+      FROM workspace_members wm
+      JOIN workspaces w ON wm."workspaceId" = w.id
+      WHERE wm."userId" = ${userId}
+    `;
 
     for (const member of workspaceMembers) {
       const newRole = this.mapWorkspaceRole(member.role);
@@ -186,15 +272,19 @@ export class RBACMigrationService {
           'WORKSPACE',
           member.workspaceId,
           migratedBy,
+          member.tenantId,
         );
       }
     }
 
-    // Team memberships
-    const teamMembers = await this.prisma.teamMember.findMany({
-      where: { userId },
-      include: { team: true },
-    });
+    // Team memberships - use raw SQL
+    const teamMembers = await this.prisma.$queryRaw<Array<{id: string, userId: string, teamId: string, role: string, tenantId: string}>>`
+      SELECT tm.id, tm."userId", tm."teamId", tm.role::text, w."tenantId"
+      FROM team_members tm
+      JOIN teams t ON tm."teamId" = t.id
+      JOIN workspaces w ON t."workspaceId" = w.id
+      WHERE tm."userId" = ${userId}
+    `;
 
     for (const member of teamMembers) {
       const newRole = this.mapTeamRole(member.role);
@@ -205,6 +295,7 @@ export class RBACMigrationService {
           'TEAM',
           member.teamId,
           migratedBy,
+          member.tenantId,
         );
       }
     }
@@ -216,7 +307,7 @@ export class RBACMigrationService {
   private mapOrganizationRole(oldRole: string): Role | null {
     const mapping: Record<string, Role> = {
       ORG_ADMIN: 'TENANT_ADMIN',
-      MEMBER: 'WORKSPACE_MEMBER', // Default workspace member
+      MEMBER: 'TENANT_VIEWER', // MEMBER at organization level becomes TENANT_VIEWER
       VIEWER: 'TENANT_VIEWER',
     };
 
@@ -247,12 +338,22 @@ export class RBACMigrationService {
     workspaceMembersNotMigrated: number;
     teamMembersNotMigrated: number;
   }> {
-    const orgMembers = await this.prisma.organizationMember.count();
-    const workspaceMembers = await this.prisma.workspaceMember.count();
-    const teamMembers = await this.prisma.teamMember.count();
+    // Use raw SQL queries since legacy tables may not be in Prisma schema
+    const orgMembersResult = await this.prisma.$queryRaw<Array<{count: bigint}>>`
+      SELECT COUNT(*)::bigint as count FROM organization_members
+    `;
+    const orgMembers = Number(orgMembersResult[0]?.count || 0);
 
-    // Count users with role assignments but no old memberships
-    // This is approximate - full verification would require checking each user
+    const workspaceMembersResult = await this.prisma.$queryRaw<Array<{count: bigint}>>`
+      SELECT COUNT(*)::bigint as count FROM workspace_members
+    `;
+    const workspaceMembers = Number(workspaceMembersResult[0]?.count || 0);
+
+    const teamMembersResult = await this.prisma.$queryRaw<Array<{count: bigint}>>`
+      SELECT COUNT(*)::bigint as count FROM team_members
+    `;
+    const teamMembers = Number(teamMembersResult[0]?.count || 0);
+
     return {
       organizationMembersNotMigrated: orgMembers,
       workspaceMembersNotMigrated: workspaceMembers,

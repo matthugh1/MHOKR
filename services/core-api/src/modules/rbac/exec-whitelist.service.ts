@@ -6,10 +6,31 @@
 
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { OkrTenantGuard } from '../okr/tenant-guard';
+import { AuditLogService } from '../audit/audit-log.service';
+import { AuditTargetType } from '@prisma/client';
+import { Logger } from '@nestjs/common';
+
+// Simple telemetry helper for whitelist operations
+const whitelistTelemetry = {
+  enabled: process.env.WHITELIST_TELEMETRY !== 'off',
+  logger: new Logger('WhitelistTelemetry'),
+  recordCounter(metric: string, tags?: Record<string, string | number>): void {
+    if (!this.enabled) return;
+    this.logger.log(`[TELEMETRY] Counter: ${metric}`, {
+      metric,
+      tags: tags || {},
+      timestamp: new Date().toISOString(),
+    });
+  },
+};
 
 @Injectable()
 export class ExecWhitelistService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditLogService: AuditLogService,
+  ) {}
 
   /**
    * Get the EXEC_ONLY whitelist for a tenant
@@ -34,7 +55,13 @@ export class ExecWhitelistService {
   /**
    * Add a user to the EXEC_ONLY whitelist
    */
-  async addToWhitelist(tenantId: string, userId: string): Promise<string[]> {
+  async addToWhitelist(tenantId: string, userId: string, userOrganizationId: string | null | undefined, actorUserId: string): Promise<string[]> {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Tenant isolation: verify tenant match
+    OkrTenantGuard.assertSameTenant(tenantId, userOrganizationId);
+
     const whitelist = await this.getWhitelist(tenantId);
 
     if (!whitelist.includes(userId)) {
@@ -43,6 +70,23 @@ export class ExecWhitelistService {
         where: { id: tenantId },
         data: { execOnlyWhitelist: updated },
       });
+      
+      await this.auditLogService.record({
+        action: 'ADD_TO_EXEC_WHITELIST',
+        actorUserId,
+        targetUserId: userId,
+        targetId: userId,
+        targetType: AuditTargetType.USER,
+        tenantId: tenantId,
+        metadata: { tenantId },
+      });
+      
+      // Record telemetry
+      whitelistTelemetry.recordCounter('whitelist.add', {
+        tenantId,
+        actorUserId,
+      });
+      
       return updated;
     }
 
@@ -52,7 +96,13 @@ export class ExecWhitelistService {
   /**
    * Remove a user from the EXEC_ONLY whitelist
    */
-  async removeFromWhitelist(tenantId: string, userId: string): Promise<string[]> {
+  async removeFromWhitelist(tenantId: string, userId: string, userOrganizationId: string | null | undefined, actorUserId: string): Promise<string[]> {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Tenant isolation: verify tenant match
+    OkrTenantGuard.assertSameTenant(tenantId, userOrganizationId);
+
     const whitelist = await this.getWhitelist(tenantId);
 
     const updated = whitelist.filter(id => id !== userId);
@@ -62,16 +112,47 @@ export class ExecWhitelistService {
       data: { execOnlyWhitelist: updated },
     });
 
+    await this.auditLogService.record({
+      action: 'REMOVE_FROM_EXEC_WHITELIST',
+      actorUserId,
+      targetUserId: userId,
+      targetId: userId,
+      targetType: AuditTargetType.USER,
+      tenantId: tenantId,
+      metadata: { tenantId },
+    });
+
+    // Record telemetry
+    whitelistTelemetry.recordCounter('whitelist.remove', {
+      tenantId,
+      actorUserId,
+    });
+
     return updated;
   }
 
   /**
    * Set the entire whitelist (replaces existing)
    */
-  async setWhitelist(tenantId: string, userIds: string[]): Promise<string[]> {
+  async setWhitelist(tenantId: string, userIds: string[], userOrganizationId: string | null | undefined, actorUserId: string): Promise<string[]> {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Tenant isolation: verify tenant match
+    OkrTenantGuard.assertSameTenant(tenantId, userOrganizationId);
+
     await this.prisma.organization.update({
       where: { id: tenantId },
       data: { execOnlyWhitelist: userIds },
+    });
+
+    await this.auditLogService.record({
+      action: 'SET_EXEC_WHITELIST',
+      actorUserId,
+      targetId: tenantId,
+      targetType: AuditTargetType.TENANT,
+      tenantId: tenantId,
+      metadata: { userIds },
     });
 
     return userIds;
@@ -88,12 +169,27 @@ export class ExecWhitelistService {
   /**
    * Clear the whitelist
    */
-  async clearWhitelist(tenantId: string): Promise<void> {
+  async clearWhitelist(tenantId: string, userOrganizationId: string | null | undefined, actorUserId: string): Promise<void> {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Tenant isolation: verify tenant match
+    OkrTenantGuard.assertSameTenant(tenantId, userOrganizationId);
+
     await this.prisma.organization.update({
       where: { id: tenantId },
       data: { execOnlyWhitelist: [] },
     });
+
+    await this.auditLogService.record({
+      action: 'CLEAR_EXEC_WHITELIST',
+      actorUserId,
+      targetId: tenantId,
+      targetType: AuditTargetType.TENANT,
+      tenantId: tenantId,
+    });
   }
 }
+
 
 

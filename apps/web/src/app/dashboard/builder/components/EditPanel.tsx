@@ -4,18 +4,18 @@ import { useState } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Target, CheckCircle, Lightbulb, Trash2 } from 'lucide-react'
-import { SectionHeader } from '@/components/ui/SectionHeader'
 import { cn } from '@/lib/utils'
+import { EditFormState } from './EditFormTabs'
 
 interface EditPanelProps {
   isOpen: boolean
   onClose: () => void
   nodeId: string | null
   nodeData: Record<string, unknown> | null
-  onSave: (nodeId: string, data: Record<string, unknown>) => Promise<void>
+  onSave: (nodeId: string, data: EditFormState) => Promise<void>
   onDelete: (nodeId: string) => Promise<void>
-  formData: Record<string, unknown> | null
-  setFormData: (data: Record<string, unknown>) => void
+  formData: EditFormState | null
+  setFormData: (data: EditFormState) => void
   children: React.ReactNode
   canEdit?: boolean
   canDelete?: boolean
@@ -53,7 +53,7 @@ export function EditPanel({
 
   const handleDelete = async () => {
     if (!nodeId || !canDelete) return
-    // TODO [phase7-hardening]: add confirm modal before destructive actions
+    if (!confirm('Delete this item? This cannot be undone.')) return
     await onDelete(nodeId)
   }
 
@@ -137,7 +137,6 @@ export function EditPanel({
               <div className="mt-3 rounded-lg border border-neutral-100 bg-neutral-50 p-3 text-sm text-neutral-600 shadow-sm">
                 {lockMessage}
               </div>
-              {/* TODO [phase6-polish]: replace with a nicer inline callout component */}
             </>
           )}
           
@@ -151,32 +150,30 @@ export function EditPanel({
       {/* Footer Actions */}
       <div className="sticky bottom-0 bg-white border-t border-neutral-200 p-4">
         <div className="flex gap-2 justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleDelete}
-              disabled={!canDelete || isSaving}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete
-            </Button>
-            {!canDelete && (
-              <p className="text-xs text-neutral-500">You cannot delete this item</p>
-            )}
-          </div>
-          <div className="flex gap-2">
+          {canDelete && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleDelete}
+                disabled={isSaving}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+            </div>
+          )}
+          <div className="flex gap-2 ml-auto">
             <Button variant="outline" onClick={onClose} disabled={isSaving}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={!canEdit || isSaving}>
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </Button>
+            {canEdit && (
+              <Button onClick={handleSave} disabled={isSaving}>
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            )}
           </div>
         </div>
-        {!canEdit && (
-          <p className="text-xs text-neutral-500 text-right mt-2">You cannot edit this item</p>
-        )}
       </div>
     </div>
   )

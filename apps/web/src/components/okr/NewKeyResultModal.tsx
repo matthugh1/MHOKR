@@ -19,9 +19,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { SearchableUserSelect } from "@/components/okr/SearchableUserSelect"
 
 type OKRStatus = "ON_TRACK" | "AT_RISK" | "OFF_TRACK" | "COMPLETED" | "CANCELLED"
-type VisibilityLevel = "PUBLIC_TENANT" | "PRIVATE" | "WORKSPACE_ONLY" | "TEAM_ONLY" | "MANAGER_CHAIN" | "EXEC_ONLY"
+type VisibilityLevel = "PUBLIC_TENANT" | "PRIVATE"
 type CheckInCadence = "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "NONE"
 
 export interface NewKeyResultModalProps {
@@ -156,18 +157,14 @@ export function NewKeyResultModal({
             <Label htmlFor="owner">
               Owner <span className="text-red-500">*</span>
             </Label>
-            <Select value={ownerId} onValueChange={setOwnerId} required>
-              <SelectTrigger id="owner">
-                <SelectValue placeholder="Select owner" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableUsers.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.name || user.email || user.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableUserSelect
+              value={ownerId}
+              onValueChange={setOwnerId}
+              availableUsers={availableUsers}
+              placeholder="Select owner"
+              id="owner"
+              required
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -265,10 +262,6 @@ export function NewKeyResultModal({
               <SelectContent>
                 <SelectItem value="PUBLIC_TENANT">Public (Tenant)</SelectItem>
                 <SelectItem value="PRIVATE">Private</SelectItem>
-                <SelectItem value="WORKSPACE_ONLY">Workspace Only</SelectItem>
-                <SelectItem value="TEAM_ONLY">Team Only</SelectItem>
-                <SelectItem value="MANAGER_CHAIN">Manager Chain</SelectItem>
-                <SelectItem value="EXEC_ONLY">Executive Only</SelectItem>
               </SelectContent>
             </Select>
           </div>

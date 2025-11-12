@@ -30,7 +30,7 @@ export class RBACTestHelper {
     assignedBy: string = 'test',
   ): Promise<void> {
     for (const { role, scopeType, scopeId } of roles) {
-      await this.rbacService.assignRole(userId, role, scopeType, scopeId, assignedBy);
+      await this.rbacService.assignRole(userId, role, scopeType, scopeId, assignedBy, null);
     }
   }
 
@@ -48,6 +48,7 @@ export class RBACTestHelper {
       'TENANT',
       tenantId,
       assignedBy,
+      null,
     );
   }
 
@@ -65,6 +66,7 @@ export class RBACTestHelper {
       'TENANT',
       tenantId,
       assignedBy,
+      null,
     );
   }
 
@@ -82,6 +84,7 @@ export class RBACTestHelper {
       'WORKSPACE',
       workspaceId,
       assignedBy,
+      null,
     );
   }
 
@@ -99,6 +102,7 @@ export class RBACTestHelper {
       'TEAM',
       teamId,
       assignedBy,
+      null,
     );
   }
 
@@ -143,7 +147,7 @@ export class RBACTestHelper {
     const workspace = await this.prisma.workspace.create({
       data: {
         name: 'Test Workspace',
-        organizationId: tenant.id,
+        tenantId: tenant.id,
       },
     });
 
@@ -169,13 +173,13 @@ export class RBACTestHelper {
     await this.prisma.team.deleteMany({
       where: {
         workspace: {
-          organizationId: tenantId,
+          tenantId: tenantId,
         },
       },
     });
 
     await this.prisma.workspace.deleteMany({
-      where: { organizationId: tenantId },
+      where: { tenantId: tenantId },
     });
 
     await this.prisma.organization.delete({
@@ -193,5 +197,6 @@ export function createRBACTestHelper(
 ): RBACTestHelper {
   return new RBACTestHelper(prisma, rbacService);
 }
+
 
 

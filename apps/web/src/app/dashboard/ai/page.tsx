@@ -3,6 +3,7 @@
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { PageContainer } from '@/components/ui/PageContainer'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { StatCard } from '@/components/ui/StatCard'
 import { ActivityItemCard } from '@/components/ui/ActivityItemCard'
@@ -11,7 +12,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 export default function AIAssistantPage() {
   // Placeholder data for insights feed
   // TODO [phase7-hardening]: Replace with live data from /reports/* endpoints once backend integration is ready
-  // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
   const placeholderInsights = [
     {
       id: '1',
@@ -39,7 +39,7 @@ export default function AIAssistantPage() {
   return (
     <ProtectedRoute>
       <DashboardLayout>
-        <div className="p-8">
+        <PageContainer variant="content">
           <div className="mb-8">
             <div className="flex items-start justify-between flex-wrap gap-4">
               <div className="flex-1">
@@ -100,7 +100,6 @@ export default function AIAssistantPage() {
               />
             </div>
             {/* TODO [phase7-hardening]: Replace placeholder StatCards with live data from /reports/* endpoints */}
-            {/* NOTE: This surface is internal-tenant-only and is not exposed to external design partners. */}
           </div>
 
           {/* Executive Summary Draft */}
@@ -135,7 +134,7 @@ export default function AIAssistantPage() {
               </CardContent>
             </Card>
           </div>
-        </div>
+        </PageContainer>
       </DashboardLayout>
     </ProtectedRoute>
   )

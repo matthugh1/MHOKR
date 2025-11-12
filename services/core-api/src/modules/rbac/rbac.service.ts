@@ -5,7 +5,7 @@
  * Provides methods to build user context, check permissions, and manage role assignments.
  */
 
-import { Injectable, Optional, Logger } from '@nestjs/common';
+import { Injectable, Optional, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {
   UserContext,
@@ -19,6 +19,9 @@ import {
 import { can, getEffectiveRoles } from './rbac';
 import { ResourceContext, Action } from './types';
 import { RBACCacheService } from './rbac-cache.service';
+import { OkrTenantGuard } from '../okr/tenant-guard';
+import { AuditLogService } from '../audit/audit-log.service';
+import { AuditTargetType, RBACRole } from '@prisma/client';
 
 @Injectable()
 export class RBACService {
@@ -27,6 +30,7 @@ export class RBACService {
 
   constructor(
     private prisma: PrismaService,
+    private auditLogService: AuditLogService,
     @Optional() private cacheService?: RBACCacheService,
   ) {}
 
@@ -93,6 +97,17 @@ export class RBACService {
       where: { userId },
     });
 
+    // Log role assignments for debugging
+    this.logger.log(`[RBAC] buildUserContext: Found ${roleAssignments.length} role assignments for user ${userId}`, {
+      userId,
+      roleAssignments: roleAssignments.map(ra => ({
+        id: ra.id,
+        role: ra.role,
+        scopeType: ra.scopeType,
+        scopeId: ra.scopeId,
+      })),
+    });
+
     // Build maps of roles by scope
     const tenantRoles = new Map<string, TenantRole[]>();
     const workspaceRoles = new Map<string, WorkspaceRole[]>();
@@ -128,6 +143,15 @@ export class RBACService {
           break;
       }
     }
+
+    // Log built maps for debugging
+    this.logger.log(`[RBAC] buildUserContext: Built role maps`, {
+      userId,
+      tenantRolesCount: tenantRoles.size,
+      tenantRoles: Array.from(tenantRoles.entries()),
+      workspaceRolesCount: workspaceRoles.size,
+      teamRolesCount: teamRoles.size,
+    });
 
     // Load manager relationships (for MANAGER_CHAIN visibility)
     const directReportsResult = await this.prisma.user.findMany({
@@ -247,6 +271,165 @@ export class RBACService {
   }
 
   /**
+   * Get effective permissions for a user
+   * 
+   * Returns all actions the user can perform at different scopes.
+   * Used for debugging, auditing, and RBAC visualization.
+   */
+  async getEffectivePermissions(
+    userId: string,
+    filterTenantId?: string,
+    filterWorkspaceId?: string,
+    filterTeamId?: string,
+  ): Promise<{
+    userId: string;
+    isSuperuser: boolean;
+    scopes: Array<{
+      tenantId: string;
+      workspaceId?: string;
+      teamId?: string;
+      effectiveRoles: Role[];
+      actionsAllowed: Action[];
+      actionsDenied: Action[];
+    }>;
+  }> {
+    const userContext = await this.buildUserContext(userId, false);
+    
+    // Define all possible actions to test
+    const allActions: Action[] = [
+      'view_okr',
+      'edit_okr',
+      'delete_okr',
+      'create_okr',
+      'request_checkin',
+      'publish_okr',
+      'manage_users',
+      'manage_billing',
+      'manage_workspaces',
+      'manage_teams',
+      'impersonate_user',
+      'manage_tenant_settings',
+      'view_all_okrs',
+      'export_data',
+    ];
+
+    const scopes: Array<{
+      tenantId: string;
+      workspaceId?: string;
+      teamId?: string;
+      effectiveRoles: Role[];
+      actionsAllowed: Action[];
+      actionsDenied: Action[];
+    }> = [];
+
+    // Get all tenants user has roles in
+    const tenantIds = filterTenantId 
+      ? [filterTenantId] 
+      : Array.from(userContext.tenantRoles.keys());
+
+    for (const tenantId of tenantIds) {
+      // Tenant-level scope
+      if (!filterWorkspaceId && !filterTeamId) {
+        const effectiveRoles = getEffectiveRoles(userContext, tenantId);
+        const actionsAllowed: Action[] = [];
+        const actionsDenied: Action[] = [];
+
+        for (const action of allActions) {
+          const resourceContext: ResourceContext = { tenantId };
+          const allowed = can(userContext, action, resourceContext);
+          
+          if (allowed) {
+            actionsAllowed.push(action);
+          } else {
+            actionsDenied.push(action);
+          }
+        }
+
+        scopes.push({
+          tenantId,
+          effectiveRoles,
+          actionsAllowed,
+          actionsDenied,
+        });
+      }
+
+      // Workspace-level scopes
+      const workspaceIds = filterWorkspaceId 
+        ? [filterWorkspaceId] 
+        : Array.from(userContext.workspaceRoles.keys());
+
+      for (const workspaceId of workspaceIds) {
+        if (!filterTeamId) {
+          const effectiveRoles = getEffectiveRoles(userContext, tenantId, workspaceId);
+          const actionsAllowed: Action[] = [];
+          const actionsDenied: Action[] = [];
+
+          for (const action of allActions) {
+            const resourceContext: ResourceContext = { 
+              tenantId, 
+              workspaceId 
+            };
+            const allowed = can(userContext, action, resourceContext);
+            
+            if (allowed) {
+              actionsAllowed.push(action);
+            } else {
+              actionsDenied.push(action);
+            }
+          }
+
+          scopes.push({
+            tenantId,
+            workspaceId,
+            effectiveRoles,
+            actionsAllowed,
+            actionsDenied,
+          });
+        }
+      }
+
+      // Team-level scopes
+      const teamIds = filterTeamId 
+        ? [filterTeamId] 
+        : Array.from(userContext.teamRoles.keys());
+
+      for (const teamId of teamIds) {
+        const effectiveRoles = getEffectiveRoles(userContext, tenantId, null, teamId);
+        const actionsAllowed: Action[] = [];
+        const actionsDenied: Action[] = [];
+
+        for (const action of allActions) {
+          const resourceContext: ResourceContext = { 
+            tenantId, 
+            teamId 
+          };
+          const allowed = can(userContext, action, resourceContext);
+          
+          if (allowed) {
+            actionsAllowed.push(action);
+          } else {
+            actionsDenied.push(action);
+          }
+        }
+
+        scopes.push({
+          tenantId,
+          teamId,
+          effectiveRoles,
+          actionsAllowed,
+          actionsDenied,
+        });
+      }
+    }
+
+    return {
+      userId,
+      isSuperuser: userContext.isSuperuser,
+      scopes,
+    };
+  }
+
+  /**
    * Assign a role to a user
    */
   async assignRole(
@@ -254,11 +437,43 @@ export class RBACService {
     role: Role,
     scopeType: ScopeType,
     scopeId: string | null,
-    _assignedBy: string,
+    assignedBy: string,
+    userOrganizationId: string | null | undefined,
   ): Promise<RoleAssignment> {
     // Validate scopeId requirement
     if (scopeType !== 'PLATFORM' && !scopeId) {
       throw new Error(`scopeId is required for ${scopeType} scope`);
+    }
+
+    // Tenant isolation: enforce mutation rules (except PLATFORM scope which is superuser-only)
+    if (scopeType !== 'PLATFORM') {
+      OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+      // Tenant isolation based on scopeType
+      if (scopeType === 'TENANT') {
+        // Verify scopeId matches caller's org
+        OkrTenantGuard.assertSameTenant(scopeId, userOrganizationId);
+      } else if (scopeType === 'WORKSPACE') {
+        // Verify workspace belongs to caller's org
+        const workspace = await this.prisma.workspace.findUnique({
+          where: { id: scopeId! },
+          select: { tenantId: true },
+        });
+        if (!workspace) {
+          throw new NotFoundException(`Workspace with ID ${scopeId} not found`);
+        }
+        OkrTenantGuard.assertSameTenant(workspace.tenantId, userOrganizationId);
+      } else if (scopeType === 'TEAM') {
+        // Verify team's workspace belongs to caller's org
+        const team = await this.prisma.team.findUnique({
+          where: { id: scopeId! },
+          include: { workspace: { select: { tenantId: true } } },
+        });
+        if (!team) {
+          throw new NotFoundException(`Team with ID ${scopeId} not found`);
+        }
+        OkrTenantGuard.assertSameTenant(team.workspace.tenantId, userOrganizationId);
+      }
     }
 
     // Create or update role assignment
@@ -280,6 +495,17 @@ export class RBACService {
           data: { updatedAt: new Date() },
         });
         this.invalidateUserContextCache(userId);
+        
+        await this.auditLogService.record({
+          action: 'GRANT_ROLE',
+          actorUserId: assignedBy,
+          targetUserId: userId,
+          targetId: userId,
+          targetType: AuditTargetType.ROLE_ASSIGNMENT,
+          newRole: role as RBACRole,
+          metadata: { scopeType: 'PLATFORM', scopeId: null },
+        });
+        
         return this.mapPrismaToRoleAssignment(updated);
       }
 
@@ -292,6 +518,17 @@ export class RBACService {
         },
       });
       this.invalidateUserContextCache(userId);
+      
+      await this.auditLogService.record({
+        action: 'GRANT_ROLE',
+        actorUserId: assignedBy,
+        targetUserId: userId,
+        targetId: userId,
+        targetType: AuditTargetType.ROLE_ASSIGNMENT,
+        newRole: role as RBACRole,
+        metadata: { scopeType: 'PLATFORM', scopeId: null },
+      });
+      
       return this.mapPrismaToRoleAssignment(created);
     }
 
@@ -320,8 +557,16 @@ export class RBACService {
     // Invalidate cache for this user
     this.invalidateUserContextCache(userId);
 
-    // TODO [phase7-hardening]: Record audit log for RBAC changes for audit/compliance visibility
-    // await this.auditService.recordRoleChange(...)
+    await this.auditLogService.record({
+      action: 'GRANT_ROLE',
+      actorUserId: assignedBy,
+      targetUserId: userId,
+      targetId: userId,
+      targetType: AuditTargetType.ROLE_ASSIGNMENT,
+      newRole: role as RBACRole,
+      tenantId: scopeType === 'TENANT' ? (scopeId || undefined) : undefined,
+      metadata: { scopeType, scopeId },
+    });
 
     return this.mapPrismaToRoleAssignment(assignment);
   }
@@ -334,8 +579,40 @@ export class RBACService {
     role: Role,
     scopeType: ScopeType,
     scopeId: string | null,
-    _revokedBy: string,
+    revokedBy: string,
+    userOrganizationId: string | null | undefined,
   ): Promise<void> {
+    // Tenant isolation: enforce mutation rules (except PLATFORM scope which is superuser-only)
+    if (scopeType !== 'PLATFORM') {
+      OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+      // Tenant isolation based on scopeType
+      if (scopeType === 'TENANT') {
+        // Verify scopeId matches caller's org
+        OkrTenantGuard.assertSameTenant(scopeId, userOrganizationId);
+      } else if (scopeType === 'WORKSPACE') {
+        // Verify workspace belongs to caller's org
+        const workspace = await this.prisma.workspace.findUnique({
+          where: { id: scopeId! },
+          select: { tenantId: true },
+        });
+        if (!workspace) {
+          throw new NotFoundException(`Workspace with ID ${scopeId} not found`);
+        }
+        OkrTenantGuard.assertSameTenant(workspace.tenantId, userOrganizationId);
+      } else if (scopeType === 'TEAM') {
+        // Verify team's workspace belongs to caller's org
+        const team = await this.prisma.team.findUnique({
+          where: { id: scopeId! },
+          include: { workspace: { select: { tenantId: true } } },
+        });
+        if (!team) {
+          throw new NotFoundException(`Team with ID ${scopeId} not found`);
+        }
+        OkrTenantGuard.assertSameTenant(team.workspace.tenantId, userOrganizationId);
+      }
+    }
+
     await this.prisma.roleAssignment.deleteMany({
       where: {
         userId,
@@ -348,7 +625,16 @@ export class RBACService {
     // Invalidate cache for this user
     this.invalidateUserContextCache(userId);
 
-    // TODO [phase7-hardening]: Record audit log for RBAC changes for audit/compliance visibility
+    await this.auditLogService.record({
+      action: 'REVOKE_ROLE',
+      actorUserId: revokedBy,
+      targetUserId: userId,
+      targetId: userId,
+      targetType: AuditTargetType.ROLE_ASSIGNMENT,
+      previousRole: role as RBACRole,
+      tenantId: scopeType === 'TENANT' ? (scopeId || undefined) : undefined,
+      metadata: { scopeType, scopeId },
+    });
   }
 
   /**

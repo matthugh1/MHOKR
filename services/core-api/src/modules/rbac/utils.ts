@@ -170,8 +170,7 @@ export async function canViewOKRAsOwnerOrByVisibility(
     okr: {
       id: okr.id,
       ownerId: okr.ownerId,
-      organizationId: okr.tenantId, // Standardized field (tenantId is deprecated)
-      tenantId: okr.tenantId, // Deprecated, kept for backward compatibility
+      tenantId: okr.tenantId,
       workspaceId: okr.workspaceId,
       teamId: okr.teamId,
       visibilityLevel: okr.visibilityLevel as any,

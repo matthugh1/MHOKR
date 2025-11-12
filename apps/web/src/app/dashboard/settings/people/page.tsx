@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { PageContainer } from '@/components/ui/PageContainer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -44,12 +46,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useWorkspace } from '@/contexts/workspace.context'
-import { UserCog, UserPlus, X, Plus, Edit2, Key, Building2, Briefcase, Users, Shield, UserCheck, Search, Info } from 'lucide-react'
+import { UserCog, X, Plus, Edit2, Key, Building2, Briefcase, Users, UserCheck, Search, Info, Shield, Lock, Eye } from 'lucide-react'
 import api from '@/lib/api'
 import { useAuth } from '@/contexts/auth.context'
 import { useToast } from '@/hooks/use-toast'
+import { useEffectivePermissions } from '@/hooks/useEffectivePermissions'
+import { usePermissions } from '@/hooks/usePermissions'
+import { useFeatureFlags } from '@/hooks/useFeatureFlags'
+import { RoleAssignmentDialog } from '@/components/user/RoleAssignmentDialog'
 
 export default function PeoplePage() {
   return (
@@ -71,7 +77,7 @@ function PeopleSettings() {
     refreshContext 
   } = useWorkspace()
   
-  const { impersonate, impersonating, originalUser, user: currentUser } = useAuth()
+  const { impersonate, impersonating, user: currentUser } = useAuth()
   const { toast } = useToast()
   
   const [people, setPeople] = useState<any[]>([])
@@ -81,18 +87,34 @@ function PeopleSettings() {
   const [allOrganizations, setAllOrganizations] = useState<any[]>([])
   const [viewMode, setViewMode] = useState<'workspace' | 'organization'>('workspace')
   const [searchQuery, setSearchQuery] = useState('')
+  const [showEditRightsOnly, setShowEditRightsOnly] = useState(false)
   
   // Selected user for editing in drawer
   const [selectedUser, setSelectedUser] = useState<any>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   
+  // Effective permissions for selected user
+  const { data: effectivePermissions, loading: permissionsLoading } = useEffectivePermissions(
+    selectedUser?.id,
+    organization?.id,
+    workspace?.id,
+  )
+  
+  const permissions = usePermissions()
+  const featureFlags = useFeatureFlags()
+  
+  // RBAC Inspector toggle state
+  const [inspectorEnabled, setInspectorEnabled] = useState<boolean | null>(null)
+  const [togglingInspector, setTogglingInspector] = useState(false)
+  
   // User creation
   const [showCreateUser, setShowCreateUser] = useState(false)
+  const [devInspectorMode, setDevInspectorMode] = useState(false)
   const [newUserData, setNewUserData] = useState({ 
     name: '', 
     email: '', 
     password: '',
-    organizationId: '',
+    tenantId: '',
     workspaceId: '',
     role: 'MEMBER' as 'ORG_ADMIN' | 'MEMBER' | 'VIEWER',
     workspaceRole: 'MEMBER' as 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER'
@@ -112,6 +134,25 @@ function PeopleSettings() {
   const [resettingPassword, setResettingPassword] = useState<any>(null)
   const [newPassword, setNewPassword] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  
+  // User info editing
+  const [editingUserInfo, setEditingUserInfo] = useState(false)
+  const [editedUserName, setEditedUserName] = useState('')
+  const [editedUserEmail, setEditedUserEmail] = useState('')
+  const [savingUserInfo, setSavingUserInfo] = useState(false)
+  
+  // Role assignment dialog state
+  const [roleAssignmentDialog, setRoleAssignmentDialog] = useState<{
+    isOpen: boolean
+    scopeType: 'TENANT' | 'WORKSPACE' | 'TEAM' | null
+    scopeId: string | null
+    currentRole: string | null
+  }>({
+    isOpen: false,
+    scopeType: null,
+    scopeId: null,
+    currentRole: null,
+  })
 
   useEffect(() => {
     loadAllData()
@@ -123,7 +164,7 @@ function PeopleSettings() {
       try {
         const [orgsRes, workspacesRes] = await Promise.all([
           api.get('/organizations'),
-          organization ? api.get(`/workspaces?organizationId=${organization.id}`) : Promise.resolve({ data: [] })
+          organization ? api.get(`/workspaces?tenantId=${organization.id}`) : Promise.resolve({ data: [] })
         ])
         setAllOrganizations(orgsRes.data || [])
         setAllWorkspaces(workspacesRes.data || [])
@@ -180,11 +221,12 @@ function PeopleSettings() {
       name: '', 
       email: '', 
       password: '',
-      organizationId: organization?.id || '',
+      tenantId: organization?.id || '', // Always set to current context for SUPERUSER
       workspaceId: workspace?.id || '',
       role: 'MEMBER' as 'ORG_ADMIN' | 'MEMBER' | 'VIEWER',
       workspaceRole: 'MEMBER' as 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER'
     })
+    setDevInspectorMode(false)
   }
 
   const handleCreateUser = async () => {
@@ -197,11 +239,22 @@ function PeopleSettings() {
       return
     }
 
-    if (!newUserData.organizationId || !newUserData.workspaceId) {
+    // Validate tenant context or explicit selection
+    if (!organization && !newUserData.tenantId && !devInspectorMode) {
       toast({
         variant: 'destructive',
-        title: 'Missing selection',
-        description: 'Please select both organization and workspace',
+        title: 'Missing tenant context',
+        description: 'No active tenant context available. Please select an organisation.',
+      })
+      return
+    }
+
+    // For dev inspector mode, require explicit organisation
+    if (devInspectorMode && !newUserData.tenantId) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing organisation',
+        description: 'Developer mode requires an organisation to be selected.',
       })
       return
     }
@@ -209,15 +262,44 @@ function PeopleSettings() {
     setActionLoading(true)
     const userName = newUserData.name
     try {
-      await api.post('/users', {
+      // Build payload - only include organisationId if dev inspector mode or explicitly set
+      const payload: any = {
         name: newUserData.name,
         email: newUserData.email,
         password: newUserData.password,
-        organizationId: newUserData.organizationId,
-        workspaceId: newUserData.workspaceId,
         role: newUserData.role,
-        workspaceRole: newUserData.workspaceRole,
-      })
+      }
+
+      // SUPERUSER always needs to send tenantId (backend has no tenant context)
+      // For regular users, only send if dev inspector mode or no context
+      if (isSuperuser) {
+        // SUPERUSER: Always send tenantId from form or current context
+        const orgId = newUserData.tenantId || organization?.id
+        if (!orgId) {
+          toast({
+            variant: 'destructive',
+            title: 'Missing organisation',
+            description: 'Please select an organisation to create the user in.',
+          })
+          setActionLoading(false)
+          return
+        }
+        payload.tenantId = orgId
+      } else if (devInspectorMode || !organization) {
+        // Regular user: Send only if dev inspector mode or no context
+        const orgId = newUserData.tenantId || organization?.id
+        if (orgId) {
+          payload.tenantId = orgId
+        }
+      }
+      // Otherwise, backend will auto-inject from req.user.tenantId
+      // Only send workspaceId if provided
+      if (newUserData.workspaceId) {
+        payload.workspaceId = newUserData.workspaceId
+        payload.workspaceRole = newUserData.workspaceRole
+      }
+
+      await api.post('/users', payload)
       resetUserForm()
       setShowCreateUser(false)
       await loadPeople()
@@ -228,7 +310,6 @@ function PeopleSettings() {
         description: `${userName} has been successfully added to the system.`,
       })
     } catch (error: any) {
-      console.error('Failed to create user:', error)
       const errorMessage = error.response?.data?.message || error.message || 'Failed to create user'
       toast({
         variant: 'destructive',
@@ -240,18 +321,124 @@ function PeopleSettings() {
     }
   }
 
-  const handleUserClick = (user: any) => {
+  const handleUserClick = async (user: any) => {
     setSelectedUser(user)
     setDrawerOpen(true)
+    setEditingUserInfo(false)
+    setEditedUserName(user.name || '')
+    setEditedUserEmail(user.email || '')
+    // Fetch user's inspector setting if caller has manage_users
+    if (permissions.canInviteMembers({ organizationId: organization?.id })) {
+      try {
+        const res = await api.get(`/users/${user.id}`)
+        const settings = res.data?.settings as any
+        setInspectorEnabled(settings?.debug?.rbacInspectorEnabled === true)
+      } catch (error) {
+        console.error('Failed to fetch inspector state:', error)
+        setInspectorEnabled(false)
+      }
+    } else {
+      setInspectorEnabled(false)
+    }
+  }
+  
+  const handleUpdateUserInfo = async () => {
+    if (!selectedUser) return
+    
+    if (!editedUserName.trim() || !editedUserEmail.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing fields',
+        description: 'Name and email are required',
+      })
+      return
+    }
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(editedUserEmail)) {
+      toast({
+        variant: 'destructive',
+        title: 'Invalid email',
+        description: 'Please enter a valid email address',
+      })
+      return
+    }
+    
+    setSavingUserInfo(true)
+    try {
+      await api.patch(`/users/${selectedUser.id}`, {
+        name: editedUserName.trim(),
+        email: editedUserEmail.trim(),
+      })
+      
+      // Update local state
+      setSelectedUser({
+        ...selectedUser,
+        name: editedUserName.trim(),
+        email: editedUserEmail.trim(),
+      })
+      setEditingUserInfo(false)
+      
+      // Refresh people list
+      await loadPeople()
+      
+      toast({
+        variant: 'success',
+        title: 'User updated',
+        description: 'User information has been updated successfully.',
+      })
+    } catch (error: any) {
+      console.error('Failed to update user:', error)
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to update user'
+      toast({
+        variant: 'destructive',
+        title: 'Failed to update user',
+        description: errorMessage,
+      })
+    } finally {
+      setSavingUserInfo(false)
+    }
+  }
+
+  const handleToggleInspector = async () => {
+    if (!selectedUser || togglingInspector) return
+    
+    setTogglingInspector(true)
+    try {
+      const newState = !inspectorEnabled
+      await api.post('/rbac/inspector/enable', {
+        userId: selectedUser.id,
+        enabled: newState,
+      })
+      setInspectorEnabled(newState)
+      toast({
+        variant: 'success',
+        title: 'RBAC Inspector updated',
+        description: `RBAC Inspector ${newState ? 'enabled' : 'disabled'} for ${selectedUser.name}.`,
+      })
+    } catch (error: any) {
+      console.error('Failed to toggle inspector:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to update',
+        description: error.response?.data?.message || 'Failed to toggle RBAC Inspector',
+      })
+    } finally {
+      setTogglingInspector(false)
+    }
   }
 
   const handleAssignToOrg = async () => {
     if (!selectedUser || !selectedOrgId) return
     setActionLoading(true)
     try {
-      await api.post(`/organizations/${selectedOrgId}/members`, {
+      // Use RBAC endpoint directly
+      await api.post('/rbac/assignments/assign', {
         userId: selectedUser.id,
         role: selectedRole,
+        scopeType: 'TENANT',
+        scopeId: selectedOrgId,
       })
       await loadPeople()
       await refreshContext()
@@ -270,10 +457,20 @@ function PeopleSettings() {
       }
       setAssigningToOrg(false)
       setSelectedOrgId('')
-      setSelectedRole('MEMBER')
-    } catch (error) {
+      setSelectedRole('TENANT_VIEWER')
+      toast({
+        variant: 'success',
+        title: 'Role assigned',
+        description: `${selectedUser.name} has been assigned the ${selectedRole} role.`,
+      })
+    } catch (error: any) {
       console.error('Failed to add to organization:', error)
-      alert('Failed to add to organization')
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to add to organization'
+      toast({
+        variant: 'destructive',
+        title: 'Failed to assign role',
+        description: errorMessage,
+      })
     } finally {
       setActionLoading(false)
     }
@@ -283,26 +480,29 @@ function PeopleSettings() {
     if (!selectedUser || !selectedWorkspaceId) return
     setActionLoading(true)
     try {
-      await api.post(`/workspaces/${selectedWorkspaceId}/members`, {
+      // Use RBAC endpoint directly
+      await api.post('/rbac/assignments/assign', {
         userId: selectedUser.id,
         role: selectedRole,
+        scopeType: 'WORKSPACE',
+        scopeId: selectedWorkspaceId,
       })
       await loadPeople()
       await refreshContext()
       setAssigningToWorkspace(false)
       setSelectedWorkspaceId('')
-      setSelectedRole('MEMBER')
+      setSelectedRole('WORKSPACE_MEMBER')
       toast({
         variant: 'success',
-        title: 'User added',
-        description: `${selectedUser?.name} has been added to the workspace.`,
+        title: 'Role assigned',
+        description: `${selectedUser?.name} has been assigned the ${selectedRole} role.`,
       })
     } catch (error: any) {
       console.error('Failed to add to workspace:', error)
       const errorMessage = error.response?.data?.message || error.message || 'Failed to add to workspace'
       toast({
         variant: 'destructive',
-        title: 'Failed to add user',
+        title: 'Failed to assign role',
         description: errorMessage,
       })
     } finally {
@@ -314,25 +514,28 @@ function PeopleSettings() {
     if (!selectedUser || !selectedTeamId) return
     setActionLoading(true)
     try {
-      await api.post(`/teams/${selectedTeamId}/members`, {
+      // Use RBAC endpoint directly
+      await api.post('/rbac/assignments/assign', {
         userId: selectedUser.id,
         role: selectedRole,
+        scopeType: 'TEAM',
+        scopeId: selectedTeamId,
       })
       await loadPeople()
       setAssigningToTeam(false)
       setSelectedTeamId('')
-      setSelectedRole('MEMBER')
+      setSelectedRole('TEAM_CONTRIBUTOR')
       toast({
         variant: 'success',
-        title: 'User added',
-        description: `${selectedUser?.name} has been added to the team.`,
+        title: 'Role assigned',
+        description: `${selectedUser?.name} has been assigned the ${selectedRole} role.`,
       })
     } catch (error: any) {
       console.error('Failed to add to team:', error)
       const errorMessage = error.response?.data?.message || error.message || 'Failed to add to team'
       toast({
         variant: 'destructive',
-        title: 'Failed to add user',
+        title: 'Failed to assign role',
         description: errorMessage,
       })
     } finally {
@@ -467,7 +670,7 @@ function PeopleSettings() {
     const targetOrgId = orgId || selectedOrgId || organization?.id
     if (isSuperuser && targetOrgId) {
       try {
-        const res = await api.get(`/workspaces?organizationId=${targetOrgId}`)
+        const res = await api.get(`/workspaces?tenantId=${targetOrgId}`)
         return res.data || []
       } catch (error) {
         console.error('Failed to load workspaces:', error)
@@ -484,80 +687,140 @@ function PeopleSettings() {
     return organizations
   }
 
-  // Filter people based on search query
-  const filteredPeople = useMemo(() => {
-    if (!searchQuery.trim()) return people
-    
-    const query = searchQuery.toLowerCase()
-    return people.filter((person) => 
-      person.name?.toLowerCase().includes(query) ||
-      person.email?.toLowerCase().includes(query) ||
-      person.orgRole?.toLowerCase().includes(query) ||
-      person.workspaceRole?.toLowerCase().includes(query)
-    )
-  }, [people, searchQuery])
+  // Helper to get governance status for a user
+  const getGovernanceStatus = useMemo(() => {
+    return (user: any, perms?: typeof effectivePermissions): { label: string; variant: 'default' | 'secondary' | 'destructive' } => {
+      if (user?.isSuperuser || perms?.isSuperuser) {
+        return { label: 'Read-only (Superuser)', variant: 'secondary' }
+      }
+      // Check for locked cycles (if we had that data, we'd show count here)
+      // For now, just show "Normal" vs "Read-only (Superuser)"
+      return { label: 'Normal', variant: 'default' }
+    }
+  }, [])
 
-  // Role descriptions for tooltips
-  const roleDescriptions = {
+  // Filter people based on search query and edit rights filter
+  const filteredPeople = useMemo(() => {
+    let filtered = people
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter((person) => 
+        person.name?.toLowerCase().includes(query) ||
+        person.email?.toLowerCase().includes(query) ||
+        person.orgRole?.toLowerCase().includes(query) ||
+        person.workspaceRole?.toLowerCase().includes(query)
+      )
+    }
+    
+    // Apply edit rights filter (if enabled)
+    if (showEditRightsOnly) {
+      // This would ideally check effective permissions, but for now we use role-based heuristics
+      filtered = filtered.filter((person) => {
+        const hasEditRole = person.orgRole?.includes('ADMIN') || 
+                           person.orgRole?.includes('OWNER') ||
+                           person.workspaceRole?.includes('LEAD') ||
+                           person.workspaceRole?.includes('ADMIN') ||
+                           person.workspaceRole?.includes('OWNER')
+        return hasEditRole && !person.isSuperuser
+      })
+    }
+    
+    return filtered
+  }, [people, searchQuery, showEditRightsOnly])
+
+  // RBAC Role constants
+  const TENANT_ROLES = [
+    { value: 'TENANT_OWNER', label: 'Tenant Owner', description: 'Full commercial and operational control over organization' },
+    { value: 'TENANT_ADMIN', label: 'Tenant Admin', description: 'Administrative control within organization' },
+    { value: 'TENANT_VIEWER', label: 'Tenant Viewer', description: 'Read-only access to organization OKRs' },
+  ]
+  
+  const WORKSPACE_ROLES = [
+    { value: 'WORKSPACE_LEAD', label: 'Workspace Lead', description: 'Primary owner of workspace OKRs' },
+    { value: 'WORKSPACE_ADMIN', label: 'Workspace Admin', description: 'Administrative control within workspace' },
+    { value: 'WORKSPACE_MEMBER', label: 'Workspace Member', description: 'Contributor access to workspace OKRs' },
+  ]
+  
+  const TEAM_ROLES = [
+    { value: 'TEAM_LEAD', label: 'Team Lead', description: 'Owner of team OKRs' },
+    { value: 'TEAM_CONTRIBUTOR', label: 'Team Contributor', description: 'Can update key results and submit check-ins' },
+    { value: 'TEAM_VIEWER', label: 'Team Viewer', description: 'Read-only access to team OKRs' },
+  ]
+
+  // Role descriptions for tooltips (legacy + RBAC)
+  const roleDescriptions: Record<string, string> = {
+    // Legacy roles (for backward compatibility)
     'ORG_ADMIN': 'Can manage organization settings, members, and all workspaces within the organization.',
     'MEMBER': 'Can view and contribute to organization content. Full access to assigned workspaces.',
     'VIEWER': 'Read-only access. Can view organization content but cannot make changes.',
     'WORKSPACE_OWNER': 'Full control over workspace settings, members, and all OKRs within this workspace.',
     'WORKSPACE_ADMIN': 'Can manage workspace members and settings, create and edit OKRs.',
     'TEAM_LEAD': 'Can manage team members and team-level OKRs.',
+    // RBAC roles
+    'TENANT_OWNER': 'Full commercial and operational control over organization. Can bypass publish/cycle locks, manage users/workspaces/teams, export data, manage tenant settings.',
+    'TENANT_ADMIN': 'Administrative control within organization. Can bypass locks, manage users/workspaces, export data.',
+    'TENANT_VIEWER': 'Read-only access. Can view organization OKRs (subject to visibility rules).',
+    'WORKSPACE_LEAD': 'Primary owner of workspace OKRs. Can create, edit, and delete workspace-level OKRs, view all workspace OKRs, manage workspace members.',
+    'WORKSPACE_ADMIN': 'Administrative control within workspace. Can create and edit workspace OKRs, manage workspace members.',
+    'WORKSPACE_MEMBER': 'Contributor access. Can view workspace OKRs, contribute to OKRs, update key results and submit check-ins.',
+    'TEAM_LEAD': 'Owner of team OKRs. Can create, edit, and delete team-level OKRs, view all team OKRs, manage team members.',
+    'TEAM_CONTRIBUTOR': 'Contributor access. Can update key results, submit check-ins, view team OKRs.',
+    'TEAM_VIEWER': 'Read-only access. Can view team OKRs (subject to visibility rules).',
   }
 
   if (!workspace && !organization) {
     return (
-      <div className="p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center py-12">
-            <h1 className="text-2xl font-bold text-slate-900 mb-2">People</h1>
-            <p className="text-slate-600">Please select a workspace or organization to view people.</p>
-          </div>
+      <PageContainer variant="form">
+        <PageHeader
+          title="People"
+          subtitle="Manage users and their roles"
+        />
+        <div className="text-center py-12">
+          <p className="text-slate-600">Please select a workspace or organization to view people.</p>
         </div>
-      </div>
+      </PageContainer>
     )
   }
 
   return (
-    <div className="p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">People</h1>
-            <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
-              {organization && (
-                <>
-                  <Building2 className="h-4 w-4" />
-                  <span>{organization.name}</span>
-                </>
-              )}
-              {workspace && (
-                <>
-                  <span>→</span>
-                  <Briefcase className="h-4 w-4" />
-                  <span>{workspace.name}</span>
-                </>
-              )}
-            </div>
-          </div>
+    <PageContainer variant="form">
+      <PageHeader
+        title="People"
+        subtitle={workspace ? `Manage users in ${workspace.name}` : organization ? `Manage users in ${organization.name}` : 'Manage users and their roles'}
+      />
+      <div className="space-y-6">
+        <div className="flex items-center justify-end">
           <Button onClick={() => setShowCreateUser(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add User
           </Button>
         </div>
 
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Search by name, email, or role..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
+        {/* Search Bar and Quick Filter */}
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Search by name, email, or role..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="editRightsFilter"
+              checked={showEditRightsOnly}
+              onChange={(e) => setShowEditRightsOnly(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            <Label htmlFor="editRightsFilter" className="cursor-pointer text-sm">
+              Show users with edit rights
+            </Label>
+          </div>
         </div>
 
         {/* View Mode Toggle */}
@@ -577,16 +840,28 @@ function PeopleSettings() {
         {/* Create User Dialog */}
         <Dialog open={showCreateUser} onOpenChange={(open) => {
           setShowCreateUser(open)
-          if (!open) {
+          if (open) {
+            // Initialize form with current context when dialog opens
+            setNewUserData({ 
+              name: '', 
+              email: '', 
+              password: '',
+              tenantId: organization?.id || '',
+              workspaceId: workspace?.id || '',
+              role: 'MEMBER' as 'ORG_ADMIN' | 'MEMBER' | 'VIEWER',
+              workspaceRole: 'MEMBER' as 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER'
+            })
+            setDevInspectorMode(false)
+          } else {
             // Reset form when dialog closes
             resetUserForm()
           }
         }}>
           <DialogContent className="max-w-2xl" aria-describedby="create-user-description">
             <DialogHeader>
-              <DialogTitle>Add User</DialogTitle>
+              <DialogTitle>Create User</DialogTitle>
               <DialogDescription id="create-user-description">
-                Create a new user account and assign them to an organization and workspace
+                Create a new user account. An invitation will be sent to this address if required by your configuration.
               </DialogDescription>
             </DialogHeader>
               <div className="space-y-4 py-4">
@@ -609,6 +884,9 @@ function PeopleSettings() {
                       onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
                       placeholder="john@example.com"
                     />
+                    <p className="text-xs text-slate-500 mt-1">
+                      An invitation will be sent to this address if required by your configuration.
+                    </p>
                   </div>
                 </div>
                 <div>
@@ -621,63 +899,132 @@ function PeopleSettings() {
                     placeholder="Enter initial password"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="organization">Organization *</Label>
-                    <Select 
-                      value={newUserData.organizationId} 
-                      onValueChange={async (v) => {
-                        setNewUserData({ 
-                          ...newUserData, 
-                          organizationId: v, 
-                          workspaceId: '',
-                          workspaceRole: 'MEMBER' // Reset workspace role when organization changes
-                        })
-                        // Load workspaces for selected organization
-                        if (isSuperuser && v) {
-                          try {
-                            const res = await api.get(`/workspaces?organizationId=${v}`)
-                            setAllWorkspaces(res.data || [])
-                          } catch (error) {
-                            console.error('Failed to load workspaces:', error)
-                          }
-                        }
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select organization" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {getAvailableOrganizations().map((org) => (
-                          <SelectItem key={org.id} value={org.id}>
-                            {org.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+
+                {/* Tenant Context - Auto-detected or Manual Selection */}
+                {organization && !devInspectorMode && !isSuperuser ? (
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-slate-600" />
+                      <div>
+                        <Label className="text-xs text-slate-600">Tenant (auto-detected)</Label>
+                        <p className="text-sm font-medium text-slate-900">{organization.name}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="workspace">Workspace *</Label>
-                    <Select 
-                      value={newUserData.workspaceId} 
-                      onValueChange={(v) => setNewUserData({ ...newUserData, workspaceId: v })}
-                      disabled={!newUserData.organizationId}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select workspace" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(isSuperuser ? allWorkspaces : workspaces)
-                          .filter(w => w.organizationId === newUserData.organizationId)
-                          .map((ws) => (
+                ) : (
+                  <div className="space-y-2">
+                    {!organization && !devInspectorMode && (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <p className="text-xs text-amber-900">
+                          No active tenant context — please select a tenant.
+                        </p>
+                      </div>
+                    )}
+                    {organization && !devInspectorMode && isSuperuser && (
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <p className="text-xs text-blue-900">
+                          Using current organisation: <strong>{organization.name}</strong>
+                        </p>
+                      </div>
+                    )}
+                    <div>
+                      <Label htmlFor="organization">Organisation *</Label>
+                      <Select 
+                        value={newUserData.tenantId || organization?.id || ''} 
+                        onValueChange={async (v) => {
+                          setNewUserData({ 
+                            ...newUserData, 
+                            tenantId: v, 
+                            workspaceId: '',
+                            workspaceRole: 'MEMBER'
+                          })
+                          // Load workspaces for selected organisation
+                          if (isSuperuser && v) {
+                            try {
+                              const res = await api.get(`/workspaces?tenantId=${v}`)
+                              setAllWorkspaces(res.data || [])
+                            } catch (error) {
+                              console.error('Failed to load workspaces:', error)
+                            }
+                          }
+                        }}
+                      >
+                        <SelectTrigger id="organization">
+                          <SelectValue placeholder="Select organisation" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getAvailableOrganizations().map((org) => (
+                            <SelectItem key={org.id} value={org.id}>
+                              {org.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Developer Inspector Toggle - Only for SUPERUSER with rbacInspector enabled */}
+                {isSuperuser && currentUser?.features?.rbacInspector && (
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <Label htmlFor="dev-inspector-toggle" className="font-normal cursor-pointer">
+                          Developer mode: cross-tenant creation
+                        </Label>
+                        <p className="text-xs text-purple-700 mt-1">
+                          Enable to create users in different tenants (requires Developer Inspector).
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        id="dev-inspector-toggle"
+                        checked={devInspectorMode}
+                        onChange={(e) => {
+                          setDevInspectorMode(e.target.checked)
+                          if (!e.target.checked) {
+                            // Reset to auto-context when disabling
+                            setNewUserData({ ...newUserData, tenantId: organization?.id || '' })
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Workspace Selection - Optional and Hidden if None */}
+                {(() => {
+                  const availableWorkspacesForTenant = isSuperuser 
+                    ? allWorkspaces.filter(w => w.tenantId === (devInspectorMode ? newUserData.tenantId : organization?.id))
+                    : workspaces.filter(w => w.tenantId === organization?.id)
+                  
+                  if (availableWorkspacesForTenant.length === 0) {
+                    return null // Hide workspace selector when none exist
+                  }
+                  
+                  return (
+                    <div>
+                      <Label htmlFor="workspace">Workspace (optional)</Label>
+                      <Select 
+                        value={newUserData.workspaceId} 
+                        onValueChange={(v) => setNewUserData({ ...newUserData, workspaceId: v })}
+                        disabled={!organization && !devInspectorMode ? !newUserData.organizationId : false}
+                      >
+                        <SelectTrigger id="workspace">
+                          <SelectValue placeholder="Select workspace (optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableWorkspacesForTenant.map((ws) => (
                             <SelectItem key={ws.id} value={ws.id}>
                               {ws.name}
                             </SelectItem>
                           ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )
+                })()}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
@@ -688,7 +1035,7 @@ function PeopleSettings() {
                             <Info className="h-4 w-4 text-slate-400 cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p className="max-w-xs">{roleDescriptions[newUserData.role] || 'Select a role to see description'}</p>
+                            <p className="max-w-xs">{roleDescriptions[newUserData.role as keyof typeof roleDescriptions] || 'Select a role to see description'}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -707,34 +1054,36 @@ function PeopleSettings() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Label htmlFor="workspace-role">Workspace Role</Label>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="h-4 w-4 text-slate-400 cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="max-w-xs">{roleDescriptions[newUserData.workspaceRole] || 'Select a role to see description'}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                  {newUserData.workspaceId && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Label htmlFor="workspace-role">Workspace Role</Label>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-4 w-4 text-slate-400 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="max-w-xs">{roleDescriptions[newUserData.workspaceRole as keyof typeof roleDescriptions] || 'Select a role to see description'}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <Select 
+                        value={newUserData.workspaceRole} 
+                        onValueChange={(v: any) => setNewUserData({ ...newUserData, workspaceRole: v })}
+                      >
+                        <SelectTrigger id="workspace-role">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="MEMBER">Member</SelectItem>
+                          <SelectItem value="WORKSPACE_OWNER">Owner</SelectItem>
+                          <SelectItem value="VIEWER">Viewer</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <Select 
-                      value={newUserData.workspaceRole} 
-                      onValueChange={(v: any) => setNewUserData({ ...newUserData, workspaceRole: v })}
-                    >
-                      <SelectTrigger id="workspace-role">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="MEMBER">Member</SelectItem>
-                        <SelectItem value="WORKSPACE_OWNER">Owner</SelectItem>
-                        <SelectItem value="VIEWER">Viewer</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  )}
                 </div>
               </div>
               <DialogFooter>
@@ -772,6 +1121,9 @@ function PeopleSettings() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Roles</TableHead>
+                    <TableHead>Effective Permissions</TableHead>
+                    <TableHead>Governance</TableHead>
                     <TableHead>Organization</TableHead>
                     <TableHead>Workspace</TableHead>
                     <TableHead>Teams</TableHead>
@@ -779,74 +1131,155 @@ function PeopleSettings() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPeople.map((person) => (
-                    <TableRow 
-                      key={person.id} 
-                      className="cursor-pointer hover:bg-slate-50"
-                      onClick={() => handleUserClick(person)}
-                    >
-                      <TableCell className="font-medium">{person.name}</TableCell>
-                      <TableCell>{person.email}</TableCell>
-                      <TableCell>
-                        {person.orgRole && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant={getRoleBadgeVariant(person.orgRole)}>
-                                  {person.orgRole}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">{roleDescriptions[person.orgRole] || person.orgRole}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {person.workspaceRole && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant={getRoleBadgeVariant(person.workspaceRole)}>
-                                  {person.workspaceRole}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">{roleDescriptions[person.workspaceRole] || person.workspaceRole}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {person.teams?.slice(0, 2).map((team: any) => (
-                            <Badge key={team.id} variant="secondary" className="text-xs">
-                              {team.name}
-                            </Badge>
-                          ))}
-                          {person.teams?.length > 2 && (
-                            <Badge variant="secondary" className="text-xs">
-                              +{person.teams.length - 2}
-                            </Badge>
+                  {filteredPeople.map((person) => {
+                    // Get user's roles grouped by scope (from RBAC assignments)
+                    const userRoles = person.rbacRoles || {
+                      tenant: person.orgRole ? [{ organizationId: organization?.id || '', roles: [person.orgRole] }] : [],
+                      workspace: person.workspaceRole ? [{ workspaceId: workspace?.id || '', roles: [person.workspaceRole] }] : [],
+                      team: person.teams?.map((t: any) => ({ teamId: t.id, roles: [t.role || 'MEMBER'] })) || [],
+                    }
+                    
+                    // Calculate effective permissions count (heuristic based on roles)
+                    // Full count would require fetching effective permissions for each user
+                    let effectiveCount = 0
+                    if (person.orgRole?.includes('OWNER')) effectiveCount += 14
+                    else if (person.orgRole?.includes('ADMIN')) effectiveCount += 12
+                    else if (person.workspaceRole?.includes('LEAD')) effectiveCount += 8
+                    else if (person.workspaceRole?.includes('ADMIN')) effectiveCount += 6
+                    else effectiveCount += 3
+                    
+                    const govStatus = getGovernanceStatus(person)
+                    
+                    return (
+                      <TableRow 
+                        key={person.id} 
+                        className="cursor-pointer hover:bg-slate-50"
+                        onClick={() => handleUserClick(person)}
+                      >
+                        <TableCell className="font-medium">{person.name}</TableCell>
+                        <TableCell>{person.email}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1 max-w-[200px]">
+                            {userRoles.tenant.map((t: any, idx: number) => (
+                              <TooltipProvider key={`tenant-${idx}`}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge variant={getRoleBadgeVariant(t.roles[0])} className="text-xs">
+                                      {t.roles[0]}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="max-w-xs">Tenant: {t.roles.join(', ')}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ))}
+                            {userRoles.workspace.map((w: any, idx: number) => (
+                              <TooltipProvider key={`workspace-${idx}`}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge variant={getRoleBadgeVariant(w.roles[0])} className="text-xs">
+                                      {w.roles[0]}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="max-w-xs">Workspace: {w.roles.join(', ')}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ))}
+                            {userRoles.team.slice(0, 2).map((t: any, idx: number) => (
+                              <TooltipProvider key={`team-${idx}`}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {t.roles[0]}
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="max-w-xs">Team: {t.roles.join(', ')}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ))}
+                            {userRoles.team.length > 2 && (
+                              <Badge variant="secondary" className="text-xs">
+                                +{userRoles.team.length - 2}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-mono">
+                            {effectiveCount}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={govStatus.variant}>
+                            {govStatus.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {person.orgRole && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant={getRoleBadgeVariant(person.orgRole)}>
+                                    {person.orgRole}
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="max-w-xs">{roleDescriptions[person.orgRole as keyof typeof roleDescriptions] || person.orgRole}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleUserClick(person)
-                          }}
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell>
+                          {person.workspaceRole && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge variant={getRoleBadgeVariant(person.workspaceRole)}>
+                                    {person.workspaceRole}
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="max-w-xs">{roleDescriptions[person.workspaceRole as keyof typeof roleDescriptions] || person.workspaceRole}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {person.teams?.slice(0, 2).map((team: any) => (
+                              <Badge key={team.id} variant="secondary" className="text-xs">
+                                {team.name}
+                              </Badge>
+                            ))}
+                            {person.teams?.length > 2 && (
+                              <Badge variant="secondary" className="text-xs">
+                                +{person.teams.length - 2}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleUserClick(person)
+                            }}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -876,16 +1309,67 @@ function PeopleSettings() {
                 <div className="mt-6 space-y-6">
                   {/* Basic Info */}
                   <div>
-                    <h3 className="text-sm font-semibold mb-3">User Information</h3>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold">User Information</h3>
+                      {!editingUserInfo && permissions.canInviteMembers({ organizationId: organization?.id }) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditingUserInfo(true)
+                            setEditedUserName(selectedUser.name || '')
+                            setEditedUserEmail(selectedUser.email || '')
+                          }}
+                        >
+                          <Edit2 className="h-4 w-4 mr-1" />
+                          Edit
+                        </Button>
+                      )}
+                    </div>
                     <div className="space-y-2">
                       <div>
                         <Label>Name</Label>
-                        <Input value={selectedUser.name} disabled />
+                        <Input 
+                          value={editingUserInfo ? editedUserName : selectedUser.name} 
+                          disabled={!editingUserInfo}
+                          onChange={(e) => editingUserInfo && setEditedUserName(e.target.value)}
+                        />
                       </div>
                       <div>
                         <Label>Email</Label>
-                        <Input value={selectedUser.email} disabled />
+                        <Input 
+                          type="email"
+                          value={editingUserInfo ? editedUserEmail : selectedUser.email} 
+                          disabled={!editingUserInfo}
+                          onChange={(e) => editingUserInfo && setEditedUserEmail(e.target.value)}
+                        />
                       </div>
+                      {editingUserInfo && (
+                        <div className="flex gap-2 pt-2">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={handleUpdateUserInfo}
+                            disabled={savingUserInfo}
+                            className="flex-1"
+                          >
+                            {savingUserInfo ? 'Saving...' : 'Save Changes'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditingUserInfo(false)
+                              setEditedUserName(selectedUser.name || '')
+                              setEditedUserEmail(selectedUser.email || '')
+                            }}
+                            disabled={savingUserInfo}
+                            className="flex-1"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      )}
                       {isSuperuser && !impersonating && selectedUser.id !== currentUser?.id && (
                         <Button
                           variant="default"
@@ -913,6 +1397,201 @@ function PeopleSettings() {
                     </div>
                   </div>
 
+                  {/* RBAC Insights */}
+                  {effectivePermissions && (
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                        <Shield className="h-4 w-4" />
+                        Roles & Effective Permissions
+                      </h3>
+                      
+                      {/* Roles by Scope */}
+                      <div className="mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-xs font-medium text-slate-600">Roles by Scope</h4>
+                          {permissions.canInviteMembers({ organizationId: organization?.id, workspaceId: workspace?.id }) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setRoleAssignmentDialog({
+                                  isOpen: true,
+                                  scopeType: null,
+                                  scopeId: null,
+                                  currentRole: null,
+                                })
+                              }}
+                            >
+                              <Plus className="h-3 w-3 mr-1" />
+                              Assign Role
+                            </Button>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          {effectivePermissions.scopes.map((scope, idx) => (
+                            <div key={idx} className="p-3 bg-slate-50 rounded-lg">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-xs font-medium">
+                                  {scope.tenantId && (
+                                    <span>
+                                      Tenant: {scope.tenantId.substring(0, 8)}...
+                                      {scope.workspaceId && ` • Workspace: ${scope.workspaceId.substring(0, 8)}...`}
+                                      {scope.teamId && ` • Team: ${scope.teamId.substring(0, 8)}...`}
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                {scope.effectiveRoles.map((role, rIdx) => (
+                                  <Badge key={rIdx} variant={getRoleBadgeVariant(role)} className="text-xs">
+                                    {role}
+                                  </Badge>
+                                ))}
+                              </div>
+                              <div className="text-xs text-slate-600">
+                                <span className="font-medium">{scope.actionsAllowed.length}</span> allowed,{' '}
+                                <span className="font-medium">{scope.actionsDenied.length}</span> denied
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Effective Actions Grouped by Category */}
+                      <div className="mb-4">
+                        <h4 className="text-xs font-medium text-slate-600 mb-2">Effective Actions</h4>
+                        {effectivePermissions.scopes.length > 0 && (
+                          <div className="space-y-3">
+                            {/* OKR Actions */}
+                            <div>
+                              <h5 className="text-xs font-medium text-slate-500 mb-1">OKR</h5>
+                              <div className="flex flex-wrap gap-1">
+                                {['create_okr', 'edit_okr', 'delete_okr', 'publish_okr', 'view_okr', 'view_all_okrs'].map((action) => {
+                                  const isAllowed = effectivePermissions.scopes.some(s => s.actionsAllowed.includes(action))
+                                  return (
+                                    <Badge
+                                      key={action}
+                                      variant={isAllowed ? 'default' : 'secondary'}
+                                      className="text-xs"
+                                    >
+                                      {action.replace(/_/g, ' ')}
+                                    </Badge>
+                                  )
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Governance Actions */}
+                            <div>
+                              <h5 className="text-xs font-medium text-slate-500 mb-1">Governance</h5>
+                              <div className="flex flex-wrap gap-1">
+                                {['request_checkin'].map((action) => {
+                                  const isAllowed = effectivePermissions.scopes.some(s => s.actionsAllowed.includes(action))
+                                  return (
+                                    <Badge
+                                      key={action}
+                                      variant={isAllowed ? 'default' : 'secondary'}
+                                      className="text-xs"
+                                    >
+                                      {action.replace(/_/g, ' ')}
+                                    </Badge>
+                                  )
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Admin Actions */}
+                            <div>
+                              <h5 className="text-xs font-medium text-slate-500 mb-1">Admin</h5>
+                              <div className="flex flex-wrap gap-1">
+                                {['manage_users', 'manage_workspaces', 'manage_teams', 'manage_tenant_settings', 'export_data', 'manage_billing'].map((action) => {
+                                  const isAllowed = effectivePermissions.scopes.some(s => s.actionsAllowed.includes(action))
+                                  return (
+                                    <Badge
+                                      key={action}
+                                      variant={isAllowed ? 'default' : 'secondary'}
+                                      className="text-xs"
+                                    >
+                                      {action.replace(/_/g, ' ')}
+                                    </Badge>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Governance Overlays */}
+                      <div className="mb-4">
+                        <h4 className="text-xs font-medium text-slate-600 mb-2">Governance Status</h4>
+                        <div className="space-y-2">
+                          {effectivePermissions.isSuperuser && (
+                            <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs">
+                              <div className="flex items-center gap-2">
+                                <Lock className="h-3 w-3 text-amber-600" />
+                                <span className="font-medium">Platform Superuser is read-only for OKR content.</span>
+                              </div>
+                            </div>
+                          )}
+                          <div className="p-2 bg-slate-50 border border-slate-200 rounded text-xs">
+                            <div className="flex items-center gap-2">
+                              <Info className="h-3 w-3 text-slate-600" />
+                              <span>Publish lock applies to published OKRs: only Tenant Owner/Admin can edit or delete.</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Visibility Note */}
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+                        <div className="flex items-start gap-2">
+                          <Eye className="h-4 w-4 text-blue-600 mt-0.5" />
+                          <div className="text-xs text-blue-900">
+                            <p className="font-medium mb-1">Visibility Policy</p>
+                            <p>Only PRIVATE OKRs are access-restricted; all other visibility levels (PUBLIC_TENANT, EXEC_ONLY, WORKSPACE_ONLY, etc.) are treated as tenant-visible.</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {permissionsLoading && (
+                    <div className="text-center py-4 text-sm text-slate-500">
+                      Loading permissions...
+                    </div>
+                  )}
+
+                  {/* Troubleshooting Section - RBAC Inspector Toggle */}
+                  {permissions.canInviteMembers({ organizationId: organization?.id }) && (
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                        <Info className="h-4 w-4" />
+                        Troubleshooting
+                      </h3>
+                      <div className="p-3 bg-slate-50 rounded-lg space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <Label htmlFor="rbac-inspector-toggle" className="font-normal cursor-pointer">
+                              Enable RBAC Inspector for this user
+                            </Label>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Shows permission reasoning tooltips in production for this user.
+                            </p>
+                          </div>
+                          <input
+                            type="checkbox"
+                            id="rbac-inspector-toggle"
+                            checked={inspectorEnabled === true}
+                            onChange={handleToggleInspector}
+                            disabled={togglingInspector || inspectorEnabled === null}
+                            className="h-4 w-4 rounded border-slate-300"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Organization Memberships */}
                   <div>
                     <div className="flex items-center justify-between mb-3">
@@ -926,7 +1605,7 @@ function PeopleSettings() {
                         onClick={async () => {
                           setAssigningToOrg(true)
                           setSelectedOrgId(organization?.id || '')
-                          setSelectedRole('MEMBER')
+                          setSelectedRole('TENANT_VIEWER')
                           // Load workspaces for all organizations if superuser
                           if (isSuperuser) {
                             const orgs = getAvailableOrganizations()
@@ -949,16 +1628,35 @@ function PeopleSettings() {
                             {organization?.name || 'Organization'} - {selectedUser.orgRole}
                           </Badge>
                         </div>
-                        {organization && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveFromOrg(organization.id)}
-                            disabled={actionLoading}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {permissions.canInviteMembers({ organizationId: organization?.id }) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setRoleAssignmentDialog({
+                                  isOpen: true,
+                                  scopeType: 'TENANT',
+                                  scopeId: organization?.id || null,
+                                  currentRole: selectedUser.orgRole || null,
+                                })
+                              }}
+                              disabled={actionLoading}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {organization && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveFromOrg(organization.id)}
+                              disabled={actionLoading}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <p className="text-sm text-slate-500">No organization memberships</p>
@@ -978,7 +1676,7 @@ function PeopleSettings() {
                         onClick={async () => {
                           setAssigningToWorkspace(true)
                           setSelectedWorkspaceId(workspace?.id || '')
-                          setSelectedRole('MEMBER')
+                          setSelectedRole('WORKSPACE_MEMBER')
                           // Load workspaces for organization if superuser
                           if (isSuperuser && organization) {
                             const workspaces = await getAvailableWorkspaces(organization.id)
@@ -997,16 +1695,35 @@ function PeopleSettings() {
                             {workspace?.name || 'Workspace'} - {selectedUser.workspaceRole}
                           </Badge>
                         </div>
-                        {workspace && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleRemoveFromWorkspace(workspace.id)}
-                            disabled={actionLoading}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {permissions.canInviteMembers({ workspaceId: workspace?.id }) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setRoleAssignmentDialog({
+                                  isOpen: true,
+                                  scopeType: 'WORKSPACE',
+                                  scopeId: workspace?.id || null,
+                                  currentRole: selectedUser.workspaceRole || null,
+                                })
+                              }}
+                              disabled={actionLoading}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {workspace && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveFromWorkspace(workspace.id)}
+                              disabled={actionLoading}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <p className="text-sm text-slate-500">No workspace memberships</p>
@@ -1026,7 +1743,7 @@ function PeopleSettings() {
                         onClick={() => {
                           setAssigningToTeam(true)
                           setSelectedTeamId('')
-                          setSelectedRole('MEMBER')
+                          setSelectedRole('TEAM_CONTRIBUTOR')
                         }}
                         disabled={!workspace}
                       >
@@ -1039,14 +1756,33 @@ function PeopleSettings() {
                         {selectedUser.teams.map((team: any) => (
                           <div key={team.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                             <Badge variant="secondary">{team.name} - {team.role}</Badge>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveFromTeam(team.id)}
-                              disabled={actionLoading}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              {permissions.canInviteMembers({ workspaceId: workspace?.id }) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setRoleAssignmentDialog({
+                                      isOpen: true,
+                                      scopeType: 'TEAM',
+                                      scopeId: team.id,
+                                      currentRole: team.role || null,
+                                    })
+                                  }}
+                                  disabled={actionLoading}
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveFromTeam(team.id)}
+                                disabled={actionLoading}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1104,7 +1840,7 @@ function PeopleSettings() {
                         <Info className="h-4 w-4 text-slate-400 cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="max-w-xs">{roleDescriptions[selectedRole] || 'Select a role to see description'}</p>
+                        <p className="max-w-xs">{roleDescriptions[selectedRole as keyof typeof roleDescriptions] || 'Select a role to see description'}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -1114,9 +1850,11 @@ function PeopleSettings() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MEMBER">Member</SelectItem>
-                    <SelectItem value="ORG_ADMIN">Admin</SelectItem>
-                    <SelectItem value="VIEWER">Viewer</SelectItem>
+                    {TENANT_ROLES.map((role) => (
+                      <SelectItem key={role.value} value={role.value}>
+                        {role.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -1168,7 +1906,7 @@ function PeopleSettings() {
                         <Info className="h-4 w-4 text-slate-400 cursor-help" />
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="max-w-xs">{roleDescriptions[selectedRole] || 'Select a role to see description'}</p>
+                        <p className="max-w-xs">{roleDescriptions[selectedRole as keyof typeof roleDescriptions] || 'Select a role to see description'}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -1178,9 +1916,11 @@ function PeopleSettings() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MEMBER">Member</SelectItem>
-                    <SelectItem value="WORKSPACE_OWNER">Owner</SelectItem>
-                    <SelectItem value="VIEWER">Viewer</SelectItem>
+                    {WORKSPACE_ROLES.map((role) => (
+                      <SelectItem key={role.value} value={role.value}>
+                        {role.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -1228,10 +1968,11 @@ function PeopleSettings() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MEMBER">Member</SelectItem>
-                    <SelectItem value="TEAM_LEAD">Team Lead</SelectItem>
-                    <SelectItem value="WORKSPACE_ADMIN">Workspace Admin</SelectItem>
-                    <SelectItem value="ORG_ADMIN">Org Admin</SelectItem>
+                    {TEAM_ROLES.map((role) => (
+                      <SelectItem key={role.value} value={role.value}>
+                        {role.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -1246,6 +1987,36 @@ function PeopleSettings() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Role Assignment Dialog */}
+        {roleAssignmentDialog.isOpen && selectedUser && (
+          <RoleAssignmentDialog
+            isOpen={roleAssignmentDialog.isOpen}
+            onClose={() => setRoleAssignmentDialog({ isOpen: false, scopeType: null, scopeId: null, currentRole: null })}
+            userId={selectedUser.id}
+            userName={selectedUser.name}
+            scopeType={roleAssignmentDialog.scopeType}
+            scopeId={roleAssignmentDialog.scopeId}
+            currentRole={roleAssignmentDialog.currentRole}
+            availableOrganizations={getAvailableOrganizations()}
+            availableWorkspaces={isSuperuser ? availableWorkspacesForOrg : workspaces.filter(w => !organization || w.organizationId === organization.id)}
+            availableTeams={teams}
+            onSuccess={async () => {
+              await loadPeople()
+              await refreshContext()
+              // Refresh selected user data
+              if (workspace) {
+                const wsRes = await api.get(`/workspaces/${workspace.id}/members`)
+                const updatedUser = wsRes.data.find((u: any) => u.id === selectedUser.id)
+                if (updatedUser) setSelectedUser(updatedUser)
+              } else if (organization) {
+                const orgRes = await api.get(`/organizations/${organization.id}/members`)
+                const updatedUser = orgRes.data.find((u: any) => u.id === selectedUser.id)
+                if (updatedUser) setSelectedUser(updatedUser)
+              }
+            }}
+          />
+        )}
 
         {/* Reset Password Dialog */}
         <Dialog open={!!resettingPassword} onOpenChange={() => setResettingPassword(null)}>
@@ -1279,6 +2050,6 @@ function PeopleSettings() {
           </DialogContent>
         </Dialog>
       </div>
-    </div>
+    </PageContainer>
   )
 }

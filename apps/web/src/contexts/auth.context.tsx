@@ -11,6 +11,11 @@ interface User {
   lastName: string
   role: string
   isSuperuser?: boolean
+  features?: {
+    rbacInspector?: boolean
+    okrTreeView?: boolean
+    [key: string]: any
+  }
 }
 
 interface AuthContextType {
@@ -136,7 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!impData) return
     
     try {
-      const { originalUser: orig, originalToken } = JSON.parse(impData)
+      const { originalToken } = JSON.parse(impData)
       
       // Restore original token
       if (originalToken) {

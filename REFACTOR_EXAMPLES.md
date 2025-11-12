@@ -308,3 +308,8 @@ These examples show:
 3. **View Models:** Explicit mapper functions transform API data to clean props for components
 4. **Consistency:** Frontend permission logic mirrors backend logic
 
+
+
+
+
+

@@ -69,12 +69,14 @@ export function ObjectiveNode({ data, id }: NodeProps) {
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    setIsEditingTitle(true)
+    if (data.canEdit !== false) {
+      setIsEditingTitle(true)
+    }
   }
 
   const handleTitleSave = (newTitle: string) => {
     setIsEditingTitle(false)
-    if (newTitle !== data.label && data.onQuickSave) {
+    if (newTitle !== data.label && data.onQuickSave && data.canEdit !== false) {
       data.onQuickSave(id, { label: newTitle })
     }
     setTitle(newTitle)
@@ -87,15 +89,20 @@ export function ObjectiveNode({ data, id }: NodeProps) {
 
   return (
     <div 
-      onClick={(e) => {
+      onClick={(_e) => {
         // Single click - open edit panel
         if (!isEditingTitle) {
           data.onEdit?.(id, data)
         }
       }}
       onDoubleClick={handleDoubleClick}
-      title="Click to edit • Double-click title to edit inline"
-      className="w-[260px] h-[120px] px-3 py-2 shadow-md rounded-lg border-2 border-blue-500 bg-white cursor-pointer hover:shadow-lg hover:border-blue-600 hover:scale-[1.02] transition-all"
+      title={data.canEdit === false ? "This item is locked and cannot be edited" : "Click to edit • Double-click title to edit inline"}
+      className={`w-[260px] h-[120px] px-3 py-2 shadow-md rounded-lg border-2 border-blue-500 bg-white transition-all ${
+        data.canEdit === false 
+          ? 'opacity-75 cursor-not-allowed' 
+          : 'cursor-pointer hover:shadow-lg hover:border-blue-600 hover:scale-[1.02]'
+      }`}
+      draggable={data.canEdit !== false}
     >
       {/* Always-visible Handles */}
       <Handle
@@ -158,12 +165,14 @@ export function KeyResultNode({ data, id }: NodeProps) {
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    setIsEditingTitle(true)
+    if (data.canEdit !== false) {
+      setIsEditingTitle(true)
+    }
   }
 
   const handleTitleSave = (newTitle: string) => {
     setIsEditingTitle(false)
-    if (newTitle !== data.label && data.onQuickSave) {
+    if (newTitle !== data.label && data.onQuickSave && data.canEdit !== false) {
       data.onQuickSave(id, { label: newTitle })
     }
     setTitle(newTitle)
@@ -176,14 +185,19 @@ export function KeyResultNode({ data, id }: NodeProps) {
 
   return (
     <div 
-      onClick={(e) => {
+      onClick={(_e) => {
         if (!isEditingTitle) {
           data.onEdit?.(id, data)
         }
       }}
       onDoubleClick={handleDoubleClick}
-      title="Click to edit • Double-click title to edit inline"
-      className="w-[260px] h-[110px] px-3 py-2 shadow-md rounded-lg border-2 border-green-500 bg-white cursor-pointer hover:shadow-lg hover:border-green-600 hover:scale-[1.02] transition-all"
+      title={data.canEdit === false ? "This item is locked and cannot be edited" : "Click to edit • Double-click title to edit inline"}
+      className={`w-[260px] h-[110px] px-3 py-2 shadow-md rounded-lg border-2 border-green-500 bg-white transition-all ${
+        data.canEdit === false 
+          ? 'opacity-75 cursor-not-allowed' 
+          : 'cursor-pointer hover:shadow-lg hover:border-green-600 hover:scale-[1.02]'
+      }`}
+      draggable={data.canEdit !== false}
     >
       <Handle
         type="target"
@@ -241,12 +255,14 @@ export function InitiativeNode({ data, id }: NodeProps) {
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    setIsEditingTitle(true)
+    if (data.canEdit !== false) {
+      setIsEditingTitle(true)
+    }
   }
 
   const handleTitleSave = (newTitle: string) => {
     setIsEditingTitle(false)
-    if (newTitle !== data.label && data.onQuickSave) {
+    if (newTitle !== data.label && data.onQuickSave && data.canEdit !== false) {
       data.onQuickSave(id, { label: newTitle })
     }
     setTitle(newTitle)
@@ -259,14 +275,19 @@ export function InitiativeNode({ data, id }: NodeProps) {
 
   return (
     <div 
-      onClick={(e) => {
+      onClick={(_e) => {
         if (!isEditingTitle) {
           data.onEdit?.(id, data)
         }
       }}
       onDoubleClick={handleDoubleClick}
-      title="Click to edit • Double-click title to edit inline"
-      className="w-[260px] h-[100px] px-3 py-2 shadow-md rounded-lg border-2 border-purple-500 bg-white cursor-pointer hover:shadow-lg hover:border-purple-600 hover:scale-[1.02] transition-all"
+      title={data.canEdit === false ? "This item is locked and cannot be edited" : "Click to edit • Double-click title to edit inline"}
+      className={`w-[260px] h-[100px] px-3 py-2 shadow-md rounded-lg border-2 border-purple-500 bg-white transition-all ${
+        data.canEdit === false 
+          ? 'opacity-75 cursor-not-allowed' 
+          : 'cursor-pointer hover:shadow-lg hover:border-purple-600 hover:scale-[1.02]'
+      }`}
+      draggable={data.canEdit !== false}
     >
       <Handle
         type="target"

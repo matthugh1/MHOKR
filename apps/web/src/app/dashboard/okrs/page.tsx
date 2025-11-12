@@ -1,9 +1,28 @@
+/**
+ * Performance Budgets (W5.M3)
+ * 
+ * Page-level budgets:
+ * - First list render: ≤ 150ms for 20 items (dev mode tolerance allowed)
+ * - Scroll frame: no long tasks > 50ms during windowed list scroll
+ * - Drawer open: content interactive ≤ 120ms
+ * - Objective insight fetch: show skeleton within 50ms; render < 16ms when data arrives
+ * 
+ * Bundle/RT budgets (non-failing warnings):
+ * - OKR page chunk ≤ 180 KB gz (if measurable with existing tooling)
+ * 
+ * Virtualisation tuning:
+ * - IntersectionObserver thresholds: rootMargin '200px', row prefetch buffer = 2 screenfuls
+ * - Avoid re-creating observers per row; centralise hook
+ */
+
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { PageContainer } from '@/components/ui/PageContainer'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -24,43 +43,65 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Search, X, Trash2, Lock, History, LockKeyhole } from 'lucide-react'
-import { Period } from '@okr-nexus/types'
-import { 
-  formatPeriod, 
-  getPeriodLabel, 
-  getAvailablePeriodFilters, 
-  getCurrentPeriodFilter,
-  doesOKRMatchPeriod,
-  type PeriodFilterOption
-} from '@/lib/date-utils'
+import { Plus, X } from 'lucide-react'
+// W4.M1: Period utilities removed - Cycle is canonical
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
 import { usePermissions } from '@/hooks/usePermissions'
 import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import { useToast } from '@/hooks/use-toast'
-import { PageHeader } from '@/components/ui/PageHeader'
-import { ObjectiveRow } from '@/components/okr/ObjectiveRow'
-import Link from 'next/link'
+import { useFeatureFlags } from '@/hooks/useFeatureFlags'
+import { OKRPageContainer } from './OKRPageContainer'
+import { OKRTreeContainer } from './OKRTreeContainer'
 import { ActivityDrawer, ActivityItem } from '@/components/ui/ActivityDrawer'
 import { PublishLockWarningModal } from './components/PublishLockWarningModal'
 import { NewObjectiveModal } from '@/components/okr/NewObjectiveModal'
 import { EditObjectiveModal } from '@/components/okr/EditObjectiveModal'
+import { EditKeyResultDrawer } from '@/components/okr/EditKeyResultDrawer'
 import { NewKeyResultModal } from '@/components/okr/NewKeyResultModal'
 import { NewCheckInModal } from '@/components/okr/NewCheckInModal'
 import { NewInitiativeModal } from '@/components/okr/NewInitiativeModal'
-import api from '@/lib/api'
-import { logTokenInfo } from '@/lib/jwt-debug'
+import { OKRCreationDrawer } from './components/OKRCreationDrawer'
+import { CycleHealthStrip } from '@/components/okr/CycleHealthStrip'
+import { AttentionDrawer } from '@/components/okr/AttentionDrawer'
+import { track } from '@/lib/analytics'
 import { cn } from '@/lib/utils'
+import api from '@/lib/api'
+import { OKRFilterBar } from './components/OKRFilterBar'
+import { OKRToolbar } from './components/OKRToolbar'
+import { GovernanceStatusBar } from './components/GovernanceStatusBar'
+import { CycleManagementDrawer } from './components/CycleManagementDrawer'
 
 // NOTE: This screen is now the system of record for CRUD on Objectives, Key Results, and Initiatives.
-// Visual Builder becomes an optional planning surface, not the source of truth.
 export default function OKRsPage() {
   const router = useRouter()
-  // TODO [phase6-polish]: reintroduce compact view with grid/list toggle
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
-  const [selectedPeriod, setSelectedPeriod] = useState<string>(getCurrentPeriodFilter())
-  const availablePeriods = getAvailablePeriodFilters()
+  const searchParams = useSearchParams()
+  const { okrTreeView } = useFeatureFlags()
+  
+  
+  // View mode: 'list' or 'tree' (only if feature flag enabled)
+  const viewMode = okrTreeView && searchParams.get('view') === 'tree' ? 'tree' : 'list'
+  
+  const setViewMode = (mode: 'list' | 'tree') => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (mode === 'tree') {
+      params.set('view', 'tree')
+      track('okr.tree.toggle', {
+        view: 'tree',
+        timestamp: new Date().toISOString(),
+      })
+    } else {
+      params.delete('view')
+    }
+    router.push(`/dashboard/okrs?${params.toString()}`)
+  }
+  
+  // [phase6-polish] Reintroduce compact multi-column grid view for exec scanning.
+  const [_viewMode, _setViewMode] = useState<'grid' | 'list'>('list')
+  // W4.M1: Period removed - Cycle is canonical
+  
+  // Read filter=overdue from URL
+  const filterOverdue = searchParams.get('filter') === 'overdue'
   
   // Filter states
   const [filterWorkspaceId, setFilterWorkspaceId] = useState<string>('all')
@@ -68,24 +109,214 @@ export default function OKRsPage() {
   const [filterOwnerId, setFilterOwnerId] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   
-  const { workspaces, teams, currentOrganization } = useWorkspace()
+  // New filter states with URL persistence
+  const myOkrsOnly = searchParams.get('myOkrs') === 'true'
+  const selectedVisibility = (searchParams.get('visibility') as 'ALL' | 'PUBLIC_TENANT' | 'PRIVATE') || 'ALL'
+  const selectedOwnerIdFromUrl = searchParams.get('ownerId')
+  const [selectedOwnerId, setSelectedOwnerId] = useState<string | null>(selectedOwnerIdFromUrl || null)
+  const selectedPillarIdFromUrl = searchParams.get('pillarId')
+  const [selectedPillarId, setSelectedPillarId] = useState<string | null>(selectedPillarIdFromUrl || null)
+  const [availablePillars, setAvailablePillars] = useState<Array<{ id: string; name: string; color: string | null }>>([])
+  
+  // Sync ownerId from URL
+  useEffect(() => {
+    if (selectedOwnerIdFromUrl) {
+      setSelectedOwnerId(selectedOwnerIdFromUrl)
+    } else if (!selectedOwnerIdFromUrl && selectedOwnerId) {
+      // URL cleared but state still has value - clear state
+      setSelectedOwnerId(null)
+    }
+  }, [selectedOwnerIdFromUrl])
+
+  // Sync pillarId from URL
+  useEffect(() => {
+    if (selectedPillarIdFromUrl) {
+      setSelectedPillarId(selectedPillarIdFromUrl)
+    } else if (!selectedPillarIdFromUrl && selectedPillarId) {
+      // URL cleared but state still has value - clear state
+      setSelectedPillarId(null)
+    }
+  }, [selectedPillarIdFromUrl])
+
+  // Load available pillars for filter chips
+  useEffect(() => {
+    api.get('/pillars')
+      .then((res) => {
+        setAvailablePillars(res.data || [])
+      })
+      .catch((err) => {
+        console.error('Failed to load pillars:', err)
+      })
+  }, [])
+  
+  const { workspaces, teams, currentOrganization, isSuperuser } = useWorkspace()
   const { user } = useAuth()
   const permissions = usePermissions()
-  const { canSeeObjective, canSeeKeyResult, ...tenantPermissions } = useTenantPermissions()
+  
+  // Memoize the tenant admin check for the current organization to avoid repeated calls
+  const isTenantAdminForCurrentOrg = useMemo(() => {
+    if (!currentOrganization?.id) return false
+    if (isSuperuser || permissions.isSuperuser) return true
+    
+    // Check if user has TENANT_OWNER or TENANT_ADMIN role for this organization
+    const tenantRoles = permissions.rolesByScope?.tenant?.find(
+      (t) => t.tenantId === currentOrganization.id
+    )
+    return tenantRoles !== undefined && (
+      tenantRoles.roles.includes('TENANT_OWNER') || 
+      tenantRoles.roles.includes('TENANT_ADMIN')
+    )
+  }, [permissions.rolesByScope, permissions.isSuperuser, currentOrganization?.id, isSuperuser])
+  
+  // Scope toggle: My | Team/Workspace | Tenant
+  const availableScopes = useMemo(() => {
+    const scopes: Array<'my' | 'team-workspace' | 'tenant'> = []
+    
+    // "My" is always available
+    scopes.push('my')
+    
+    // "Team/Workspace" if user has WORKSPACE_* or TEAM_* roles
+    const hasWorkspaceRole = permissions.rolesByScope?.workspace?.some(
+      (w: any) => w.roles.some((r: string) => r.startsWith('WORKSPACE_'))
+    )
+    const hasTeamRole = permissions.rolesByScope?.team?.some(
+      (t: any) => t.roles.some((r: string) => r.startsWith('TEAM_'))
+    )
+    if (hasWorkspaceRole || hasTeamRole) {
+      scopes.push('team-workspace')
+    }
+    
+    // "Tenant" if user has any tenant-level role (TENANT_VIEWER, TENANT_ADMIN, TENANT_OWNER) or SUPERUSER
+    // TENANT_VIEWER should be able to see all tenant OKRs (read-only)
+    if (currentOrganization?.id) {
+      const tenantRoles = permissions.rolesByScope?.tenant?.find(
+        (t) => t.tenantId === currentOrganization.id
+      )
+      const hasTenantRole = tenantRoles !== undefined && tenantRoles.roles.length > 0
+      
+      // Debug logging
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[OKR Page] Tenant scope check:', {
+          currentOrgId: currentOrganization.id,
+          tenantRoles: tenantRoles,
+          hasTenantRole,
+          isSuperuser,
+          permissionsIsSuperuser: permissions.isSuperuser,
+          isTenantAdminForCurrentOrg,
+          allTenantRoles: permissions.rolesByScope?.tenant,
+        })
+      }
+      
+      if (hasTenantRole || isSuperuser || permissions.isSuperuser || isTenantAdminForCurrentOrg) {
+        scopes.push('tenant')
+      }
+    }
+    
+    return scopes
+  }, [permissions.rolesByScope, isTenantAdminForCurrentOrg, currentOrganization?.id, isSuperuser, permissions.isSuperuser])
+  
+  // Read scope from URL or determine default
+  const scopeFromUrl = searchParams.get('scope') as 'my' | 'team-workspace' | 'tenant' | null
+  const defaultScope = useMemo(() => {
+    // If URL has scope and it's valid, use it
+    if (scopeFromUrl && availableScopes.includes(scopeFromUrl)) {
+      return scopeFromUrl
+    }
+    // Otherwise, default based on available scopes
+    if (availableScopes.includes('my')) {
+      return 'my'
+    } else if (availableScopes.includes('team-workspace')) {
+      return 'team-workspace'
+    } else if (availableScopes.includes('tenant')) {
+      return 'tenant'
+    }
+    return 'my' // fallback
+  }, [availableScopes, scopeFromUrl])
+  
+  const [selectedScope, setSelectedScope] = useState<'my' | 'team-workspace' | 'tenant'>(defaultScope)
+  
+  // Sync scope from URL on mount/change
+  useEffect(() => {
+    if (scopeFromUrl && availableScopes.includes(scopeFromUrl)) {
+      setSelectedScope(scopeFromUrl)
+    }
+  }, [scopeFromUrl, availableScopes])
+  
+  const handleMyOkrsToggle = (enabled: boolean) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (enabled) {
+      params.set('myOkrs', 'true')
+      // Clear ownerId filter when My OKRs is enabled (My OKRs replaces owner filter)
+      params.delete('ownerId')
+      setSelectedOwnerId(null)
+    } else {
+      params.delete('myOkrs')
+    }
+    router.push(`/dashboard/okrs?${params.toString()}`)
+  }
+
+  const handleVisibilityChange = (visibility: 'ALL' | 'PUBLIC_TENANT' | 'PRIVATE') => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (visibility === 'ALL') {
+      params.delete('visibility')
+    } else {
+      params.set('visibility', visibility)
+    }
+    router.push(`/dashboard/okrs?${params.toString()}`)
+  }
+
+  const handleOwnerChange = (ownerId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString())
+    // If My OKRs is enabled, disable it when user selects a different owner
+    if (myOkrsOnly) {
+      params.delete('myOkrs')
+    }
+    if (ownerId === 'me' && user?.id) {
+      params.set('ownerId', user.id)
+      setSelectedOwnerId(user.id)
+    } else if (ownerId) {
+      params.set('ownerId', ownerId)
+      setSelectedOwnerId(ownerId)
+    } else {
+      params.delete('ownerId')
+      setSelectedOwnerId(null)
+    }
+    router.push(`/dashboard/okrs?${params.toString()}`)
+  }
+
+  const handlePillarChange = (pillarId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (pillarId) {
+      params.set('pillarId', pillarId)
+      setSelectedPillarId(pillarId)
+    } else {
+      params.delete('pillarId')
+      setSelectedPillarId(null)
+    }
+    router.push(`/dashboard/okrs?${params.toString()}`)
+  }
+  
+  const handleScopeChange = (newScope: 'my' | 'team-workspace' | 'tenant') => {
+    const previousScope = selectedScope
+    setSelectedScope(newScope)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('scope', newScope)
+    router.push(`/dashboard/okrs?${params.toString()}`)
+    
+    // Telemetry: scope toggle
+    track('scope_toggle', {
+      scope: newScope,
+      prev_scope: previousScope,
+      cycle_id: selectedCycleId,
+      ts: new Date().toISOString(),
+    })
+  }
+  const { canSeeObjective, ...tenantPermissions } = useTenantPermissions()
   const { toast } = useToast()
   const [availableUsers, setAvailableUsers] = useState<any[]>([])
-  const [okrs, setOkrs] = useState<any[]>([])
   const [overdueCheckIns, setOverdueCheckIns] = useState<Array<{ krId: string; objectiveId: string }>>([])
-  // TODO [phase7-hardening]: move to SWR/react-query once we introduce caching & invalidation.
-  const [loading, setLoading] = useState(true)
-  const [permissionError, setPermissionError] = useState<string | null>(null)
-  
-  // Pagination and filter state
-  const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(10)
   const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null)
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null)
-  const [totalCount, setTotalCount] = useState<number>(0)
   const [activityDrawerOpen, setActivityDrawerOpen] = useState(false)
   const [activityItems, setActivityItems] = useState<ActivityItem[]>([])
   const [activityEntityName, setActivityEntityName] = useState('')
@@ -93,22 +324,44 @@ export default function OKRsPage() {
   const [selectedObjectiveForLock, setSelectedObjectiveForLock] = useState<any | null>(null)
   const [pendingDeleteOkr, setPendingDeleteOkr] = useState<{ id: string; title: string } | null>(null)
   const [expandedObjectiveId, setExpandedObjectiveId] = useState<string | null>(null)
+  const [reloadTrigger, setReloadTrigger] = useState(0)
+  const [attentionDrawerOpen, setAttentionDrawerOpen] = useState(false)
+  const [attentionCount, setAttentionCount] = useState<number>(0)
+  const attentionTelemetryFiredRef = useRef<Set<string>>(new Set())
+  const [liveRegionMessage, setLiveRegionMessage] = useState<string | null>(null)
+  const liveRegionRef = useRef<HTMLDivElement>(null)
+  const [cycleManagementDrawerOpen, setCycleManagementDrawerOpen] = useState(false)
+  // Tree view state
+  const [selectedTreeNodeId, setSelectedTreeNodeId] = useState<string | null>(null)
+  const [selectedTreeNodeType, setSelectedTreeNodeType] = useState<'objective' | 'keyResult' | 'initiative' | null>(null)
   const [activeCycles, setActiveCycles] = useState<Array<{
     id: string
     name: string
     status: string
     startDate: string
     endDate: string
-    organizationId: string
+    tenantId: string
   }>>([])
   
   // Objective creation
   const [showNewObjective, setShowNewObjective] = useState(false)
+  const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false)
+  const [canCreateObjective, setCanCreateObjective] = useState<boolean>(false)
+  const [creationDrawerMode, setCreationDrawerMode] = useState<'objective' | 'kr' | 'initiative'>('objective')
+  // Story 5: Parent context for contextual creation
+  const [creationDrawerParentContext, setCreationDrawerParentContext] = useState<{
+    type: 'objective' | 'kr'
+    id: string
+    title: string
+  } | undefined>()
   
   // Objective editing
   const [showEditObjective, setShowEditObjective] = useState(false)
   const [editObjectiveId, setEditObjectiveId] = useState<string | null>(null)
   const [editObjectiveData, setEditObjectiveData] = useState<any | null>(null)
+  const [showEditKeyResult, setShowEditKeyResult] = useState(false)
+  const [editKeyResultId, setEditKeyResultId] = useState<string | null>(null)
+  const [editKeyResultData, setEditKeyResultData] = useState<any | null>(null)
   
   // Key Result creation
   const [showNewKeyResult, setShowNewKeyResult] = useState(false)
@@ -125,7 +378,6 @@ export default function OKRsPage() {
   const [initiativeParentKeyResultId, setInitiativeParentKeyResultId] = useState<string | null>(null)
   const [initiativeParentName, setInitiativeParentName] = useState<string | null>(null)
   
-  // TODO [phase6-polish]: consolidate these into a reducer.
   
   // Helper to normalize a label string to a timeframeKey
   const normaliseLabelToKey = (label: string): string => {
@@ -139,24 +391,21 @@ export default function OKRsPage() {
   }
   
   // Helper to map raw objective from API to view model with timeframeKey
+  // W4.M1: Period removed - only use cycleId/cycleName
   const mapObjectiveToViewModel = (rawObjective: any): any => {
     let timeframeKey: string = 'unassigned'
     
-    // Priority 1: cycleId
+    // Priority 1: cycleId (canonical)
     if (rawObjective.cycleId) {
       timeframeKey = rawObjective.cycleId
     }
-    // Priority 2: plannedCycleId (if exists)
-    else if (rawObjective.plannedCycleId) {
-      timeframeKey = rawObjective.plannedCycleId
-    }
-    // Priority 3: cycle-like label fields (cycleName, periodLabel, timeframeLabel, etc.)
+    // Priority 2: cycleName (fallback)
     else if (rawObjective.cycleName) {
       timeframeKey = normaliseLabelToKey(rawObjective.cycleName)
-    } else if (rawObjective.periodLabel) {
-      timeframeKey = normaliseLabelToKey(rawObjective.periodLabel)
-    } else if (rawObjective.timeframeLabel) {
-      timeframeKey = normaliseLabelToKey(rawObjective.timeframeLabel)
+    }
+    // Priority 3: cycle object (from API response)
+    else if (rawObjective.cycle?.id) {
+      timeframeKey = rawObjective.cycle.id
     }
     // Priority 4: fallback to 'unassigned'
     
@@ -166,111 +415,31 @@ export default function OKRsPage() {
     }
   }
   
+  // Track if we've initialized the cycle selection (only set default once per org)
+  const cycleInitializedRef = useRef(false)
+  const lastOrgIdRef = useRef<string | null>(null)
+
   useEffect(() => {
-    // Debug: Log JWT token info and user context (remove in production)
-    if (process.env.NODE_ENV === 'development') {
-      logTokenInfo()
-      console.log('👤 Current User from Auth Context:', user)
-      console.log('🏢 Current Organization:', currentOrganization)
-      
-      // Check what /users/me actually returns (backend req.user)
-      api.get('/users/me')
-        .then((res) => {
-          console.log('🔍 Backend /users/me response:', res.data)
-          console.log('   organizationId:', res.data.organizationId || '❌ NOT SET')
-        })
-        .catch((err) => {
-          console.error('Failed to fetch /users/me:', err)
-        })
+    // Reset cycle initialization when organization changes
+    if (currentOrganization?.id !== lastOrgIdRef.current) {
+      cycleInitializedRef.current = false
+      lastOrgIdRef.current = currentOrganization?.id || null
+      // Reset cycle selection when org changes
+      setSelectedCycleId(null)
+      setSelectedTimeframeKey('all')
+      setSelectedTimeframeLabel('All cycles')
     }
-    
+    // Initialization - only run when org/user changes, not when cycle/scope changes
     loadUsers()
     loadActiveCycles()
-    loadOverdueCheckIns()
   }, [currentOrganization?.id, user])
-  
-  // Reload OKRs when pagination or filters change
+
   useEffect(() => {
-    if (currentOrganization?.id) {
-      loadOKRs()
-    }
-  }, [page, limit, selectedCycleId, selectedStatus, currentOrganization?.id])
+    // Load data that depends on cycle/scope selection
+    loadOverdueCheckIns()
+    loadAttentionCount()
+  }, [currentOrganization?.id, user, selectedCycleId, selectedScope])
   
-  const loadOKRs = async () => {
-    if (!currentOrganization?.id) return
-    try {
-      setLoading(true)
-      setPermissionError(null)
-      
-      // Build query parameters
-      const params = new URLSearchParams({
-        organizationId: currentOrganization.id,
-        page: String(page),
-        limit: String(limit),
-      })
-      
-      if (selectedCycleId) {
-        params.set('cycleId', selectedCycleId)
-      }
-      
-      if (selectedStatus) {
-        params.set('status', selectedStatus)
-      }
-      
-      // Use fetch to access response headers
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/okr/overview?${params.toString()}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: 'include',
-      })
-      
-      if (!res.ok) {
-        console.error('[OKR PAGE] Failed to load OKRs', res.status, res.statusText)
-        if (res.status === 403) {
-          setPermissionError('You do not have permission to view OKRs. Please contact your administrator.')
-        } else {
-          setPermissionError('Failed to load OKRs. Please try again later.')
-        }
-        setOkrs([])
-        return
-      }
-      
-      // Parse pagination headers
-      const totalHeader = res.headers.get('X-Total-Count')
-      const pageHeader = res.headers.get('X-Page')
-      const limitHeader = res.headers.get('X-Limit')
-      
-      if (totalHeader) setTotalCount(Number(totalHeader))
-      // Only update page/limit from headers if they differ (prevents unnecessary re-renders)
-      if (pageHeader) {
-        const serverPage = Number(pageHeader)
-        if (serverPage !== page) setPage(serverPage)
-      }
-      if (limitHeader) {
-        const serverLimit = Number(limitHeader)
-        if (serverLimit !== limit) setLimit(serverLimit)
-      }
-      
-      const data = await res.json()
-      
-      // Map data using existing mapObjectiveData function
-      const mapped = data.map((obj: any) => 
-        mapObjectiveData(obj, availableUsers, activeCycles, overdueCheckIns)
-      )
-      
-      setOkrs(mapped)
-    } catch (error: any) {
-      console.error('[OKR PAGE] Exception while loading OKRs', error)
-      setPermissionError('Failed to load OKRs. Please try again later.')
-      setOkrs([])
-    } finally {
-      setLoading(false)
-    }
-  }
   
   const loadUsers = async () => {
     try {
@@ -288,22 +457,40 @@ export default function OKRsPage() {
 
   const loadActiveCycles = async () => {
     try {
-      const response = await api.get('/objectives/cycles/active')
+      // First try to load all cycles (includes ACTIVE, DRAFT, ARCHIVED)
+      const response = await api.get('/reports/cycles')
       const cycles = response.data || []
       setActiveCycles(cycles)
-      // TODO [phase7-hardening]: Replace with /objectives/cycles/all endpoint when available to show all cycles, not just active
-      // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
-      // Set default selected cycle to first active cycle if available
-      if (cycles.length > 0) {
-        setSelectedTimeframeKey(cycles[0].id)
-        setSelectedTimeframeLabel(cycles[0].name)
+      // NOTE: Only set default cycle selection on initial load (when no cycle is selected yet)
+      // This prevents resetting the user's selection when they choose "All Cycles"
+      if (!cycleInitializedRef.current && (selectedCycleId === null || selectedTimeframeKey === 'all')) {
+        const activeCycle = cycles.find((c: any) => c.status === 'ACTIVE') || cycles[0]
+        if (activeCycle) {
+          setSelectedTimeframeKey(activeCycle.id)
+          setSelectedTimeframeLabel(activeCycle.name)
+          setSelectedCycleId(activeCycle.id) // Sync for CycleHealthStrip and AttentionDrawer
+          cycleInitializedRef.current = true
+        }
       }
     } catch (error: any) {
-      // Cycles endpoint is optional - gracefully degrade if no permission
-      if (error.response?.status !== 403) {
-        console.error('Failed to load active cycles:', error)
+      // If /reports/cycles fails, fallback to /reports/cycles/active for backward compatibility
+      try {
+        const response = await api.get('/reports/cycles/active')
+        const cycles = response.data || []
+        setActiveCycles(cycles)
+        if (cycles.length > 0 && !cycleInitializedRef.current && (selectedCycleId === null || selectedTimeframeKey === 'all')) {
+          setSelectedTimeframeKey(cycles[0].id)
+          setSelectedTimeframeLabel(cycles[0].name)
+          setSelectedCycleId(cycles[0].id)
+          cycleInitializedRef.current = true
+        }
+      } catch (fallbackError: any) {
+        // Cycles endpoint is optional - gracefully degrade if no permission
+        if (fallbackError.response?.status !== 403) {
+          console.error('Failed to load cycles:', fallbackError)
+        }
+        setActiveCycles([])
       }
-      setActiveCycles([])
     }
   }
 
@@ -326,50 +513,48 @@ export default function OKRsPage() {
     }
   }
 
-  const formatCycleDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
-  }
-
-  const getCycleStatusBadge = (status: string) => {
-    switch (status) {
-      case 'LOCKED':
-        return (
-          <Badge variant="secondary" className="bg-slate-600 text-white">
-            <LockKeyhole className="h-3 w-3 mr-1" />
-            Locked
-          </Badge>
-        )
-      case 'ACTIVE':
-        return (
-          <Badge variant="default" className="bg-green-600 text-white">
-            Active
-          </Badge>
-        )
-      case 'DRAFT':
-        return (
-          <Badge variant="outline" className="bg-slate-100 text-slate-700">
-            Draft (planning)
-          </Badge>
-        )
-      case 'ARCHIVED':
-        return (
-          <Badge variant="outline" className="bg-slate-100 text-slate-500">
-            Archived
-          </Badge>
-        )
-      default:
-        return (
-          <Badge variant="outline">
-            {status}
-          </Badge>
-        )
+  const loadAttentionCount = async () => {
+    if (!selectedCycleId) {
+      setAttentionCount(0)
+      return
+    }
+    try {
+      const params = new URLSearchParams({
+        page: '1',
+        pageSize: '1', // We only need the totalCount
+      })
+      params.append('cycleId', selectedCycleId)
+      // Note: Backend filters by scope automatically via user context
+      // Including scope param for clarity and future-proofing
+      if (selectedScope) {
+        params.append('scope', selectedScope)
+      }
+      
+      const response = await api.get(`/okr/insights/attention?${params.toString()}`)
+      const count = response.data?.totalCount || 0
+      setAttentionCount(count)
+      
+      // Telemetry: fire once per unique scope+cycle combination (per mount)
+      const telemetryKey = `${selectedScope}-${selectedCycleId}`
+      if (!attentionTelemetryFiredRef.current.has(telemetryKey)) {
+        track('attention_badge_loaded', {
+          scope: selectedScope,
+          cycle_id: selectedCycleId,
+          count,
+          ts: new Date().toISOString(),
+        })
+        attentionTelemetryFiredRef.current.add(telemetryKey)
+      }
+    } catch (error: any) {
+      // Attention endpoint is optional - gracefully degrade
+      if (error.response?.status !== 403) {
+        console.error('Failed to load attention count:', error)
+      }
+      setAttentionCount(0)
     }
   }
 
-  const selectedPeriodOption = availablePeriods.find(p => p.value === selectedPeriod);
-  
-  // Transform cycles for CycleSelector (map startDate/endDate to startsAt/endsAt)
+  // W4.M1: Transform cycles for CycleSelector (map startDate/endDate to startsAt/endsAt)
   const cyclesFromApi = activeCycles.map(cycle => ({
     id: cycle.id,
     name: cycle.name,
@@ -400,101 +585,75 @@ export default function OKRsPage() {
     ]
   }, [cyclesFromApi])
 
-  // Build legacy periods list
-  const legacyPeriods = useMemo(() => [
-    { id: '2025-Q4', label: 'Q4 2025 (current)' },
-    { id: '2026-Q1-planning', label: 'Q1 2026 (planning)', isFuture: true },
-    { id: '2026-Q2-draft', label: 'Q2 2026 (draft)', isFuture: true },
-    // [phase6-polish]: hydrate from backend once periods endpoint exists
-  ], [])
+  // W4.M1: Legacy periods removed - only cycles are canonical
+  const legacyPeriods: Array<{ id: string; label: string }> = []
 
   // State for timeframe selection (key and label)
+  // W4.M1: Only cycles, no periods
   const [selectedTimeframeKey, setSelectedTimeframeKey] = useState<string | null>(() => {
     if (normalizedCycles.length > 0) return normalizedCycles[0].id
-    if (legacyPeriods.length > 0) return legacyPeriods[0].id
     return 'all' // Default to 'all' if no cycles available
   })
   const [selectedTimeframeLabel, setSelectedTimeframeLabel] = useState<string>(() => {
     if (normalizedCycles.length > 0) return normalizedCycles[0].name
-    if (legacyPeriods.length > 0) return legacyPeriods[0].label
-    return 'All periods'
+    return 'All cycles'
   })
   
   // Legacy selectedId for backwards compatibility during transition
-  const selectedId = selectedTimeframeKey
+  const _selectedId = selectedTimeframeKey
   
-  // Map all objectives to view models with timeframeKey
-  const objectivesViewModel = useMemo(() => {
-    const safeObjectives = Array.isArray(okrs) ? okrs : []
-    return safeObjectives.map(mapObjectiveToViewModel)
-  }, [okrs])
-  
-  // Apply filters and visibility checks with safe defaults
-  const filteredOKRs = objectivesViewModel.filter(okr => {
-    // Apply visibility check
-    if (!canSeeObjective(okr)) {
-      return false
-    }
-    
-    // Strict filtering by timeframeKey
-    if (!selectedTimeframeKey || selectedTimeframeKey === 'all') {
-      // Show all when 'all' is selected or no selection
-    } else {
-      // Strict match: only include if timeframeKey matches
-      if (okr.timeframeKey !== selectedTimeframeKey) {
-        return false
-      }
-    }
-    
-    // Workspace filter
-    if (filterWorkspaceId !== 'all' && okr.workspaceId !== filterWorkspaceId) {
-      return false
-    }
-    
-    // Team filter
-    if (filterTeamId !== 'all' && okr.teamId !== filterTeamId) {
-      return false
-    }
-    
-    // Owner filter
-    if (filterOwnerId !== 'all' && okr.ownerId !== filterOwnerId) {
-      return false
-    }
-    
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      const matchesTitle = okr.title?.toLowerCase().includes(query)
-      const matchesDescription = okr.description?.toLowerCase().includes(query)
-      const matchesOwner = okr.owner?.name?.toLowerCase().includes(query)
-      if (!matchesTitle && !matchesDescription && !matchesOwner) {
-        return false
-      }
-    }
-    
-    return true
-  })
   
   const clearFilters = () => {
     setFilterWorkspaceId('all')
     setFilterTeamId('all')
     setFilterOwnerId('all')
     setSearchQuery('')
+    // Clear URL-based filters
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete('myOkrs')
+    params.delete('visibility')
+    params.delete('ownerId')
+    router.push(`/dashboard/okrs?${params.toString()}`)
   }
   
-  const hasActiveFilters = filterWorkspaceId !== 'all' || filterTeamId !== 'all' || filterOwnerId !== 'all' || searchQuery.length > 0;
+  const hasActiveFilters = filterWorkspaceId !== 'all' || filterTeamId !== 'all' || filterOwnerId !== 'all' || searchQuery.length > 0 || myOkrsOnly || selectedVisibility !== 'ALL' || selectedOwnerId !== null || selectedPillarId !== null;
+
+  const handleEditKeyResult = (krId: string) => {
+    // Find the KR in the objectives data
+    const findKR = (objectives: any[]): any => {
+      for (const obj of objectives) {
+        if (obj.keyResults) {
+          for (const krJunction of obj.keyResults) {
+            const kr = krJunction.keyResult || krJunction
+            if (kr.id === krId) {
+              return {
+                ...kr,
+                tenantId: obj.tenantId,
+                objectiveIds: [obj.id],
+              }
+            }
+          }
+        }
+      }
+      return null
+    }
+
+    // Try to find KR in current data (if available)
+    // For now, we'll load it from the API when drawer opens
+    setEditKeyResultId(krId)
+    setEditKeyResultData(null) // Will be loaded by drawer
+    setShowEditKeyResult(true)
+  }
 
   const handleEditOKR = (okr: any) => {
-    // Map okr to Objective interface expected by hook
-    // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
-    // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
-    const objectiveForHook = {
+    const objectiveForHook = okr.objectiveForHook || {
       id: okr.id,
       ownerId: okr.ownerId,
-      organizationId: okr.organizationId,
+      tenantId: okr.tenantId,
       workspaceId: okr.workspaceId,
       teamId: okr.teamId,
       isPublished: okr.isPublished,
+      visibilityLevel: okr.visibilityLevel,
       cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
         ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
         : null,
@@ -507,23 +666,52 @@ export default function OKRsPage() {
     
     if (!canEdit) {
       const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
-      setSelectedObjectiveForLock(okr)
-      setPublishLockDialogOpen(true)
+      // Only show lock modal if actually locked - tenant admins should not see this
+      if (lockInfo.isLocked) {
+        setSelectedObjectiveForLock(okr)
+        setPublishLockDialogOpen(true)
+        return
+      }
+      // If not locked but can't edit, it's an RBAC or visibility issue - skip modal
+      console.warn('[handleEditOKR] Cannot edit but not locked:', {
+        objectiveId: okr.id,
+        isPublished: okr.isPublished,
+        visibilityLevel: okr.visibilityLevel,
+        tenantId: okr.tenantId,
+        lockInfo
+      })
       return
     }
     
-    // [phase5-core:done] replaced Visual Builder redirect with inline EditObjectiveModal for objective CRUD.
     setEditObjectiveId(okr.id)
     setEditObjectiveData({
       title: okr.title,
       ownerId: okr.ownerId,
       workspaceId: okr.workspaceId,
+      teamId: okr.teamId,
+      tenantId: okr.organizationId,
       cycleId: okr.cycleId,
       status: okr.status,
       visibilityLevel: okr.visibilityLevel,
+      isPublished: okr.isPublished,
       pillarId: okr.pillarId,
     })
     setShowEditObjective(true)
+  }
+  
+  // Handler for tree node clicks - opens edit modal for objectives
+  const handleTreeNodeClick = (nodeId: string, nodeType: 'objective' | 'keyResult' | 'initiative') => {
+    setSelectedTreeNodeId(nodeId)
+    setSelectedTreeNodeType(nodeType)
+    
+    // For objectives, open edit modal
+    if (nodeType === 'objective') {
+      // Find the objective in the prepared objectives
+      // This is a simplified handler - in production, we'd fetch the objective or use a lookup
+      handleEditOKR({ id: nodeId } as any)
+    }
+    // For KRs and Initiatives, we could expand their parent objective
+    // For now, we'll just set the selection state
   }
   
   const handleAddKrClick = (objectiveId: string, objectiveName: string) => {
@@ -539,119 +727,42 @@ export default function OKRsPage() {
     setShowNewInitiative(true)
   }
   
-  const handleAddInitiativeToKrClick = (krId: string, krTitle: string) => {
-    setInitiativeParentObjectiveId(null)
+  const handleAddInitiativeToKrClick = (krId: string, krTitle: string, objectiveId: string) => {
+    setInitiativeParentObjectiveId(objectiveId)
     setInitiativeParentKeyResultId(krId)
     setInitiativeParentName(krTitle)
     setShowNewInitiative(true)
+  }
+
+  // Story 5: Contextual Add menu handlers
+  const handleOpenContextualAddMenu = (_objectiveId: string) => {
+    // Telemetry handler for contextual add menu
+  }
+
+  const handleContextualAddKeyResult = (objectiveId: string, objectiveTitle: string) => {
+    setCreationDrawerMode('kr')
+    setCreationDrawerParentContext({
+      type: 'objective',
+      id: objectiveId,
+      title: objectiveTitle,
+    })
+    setIsCreateDrawerOpen(true)
+  }
+
+  const handleContextualAddInitiative = (objectiveId: string, objectiveTitle: string) => {
+    setCreationDrawerMode('initiative')
+    setCreationDrawerParentContext({
+      type: 'objective',
+      id: objectiveId,
+      title: objectiveTitle,
+    })
+    setIsCreateDrawerOpen(true)
   }
   
   const handleToggleObjective = (id: string) => {
     setExpandedObjectiveId(prev => (prev === id ? null : id))
   }
 
-  // Section Header Component for health bands
-  const SectionHeader = ({ tone, label }: { tone: 'bad' | 'good' | 'neutral' | 'warn'; label: string }) => (
-    <div className="flex items-center gap-2 mb-2 text-sm font-medium text-neutral-700">
-      <span
-        className={`h-2.5 w-2.5 rounded-full ${
-          tone === 'bad'
-            ? 'bg-rose-500'
-            : tone === 'good'
-            ? 'bg-emerald-500'
-            : tone === 'neutral'
-            ? 'bg-neutral-400'
-            : 'bg-amber-500'
-        }`}
-      />
-      <span>{label}</span>
-    </div>
-  )
-
-  // Helper function to render objective row
-  const renderObjectiveRow = (okr: any) => {
-    // Map okr to Objective interface expected by hook for permissions
-    // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
-    // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
-    const objectiveForHook = {
-      id: okr.id,
-      ownerId: okr.ownerId,
-      organizationId: okr.organizationId,
-      workspaceId: okr.workspaceId,
-      teamId: okr.teamId,
-      isPublished: okr.isPublished,
-      cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-        ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
-        : null,
-      cycleStatus: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
-        ? activeCycles.find(c => c.id === okr.cycleId)!.status
-        : null,
-    }
-    
-    const canEdit = tenantPermissions.canEditObjective(objectiveForHook)
-    const canDelete = tenantPermissions.canDeleteObjective(objectiveForHook)
-    
-    // Normalise objective data for ObjectiveRow
-    const normalised = mapObjectiveData(okr, availableUsers, activeCycles, overdueCheckIns)
-    
-    return (
-      <ObjectiveRow
-        key={normalised.id}
-        objective={{
-          id: normalised.id,
-          title: normalised.title,
-          status: normalised.status as 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED',
-          progress: Math.round(normalised.progress),
-          isPublished: normalised.isPublished,
-          cycleName: normalised.cycleName,
-          cycleLabel: normalised.cycleLabel,
-          cycleStatus: normalised.cycleStatus,
-          visibilityLevel: normalised.visibilityLevel,
-          owner: normalised.owner,
-          overdueCountForObjective: normalised.overdueCountForObjective,
-          lowestConfidence: normalised.lowestConfidence,
-          keyResults: normalised.keyResults,
-          initiatives: normalised.initiatives,
-        }}
-        isExpanded={expandedObjectiveId === normalised.id}
-        onToggle={handleToggleObjective}
-        onAddKeyResult={handleAddKrClick}
-        onAddInitiative={handleAddInitiativeToObjectiveClick}
-        onEdit={(objectiveId) => handleEditOKR(okr)}
-        onDelete={(objectiveId) => handleDeleteOKR(okr)}
-        onOpenHistory={() => handleOpenActivityDrawer('OBJECTIVE', normalised.id, normalised.title)}
-        onAddInitiativeToKr={(krId) => {
-          const kr = normalised.keyResults.find((k: any) => k.id === krId)
-          if (kr) handleAddInitiativeToKrClick(krId, kr.title)
-        }}
-        onAddCheckIn={handleAddCheckIn}
-        canEdit={canEdit}
-        canDelete={canDelete}
-        availableUsers={availableUsers}
-      />
-    )
-  }
-
-  // Group objectives by health status
-  // TODO [phase7-hardening]: Virtualise ObjectiveRows when >50 items using react-window or similar.
-  const groupedObjectives = useMemo(() => {
-    const needsAttention: typeof filteredOKRs = []
-    const active: typeof filteredOKRs = []
-    const completed: typeof filteredOKRs = []
-
-    filteredOKRs.forEach((okr) => {
-      const status = okr.status || 'ON_TRACK'
-      if (status === 'AT_RISK' || status === 'BLOCKED' || status === 'OFF_TRACK') {
-        needsAttention.push(okr)
-      } else if (status === 'COMPLETED' || status === 'CANCELLED') {
-        completed.push(okr)
-      } else {
-        active.push(okr)
-      }
-    })
-
-    return { needsAttention, active, completed }
-  }, [filteredOKRs])
   
   const handleAddCheckIn = (krId: string) => {
     // [phase5-core:done] implemented NewCheckInModal and wired POST /api/check-ins
@@ -660,16 +771,14 @@ export default function OKRsPage() {
   }
 
   const handleDeleteOKR = async (okr: any) => {
-    // Map okr to Objective interface expected by hook
-    // TODO [phase7-hardening]: align with backend once cycle status is fully exposed in API responses
-    // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
-    const objectiveForHook = {
+    const objectiveForHook = okr.objectiveForHook || {
       id: okr.id,
       ownerId: okr.ownerId,
-      organizationId: okr.organizationId,
+      tenantId: okr.tenantId,
       workspaceId: okr.workspaceId,
       teamId: okr.teamId,
       isPublished: okr.isPublished,
+      visibilityLevel: okr.visibilityLevel,
       cycle: okr.cycleId && activeCycles.find(c => c.id === okr.cycleId)
         ? { id: okr.cycleId, status: activeCycles.find(c => c.id === okr.cycleId)!.status }
         : null,
@@ -681,13 +790,12 @@ export default function OKRsPage() {
     const canDelete = tenantPermissions.canDeleteObjective(objectiveForHook)
     
     if (!canDelete) {
-      const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
+      tenantPermissions.getLockInfoForObjective(objectiveForHook)
       setSelectedObjectiveForLock(okr)
       setPublishLockDialogOpen(true)
       return
     }
     
-    // Store pending delete info for confirmation dialog
     setPendingDeleteOkr({ id: okr.id, title: okr.title })
   }
 
@@ -696,12 +804,13 @@ export default function OKRsPage() {
     
     try {
       await api.delete(`/objectives/${pendingDeleteOkr.id}`)
-      await loadOKRs() // Reload the list
+      const title = pendingDeleteOkr.title
       setPendingDeleteOkr(null)
       toast({
         title: 'OKR deleted',
-        description: `"${pendingDeleteOkr.title}" has been deleted.`,
+        description: `"${title}" has been deleted.`,
       })
+      handleReloadOKRs()
     } catch (error: any) {
       console.error('Failed to delete OKR:', error)
       const errorMessage = error.response?.data?.message || error.message || 'Failed to delete OKR'
@@ -711,6 +820,15 @@ export default function OKRsPage() {
         variant: 'destructive',
       })
     }
+  }
+  
+  const handleReloadOKRs = () => {
+    // Increment reload trigger to force OKRPageContainer to reload
+    setReloadTrigger(prev => prev + 1)
+    
+    // Announce to screen readers
+    setLiveRegionMessage('OKR list updated')
+    setTimeout(() => setLiveRegionMessage(null), 1000)
   }
 
   const handleOpenActivityDrawer = async (entityType: 'OBJECTIVE' | 'KEY_RESULT', entityId: string, entityTitle?: string) => {
@@ -797,22 +915,29 @@ export default function OKRsPage() {
     }
     
     // Map key results from unified response (already includes nested initiatives)
+    // Handle both direct KR objects and junction table format (keyResults array with weight)
     const keyResults = (rawObj.keyResults || []).map((kr: any): any => {
       // Check if this KR is overdue
-      const isOverdue = overdueCheckIns.some(item => item.krId === kr.id)
+      const krId = kr.keyResultId || kr.id
+      const isOverdue = overdueCheckIns.some(item => item.krId === krId)
+      
+      // Extract KR data - handle both junction table format and direct format
+      const krData = kr.keyResult || kr
+      const weight = kr.weight ?? 1.0 // Extract weight from junction table, default to 1.0
       
       return {
-        id: kr.id,
-        title: kr.title,
-        status: kr.status,
-        progress: kr.progress,
-        currentValue: kr.currentValue,
-        targetValue: kr.targetValue,
-        startValue: kr.startValue,
-        unit: kr.unit,
-        checkInCadence: kr.cadence,
+        id: krId,
+        title: krData.title || kr.title,
+        status: krData.status || kr.status,
+        progress: krData.progress ?? kr.progress ?? 0,
+        currentValue: krData.currentValue ?? kr.currentValue,
+        targetValue: krData.targetValue ?? kr.targetValue,
+        startValue: krData.startValue ?? kr.startValue,
+        unit: krData.unit || kr.unit,
+        checkInCadence: krData.checkInCadence || kr.cadence,
         isOverdue,
-        ownerId: kr.ownerId,
+        ownerId: krData.ownerId || kr.ownerId,
+        weight, // Include weight from junction table
       }
     })
     
@@ -828,18 +953,55 @@ export default function OKRsPage() {
     
     // Map initiatives from unified response
     // Initiatives can be directly under objective or nested under key results
-    const allInitiatives = [
-      ...(rawObj.initiatives || []), // Direct objective initiatives
-      ...(rawObj.keyResults || []).flatMap((kr: any) => 
-        (kr.initiatives || []).map((init: any) => ({
-          ...init,
-          keyResultId: kr.id, // Ensure keyResultId is set
-          keyResultTitle: kr.title, // Add KR title for display
-        }))
-      )
-    ]
+    // If an initiative has both objectiveId and keyResultId, prioritize the KR-linked version
+      console.error(`🔍🔍🔍 [OKR MAPPING] STARTING MAPPING 🔍🔍🔍`);
+      console.error(`🔍 [OKR MAPPING] Raw objective data:`, {
+      objectiveId: rawObj.objectiveId || rawObj.id,
+      objectiveTitle: rawObj.title,
+      directInitiatives: rawObj.initiatives?.length || 0,
+      directInitiativesData: rawObj.initiatives,
+      keyResultsCount: rawObj.keyResults?.length || 0,
+      keyResultsWithInitiatives: rawObj.keyResults?.map((kr: any) => ({
+        id: kr.keyResultId || kr.id,
+        title: kr.title,
+        initiativesCount: kr.initiatives?.length || 0,
+        initiatives: kr.initiatives,
+      })),
+    });
     
-    // Deduplicate and map initiatives
+    // Collect KR-linked initiatives first (they have more context)
+    const seenInitIds = new Set<string>()
+    const allInitiatives: any[] = []
+    
+    // First, add initiatives from Key Results (they have KR context)
+    rawObj.keyResults?.forEach((kr: any) => {
+      (kr.initiatives || []).forEach((init: any) => {
+        if (!seenInitIds.has(init.id)) {
+          seenInitIds.add(init.id)
+          allInitiatives.push({
+            ...init,
+            keyResultId: kr.keyResultId || kr.id,
+            keyResultTitle: kr.title,
+          })
+        }
+      })
+    })
+    
+    // Then, add objective-only initiatives (skip if already seen from KR)
+    rawObj.initiatives?.forEach((init: any) => {
+      if (!seenInitIds.has(init.id)) {
+        seenInitIds.add(init.id)
+        allInitiatives.push({
+          ...init,
+          keyResultId: init.keyResultId,
+          keyResultTitle: init.keyResultTitle,
+        })
+      }
+    })
+    
+      console.error(`🔍 [OKR MAPPING] All initiatives mapped:`, allInitiatives.length, allInitiatives);
+    
+    // Map initiatives to final format
     const initiatives = allInitiatives.map((init: any) => ({
       id: init.id,
       title: init.title,
@@ -853,7 +1015,7 @@ export default function OKRsPage() {
     const owner = rawObj.owner || availableUsers.find(u => u.id === rawObj.ownerId)
     
     return {
-      id: rawObj.id,
+      id: rawObj.objectiveId || rawObj.id,
       title: rawObj.title,
       status: rawObj.status || 'ON_TRACK',
       isPublished: rawObj.isPublished ?? false,
@@ -877,7 +1039,7 @@ export default function OKRsPage() {
   return (
     <ProtectedRoute>
       <DashboardLayout>
-        <div className="p-8">
+        <PageContainer variant="content">
           <div className="mb-8">
             <div className="flex items-start justify-between flex-wrap gap-4">
               <div className="flex-1">
@@ -891,254 +1053,143 @@ export default function OKRsPage() {
                         tone: 'neutral' as const,
                       },
                     ] : []),
-                    ...(activeCycles.length > 0
-                      ? [
-                          {
-                            label: `Active Cycle: ${activeCycles[0].name}`,
-                            tone: 'neutral' as const,
-                          },
-                        ]
-                      : []),
                     ...(activeCycles.some((c) => c.status === 'LOCKED')
                       ? [{ label: 'Locked', tone: 'warning' as const }]
-                      : []),
-                    ...(okrs.filter((o) => o.status === 'AT_RISK').length > 0
-                      ? [
-                          {
-                            label: `${okrs.filter((o) => o.status === 'AT_RISK').length} At Risk`,
-                            tone: 'warning' as const,
-                          },
-                        ]
                       : []),
                   ]}
                 />
               </div>
-              <div className="flex items-center gap-4">
-                <Button onClick={() => setShowNewObjective(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Objective
-                </Button>
-                <button
-                  className="text-[12px] font-medium text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
-                  onClick={() => router.push('/dashboard/builder')}
-                  // TODO [phase7-hardening]: restrict Visual Builder to admin / strategy roles only
-                >
-                  Visual Builder
-                </button>
-              </div>
-            </div>
-            <p className="text-[13px] text-neutral-500 leading-relaxed mt-2">
-              This view shows execution state. For planning or alignment storytelling, open the{' '}
-              <Link
-                href="/dashboard/builder"
-                className="text-violet-700 hover:text-violet-900 font-medium underline underline-offset-2"
-              >
-                Visual Builder
-              </Link>
-              .
-            </p>
-          </div>
-
-          {/* Active Cycle Banner */}
-          {activeCycles.length > 0 && (
-            <div className="mb-6">
-              {activeCycles.map((cycle) => (
-                <div key={cycle.id} className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-semibold text-slate-900">{cycle.name}</h3>
-                          {getCycleStatusBadge(cycle.status)}
-                        </div>
-                        <p className="text-sm text-slate-600 mt-1">
-                          {formatCycleDate(cycle.startDate)} → {formatCycleDate(cycle.endDate)}
-                        </p>
-                        {cycle.status === 'LOCKED' && !permissions.isTenantAdminOrOwner(currentOrganization?.id) && (
-                          <p className="text-sm text-slate-500 mt-2 flex items-center gap-1">
-                            <Lock className="h-3 w-3" />
-                            This cycle is locked. You can't change targets in this period.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Sticky Filter and Pagination Header */}
-          <div className="sticky top-0 z-10 bg-white border-b border-neutral-200 mb-4 pb-4 -mx-8 px-8 pt-4">
-            {/* Quick Status Chips */}
-            <div className="mb-3 flex flex-wrap gap-2">
-              <button
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                  selectedStatus === null
-                    ? "bg-violet-100 text-violet-700 border border-violet-300"
-                    : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                )}
-                onClick={() => {
-                  setSelectedStatus(null)
-                  setPage(1)
-                }}
-              >
-                All statuses
-              </button>
-              <button
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                  selectedStatus === 'ON_TRACK'
-                    ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
-                    : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                )}
-                onClick={() => {
-                  setSelectedStatus('ON_TRACK')
-                  setPage(1)
-                }}
-              >
-                On track
-              </button>
-              <button
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                  selectedStatus === 'AT_RISK'
-                    ? "bg-amber-100 text-amber-700 border border-amber-300"
-                    : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                )}
-                onClick={() => {
-                  setSelectedStatus('AT_RISK')
-                  setPage(1)
-                }}
-              >
-                At risk
-              </button>
-              <button
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                  selectedStatus === 'BLOCKED'
-                    ? "bg-rose-100 text-rose-700 border border-rose-300"
-                    : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                )}
-                onClick={() => {
-                  setSelectedStatus('BLOCKED')
-                  setPage(1)
-                }}
-              >
-                Blocked
-              </button>
-              <button
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                  selectedStatus === 'COMPLETED'
-                    ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
-                    : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                )}
-                onClick={() => {
-                  setSelectedStatus('COMPLETED')
-                  setPage(1)
-                }}
-              >
-                Completed
-              </button>
-              <button
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                  selectedStatus === 'CANCELLED'
-                    ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
-                    : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
-                )}
-                onClick={() => {
-                  setSelectedStatus('CANCELLED')
-                  setPage(1)
-                }}
-              >
-                Cancelled
-              </button>
-            </div>
-
-            {/* Cycle Filter and Top Pagination */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex flex-wrap gap-3 text-sm text-neutral-700">
-                <select
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                  value={selectedCycleId ?? ''}
-                  onChange={(e) => {
-                    setSelectedCycleId(e.target.value || null)
-                    setPage(1)
-                  }}
-                >
-                  <option value="">All cycles</option>
-                  {activeCycles.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Top Pagination Controls */}
-              {totalCount > 0 && (
-                <div className="flex items-center gap-4 text-sm text-neutral-700">
-                  <div className="flex items-center gap-2">
-                    <span className="text-neutral-600">Rows per page:</span>
-                    <select
-                      className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-                      value={limit}
-                      onChange={(e) => {
-                        const newLimit = Number(e.target.value)
-                        setLimit(newLimit)
-                        setPage(1)
-                      }}
-                    >
-                      {[5, 10, 25, 50].map(opt => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <button
-                      className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                      disabled={page <= 1}
-                      onClick={() => {
-                        setPage(p => Math.max(1, p - 1))
-                      }}
-                    >
-                      ‹ Prev
-                    </button>
-                    <div className="tabular-nums text-neutral-600">
-                      Page {page} of {Math.ceil(totalCount / limit) || 1}
-                    </div>
-                    <button
-                      className="rounded-md border border-neutral-300 bg-white px-2 py-1 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                      disabled={page >= Math.ceil(totalCount / limit)}
-                      onClick={() => {
-                        const totalPages = Math.ceil(totalCount / limit)
-                        setPage(p => (p < totalPages ? p + 1 : p))
-                      }}
-                    >
-                      Next ›
-                    </button>
-                  </div>
+              
+              {/* View Toggle (List | Tree) - only show if feature flag enabled */}
+              {okrTreeView && (
+                <div className="flex items-center gap-1 rounded-lg border border-neutral-300 bg-neutral-50 p-1" role="group" aria-label="View mode">
+                  <button
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
+                      viewMode === 'list'
+                        ? "bg-white text-neutral-900 shadow-sm"
+                        : "text-neutral-600 hover:text-neutral-900"
+                    )}
+                    onClick={() => setViewMode('list')}
+                    aria-pressed={viewMode === 'list'}
+                  >
+                    List
+                  </button>
+                  <button
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
+                      viewMode === 'tree'
+                        ? "bg-white text-neutral-900 shadow-sm"
+                        : "text-neutral-600 hover:text-neutral-900"
+                    )}
+                    onClick={() => setViewMode('tree')}
+                    aria-pressed={viewMode === 'tree'}
+                  >
+                    Tree
+                  </button>
                 </div>
               )}
             </div>
+            {/* Cycle Health Strip */}
+            {selectedCycleId && (
+              <div className="mt-4">
+                <CycleHealthStrip cycleId={selectedCycleId} />
+              </div>
+            )}
           </div>
 
-          {/* Filters and Search */}
-          <div className="mb-6 space-y-4">
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex-1 relative min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input 
-                  placeholder="Search OKRs..." 
-                  className="pl-10"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
+          {/* Governance Status Bar */}
+          {selectedCycleId && (
+            <GovernanceStatusBar cycleId={selectedCycleId} scope={selectedScope} />
+          )}
+
+          {/* Filters and Search Toolbar */}
+          <div className="mb-6">
+            <div className="flex items-start justify-between gap-3">
+              {/* Left: Filters - Two-row layout */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <OKRFilterBar
+                      searchQuery={searchQuery}
+                      onSearchChange={setSearchQuery}
+                      selectedStatus={selectedStatus}
+                      onStatusChange={setSelectedStatus}
+                      selectedScope={selectedScope}
+                      onScopeChange={handleScopeChange}
+                      availableScopes={availableScopes}
+                      selectedCycleId={selectedCycleId}
+                      normalizedCycles={normalizedCycles}
+                      legacyPeriods={legacyPeriods}
+                      selectedTimeframeKey={selectedTimeframeKey}
+                      onCycleSelect={(opt: { key: string; label: string }) => {
+                        const previousCycleId = selectedCycleId
+                        setSelectedTimeframeKey(opt.key)
+                        setSelectedTimeframeLabel(opt.label)
+                        if (opt.key && opt.key !== 'all' && opt.key !== 'unassigned' && normalizedCycles.some(c => c.id === opt.key)) {
+                          setSelectedCycleId(opt.key)
+                          // Telemetry: cycle changed
+                          track('cycle_changed', {
+                            scope: selectedScope,
+                            cycle_id_prev: previousCycleId,
+                            cycle_id: opt.key,
+                            ts: new Date().toISOString(),
+                          })
+                        } else {
+                          // User selected "All Cycles" or "Unassigned" - clear cycle filter
+                          setSelectedCycleId(null)
+                          // Mark as initialized so loadActiveCycles doesn't reset it
+                          cycleInitializedRef.current = true
+                          // Telemetry: cycle changed (cleared)
+                          track('cycle_changed', {
+                            scope: selectedScope,
+                            cycle_id_prev: previousCycleId,
+                            cycle_id: null,
+                            ts: new Date().toISOString(),
+                          })
+                        }
+                      }}
+                      onManageCycles={isTenantAdminForCurrentOrg ? () => setCycleManagementDrawerOpen(true) : undefined}
+                      hasActiveFilters={hasActiveFilters}
+                      onClearFilters={clearFilters}
+                      myOkrsOnly={myOkrsOnly}
+                      onMyOkrsToggle={handleMyOkrsToggle}
+                      selectedVisibility={selectedVisibility}
+                      onVisibilityChange={handleVisibilityChange}
+                      selectedOwnerId={selectedOwnerId}
+                      onOwnerChange={handleOwnerChange}
+                      selectedPillarId={selectedPillarId}
+                      onPillarChange={handlePillarChange}
+                      availableUsers={availableUsers}
+                      currentUserId={user?.id}
+                    />
+                  </div>
+
+                  {/* Right: Actions */}
+                  <OKRToolbar
+                    attentionCount={attentionCount}
+                    onOpenAttentionDrawer={() => setAttentionDrawerOpen(true)}
+                    canCreateObjective={canCreateObjective}
+                    canEditOKR={permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || null })}
+                    isSuperuser={isSuperuser}
+                    onCreateObjective={() => {
+                      setCreationDrawerMode('objective')
+                      setIsCreateDrawerOpen(true)
+                    }}
+                    onCreateKeyResult={() => {
+                      setCreationDrawerMode('kr')
+                      setIsCreateDrawerOpen(true)
+                    }}
+                    onCreateInitiative={() => {
+                      setCreationDrawerMode('initiative')
+                      setIsCreateDrawerOpen(true)
+                    }}
+                    onOpenCycleManagement={() => setCycleManagementDrawerOpen(true)}
+                    canManageCycles={isTenantAdminForCurrentOrg}
+                  />
+                </div>
               </div>
+<<<<<<< HEAD
               
               <Select value={filterWorkspaceId} onValueChange={setFilterWorkspaceId}>
                 <SelectTrigger className="w-[180px]">
@@ -1184,110 +1235,176 @@ export default function OKRsPage() {
               )}
             </div>
             
+            {/* Active Filters Display */}
             {hasActiveFilters && (
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap mt-3">
                 <span className="text-sm text-slate-600">Active filters:</span>
+                
+                {/* Scope filter chip */}
+                {selectedScope && (
+                  <Badge variant="secondary" className="text-xs">
+                    Scope: {selectedScope === 'my' ? 'My OKRs' : selectedScope === 'team-workspace' ? 'Team/Workspace OKRs' : 'Company OKRs'}
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams.toString())
+                        params.delete('scope')
+                        router.push(`/dashboard/okrs?${params.toString()}`)
+                      }}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label="Remove scope filter"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                )}
+                
+                {/* Status filter chip */}
+                {selectedStatus && (
+                  <Badge variant="secondary" className="text-xs">
+                    Status: {selectedStatus.replace('_', ' ')}
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams.toString())
+                        params.delete('status')
+                        router.push(`/dashboard/okrs?${params.toString()}`)
+                      }}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label="Remove status filter"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                )}
+                
+                {/* Visibility filter chip */}
+                {selectedVisibility && selectedVisibility !== 'ALL' && (
+                  <Badge variant="secondary" className="text-xs">
+                    Visibility: {selectedVisibility === 'PUBLIC_TENANT' ? 'Public' : 'Private'}
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams.toString())
+                        params.delete('visibility')
+                        router.push(`/dashboard/okrs?${params.toString()}`)
+                      }}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label="Remove visibility filter"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                )}
+                
+                {/* Cycle filter chip */}
+                {selectedCycleId && (
+                  <Badge variant="secondary" className="text-xs">
+                    Cycle: {normalizedCycles.find(c => c.id === selectedCycleId)?.name || selectedTimeframeLabel || 'Selected'}
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams.toString())
+                        params.delete('cycleId')
+                        router.push(`/dashboard/okrs?${params.toString()}`)
+                      }}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label="Remove cycle filter"
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                )}
+                
                 {filterWorkspaceId !== 'all' && (
                   <Badge variant="secondary" className="text-xs">
                     Workspace: {workspaces.find(w => w.id === filterWorkspaceId)?.name}
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams.toString())
+                        params.delete('workspaceId')
+                        router.push(`/dashboard/okrs?${params.toString()}`)
+                      }}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label="Remove workspace filter"
+                    >
+                      ×
+                    </button>
                   </Badge>
                 )}
                 {filterTeamId !== 'all' && (
                   <Badge variant="secondary" className="text-xs">
                     Team: {teams.find(t => t.id === filterTeamId)?.name}
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams.toString())
+                        params.delete('teamId')
+                        router.push(`/dashboard/okrs?${params.toString()}`)
+                      }}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label="Remove team filter"
+                    >
+                      ×
+                    </button>
                   </Badge>
                 )}
-                {filterOwnerId !== 'all' && (
+                {filterOwnerId !== 'all' && selectedScope !== 'my' && (
                   <Badge variant="secondary" className="text-xs">
                     Owner: {availableUsers.find(u => u.id === filterOwnerId)?.name}
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams(searchParams.toString())
+                        params.delete('ownerId')
+                        router.push(`/dashboard/okrs?${params.toString()}`)
+                      }}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label="Remove owner filter"
+                    >
+                      ×
+                    </button>
                   </Badge>
                 )}
+                {selectedPillarId && (
+                  <Badge 
+                    variant="secondary" 
+                    className="text-xs"
+                    style={{
+                      backgroundColor: availablePillars.find(p => p.id === selectedPillarId)?.color || undefined,
+                    }}
+                  >
+                    Pillar: {availablePillars.find(p => p.id === selectedPillarId)?.name || 'Unknown'}
+                    <button
+                      onClick={() => handlePillarChange(null)}
+                      className="ml-1.5 hover:text-destructive"
+                      aria-label={`Remove pillar filter ${availablePillars.find(p => p.id === selectedPillarId)?.name || ''}`}
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                )}
+                
+                {/* Clear All Filters Button */}
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={clearFilters}
+                  className="h-6 px-2 text-xs text-slate-600 hover:text-slate-900"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Clear all
+                </Button>
               </div>
             )}
-            {/* TODO [phase6-polish]: reintroduce compact view with grid/list toggle */}
-            {/* <div className="flex border rounded-lg">
-              <Button
-                variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setViewMode('grid')}
-                className="rounded-r-none"
-              >
-                <Grid3x3 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={viewMode === 'list' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setViewMode('list')}
-                className="rounded-l-none"
-              >
-                <List className="h-4 w-4" />
-              </Button>
-            </div> */}
           </div>
 
-          {/* OKRs Grid/List */}
-          {loading ? (
-            <div className="text-center py-12 text-slate-500">Loading OKRs...</div>
-          ) : permissionError ? (
-            <div className="text-center py-12">
-              <div className="max-w-md mx-auto">
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-yellow-900 mb-2">Access Restricted</h3>
-                  <p className="text-yellow-800 mb-4">{permissionError}</p>
-                  <p className="text-sm text-yellow-700">
-                    If you believe you should have access, please contact your administrator.
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : filteredOKRs.length === 0 ? (
-            <div className="text-center py-12">
-              {objectivesViewModel.filter(canSeeObjective).length === 0 ? (
-                <div className="border border-dashed border-neutral-300 rounded-xl bg-white/50 text-center p-8">
-                  <p className="font-medium text-neutral-700 mb-1">No Objectives yet</p>
-                  <p className="text-sm text-neutral-500 mb-3">Start by defining your first Objective.</p>
-                  <button
-                    className="text-violet-700 hover:text-violet-900 underline underline-offset-2 font-medium text-sm"
-                    onClick={() => setShowNewObjective(true)}
-                  >
-                    + New Objective
-                  </button>
-                  {/* TODO [phase6-polish]: Fade-in animation when first Objective appears. */}
-                </div>
-              ) : (
-                <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm text-sm text-neutral-600">
-                  {selectedTimeframeKey === 'unassigned' ? (
-                    <p>No objectives are currently unassigned to a planning cycle.</p>
-                  ) : selectedTimeframeKey && selectedTimeframeKey !== 'all' ? (
-                    <p>No objectives defined for {selectedTimeframeLabel} yet.</p>
-                  ) : (
-                    <>
-                      <p className="mb-4">No OKRs found</p>
-                      {hasActiveFilters && (
-                        <Button variant="outline" onClick={clearFilters}>
-                          Clear filters to see all OKRs
-                        </Button>
-                      )}
-                    </>
-                  )}
-                  {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4 md:space-y-6">
-              {/* Needs attention group */}
-              {groupedObjectives.needsAttention.length > 0 && (
-                <div>
-                  <SectionHeader tone="bad" label="Needs attention" />
-                  <div className="space-y-4 md:space-y-6">
-                    {groupedObjectives.needsAttention.map((okr) => {
-                      return renderObjectiveRow(okr)
-                    })}
-                  </div>
-                </div>
-              )}
+          {/* Live Region for Async Announcements */}
+          <div
+            ref={liveRegionRef}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className="sr-only"
+          >
+            {liveRegionMessage}
+          </div>
 
+<<<<<<< HEAD
               {/* Active Objectives group */}
               {groupedObjectives.active.length > 0 && (
                 <div>
@@ -1317,9 +1434,86 @@ export default function OKRsPage() {
               )}
             </div>
           )}
+          
+          {/* OKRs List or Tree View */}
+          <main role="main" aria-busy={false} aria-label={viewMode === 'tree' ? 'OKRs tree' : 'OKRs list'}>
+            {viewMode === 'tree' ? (
+              <OKRTreeContainer
+                key={reloadTrigger}
+                availableUsers={availableUsers}
+                activeCycles={activeCycles}
+                overdueCheckIns={overdueCheckIns}
+                filterWorkspaceId={filterWorkspaceId}
+                filterTeamId={filterTeamId}
+                filterOwnerId={filterOwnerId}
+                filterOverdue={filterOverdue}
+                searchQuery={searchQuery}
+                selectedTimeframeKey={selectedTimeframeKey}
+                selectedStatus={selectedStatus}
+                selectedCycleId={selectedCycleId}
+                selectedScope={selectedScope}
+                onAction={{
+                  onEdit: handleEditOKR,
+                  onDelete: handleDeleteOKR,
+                  onAddKeyResult: handleAddKrClick,
+                  onAddInitiativeToObjective: handleAddInitiativeToObjectiveClick,
+                  onAddInitiativeToKr: handleAddInitiativeToKrClick,
+                  onAddCheckIn: handleAddCheckIn,
+                  onOpenHistory: handleOpenActivityDrawer,
+                  onEditKeyResult: handleEditKeyResult,
+                  onOpenContextualAddMenu: handleOpenContextualAddMenu,
+                  onContextualAddKeyResult: handleContextualAddKeyResult,
+                  onContextualAddInitiative: handleContextualAddInitiative,
+                }}
+                selectedNodeId={selectedTreeNodeId}
+                selectedNodeType={selectedTreeNodeType}
+                onNodeClick={handleTreeNodeClick}
+              />
+            ) : (
+              <OKRPageContainer
+                key={reloadTrigger}
+                availableUsers={availableUsers}
+                activeCycles={activeCycles}
+                overdueCheckIns={overdueCheckIns}
+                filterWorkspaceId={filterWorkspaceId}
+                filterTeamId={filterTeamId}
+                filterOwnerId={filterOwnerId}
+                filterOverdue={filterOverdue}
+                searchQuery={searchQuery}
+                selectedTimeframeKey={selectedTimeframeKey}
+                selectedStatus={selectedStatus}
+                selectedCycleId={selectedCycleId}
+                selectedScope={selectedScope}
+                myOkrsOnly={myOkrsOnly}
+                selectedVisibility={selectedVisibility}
+                selectedOwnerId={selectedOwnerId}
+                onAction={{
+                  onEdit: handleEditOKR,
+                  onDelete: handleDeleteOKR,
+                  onAddKeyResult: handleAddKrClick,
+                  onAddInitiativeToObjective: handleAddInitiativeToObjectiveClick,
+                  onAddInitiativeToKr: handleAddInitiativeToKrClick,
+                  onAddCheckIn: handleAddCheckIn,
+                  onOpenHistory: handleOpenActivityDrawer,
+                  onEditKeyResult: handleEditKeyResult,
+                  // Story 5: Contextual Add menu handlers
+                  onOpenContextualAddMenu: handleOpenContextualAddMenu,
+                  onContextualAddKeyResult: handleContextualAddKeyResult,
+                  onContextualAddInitiative: handleContextualAddInitiative,
+                }}
+                expandedObjectiveId={expandedObjectiveId}
+                onToggleObjective={handleToggleObjective}
+                onCanCreateChange={setCanCreateObjective}
+                onCreateObjective={() => {
+                  setCreationDrawerMode('objective')
+                  setIsCreateDrawerOpen(true)
+                }}
+              />
+            )}
+          </main>
+>>>>>>> main
 
           {/* Activity Timeline Drawer */}
-          {/* TODO [phase7-performance]: pass pagination cursor + load handler once backend supports it. */}
           <ActivityDrawer
             isOpen={activityDrawerOpen}
             onClose={handleCloseActivityDrawer}
@@ -1337,6 +1531,7 @@ export default function OKRsPage() {
               workspaceId: selectedObjectiveForLock.workspaceId,
               teamId: selectedObjectiveForLock.teamId,
               isPublished: selectedObjectiveForLock.isPublished,
+              visibilityLevel: selectedObjectiveForLock.visibilityLevel,
               cycle: selectedObjectiveForLock.cycleId && activeCycles.find(c => c.id === selectedObjectiveForLock.cycleId)
                 ? { id: selectedObjectiveForLock.cycleId, status: activeCycles.find(c => c.id === selectedObjectiveForLock.cycleId)!.status }
                 : null,
@@ -1345,7 +1540,6 @@ export default function OKRsPage() {
                 : null,
             }
             const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
-            // TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle'
             const lockMessage = lockInfo.message || 'This item is locked and cannot be changed in the current cycle.'
             
             return (
@@ -1390,22 +1584,38 @@ export default function OKRsPage() {
                 const res = await api.post('/objectives', formData)
                 const created = res.data
                 
-                // Map to view model and optimistic merge (prepend newest)
-                const createdViewModel = mapObjectiveToViewModel(created)
-                setOkrs((prev) => [createdViewModel, ...prev])
-                
-                // TODO [phase6-polish]: toast "Objective created"
+                toast({
+                  title: 'Objective created',
+                  description: `"${created.title}" has been created.`,
+                })
                 setShowNewObjective(false)
+                handleReloadOKRs()
               } catch (err) {
-                // TODO [phase7-hardening]: map backend validation errors to field-level messages.
                 console.error('Failed to create objective', err)
-                // TODO [phase6-polish]: surface inline form error state
               }
             }}
             availableUsers={availableUsers}
             availableWorkspaces={workspaces}
             availableCycles={normalizedCycles}
             availablePillars={[]}
+          />
+
+          {/* Edit Key Result Drawer */}
+          <EditKeyResultDrawer
+            isOpen={showEditKeyResult}
+            keyResultId={editKeyResultId}
+            keyResultData={editKeyResultData}
+            availableUsers={availableUsers}
+            activeCycles={activeCycles}
+            currentOrganization={currentOrganization}
+            onClose={() => {
+              setShowEditKeyResult(false)
+              setEditKeyResultId(null)
+              setEditKeyResultData(null)
+            }}
+            onSuccess={() => {
+              handleReloadOKRs()
+            }}
           />
 
           {/* Edit Objective Modal */}
@@ -1425,30 +1635,32 @@ export default function OKRsPage() {
                 const res = await api.patch(`/objectives/${editObjectiveId}`, formData)
                 const updated = res.data
                 
-                // Optimistically update objective in local state
-                setOkrs((prev) =>
-                  prev.map((obj) => {
-                    if (obj.id !== editObjectiveId) return obj
-                    return {
-                      ...obj,
-                      title: updated.title || obj.title,
-                      ownerId: updated.ownerId || obj.ownerId,
-                      workspaceId: updated.workspaceId || obj.workspaceId,
-                      cycleId: updated.cycleId || obj.cycleId,
-                      status: updated.status || obj.status,
-                      visibilityLevel: updated.visibilityLevel || obj.visibilityLevel,
-                      pillarId: updated.pillarId || obj.pillarId,
-                    }
-                  })
-                )
-                
+                toast({
+                  title: 'Objective updated',
+                  description: `"${updated.title}" has been updated.`,
+                })
                 setShowEditObjective(false)
                 setEditObjectiveId(null)
                 setEditObjectiveData(null)
-              } catch (err) {
-                // TODO [phase7-hardening]: map backend validation errors to field-level messages.
+                handleReloadOKRs()
+              } catch (err: any) {
                 console.error('Failed to update objective', err)
-                // TODO [phase6-polish]: surface inline form error state
+                const errorMessage = err.response?.data?.message || err.message || 'Failed to update objective'
+                
+                // Check if it's a permission error
+                if (err.response?.status === 403) {
+                  toast({
+                    variant: 'destructive',
+                    title: 'Permission denied',
+                    description: errorMessage || 'You do not have permission to edit this objective. Published objectives can only be edited by organization administrators.',
+                  })
+                } else {
+                  toast({
+                    variant: 'destructive',
+                    title: 'Failed to update objective',
+                    description: errorMessage,
+                  })
+                }
               }
             }}
             availableUsers={availableUsers}
@@ -1470,51 +1682,17 @@ export default function OKRsPage() {
               try {
                 // API: create check-in
                 const res = await api.post(`/key-results/${activeCheckInKrId}/check-in`, formData)
-                const createdCheckIn = res.data
+                const _createdCheckIn = res.data
                 
-                // Optimistically update KR in local state
-                setOkrs((prev) =>
-                  prev.map((obj) => {
-                    const updatedKeyResults = (obj.keyResults || []).map((kr: any) => {
-                      const krId = kr.keyResult?.id || kr.id
-                      if (krId !== activeCheckInKrId) return kr
-                      
-                      // Update currentValue and progress
-                      const updatedKr = kr.keyResult
-                        ? {
-                            ...kr,
-                            keyResult: {
-                              ...kr.keyResult,
-                              currentValue: formData.value,
-                              progress: kr.keyResult.targetValue > 0
-                                ? Math.min(100, Math.round((formData.value / kr.keyResult.targetValue) * 100))
-                                : kr.keyResult.progress,
-                            },
-                          }
-                        : {
-                            ...kr,
-                            currentValue: formData.value,
-                            progress: kr.targetValue > 0
-                              ? Math.min(100, Math.round((formData.value / kr.targetValue) * 100))
-                              : kr.progress,
-                          }
-                      
-                      return updatedKr
-                    })
-                    
-                    return {
-                      ...obj,
-                      keyResults: updatedKeyResults,
-                    }
-                  })
-                )
-                
+                toast({
+                  title: 'Check-in recorded',
+                  description: 'Check-in has been recorded successfully.',
+                })
                 setShowNewCheckIn(false)
                 setActiveCheckInKrId(null)
+                handleReloadOKRs()
               } catch (err) {
-                // TODO [phase7-hardening]: map backend validation errors to field-level messages.
                 console.error('Failed to create check-in', err)
-                // TODO [phase6-polish]: surface inline form error state
               }
             }}
           />
@@ -1535,32 +1713,16 @@ export default function OKRsPage() {
                 const res = await api.post('/key-results', payload)
                 const createdKr = res.data
                 
-                // Merge KR into that objective in local state (optimistic update)
-                setOkrs((prev) =>
-                  prev.map((obj) => {
-                    if (obj.id !== formData.objectiveId) return obj
-                    
-                    // Handle nested keyResults structure (keyResults is array of { keyResult: {...} })
-                    const existingKeyResults = obj.keyResults || []
-                    const newKeyResultEntry = Array.isArray(existingKeyResults) && existingKeyResults.length > 0 && existingKeyResults[0]?.keyResult
-                      ? { keyResult: createdKr }
-                      : createdKr
-                    
-                    return {
-                      ...obj,
-                      keyResults: [...existingKeyResults, newKeyResultEntry],
-                    }
-                  })
-                )
-                
+                toast({
+                  title: 'Key Result added',
+                  description: `"${createdKr.title}" has been added.`,
+                })
                 setShowNewKeyResult(false)
                 setKrParentObjectiveId(null)
                 setKrParentObjectiveName(null)
-                // TODO [phase6-polish]: toast "Key Result added"
+                handleReloadOKRs()
               } catch (err) {
-                // TODO [phase7-hardening]: map backend validation errors to field-level messages.
                 console.error('Failed to create key result', err)
-                // TODO [phase6-polish]: surface inline form error state
               }
             }}
             availableUsers={availableUsers}
@@ -1582,61 +1744,107 @@ export default function OKRsPage() {
               try {
                 const payload = {
                   ...formData,
-                  objectiveId: initiativeParentObjectiveId ?? undefined,
+                  // Only send objectiveId if we DON'T have a keyResultId
+                  // If keyResultId is provided, the backend will auto-set objectiveId from the KR's objective
+                  objectiveId: initiativeParentKeyResultId ? undefined : (initiativeParentObjectiveId ?? undefined),
                   keyResultId: initiativeParentKeyResultId ?? undefined,
+                  // Include tenantId so RBAC guard can extract tenantId
+                  tenantId: currentOrganization?.id,
                 }
+                
+                // Convert dueDate from YYYY-MM-DD to ISO-8601 DateTime format if provided
+                if (payload.dueDate && typeof payload.dueDate === 'string') {
+                  // If it's already a full ISO string, use it; otherwise convert date-only to ISO DateTime
+                  if (payload.dueDate.includes('T')) {
+                    // Already ISO format
+                    payload.dueDate = payload.dueDate
+                  } else {
+                    // Convert YYYY-MM-DD to ISO-8601 DateTime (start of day in UTC)
+                    payload.dueDate = new Date(payload.dueDate + 'T00:00:00.000Z').toISOString()
+                  }
+                }
+                
                 const res = await api.post('/initiatives', payload)
                 const createdInit = res.data
                 
-                // Optimistic merge:
-                // If this initiative is under a KR, put it under that KR.
-                // Else attach it at objective level.
-                setOkrs((prev) =>
-                  prev.map((obj) => {
-                    // If it's under objective:
-                    if (initiativeParentObjectiveId && obj.id === initiativeParentObjectiveId) {
-                      return {
-                        ...obj,
-                        initiatives: [...(obj.initiatives || []), createdInit],
-                      }
-                    }
-                    
-                    // If it's under a KR inside the objective:
-                    if (initiativeParentKeyResultId) {
-                      return {
-                        ...obj,
-                        keyResults: (obj.keyResults || []).map((kr: any) => {
-                          // Handle nested structure: kr.keyResult.id or kr.id
-                          const krId = kr.keyResult?.id || kr.id
-                          if (krId !== initiativeParentKeyResultId) return kr
-                          
-                          const updatedKr = kr.keyResult 
-                            ? { ...kr, keyResult: { ...kr.keyResult, initiatives: [...(kr.keyResult.initiatives || []), createdInit] } }
-                            : { ...kr, initiatives: [...(kr.initiatives || []), createdInit] }
-                          
-                          return updatedKr
-                        }),
-                      }
-                    }
-                    
-                    return obj
-                  })
-                )
-                
+                toast({
+                  title: 'Initiative added',
+                  description: `"${createdInit.title}" has been added.`,
+                })
                 setShowNewInitiative(false)
                 setInitiativeParentObjectiveId(null)
                 setInitiativeParentKeyResultId(null)
                 setInitiativeParentName(null)
-                // TODO [phase6-polish]: toast "Initiative added"
-              } catch (err) {
-                // TODO [phase7-hardening]: map backend validation errors to field-level messages.
+                handleReloadOKRs()
+              } catch (err: any) {
                 console.error('Failed to create initiative', err)
-                // TODO [phase6-polish]: surface inline form error state
+                toast({
+                  title: 'Failed to create initiative',
+                  description: err.response?.data?.message || err.message || 'An error occurred while creating the initiative.',
+                  variant: 'destructive',
+                })
               }
             }}
             availableUsers={availableUsers}
           />
-        </div>
+
+          {/* OKR Creation Drawer */}
+          <OKRCreationDrawer
+            isOpen={isCreateDrawerOpen}
+            mode={creationDrawerMode}
+            onClose={() => {
+              setIsCreateDrawerOpen(false)
+              setCreationDrawerMode('objective')
+              setCreationDrawerParentContext(undefined)
+            }}
+            availableUsers={availableUsers}
+            activeCycles={activeCycles}
+            currentOrganization={currentOrganization}
+            parentContext={creationDrawerParentContext}
+            onSuccess={() => {
+              setIsCreateDrawerOpen(false)
+              setCreationDrawerMode('objective')
+              setCreationDrawerParentContext(undefined)
+              handleReloadOKRs()
+            }}
+          />
+
+          {/* Cycle Management Drawer */}
+          <CycleManagementDrawer
+            isOpen={cycleManagementDrawerOpen}
+            onClose={() => setCycleManagementDrawerOpen(false)}
+            currentOrganizationId={currentOrganization?.id || null}
+            onCyclesUpdated={() => {
+              loadActiveCycles()
+              setCycleManagementDrawerOpen(false)
+            }}
+          />
+
+          {/* Attention Drawer */}
+          <AttentionDrawer
+            isOpen={attentionDrawerOpen}
+            onClose={() => {
+              setAttentionDrawerOpen(false)
+              // Refresh attention count when drawer closes
+              loadAttentionCount()
+            }}
+            cycleId={selectedCycleId}
+            scope={selectedScope}
+            onNavigateToObjective={(objectiveId) => {
+              // Scroll to objective or expand it
+              setExpandedObjectiveId(objectiveId)
+              setAttentionDrawerOpen(false)
+            }}
+            onNavigateToKeyResult={(krId) => {
+              // Find and expand the objective containing this KR
+            }}
+            canRequestCheckIn={isTenantAdminForCurrentOrg}
+            onRequestCheckIn={(krId) => {
+              handleAddCheckIn(krId)
+              setAttentionDrawerOpen(false)
+            }}
+          />
+        </PageContainer>
       </DashboardLayout>
     </ProtectedRoute>
   )

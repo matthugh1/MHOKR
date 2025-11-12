@@ -19,9 +19,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { SearchableUserSelect } from "@/components/okr/SearchableUserSelect"
 
 type OKRStatus = "ON_TRACK" | "AT_RISK" | "OFF_TRACK" | "COMPLETED" | "CANCELLED"
-type VisibilityLevel = "PUBLIC_TENANT" | "PRIVATE" | "WORKSPACE_ONLY" | "TEAM_ONLY" | "MANAGER_CHAIN" | "EXEC_ONLY"
+type VisibilityLevel = "PUBLIC_TENANT" | "PRIVATE"
 
 export interface NewObjectiveModalProps {
   isOpen: boolean
@@ -33,13 +34,13 @@ export interface NewObjectiveModalProps {
     cycleId: string
     status: OKRStatus
     visibilityLevel: VisibilityLevel
-    pillarId?: string
+    // W4.M1: pillarId removed - deprecated
   }) => Promise<void>
   // Options for dropdowns (parent should provide these)
   availableUsers?: Array<{ id: string; name: string; email?: string }>
   availableWorkspaces?: Array<{ id: string; name: string }>
   availableCycles?: Array<{ id: string; name: string }>
-  availablePillars?: Array<{ id: string; name: string }>
+  availablePillars?: Array<{ id: string; name: string }> // W4.M1: Deprecated - not used
 }
 
 export function NewObjectiveModal({
@@ -49,6 +50,7 @@ export function NewObjectiveModal({
   availableUsers = [],
   availableWorkspaces = [],
   availableCycles = [],
+  // W4.M1: Pillar support removed - pillarId deprecated
   availablePillars = [],
 }: NewObjectiveModalProps) {
   const [title, setTitle] = React.useState("")
@@ -57,7 +59,7 @@ export function NewObjectiveModal({
   const [cycleId, setCycleId] = React.useState("")
   const [status, setStatus] = React.useState<OKRStatus>("ON_TRACK")
   const [visibilityLevel, setVisibilityLevel] = React.useState<VisibilityLevel>("PUBLIC_TENANT")
-  const [pillarId, setPillarId] = React.useState<string>("")
+  // W4.M1: pillarId removed - deprecated
   const [isSubmitting, setIsSubmitting] = React.useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -77,7 +79,7 @@ export function NewObjectiveModal({
         cycleId,
         status,
         visibilityLevel,
-        pillarId: pillarId || undefined,
+        // W4.M1: pillarId removed
       })
       // Reset form
       setTitle("")
@@ -86,7 +88,7 @@ export function NewObjectiveModal({
       setCycleId("")
       setStatus("ON_TRACK")
       setVisibilityLevel("PUBLIC_TENANT")
-      setPillarId("")
+      // W4.M1: pillarId removed
       onClose()
     } catch (error) {
       console.error("Failed to create objective:", error)
@@ -104,7 +106,7 @@ export function NewObjectiveModal({
       setCycleId("")
       setStatus("ON_TRACK")
       setVisibilityLevel("PUBLIC_TENANT")
-      setPillarId("")
+      // W4.M1: pillarId removed
       onClose()
     }
   }
@@ -137,18 +139,14 @@ export function NewObjectiveModal({
             <Label htmlFor="owner">
               Owner <span className="text-red-500">*</span>
             </Label>
-            <Select value={ownerId} onValueChange={setOwnerId} required>
-              <SelectTrigger id="owner">
-                <SelectValue placeholder="Select owner" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableUsers.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.name || user.email || user.id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableUserSelect
+              value={ownerId}
+              onValueChange={setOwnerId}
+              availableUsers={availableUsers}
+              placeholder="Select owner"
+              id="owner"
+              required
+            />
           </div>
 
           <div className="flex flex-col gap-2">
@@ -171,7 +169,7 @@ export function NewObjectiveModal({
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="cycle">
-              Cycle / Period <span className="text-red-500">*</span>
+              Cycle <span className="text-red-500">*</span>
             </Label>
             <Select value={cycleId} onValueChange={setCycleId} required>
               <SelectTrigger id="cycle">
@@ -220,32 +218,11 @@ export function NewObjectiveModal({
               <SelectContent>
                 <SelectItem value="PUBLIC_TENANT">Public (Tenant)</SelectItem>
                 <SelectItem value="PRIVATE">Private</SelectItem>
-                <SelectItem value="WORKSPACE_ONLY">Workspace Only</SelectItem>
-                <SelectItem value="TEAM_ONLY">Team Only</SelectItem>
-                <SelectItem value="MANAGER_CHAIN">Manager Chain</SelectItem>
-                <SelectItem value="EXEC_ONLY">Executive Only</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {availablePillars.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="pillar">Strategic Theme / Pillar (Optional)</Label>
-              <Select value={pillarId} onValueChange={setPillarId}>
-                <SelectTrigger id="pillar">
-                  <SelectValue placeholder="Select strategic theme" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">None</SelectItem>
-                  {availablePillars.map((pillar) => (
-                    <SelectItem key={pillar.id} value={pillar.id}>
-                      {pillar.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          {/* W4.M1: Pillar UI removed - deprecated */}
 
           {/* [phase6-polish]: After successful create, offer CTA "Add first Key Result" with the returned objectiveId. */}
 
@@ -262,4 +239,6 @@ export function NewObjectiveModal({
     </Dialog>
   )
 }
+
+
 

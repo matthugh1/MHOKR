@@ -3,36 +3,87 @@
 import { useState, useEffect } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionHeader } from '@/components/ui/SectionHeader'
-import { Calendar, User, Building2, Users, Target, Search, ChevronDown } from 'lucide-react'
+import { Calendar, User, Building2, Users, Target, Search, ChevronDown, AlertCircle } from 'lucide-react'
 import { Period } from '@okr-nexus/types'
+import { LinkedKeyResults } from './LinkedKeyResults'
+import { TagSelector } from '@/components/okr/TagSelector'
+import { ContributorSelector } from '@/components/okr/ContributorSelector'
+import { SponsorSelector } from '@/components/okr/SponsorSelector'
 
 import { 
   formatDateForInput, 
-  getQuarterFromDate, 
   getQuarterDates, 
   getMonthDates, 
   getYearDates,
   getAvailableYears,
-  getMonthName,
   formatPeriod,
 } from '@/lib/date-utils'
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
 import { useTenantPermissions } from '@/hooks/useTenantPermissions'
+import { useTenantAdmin } from '@/hooks/useTenantAdmin'
+import { useToast } from '@/hooks/use-toast'
 import api from '@/lib/api'
 
 type UnknownObjective = Record<string, unknown> // TODO [phase7-hardening]: tighten typing
-type UnknownKeyResult = Record<string, unknown> // TODO [phase7-hardening]: tighten typing
+
+export interface EditFormState {
+  okrId?: string
+  ownerId?: string
+  ownerName?: string
+  tenantId?: string | null
+  workspaceId?: string | null
+  teamId?: string | null
+
+  isPublished?: boolean
+  cycle?: { id: string; status: string } | null
+  cycleStatus?: string | null
+
+  label?: string
+  description?: string
+
+  // Key Result fields
+  current?: number
+  target?: number
+  unit?: string
+  metricType?: 'INCREASE' | 'DECREASE' | 'REACH' | 'MAINTAIN'
+
+  // Shared progress fields
+  progress?: number
+
+  // Time frame fields
+  period?: Period
+  quarter?: number
+  month?: number
+  year?: number
+  startDate?: string
+  endDate?: string
+
+  // Initiative fields
+  status?: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'BLOCKED'
+
+  // Review fields (Objective only)
+  confidence?: number | null
+  reviewFrequency?: 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | null
+  lastReviewedAt?: string | null
+
+  // Hierarchy / visibility
+  parentId?: string
+  parentObjective?: Record<string, unknown> | null
+  visibilityLevel?: string
+}
 
 interface EditFormTabsProps {
   nodeId: string
   nodeType: 'obj' | 'kr' | 'init'
   data: Record<string, unknown>
-  formData: Record<string, unknown>
-  setFormData: (data: Record<string, unknown>) => void
+  formData: EditFormState
+  setFormData: (data: EditFormState) => void
   onSave: () => void
+  alignmentError?: { code?: string; message?: string } | null
 }
 
 export function EditFormTabs({
@@ -42,26 +93,33 @@ export function EditFormTabs({
   formData,
   setFormData,
   onSave: _onSave,
+  alignmentError,
 }: EditFormTabsProps) {
   const { organizations, workspaces, teams, currentOrganization } = useWorkspace()
   const { user } = useAuth()
   const tenantPermissions = useTenantPermissions()
+  
+  const period = formData.period
+  
   const [showOwnerDropdown, setShowOwnerDropdown] = useState(false)
   const [showContextDropdown, setShowContextDropdown] = useState(false)
   const [showParentDropdown, setShowParentDropdown] = useState(false)
   const [ownerSearch, setOwnerSearch] = useState('')
   const [contextSearch, setContextSearch] = useState('')
   const [parentSearch, setParentSearch] = useState('')
-  const [availableUsers, setAvailableUsers] = useState<Array<{ id: string; name: string }>>([])
+  const [availableUsers, setAvailableUsers] = useState<Array<{ id: string; name: string; email?: string; avatar?: string | null }>>([])
   const [availableObjectives, setAvailableObjectives] = useState<Array<{ id: string; title: string }>>([])
+  const [availablePillars, setAvailablePillars] = useState<Array<{ id: string; name: string; color?: string | null }>>([])
+  const [selectedTags, setSelectedTags] = useState<Array<{ id: string; name: string; color?: string | null }>>([])
+  const [selectedContributors, setSelectedContributors] = useState<Array<{ id: string; user: { id: string; name: string; email?: string; avatar?: string | null }; role: string }>>([])
+  const [sponsorId, setSponsorId] = useState<string | null>(null)
 
   // Determine if editing is allowed based on node type
-  // TODO [phase7-hardening]: parent objective should always be available for KR checks
   const canEdit = nodeType === 'obj' 
     ? tenantPermissions.canEditObjective({
         id: formData.okrId as string || '',
         ownerId: formData.ownerId as string || '',
-        organizationId: formData.organizationId as string | null || null,
+        tenantId: formData.tenantId as string | null || null,
         workspaceId: formData.workspaceId as string | null || null,
         teamId: formData.teamId as string | null || null,
         isPublished: formData.isPublished as boolean || false,
@@ -72,11 +130,18 @@ export function EditFormTabs({
     ? tenantPermissions.canEditKeyResult({
         id: formData.okrId as string || '',
         ownerId: formData.ownerId as string || '',
-        organizationId: formData.organizationId as string | null || null,
+        tenantId: formData.tenantId as string | null || null,
         workspaceId: formData.workspaceId as string | null || null,
         teamId: formData.teamId as string | null || null,
-        // @ts-expect-error TODO [phase7-hardening]: tighten typing - parentObjective needs proper interface
-        parentObjective: formData.parentObjective as UnknownObjective || null,
+        parentObjective: formData.parentObjective && typeof formData.parentObjective === 'object' && 'id' in formData.parentObjective
+          ? {
+              id: (formData.parentObjective as any).id as string,
+              tenantId: (formData.parentObjective as any).tenantId as string | null | undefined,
+              isPublished: (formData.parentObjective as any).isPublished as boolean | undefined,
+              cycle: (formData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
+              cycleStatus: (formData.parentObjective as any).cycleStatus as string | null | undefined,
+            }
+          : null,
       })
     : true // Initiatives don't have lock logic yet
 
@@ -84,7 +149,7 @@ export function EditFormTabs({
     ? tenantPermissions.getLockInfoForObjective({
         id: formData.okrId as string || '',
         ownerId: formData.ownerId as string || '',
-        organizationId: formData.organizationId as string | null || null,
+        tenantId: formData.tenantId as string | null || null,
         workspaceId: formData.workspaceId as string | null || null,
         teamId: formData.teamId as string | null || null,
         isPublished: formData.isPublished as boolean || false,
@@ -95,11 +160,18 @@ export function EditFormTabs({
     ? tenantPermissions.getLockInfoForKeyResult({
         id: formData.okrId as string || '',
         ownerId: formData.ownerId as string || '',
-        organizationId: formData.organizationId as string | null || null,
+        tenantId: formData.tenantId as string | null || null,
         workspaceId: formData.workspaceId as string | null || null,
         teamId: formData.teamId as string | null || null,
-        // @ts-expect-error TODO [phase7-hardening]: tighten typing - parentObjective needs proper interface
-        parentObjective: formData.parentObjective as UnknownObjective || null,
+        parentObjective: formData.parentObjective && typeof formData.parentObjective === 'object' && 'id' in formData.parentObjective
+          ? {
+              id: (formData.parentObjective as any).id as string,
+              tenantId: (formData.parentObjective as any).tenantId as string | null | undefined,
+              isPublished: (formData.parentObjective as any).isPublished as boolean | undefined,
+              cycle: (formData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
+              cycleStatus: (formData.parentObjective as any).cycleStatus as string | null | undefined,
+            }
+          : null,
       })
     : { isLocked: false, reason: null, message: '' }
 
@@ -119,7 +191,7 @@ export function EditFormTabs({
     if (nodeType === 'obj') {
       const loadObjectives = async () => {
         try {
-          const queryParams = currentOrganization?.id ? `?organizationId=${currentOrganization.id}` : ''
+          const queryParams = currentOrganization?.id ? `?tenantId=${currentOrganization.id}` : ''
           const response = await api.get(`/objectives${queryParams}`)
           setAvailableObjectives(response.data)
         } catch (error) {
@@ -127,6 +199,16 @@ export function EditFormTabs({
         }
       }
       loadObjectives()
+
+      const loadPillars = async () => {
+        try {
+          const response = await api.get('/reports/pillars')
+          setAvailablePillars(response.data || [])
+        } catch (error) {
+          console.error('Failed to load pillars:', error)
+        }
+      }
+      loadPillars()
     }
   }, [nodeType, currentOrganization?.id])
 
@@ -143,8 +225,8 @@ export function EditFormTabs({
   }
 
   const getContextDisplay = () => {
-    if (formData.organizationId && !formData.workspaceId && !formData.teamId) {
-      const org = organizations.find(o => o.id === formData.organizationId)
+    if (formData.tenantId && !formData.workspaceId && !formData.teamId) {
+      const org = organizations.find(o => o.id === formData.tenantId)
       return `🏢 ${org?.name || 'Organization'}`
     }
     if (formData.workspaceId && !formData.teamId) {
@@ -168,15 +250,14 @@ export function EditFormTabs({
 
   return (
     <div className="space-y-4">
-      {/* Lock messaging */}
-      {lockInfo.isLocked && (
-        <>
-          <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-3 text-sm text-neutral-600 shadow-sm">
-            {lockInfo.message || 'This item is locked.'}
-          </div>
-          {/* TODO [phase6-polish]: replace with a nicer inline callout component */}
-        </>
-      )}
+          {/* Lock messaging */}
+          {lockInfo.isLocked && (
+            <>
+              <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-3 text-sm text-neutral-600 shadow-sm">
+                {lockInfo.message || 'This item is locked.'}
+              </div>
+            </>
+          )}
 
       <Tabs defaultValue="basic" className="w-full">
         <TabsList className="grid w-full grid-cols-3">
@@ -197,7 +278,7 @@ export function EditFormTabs({
             </Label>
             <Input
               id="label"
-              value={(formData.label as string) || ''}
+              value={formData.label || ''}
               onChange={(e) => setFormData({ ...formData, label: e.target.value })}
               placeholder="Enter title..."
               className="mt-1"
@@ -212,7 +293,7 @@ export function EditFormTabs({
             <textarea
               id="description"
               className="flex min-h-[100px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-              value={(formData.description as string) || ''}
+              value={formData.description || ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="What do you want to achieve?"
               readOnly={!canEdit}
@@ -229,7 +310,7 @@ export function EditFormTabs({
                 <Input
                   id="current"
                   type="number"
-                  value={(formData.current as number) || 0}
+                  value={formData.current ?? 0}
                   onChange={(e) => setFormData({ ...formData, current: parseFloat(e.target.value) || 0 })}
                   className="mt-1"
                   readOnly={!canEdit}
@@ -241,7 +322,7 @@ export function EditFormTabs({
                 <Input
                   id="target"
                   type="number"
-                  value={(formData.target as number) || 100}
+                  value={formData.target ?? 100}
                   onChange={(e) => setFormData({ ...formData, target: parseFloat(e.target.value) || 100 })}
                   className="mt-1"
                   readOnly={!canEdit}
@@ -253,7 +334,7 @@ export function EditFormTabs({
               <Label htmlFor="unit">Unit</Label>
               <Input
                 id="unit"
-                value={(formData.unit as string) || ''}
+                value={formData.unit || ''}
                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                 placeholder="e.g., users, %, items, $"
                 className="mt-1"
@@ -268,12 +349,12 @@ export function EditFormTabs({
                   <div 
                     className="bg-green-500 h-2 rounded-full transition-all"
                     style={{ 
-                      width: `${Math.min(100, (((formData.current as number) || 0) / ((formData.target as number) || 1)) * 100)}%` 
+                      width: `${Math.min(100, ((formData.current ?? 0) / (formData.target ?? 1)) * 100)}%` 
                     }}
                   />
                 </div>
                 <span className="text-sm font-medium">
-                  {Math.round((((formData.current as number) || 0) / ((formData.target as number) || 1)) * 100)}%
+                  {Math.round(((formData.current ?? 0) / (formData.target ?? 1)) * 100)}%
                 </span>
               </div>
             </div>
@@ -286,8 +367,8 @@ export function EditFormTabs({
             <select
               id="status"
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-              value={(formData.status as string) || 'NOT_STARTED'}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              value={formData.status || 'NOT_STARTED'}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value as 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'BLOCKED' })}
             >
               <option value="NOT_STARTED">Not Started</option>
               <option value="IN_PROGRESS">In Progress</option>
@@ -305,7 +386,7 @@ export function EditFormTabs({
               type="number"
               min="0"
               max="100"
-              value={(formData.progress as number) || 0}
+              value={formData.progress ?? 0}
               onChange={(e) => setFormData({ ...formData, progress: parseInt(e.target.value) || 0 })}
               placeholder="0"
               className="mt-1"
@@ -328,36 +409,36 @@ export function EditFormTabs({
           <select
             id="period"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-            value={(formData.period as Period) || Period.QUARTERLY}
+            value={period || Period.QUARTERLY}
             disabled={!canEdit}
             onChange={(e) => {
               const newPeriod = e.target.value as Period
               let dates = { startDate: formData.startDate, endDate: formData.endDate }
-              
+
               if (newPeriod === Period.QUARTERLY) {
-                const quarterDates = getQuarterDates((formData.quarter as number) || 1, (formData.year as number) || new Date().getFullYear())
+                const quarterDates = getQuarterDates(formData.quarter || 1, formData.year || new Date().getFullYear())
                 dates = {
                   startDate: formatDateForInput(quarterDates.startDate),
-                  endDate: formatDateForInput(quarterDates.endDate)
+                  endDate: formatDateForInput(quarterDates.endDate),
                 }
               } else if (newPeriod === Period.MONTHLY) {
-                const monthDates = getMonthDates((formData.month as number) || 0, (formData.year as number) || new Date().getFullYear())
+                const monthDates = getMonthDates(formData.month || 0, formData.year || new Date().getFullYear())
                 dates = {
                   startDate: formatDateForInput(monthDates.startDate),
-                  endDate: formatDateForInput(monthDates.endDate)
+                  endDate: formatDateForInput(monthDates.endDate),
                 }
               } else if (newPeriod === Period.ANNUAL) {
-                const yearDates = getYearDates((formData.year as number) || new Date().getFullYear())
+                const yearDates = getYearDates(formData.year || new Date().getFullYear())
                 dates = {
                   startDate: formatDateForInput(yearDates.startDate),
-                  endDate: formatDateForInput(yearDates.endDate)
+                  endDate: formatDateForInput(yearDates.endDate),
                 }
               }
-              
-              setFormData({ 
-                ...formData, 
+
+              setFormData({
+                ...formData,
                 period: newPeriod,
-                ...dates
+                ...dates,
               })
             }}
           >
@@ -369,17 +450,17 @@ export function EditFormTabs({
         </div>
 
         {/* Period-specific selectors */}
-        {formData.period === Period.QUARTERLY && (
+        {period === Period.QUARTERLY && (
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="quarter">Quarter</Label>
               <select
                 id="quarter"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm mt-1"
-                value={(formData.quarter as number) || 1}
+                value={formData.quarter ?? 1}
                 onChange={(e) => {
                   const newQuarter = parseInt(e.target.value)
-                  const dates = getQuarterDates(newQuarter, (formData.year as number) || new Date().getFullYear())
+                  const dates = getQuarterDates(newQuarter, formData.year ?? new Date().getFullYear())
                   setFormData({
                     ...formData,
                     quarter: newQuarter,
@@ -399,10 +480,10 @@ export function EditFormTabs({
               <select
                 id="year"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm mt-1"
-                value={(formData.year as number) || new Date().getFullYear()}
+                value={formData.year ?? new Date().getFullYear()}
                 onChange={(e) => {
                   const newYear = parseInt(e.target.value)
-                  const dates = getQuarterDates((formData.quarter as number) || 1, newYear)
+                  const dates = getQuarterDates(formData.quarter ?? 1, newYear)
                   setFormData({
                     ...formData,
                     year: newYear,
@@ -419,14 +500,14 @@ export function EditFormTabs({
           </div>
         )}
 
-        {(formData.period as Period) === Period.CUSTOM && (
+        {period === Period.CUSTOM && (
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="startDate">Start Date</Label>
               <Input
                 id="startDate"
                 type="date"
-                value={(formData.startDate as string) || ''}
+                value={formData.startDate || ''}
                 onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                 className="mt-1"
                 readOnly={!canEdit}
@@ -438,7 +519,7 @@ export function EditFormTabs({
               <Input
                 id="endDate"
                 type="date"
-                value={(formData.endDate as string) || ''}
+                value={formData.endDate || ''}
                 onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                 className="mt-1"
                 readOnly={!canEdit}
@@ -451,9 +532,9 @@ export function EditFormTabs({
         {formData.startDate && formData.endDate && (
           <div className="bg-slate-50 p-3 rounded-md">
             <div className="text-xs text-slate-600">
-              <strong>Duration:</strong> {formatPeriod((formData.period as Period) || Period.QUARTERLY, (formData.startDate as string) || '')}
+              <strong>Duration:</strong> {formatPeriod(period || Period.QUARTERLY, formData.startDate || '')}
               {' • '}
-              {Math.ceil((new Date((formData.endDate as string) || '').getTime() - new Date((formData.startDate as string) || '').getTime()) / (1000 * 60 * 60 * 24))} days
+              {Math.ceil((new Date(formData.endDate || '').getTime() - new Date(formData.startDate || '').getTime()) / (1000 * 60 * 60 * 24))} days
             </div>
           </div>
         )}
@@ -463,13 +544,85 @@ export function EditFormTabs({
       <TabsContent value="advanced" className="space-y-4 mt-4">
         {nodeType === 'obj' && (
           <>
+            {/* Linked Key Results with Weights */}
+            {formData.okrId && (
+              <div>
+                <Label>Linked Key Results</Label>
+                <LinkedKeyResults
+                  objectiveId={formData.okrId as string}
+                  onRefresh={async () => {
+                    // Refresh objective data to get updated linked KRs
+                    try {
+                      const response = await api.get(`/objectives/${formData.okrId}`)
+                      // Update formData with fresh keyResults if needed
+                      // The component will re-fetch on its own via useEffect
+                    } catch (error) {
+                      console.error('Failed to refresh objective:', error)
+                    }
+                  }}
+                  canEdit={canEdit}
+                />
+              </div>
+            )}
+
+            {/* Strategic Pillar Selection */}
+            {nodeType === 'obj' && (
+              <div>
+                <Label htmlFor="pillarId">Strategic Pillar</Label>
+                <select
+                  id="pillarId"
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
+                  value={formData.pillarId || ''}
+                  disabled={!canEdit || lockInfo.isLocked}
+                  onChange={async (e) => {
+                    const pillarId = e.target.value || null
+                    setFormData({ ...formData, pillarId })
+                    // Persist via standard PATCH
+                    if (formData.okrId && canEdit && !lockInfo.isLocked) {
+                      try {
+                        await api.patch(`/objectives/${formData.okrId}`, { pillarId })
+                      } catch (error: any) {
+                        console.error('Failed to update pillar:', error)
+                        toast({
+                          title: 'Error',
+                          description: 'Failed to update pillar. Please try again.',
+                          variant: 'destructive',
+                        })
+                      }
+                    }
+                  }}
+                >
+                  <option value="">No pillar</option>
+                  {availablePillars.map((pillar) => (
+                    <option key={pillar.id} value={pillar.id}>
+                      {pillar.name}
+                    </option>
+                  ))}
+                </select>
+                {formData.pillarId && availablePillars.find(p => p.id === formData.pillarId)?.color && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: availablePillars.find(p => p.id === formData.pillarId)?.color || undefined }}
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {availablePillars.find(p => p.id === formData.pillarId)?.name}
+                    </span>
+                  </div>
+                )}
+                <p className="text-xs text-slate-500 mt-1">
+                  Link this objective to a strategic pillar for reporting and grouping.
+                </p>
+              </div>
+            )}
+
             {/* Visibility Level Selection */}
             <div>
               <Label htmlFor="visibilityLevel">Visibility Level</Label>
               <select
                 id="visibilityLevel"
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-                value={(formData.visibilityLevel as string) || 'PUBLIC_TENANT'}
+                value={formData.visibilityLevel || 'PUBLIC_TENANT'}
                 disabled={!canEdit}
                 onChange={(e) => setFormData({ ...formData, visibilityLevel: e.target.value })}
               >
@@ -486,7 +639,302 @@ export function EditFormTabs({
                   : 'All OKRs are globally visible by default. Filters control what is shown in the UI, not permissions.'}
               </p>
             </div>
+
+            {/* Publish Status Toggle */}
+            {nodeType === 'obj' && formData.okrId && (
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label>Publish Status</Label>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {formData.isPublished 
+                        ? 'This objective is published and locked. Only organization administrators can edit published objectives.'
+                        : 'This objective is in draft mode and can be edited freely.'}
+                    </p>
+                  </div>
+                  <div className="ml-4">
+                    {(() => {
+                      // Check if user can publish (tenant admin/owner or workspace lead for workspace-level OKRs)
+                      const canPublish = isTenantAdmin || 
+                        (formData.workspaceId && tenantPermissions.canEditObjective({
+                          id: formData.okrId,
+                          ownerId: formData.ownerId as string || '',
+                          tenantId: formData.tenantId as string | null || null,
+                          workspaceId: formData.workspaceId as string | null || null,
+                          teamId: formData.teamId as string | null || null,
+                          isPublished: false,
+                          cycle: formData.cycle as { id: string; status: string } | null || null,
+                          cycleStatus: formData.cycleStatus as string | null || null,
+                        }))
+                      
+                      // Can unpublish if user can edit (tenant admin can always unpublish)
+                      const canUnpublish = isTenantAdmin || canEdit
+                      
+                      const canToggle = formData.isPublished ? canUnpublish : canPublish
+                      
+                      return (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!formData.okrId || !canToggle || lockInfo.isLocked) return
+                            
+                            if (!canPublish && formData.isPublished === false) {
+                              toast({
+                                title: 'Permission denied',
+                                description: 'Only organization administrators or workspace leads can publish objectives.',
+                                variant: 'destructive',
+                              })
+                              return
+                            }
+
+                            const newIsPublished = !formData.isPublished
+                            
+                            try {
+                              await api.patch(`/objectives/${formData.okrId}`, { 
+                                isPublished: newIsPublished 
+                              })
+                              
+                              setFormData({ ...formData, isPublished: newIsPublished })
+                              
+                              toast({
+                                title: newIsPublished ? 'Objective published' : 'Objective unpublished',
+                                description: newIsPublished 
+                                  ? 'This objective is now published and locked for editing.'
+                                  : 'This objective is now in draft mode and can be edited.',
+                              })
+                            } catch (error: any) {
+                              console.error('Failed to update publish status:', error)
+                              const errorMessage = error.response?.data?.message || error.message || 'Failed to update publish status'
+                              toast({
+                                title: 'Error',
+                                description: errorMessage,
+                                variant: 'destructive',
+                              })
+                            }
+                          }}
+                          disabled={!canToggle || lockInfo.isLocked}
+                          className={`
+                            px-4 py-2 rounded-md text-sm font-medium transition-colors
+                            ${formData.isPublished
+                              ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                              : 'bg-violet-600 text-white hover:bg-violet-700'
+                            }
+                            disabled:opacity-50 disabled:cursor-not-allowed
+                          `}
+                        >
+                          {formData.isPublished ? 'Unpublish' : 'Publish'}
+                        </button>
+                      )
+                    })()}
+                  </div>
+                </div>
+                {!isTenantAdmin && formData.isPublished === false && formData.workspaceId && (
+                  <p className="text-xs text-slate-500 mt-2">
+                    Only organization administrators or workspace leads can publish objectives.
+                  </p>
+                )}
+                {!isTenantAdmin && formData.isPublished === false && !formData.workspaceId && (
+                  <p className="text-xs text-slate-500 mt-2">
+                    Only organization administrators can publish organization-level objectives.
+                  </p>
+                )}
+              </div>
+            )}
             
+            {/* Tags */}
+            {formData.okrId && (
+              <div>
+                <Label>Tags</Label>
+                <TagSelector
+                  entityType="objective"
+                  entityId={formData.okrId as string}
+                  selectedTags={selectedTags}
+                  onTagsChange={setSelectedTags}
+                  currentOrganizationId={currentOrganization?.id || null}
+                  canEdit={canEdit}
+                  disabled={lockInfo.isLocked}
+                />
+              </div>
+            )}
+
+            {/* Contributors */}
+            {formData.okrId && (
+              <div>
+                <Label>Contributors</Label>
+                <ContributorSelector
+                  entityType="objective"
+                  entityId={formData.okrId as string}
+                  selectedContributors={selectedContributors}
+                  onContributorsChange={setSelectedContributors}
+                  availableUsers={availableUsers}
+                  currentOrganizationId={currentOrganization?.id || null}
+                  canEdit={canEdit}
+                  disabled={lockInfo.isLocked}
+                />
+              </div>
+            )}
+
+            {/* Sponsor */}
+            {formData.okrId && (
+              <div>
+                <Label>Sponsor</Label>
+                <SponsorSelector
+                  objectiveId={formData.okrId as string}
+                  sponsorId={sponsorId}
+                  onSponsorChange={setSponsorId}
+                  availableUsers={availableUsers}
+                  currentOrganizationId={currentOrganization?.id || null}
+                  canEdit={canEdit}
+                  disabled={lockInfo.isLocked}
+                />
+              </div>
+            )}
+
+            {/* Review Section */}
+            {formData.okrId && (
+              <div className="space-y-4 border-t pt-4">
+                <div>
+                  <Label>Review</Label>
+                  <div className="space-y-3 mt-2">
+                    {/* Confidence Slider */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <Label htmlFor="confidence" className="text-sm font-normal">
+                          Confidence: {formData.confidence ?? 0}%
+                        </Label>
+                        <Input
+                          id="confidence-numeric"
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={formData.confidence ?? 0}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 0
+                            const clamped = Math.max(0, Math.min(100, val))
+                            setFormData({ ...formData, confidence: clamped })
+                            setReviewError(null)
+                          }}
+                          className="w-20 h-8 text-sm"
+                          disabled={!canEdit || lockInfo.isLocked}
+                        />
+                      </div>
+                      <input
+                        id="confidence"
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={formData.confidence ?? 0}
+                        onChange={(e) => {
+                          setFormData({ ...formData, confidence: parseInt(e.target.value) })
+                          setReviewError(null)
+                        }}
+                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                        disabled={!canEdit || lockInfo.isLocked}
+                      />
+                      {reviewError && (
+                        <p className="text-xs text-red-600 mt-1">{reviewError}</p>
+                      )}
+                    </div>
+
+                    {/* Review Frequency */}
+                    <div>
+                      <Label htmlFor="reviewFrequency">Review Frequency</Label>
+                      <select
+                        id="reviewFrequency"
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
+                        value={formData.reviewFrequency || ''}
+                        onChange={async (e) => {
+                          const frequency = e.target.value || null
+                          setFormData({ ...formData, reviewFrequency: frequency as 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | null })
+                          // Persist frequency via standard PATCH
+                          if (formData.okrId && canEdit && !lockInfo.isLocked) {
+                            try {
+                              await api.patch(`/objectives/${formData.okrId}`, { reviewFrequency: frequency })
+                            } catch (error: any) {
+                              console.error('Failed to update review frequency:', error)
+                            }
+                          }
+                        }}
+                        disabled={!canEdit || lockInfo.isLocked}
+                      >
+                        <option value="">Not set</option>
+                        <option value="WEEKLY">Weekly</option>
+                        <option value="MONTHLY">Monthly</option>
+                        <option value="QUARTERLY">Quarterly</option>
+                      </select>
+                    </div>
+
+                    {/* Review Note */}
+                    <div>
+                      <Label htmlFor="reviewNote">Review Note (Optional)</Label>
+                      <textarea
+                        id="reviewNote"
+                        className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
+                        value={reviewNote}
+                        onChange={(e) => setReviewNote(e.target.value)}
+                        placeholder="Add notes about this review..."
+                        disabled={!canEdit || lockInfo.isLocked || isReviewing}
+                      />
+                    </div>
+
+                    {/* Last Reviewed At */}
+                    {formData.lastReviewedAt && (
+                      <div className="text-xs text-muted-foreground">
+                        Last reviewed: {new Date(formData.lastReviewedAt).toLocaleString()}
+                      </div>
+                    )}
+
+                    {/* Mark Reviewed Button */}
+                    <Button
+                      type="button"
+                      onClick={async () => {
+                        if (!formData.okrId || !canEdit || lockInfo.isLocked || isReviewing) return
+
+                        // Validate confidence
+                        const confidence = formData.confidence ?? undefined
+                        if (confidence !== undefined && (confidence < 0 || confidence > 100)) {
+                          setReviewError('Confidence must be between 0 and 100')
+                          return
+                        }
+
+                        setIsReviewing(true)
+                        setReviewError(null)
+
+                        try {
+                          await api.patch(`/objectives/${formData.okrId}/review`, {
+                            confidence,
+                            note: reviewNote.trim() || undefined,
+                          })
+                          
+                          // Refresh objective data to get updated lastReviewedAt
+                          const response = await api.get(`/objectives/${formData.okrId}`)
+                          setFormData({
+                            ...formData,
+                            confidence: response.data.confidence ?? null,
+                            lastReviewedAt: response.data.lastReviewedAt ?? null,
+                          })
+                          setReviewNote('')
+                        } catch (error: any) {
+                          if (error.response?.status === 400) {
+                            setReviewError(error.response.data.message || 'Invalid confidence value')
+                          } else {
+                            setReviewError('Failed to save review. Please try again.')
+                          }
+                        } finally {
+                          setIsReviewing(false)
+                        }
+                      }}
+                      disabled={!canEdit || lockInfo.isLocked || isReviewing}
+                      className="w-full"
+                    >
+                      {isReviewing ? 'Saving...' : 'Mark Reviewed'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Owner Selection */}
             <div>
               <Label>Owner</Label>
@@ -575,7 +1023,7 @@ export function EditFormTabs({
                     <div className="max-h-48 overflow-y-auto">
                       <button
                         onClick={() => {
-                          setFormData({ ...formData, organizationId: '', workspaceId: '', teamId: '' })
+                          setFormData({ ...formData, tenantId: '', workspaceId: '', teamId: '' })
                           setShowContextDropdown(false)
                         }}
                         className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
@@ -589,7 +1037,7 @@ export function EditFormTabs({
                           <button
                             key={org.id}
                             onClick={() => {
-                              setFormData({ ...formData, organizationId: org.id, workspaceId: '', teamId: '' })
+                              setFormData({ ...formData, tenantId: org.id, workspaceId: '', teamId: '' })
                               setShowContextDropdown(false)
                             }}
                             className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
@@ -604,7 +1052,7 @@ export function EditFormTabs({
                           <button
                             key={ws.id}
                             onClick={() => {
-                              setFormData({ ...formData, organizationId: '', workspaceId: ws.id, teamId: '' })
+                              setFormData({ ...formData, tenantId: '', workspaceId: ws.id, teamId: '' })
                               setShowContextDropdown(false)
                             }}
                             className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
@@ -619,7 +1067,7 @@ export function EditFormTabs({
                           <button
                             key={team.id}
                             onClick={() => {
-                              setFormData({ ...formData, organizationId: '', workspaceId: '', teamId: team.id })
+                              setFormData({ ...formData, tenantId: '', workspaceId: '', teamId: team.id })
                               setShowContextDropdown(false)
                             }}
                             className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
@@ -669,7 +1117,7 @@ export function EditFormTabs({
                       </button>
                       {availableObjectives
                         .filter(obj => 
-                          obj.id !== data.okrId && 
+                          obj.id !== formData.okrId && 
                           obj.title.toLowerCase().includes(parentSearch.toLowerCase())
                         )
                         .map((objective) => (
@@ -689,6 +1137,80 @@ export function EditFormTabs({
                   </div>
                 )}
               </div>
+              {alignmentError?.code === 'ALIGNMENT_DATE_OUT_OF_RANGE' && (
+                <div className="mt-2 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <p>{alignmentError.message || 'Dates must be within the parent objective\'s date range.'}</p>
+                </div>
+              )}
+              {alignmentError?.code === 'ALIGNMENT_CYCLE_MISMATCH' && (
+                <div className="mt-2 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <p>{alignmentError.message || 'Cycle must match the parent objective cycle.'}</p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Tags and Contributors for Key Results */}
+        {nodeType === 'kr' && formData.okrId && (
+          <>
+            <div>
+              <Label>Tags</Label>
+              <TagSelector
+                entityType="key-result"
+                entityId={formData.okrId as string}
+                selectedTags={selectedTags}
+                onTagsChange={setSelectedTags}
+                currentOrganizationId={currentOrganization?.id || null}
+                canEdit={canEdit}
+                disabled={lockInfo.isLocked}
+              />
+            </div>
+            <div>
+              <Label>Contributors</Label>
+              <ContributorSelector
+                entityType="key-result"
+                entityId={formData.okrId as string}
+                selectedContributors={selectedContributors}
+                onContributorsChange={setSelectedContributors}
+                availableUsers={availableUsers}
+                currentOrganizationId={currentOrganization?.id || null}
+                canEdit={canEdit}
+                disabled={lockInfo.isLocked}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Tags and Contributors for Initiatives */}
+        {nodeType === 'init' && formData.okrId && (
+          <>
+            <div>
+              <Label>Tags</Label>
+              <TagSelector
+                entityType="initiative"
+                entityId={formData.okrId as string}
+                selectedTags={selectedTags}
+                onTagsChange={setSelectedTags}
+                currentOrganizationId={currentOrganization?.id || null}
+                canEdit={canEdit}
+                disabled={lockInfo.isLocked}
+              />
+            </div>
+            <div>
+              <Label>Contributors</Label>
+              <ContributorSelector
+                entityType="initiative"
+                entityId={formData.okrId as string}
+                selectedContributors={selectedContributors}
+                onContributorsChange={setSelectedContributors}
+                availableUsers={availableUsers}
+                currentOrganizationId={currentOrganization?.id || null}
+                canEdit={canEdit}
+                disabled={lockInfo.isLocked}
+              />
             </div>
           </>
         )}
@@ -699,8 +1221,8 @@ export function EditFormTabs({
             <select
               id="metricType"
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1"
-              value={(formData.metricType as string) || 'INCREASE'}
-              onChange={(e) => setFormData({ ...formData, metricType: e.target.value })}
+              value={formData.metricType || 'INCREASE'}
+              onChange={(e) => setFormData({ ...formData, metricType: e.target.value as 'INCREASE' | 'DECREASE' | 'REACH' | 'MAINTAIN' })}
             >
               <option value="INCREASE">Increase</option>
               <option value="DECREASE">Decrease</option>

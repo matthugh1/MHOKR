@@ -28,7 +28,7 @@ export interface NewCheckInModalProps {
 
 export function NewCheckInModal({
   isOpen,
-  keyResultId,
+  keyResultId: _keyResultId,
   onClose,
   onSubmit,
 }: NewCheckInModalProps) {

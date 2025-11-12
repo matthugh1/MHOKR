@@ -36,7 +36,7 @@ app.use(cors({
 }));
 
 // Request logging middleware for debugging
-app.use((req, res, next) => {
+app.use((req, _res, next) => {
   if (req.method === 'DELETE' && req.path.includes('key-results')) {
     logger.info(`[REQUEST] ${req.method} ${req.path} - Original URL: ${req.url}`);
   }
@@ -52,7 +52,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
@@ -135,7 +135,7 @@ app.use('/api/key-results', createProxyMiddleware({
     return rewritten;
   },
   logLevel: 'debug',
-  onProxyReq: (proxyReq, req, res) => {
+  onProxyReq: (proxyReq, req, _res) => {
     // Log both original and rewritten paths for debugging
     logger.info(`[PROXY] ${req.method} ${req.originalUrl || req.url} -> ${services.core}${proxyReq.path}`);
     logger.info(`[PROXY] Method: ${req.method}, proxyReq.method: ${proxyReq.method}, req.path: ${req.path}, proxyReq.path: ${proxyReq.path}`);
@@ -148,7 +148,7 @@ app.use('/api/key-results', createProxyMiddleware({
       }
     }
   },
-  onProxyRes: (proxyRes, req, res) => {
+  onProxyRes: (proxyRes, req, _res) => {
     logger.info(`[PROXY RESPONSE] ${req.method} ${req.path} -> Status: ${proxyRes.statusCode}`);
   },
   onError: (err, req, res) => {
@@ -157,6 +157,12 @@ app.use('/api/key-results', createProxyMiddleware({
       res.status(500).json({ error: 'Proxy error', message: err.message });
     }
   },
+}));
+
+app.use('/api/reports', createProxyMiddleware({
+  target: services.core,
+  changeOrigin: true,
+  pathRewrite: { '^/api/reports': '/reports' },
 }));
 
 app.use('/api/rbac', createProxyMiddleware({
@@ -193,6 +199,24 @@ app.use('/api/layout', createProxyMiddleware({
   target: services.core,
   changeOrigin: true,
   pathRewrite: { '^/api/layout': '/layout' },
+}));
+
+app.use('/api/reports', createProxyMiddleware({
+  target: services.core,
+  changeOrigin: true,
+  pathRewrite: { '^/api/reports': '/reports' },
+  onProxyReq: (_proxyReq, req) => {
+    logger.info(`Proxying to Core API: ${req.method} ${req.path}`);
+  },
+}));
+
+app.use('/api/okr', createProxyMiddleware({
+  target: services.core,
+  changeOrigin: true,
+  pathRewrite: { '^/api/okr': '/okr' },
+  onProxyReq: (_proxyReq, req) => {
+    logger.info(`Proxying to Core API: ${req.method} ${req.path}`);
+  },
 }));
 
 // AI Service routes
