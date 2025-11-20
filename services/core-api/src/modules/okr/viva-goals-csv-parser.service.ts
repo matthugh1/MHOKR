@@ -145,9 +145,19 @@ export class VivaGoalsCSVParserService {
       return index !== undefined && values[index] ? values[index].trim() : '';
     };
 
-    const externalId = getValue('Id');
+    // Try to get Id, or generate one from Title if Id column doesn't exist
+    let externalId = getValue('Id');
     if (!externalId) {
-      return null; // Skip rows without ID
+      // If no Id column, generate one from Title (hash-based for consistency)
+      const title = getValue('Title');
+      if (!title) {
+        return null; // Skip rows without Title
+      }
+      // Generate a simple hash-based ID from title
+      externalId = `gen_${title.split('').reduce((acc, char) => {
+        const hash = ((acc << 5) - acc) + char.charCodeAt(0);
+        return hash & hash;
+      }, 0).toString(36)}`;
     }
 
     // Parse "Aligned To" column to extract parent info

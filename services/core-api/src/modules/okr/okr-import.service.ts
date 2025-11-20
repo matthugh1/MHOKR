@@ -4,6 +4,7 @@ import {
   NotFoundException,
   Logger,
 } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { VivaGoalsCSVParserService, ParsedVivaGoalsRow } from './viva-goals-csv-parser.service';
 import { OkrCycleService } from './okr-cycle.service';
@@ -667,6 +668,10 @@ export class OkrImportService {
   /**
    * Resolve user name to User ID (exact match)
    */
+  /**
+   * Resolve user name to User ID (exact match, case-insensitive)
+   * Auto-creates user if not found with email firstname.lastname@puzzel.com
+   */
   private async resolveUserNameToUserId(
     name: string | null,
     tenantId: string,
@@ -675,18 +680,95 @@ export class OkrImportService {
       return null;
     }
 
+    const trimmedName = name.trim();
+
     // Try exact match first
-    const user = await this.prisma.user.findFirst({
+    let user = await this.prisma.user.findFirst({
       where: {
         name: {
-          equals: name.trim(),
+          equals: trimmedName,
           mode: 'insensitive',
         },
         primaryOrganizationId: tenantId,
       },
     });
 
-    return user?.id || null;
+    if (user) {
+      return user.id;
+    }
+
+    // User not found - create one with generated email
+    try {
+      const email = this.generateEmailFromName(trimmedName);
+      
+      // Check if user with this email already exists (might be in different tenant)
+      const existingByEmail = await this.prisma.user.findUnique({
+        where: { email },
+      });
+
+      if (existingByEmail) {
+        // User exists but not in this tenant - update primaryOrganizationId
+        await this.prisma.user.update({
+          where: { id: existingByEmail.id },
+          data: {
+            primaryOrganizationId: tenantId,
+          },
+        });
+        this.logger.log(`Updated user ${email} to tenant ${tenantId}`);
+        return existingByEmail.id;
+      }
+
+      // Create new user
+      const defaultPassword = 'changeme'; // Default password for imported users
+      const passwordHash = await bcrypt.hash(defaultPassword, 10);
+
+      const newUser = await this.prisma.user.create({
+        data: {
+          email,
+          name: trimmedName,
+          passwordHash,
+          primaryOrganizationId: tenantId,
+        },
+      });
+
+      this.logger.log(`Auto-created user "${trimmedName}" with email ${email} for tenant ${tenantId}`);
+      return newUser.id;
+    } catch (error) {
+      this.logger.error(`Failed to create user "${trimmedName}": ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Generate email from name: firstname.lastname@puzzel.com
+   * Handles various name formats:
+   * - "Matt Hughes" -> "matt.hughes@puzzel.com"
+   * - "John Doe" -> "john.doe@puzzel.com"
+   * - "Mary Jane Smith" -> "mary.jane@puzzel.com" (uses first two parts)
+   */
+  private generateEmailFromName(name: string): string {
+    // Split name into parts and clean them
+    const parts = name
+      .split(/\s+/)
+      .map(part => part.trim())
+      .filter(part => part.length > 0)
+      .map(part => part.toLowerCase().replace(/[^a-z0-9]/g, '')); // Remove non-alphanumeric
+
+    if (parts.length === 0) {
+      // Fallback if name is empty or invalid
+      return `user.${Date.now()}@puzzel.com`;
+    }
+
+    if (parts.length === 1) {
+      // Single name - use it for both first and last
+      return `${parts[0]}.${parts[0]}@puzzel.com`;
+    }
+
+    // Multiple parts - use first two parts
+    const firstName = parts[0];
+    const lastName = parts.slice(1).join(''); // Join remaining parts
+    
+    return `${firstName}.${lastName}@puzzel.com`;
   }
 
   /**
