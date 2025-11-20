@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OkrTenantGuard } from '../okr/tenant-guard';
 import { AuditLogService } from '../audit/audit-log.service';
@@ -200,8 +200,25 @@ export class OrganizationService {
 
     // Tenant isolation: enforce mutation rules (unless superuser)
     // Superusers can create any organization (they have manage_tenant_settings permission)
-    if (!isSuperuser) {
-      OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+    // BUT: Superusers are read-only per RBAC_MATRIX.md - block superuser mutations
+    if (isSuperuser) {
+      throw new ForbiddenException('Superusers are read-only; cannot create organizations.');
+    }
+
+    // For organization creation, allow users without a tenant (creating their first organization)
+    // Users with a tenant cannot create additional organizations (only superusers can, but they're blocked above)
+    if (userOrganizationId && userOrganizationId !== '') {
+      // User already has a tenant - they cannot create additional organizations
+      throw new ForbiddenException('You already belong to an organization. Only superusers can create additional organizations.');
+    }
+
+    // Check if slug already exists
+    const existing = await this.prisma.organization.findUnique({
+      where: { slug: data.slug },
+    });
+
+    if (existing) {
+      throw new ConflictException(`Organization with slug "${data.slug}" already exists`);
     }
 
     const created = await this.prisma.organization.create({
@@ -401,6 +418,13 @@ export class OrganizationService {
   }
 
   async getMembers(tenantId: string) {
+    // Get the organization name for context
+    const organization = await this.prisma.organization.findUnique({
+      where: { id: tenantId },
+      select: { name: true },
+    });
+    const organizationName = organization?.name || null;
+
     // Get members from RBAC system (Phase 2 - primary source)
     const tenantAssignments = await this.prisma.roleAssignment.findMany({
       where: {
@@ -408,7 +432,16 @@ export class OrganizationService {
         scopeId: tenantId,
       },
       include: {
-        user: true,
+        user: {
+          include: {
+            primaryOrganization: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -430,7 +463,16 @@ export class OrganizationService {
         scopeId: { in: teams.map(t => t.id) },
       },
       include: {
-        user: true,
+        user: {
+          include: {
+            primaryOrganization: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -447,6 +489,8 @@ export class OrganizationService {
       const legacyRole = this.mapRBACRoleToLegacyRole(assignment.role as Role, 'TENANT');
       userMap.set(assignment.userId, {
         ...assignment.user,
+        // Use user's primaryOrganization name, or fallback to current organization name
+        organizationName: assignment.user.primaryOrganization?.name || organizationName,
         orgRole: legacyRole,
         teams: [],
         workspaces: new Set(),
@@ -463,12 +507,17 @@ export class OrganizationService {
       if (!userMap.has(assignment.userId)) {
         userMap.set(assignment.userId, {
           ...assignment.user,
+          organizationName: assignment.user.primaryOrganization?.name || organizationName,
           orgRole: null,
           teams: [],
           workspaces: new Set(),
         });
       }
       const user = userMap.get(assignment.userId);
+      // Ensure organizationName is set if not already
+      if (!user.organizationName) {
+        user.organizationName = assignment.user.primaryOrganization?.name || organizationName;
+      }
       user.teams.push({
         id: team.id,
         name: team.name,
@@ -478,10 +527,14 @@ export class OrganizationService {
       user.workspaces.add(team.workspace.name);
     });
 
-    return Array.from(userMap.values()).map(user => ({
-      ...user,
-      workspaces: Array.from(user.workspaces),
-    }));
+    return Array.from(userMap.values()).map(user => {
+      // Clean up the user object - remove nested primaryOrganization relation
+      const { primaryOrganization, ...userWithoutOrg } = user;
+      return {
+        ...userWithoutOrg,
+        workspaces: Array.from(user.workspaces),
+      };
+    });
   }
 
   /**
