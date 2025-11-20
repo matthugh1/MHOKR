@@ -21,6 +21,7 @@ model Organization {
   allowTenantAdminExecVisibility Boolean              @default(false) // Config flag for TENANT_ADMIN access to EXEC_ONLY
   execOnlyWhitelist              Json? // Array of user IDs allowed to view EXEC_ONLY OKRs: ["userId1", "userId2"]
   metadata                       Json? // Additional tenant configuration
+  primaryUsers                   User[]               @relation("UserPrimaryOrganization")
   workspaces                     Workspace[]
   objectives                     Objective[] // Organization-level OKRs
   keyResults                     KeyResult[] // Key Results belonging to this organization
@@ -64,6 +65,8 @@ model Team {
   workspaceId String
   workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   objectives  Objective[]
+  keyResults  KeyResult[]
+  initiatives Initiative[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
@@ -80,12 +83,19 @@ model User {
   avatar                     String?
   isSuperuser                Boolean                 @default(false) // System-wide superuser
   settings                   Json?                   @default("{}") // User settings including debug flags (e.g. debug.rbacInspectorEnabled)
+  primaryOrganizationId      String? // Primary organization reference for direct tenant relationship
+  primaryOrganization        Organization?           @relation("UserPrimaryOrganization", fields: [primaryOrganizationId], references: [id], onDelete: SetNull)
   managerId                  String? // Direct manager for MANAGER_CHAIN visibility
   manager                    User?                   @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
   directReports              User[]                  @relation("UserManager")
   roleAssignments            RoleAssignment[]        @relation("RoleAssignmentUser")
   objectives                 Objective[]             @relation("ObjectiveOwner")
   sponsoredObjectives        Objective[]             @relation("ObjectiveSponsor")
+  createdObjectives          Objective[]             @relation("ObjectiveCreator")
+  importedObjectives         Objective[]             @relation("ObjectiveImporter")
+  createdKeyResults          KeyResult[]             @relation("KeyResultCreator")
+  importedKeyResults         KeyResult[]             @relation("KeyResultImporter")
+  createdInitiatives         Initiative[]            @relation("InitiativeCreator")
   objectiveContributions     ObjectiveContributor[]  @relation("ObjectiveContributor")
   keyResultContributions     KeyResultContributor[]  @relation("KeyResultContributor")
   initiativeContributions    InitiativeContributor[] @relation("InitiativeContributor")
@@ -106,6 +116,7 @@ model User {
   @@index([keycloakId])
   @@index([isSuperuser])
   @@index([managerId])
+  @@index([primaryOrganizationId])
   @@map("users")
 }
 
@@ -216,6 +227,8 @@ model Objective {
   owner           User                   @relation("ObjectiveOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   sponsorId       String? // Optional sponsor (executive sponsor or stakeholder)
   sponsor         User?                  @relation("ObjectiveSponsor", fields: [sponsorId], references: [id], onDelete: SetNull)
+  createdBy       String? // User who created this objective
+  creator         User?                  @relation("ObjectiveCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   parentId        String?
   parent          Objective?             @relation("ObjectiveHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children        Objective[]            @relation("ObjectiveHierarchy")
@@ -228,6 +241,7 @@ model Objective {
   endDate         DateTime
   status          OKRStatus              @default(ON_TRACK)
   progress        Float                  @default(0)
+  goalType        GoalType?              @default(ASPIRATIONAL) // Aspirational vs Committed goal
   visibilityLevel VisibilityLevel        @default(PUBLIC_TENANT) // Visibility level for access control
   isPublished     Boolean                @default(false) // DEPRECATED: Use state field instead
   state           ObjectiveState         @default(DRAFT) // Combined state (publish + completion)
@@ -236,6 +250,12 @@ model Objective {
   confidence      Int?                   @db.SmallInt // Review confidence (0-100)
   reviewFrequency ReviewFrequency? // How often this objective should be reviewed
   lastReviewedAt  DateTime? // Timestamp of last review
+  // Import tracking fields
+  externalId      String? // External ID from import source (e.g., Viva Goals)
+  source          String? // Import source identifier (e.g., "VIVA_GOALS")
+  importedAt      DateTime? // Timestamp when imported
+  importedBy      String? // User who performed the import
+  importer        User?                  @relation("ObjectiveImporter", fields: [importedBy], references: [id], onDelete: SetNull)
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
 
@@ -244,12 +264,16 @@ model Objective {
   @@index([teamId])
   @@index([ownerId])
   @@index([sponsorId])
+  @@index([createdBy])
   @@index([parentId])
   @@index([pillarId])
   @@index([cycleId])
+  @@index([goalType])
   @@index([visibilityLevel])
   @@index([isPublished])
   @@index([state])
+  @@index([source, externalId])
+  @@unique([tenantId, source, externalId])
   @@map("objectives")
 }
 
@@ -260,6 +284,10 @@ model KeyResult {
   ownerId         String
   tenantId        String // Tenant scoping: KR belongs to one organization
   tenant          Organization           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  teamId          String? // Optional team assignment (inherited from parent Objective if not set)
+  team            Team?                  @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  createdBy       String? // User who created this key result
+  creator         User?                  @relation("KeyResultCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   metricType      MetricType
   startValue      Float
   targetValue     Float
@@ -267,6 +295,7 @@ model KeyResult {
   unit            String?
   status          OKRStatus              @default(ON_TRACK)
   progress        Float                  @default(0)
+  goalType        GoalType?              @default(ASPIRATIONAL) // Aspirational vs Committed goal
   visibilityLevel VisibilityLevel        @default(PUBLIC_TENANT) // Visibility level for access control
   isPublished     Boolean                @default(false) // DEPRECATED: Use state field instead
   state           KeyResultState         @default(DRAFT) // Combined state (publish + completion)
@@ -283,15 +312,26 @@ model KeyResult {
   checkIns        CheckIn[]
   integrations    KRIntegration[]
   statusSnapshots KeyResultStatusSnapshot[]
+  // Import tracking fields
+  externalId      String? // External ID from import source (e.g., Viva Goals)
+  source          String? // Import source identifier (e.g., "VIVA_GOALS")
+  importedAt      DateTime? // Timestamp when imported
+  importedBy      String? // User who performed the import
+  importer        User?                  @relation("KeyResultImporter", fields: [importedBy], references: [id], onDelete: SetNull)
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
 
   @@index([ownerId])
   @@index([tenantId])
+  @@index([teamId])
+  @@index([createdBy])
+  @@index([goalType])
   @@index([visibilityLevel])
   @@index([isPublished])
   @@index([state])
   @@index([cycleId])
+  @@index([source, externalId])
+  @@unique([tenantId, source, externalId])
   @@map("key_results")
 }
 
@@ -471,6 +511,10 @@ model Initiative {
   objective    Objective?              @relation(fields: [objectiveId], references: [id], onDelete: SetNull)
   tenantId     String // Tenant scoping: initiative belongs to one organization
   tenant       Organization            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  teamId       String? // Optional team assignment (inherited from parent Objective/KeyResult if not set)
+  team         Team?                   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  createdBy    String? // User who created this initiative
+  creator      User?                   @relation("InitiativeCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   cycleId      String? // Optional link to OKR cycle/quarter (inherited from parent Objective but can be set directly)
   cycle        Cycle?                  @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   ownerId      String
@@ -478,6 +522,8 @@ model Initiative {
   contributors InitiativeContributor[]
   status       InitiativeStatus
   statusSnapshots InitiativeStatusSnapshot[]
+  progress     Float? // Progress percentage (0-100, nullable for manual tracking)
+  goalType     GoalType?              @default(ASPIRATIONAL) // Aspirational vs Committed goal
   startDate    DateTime?
   endDate      DateTime?
   dueDate      DateTime?
@@ -489,12 +535,17 @@ model Initiative {
   @@index([keyResultId])
   @@index([objectiveId])
   @@index([ownerId])
+  @@index([teamId])
+  @@index([createdBy])
   @@index([tenantId])
   @@index([cycleId])
+  @@index([goalType])
+  @@index([progress])
   @@map("initiatives")
 }
 
 enum OKRStatus {
+  NOT_STARTED
   ON_TRACK
   AT_RISK
   OFF_TRACK
@@ -523,6 +574,11 @@ enum MetricType {
   DECREASE
   REACH
   MAINTAIN
+}
+
+enum GoalType {
+  ASPIRATIONAL
+  COMMITTED
 }
 
 enum InitiativeStatus {

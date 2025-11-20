@@ -26,6 +26,8 @@ import { CheckInReminderService } from './check-in-reminder.service';
 import { CheckInReminderScheduler } from './check-in-reminder.scheduler';
 import { LoggingNotificationAdapter } from './logging-notification.adapter';
 import { NOTIFICATION_PORT_TOKEN } from './notification.constants';
+import { VivaGoalsCSVParserService } from './viva-goals-csv-parser.service';
+import { OkrImportService } from './okr-import.service';
 import { RBACModule } from '../rbac/rbac.module';
 import { ActivityModule } from '../activity/activity.module';
 import { AuditModule } from '../audit/audit.module';
@@ -49,6 +51,8 @@ import { AuditModule } from '../audit/audit.module';
     OkrStateTransitionService,
     CheckInReminderService,
     CheckInReminderScheduler,
+    VivaGoalsCSVParserService,
+    OkrImportService,
     {
       provide: NOTIFICATION_PORT_TOKEN,
       useClass: LoggingNotificationAdapter, // Default: logging adapter; replace with EmailNotificationAdapter in production

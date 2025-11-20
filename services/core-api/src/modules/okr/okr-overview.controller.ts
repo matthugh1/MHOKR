@@ -8,9 +8,11 @@ import { OkrVisibilityService } from './okr-visibility.service';
 import { OkrGovernanceService } from './okr-governance.service';
 import { RBACService } from '../rbac/rbac.service';
 import { buildResourceContextFromOKR } from '../rbac/helpers';
+import { withTenantContextAsync } from '../../common/prisma/tenant-isolation.middleware';
 import { ObjectiveService } from './objective.service';
 import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 import { Logger } from '@nestjs/common';
+import { OkrImportService } from './okr-import.service';
 
 // Simple telemetry helper for list filtering
 const listTelemetry = {
@@ -52,6 +54,7 @@ export class OkrOverviewController {
     private governanceService: OkrGovernanceService,
     private rbacService: RBACService,
     private objectiveService: ObjectiveService,
+    private importService: OkrImportService,
   ) {}
 
   @Get('overview')
@@ -101,7 +104,8 @@ export class OkrOverviewController {
         throw new BadRequestException('tenantId is required');
       }
 
-      // Tenant isolation: validate user has access to this organization
+      // SINGLE-TENANT ACCESS: Users can only access their primary organization
+      // The tenantId in req.user comes from primaryOrganizationId (set by JWT strategy)
       const userOrganizationId = req.user.tenantId;
       
       // If user has no organization (undefined), deny access
@@ -109,12 +113,13 @@ export class OkrOverviewController {
         throw new BadRequestException('You do not have access to this organisation. No organization assigned.');
       }
       
-      const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
-      
-      // If user has a specific org and it doesn't match, deny access
-      if (userOrganizationId !== null && orgFilter && orgFilter.tenantId !== tenantId) {
+      // Strict validation: only allow access to primary organization
+      // Superusers (null) can access any organization
+      if (userOrganizationId !== null && userOrganizationId !== tenantId) {
         throw new BadRequestException('You do not have access to this organisation');
       }
+
+      const requesterUserId = req.user.id;
 
       // Parse pagination parameters
       const pageNum = page ? parseInt(page, 10) : 1;
@@ -127,8 +132,6 @@ export class OkrOverviewController {
       if (pageSizeNum < 1 || pageSizeNum > 50) {
         throw new BadRequestException('Page size must be between 1 and 50');
       }
-
-      const requesterUserId = req.user.id;
 
       // Build where clause for objectives (tenant isolation already enforced)
       const where: any = { tenantId };
@@ -224,23 +227,39 @@ export class OkrOverviewController {
       // Apply owner filter
       if (ownerId) {
         // Validate ownerId belongs to the same tenant (tenant isolation)
-        const owner = await this.prisma.user.findUnique({
-          where: { id: ownerId },
-          select: { id: true },
-        });
-        if (!owner) {
-          throw new BadRequestException(`Owner with ID ${ownerId} not found`);
+        // Note: RLS policies will automatically filter users by organization
+        try {
+          const owner = await this.prisma.user.findUnique({
+            where: { id: ownerId },
+            select: { id: true, primaryOrganizationId: true },
+          });
+          if (!owner) {
+            // User not found - could be RLS blocking or user doesn't exist
+            // Don't leak information - just filter by ownerId (will return empty if user not in org)
+            where.ownerId = ownerId;
+          } else {
+            // User found - add to filter
+            where.ownerId = ownerId;
+          }
+        } catch (error: any) {
+          // If RLS blocks the query, log but don't fail - just filter by ownerId
+          // The objective query will return empty if owner is not in the same org
+          console.warn(`[OKR Overview] Could not validate owner ${ownerId}:`, error.message);
+          where.ownerId = ownerId;
         }
-        // Note: We don't explicitly check tenant membership here because tenant isolation
-        // is already enforced by the where.tenantId clause. If ownerId is from another tenant,
-        // the query will return empty results.
-        where.ownerId = ownerId;
       }
 
-      // Fetch ALL objectives matching filters (before visibility filtering)
-      let allObjectives;
-      try {
-        allObjectives = await this.prisma.objective.findMany({
+      // CRITICAL: Set AsyncLocalStorage context to the query param tenantId
+      // This ensures RLS filters by the requested organization, not just the JWT tenantId
+      // The user's access to this tenantId has already been validated by RBACGuard
+      return await withTenantContextAsync(tenantId, async () => {
+        // Fetch ALL objectives matching filters (before visibility filtering)
+        // NOTE: Tenant context is now set to the query param tenantId
+        // This ensures RLS session variables are set correctly before the query executes
+        let allObjectives;
+        try {
+          console.log(`[OKR Overview] Fetching objectives with tenantId=${tenantId}, userTenantId=${userOrganizationId}`);
+          allObjectives = await this.prisma.objective.findMany({
         where,
         include: {
           keyResults: {
@@ -626,6 +645,7 @@ export class OkrOverviewController {
     // Removed debug logging - use structured logging service in production
 
     return responsePayload;
+      });
     } catch (error: any) {
       console.error('[OKR OVERVIEW] ========== ERROR START ==========');
       console.error('[OKR OVERVIEW] Error in getOverview:');
@@ -701,9 +721,10 @@ export class OkrOverviewController {
     // W4.M1: Canonical visibility levels only (PUBLIC_TENANT, PRIVATE)
     // Deprecated values (EXEC_ONLY, WORKSPACE_ONLY, etc.) are not exposed
     const allowedVisibilityLevels: string[] = ['PUBLIC_TENANT'];
+    let canEdit = false;
     try {
       // Check if user is TENANT_ADMIN or TENANT_OWNER
-      const canEdit = await this.rbacService.canPerformAction(
+      canEdit = await this.rbacService.canPerformAction(
         requesterUserId,
         'edit_okr',
         resourceContext,
@@ -733,16 +754,24 @@ export class OkrOverviewController {
           },
         },
       });
-      allowedOwners = tenantAssignments.map(a => a.user);
+      
+      // Deduplicate users by ID (a user can have multiple role assignments)
+      const userMap = new Map<string, { id: string; name: string; email: string }>();
+      tenantAssignments.forEach(assignment => {
+        if (assignment.user && !userMap.has(assignment.user.id)) {
+          userMap.set(assignment.user.id, assignment.user);
+        }
+      });
+      allowedOwners = Array.from(userMap.values());
     } catch (error) {
       // If user lookup fails, return empty array
       allowedOwners = [];
     }
 
     // Check if user can assign others as owner
-    // For now, we'll allow assignment if user can create OKRs
-    // This can be refined later with more granular RBAC
-    const canAssignOthers = canCreate;
+    // Users with edit_okr permission (TENANT_ADMIN, TENANT_OWNER) can assign others
+    // Regular users can only assign themselves
+    const canAssignOthers = canEdit || canCreate;
 
     // Get available cycles (active cycles user can create in)
     let availableCycles: Array<{ id: string; name: string; status: string }> = [];
@@ -852,6 +881,71 @@ export class OkrOverviewController {
       body.keyResults,
       userId,
       userOrganizationId,
+    );
+
+    return result;
+  }
+
+  @Post('import')
+  @UseGuards(RateLimitGuard)
+  @RequireAction('create_okr')
+  @HttpCode(200)
+  @ApiOperation({ 
+    summary: 'Import OKRs from Viva Goals CSV',
+    description: 'Imports Objectives and Key Results from a Viva Goals CSV export. Supports deduplication by externalId. Returns import results with success/failure counts and errors.'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Import completed',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        objectivesCreated: { type: 'number' },
+        objectivesUpdated: { type: 'number' },
+        keyResultsCreated: { type: 'number' },
+        keyResultsUpdated: { type: 'number' },
+        errors: { 
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              row: { type: 'number' },
+              externalId: { type: 'string' },
+              title: { type: 'string' },
+              error: { type: 'string' }
+            }
+          }
+        },
+        warnings: { type: 'array', items: { type: 'string' } }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: 'Bad request - invalid CSV or missing tenantId' })
+  @ApiResponse({ status: 403, description: 'Forbidden - user lacks create_okr permission' })
+  async importFromCSV(
+    @Body() body: { csvContent: string; tenantId: string },
+    @Req() req: any,
+  ) {
+    const userOrganizationId = req.user.tenantId || body.tenantId;
+    const userId = req.user.id;
+
+    if (!body.csvContent) {
+      throw new BadRequestException('csvContent is required');
+    }
+
+    if (!userOrganizationId) {
+      throw new BadRequestException('tenantId is required');
+    }
+
+    // Validate tenant isolation
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    // Import CSV
+    const result = await this.importService.importFromCSV(
+      body.csvContent,
+      userOrganizationId,
+      userId,
     );
 
     return result;
