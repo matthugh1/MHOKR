@@ -78,13 +78,24 @@ export class OkrImportService {
     // Build external ID to internal ID mapping for parent lookups
     const externalIdToInternalId = new Map<string, string>();
 
-    // Process Objectives first (they may be parents)
-    for (let i = 0; i < objectives.length; i++) {
+    // Topologically sort Objectives to ensure parents are imported before children
+    const sortedObjectives = this.topologicalSortObjectives(objectives);
+    
+    if (sortedObjectives.length !== objectives.length) {
+      result.warnings.push(
+        `Some objectives could not be sorted (circular dependencies or missing parents) - importing in original order`,
+      );
+      // Fallback to original order if sorting fails
+      sortedObjectives.length = 0;
+      sortedObjectives.push(...objectives);
+    }
+
+    // Process Objectives in topological order (parents before children)
+    for (let i = 0; i < sortedObjectives.length; i++) {
+      const row = sortedObjectives[i];
       try {
-        const row = objectives[i];
-        const row = objectives[i];
         const wasUpdate = await this.isObjectiveExisting(row.externalId, tenantId);
-        const objective = await this.importObjective(row, tenantId, userId);
+        const objective = await this.importObjective(row, tenantId, userId, externalIdToInternalId);
         if (objective) {
           externalIdToInternalId.set(row.externalId, objective.id);
           if (wasUpdate) {
@@ -95,13 +106,14 @@ export class OkrImportService {
         }
       } catch (error) {
         result.success = false;
+        const originalIndex = objectives.findIndex(o => o.externalId === row.externalId);
         result.errors.push({
-          row: i + 2, // +2 for header row and 1-based indexing
-          externalId: objectives[i].externalId,
-          title: objectives[i].title,
+          row: originalIndex >= 0 ? originalIndex + 2 : i + 2, // +2 for header row and 1-based indexing
+          externalId: row.externalId,
+          title: row.title,
           error: error instanceof Error ? error.message : String(error),
         });
-        this.logger.error(`Error importing objective ${objectives[i].externalId}: ${error}`);
+        this.logger.error(`Error importing objective ${row.externalId}: ${error}`);
       }
     }
 
@@ -158,12 +170,94 @@ export class OkrImportService {
   }
 
   /**
+   * Topologically sort Objectives to ensure parents are imported before children
+   * Uses Kahn's algorithm for topological sorting
+   */
+  private topologicalSortObjectives(
+    objectives: ParsedVivaGoalsRow[],
+  ): ParsedVivaGoalsRow[] {
+    // Build a map of externalId -> objective for quick lookup
+    const objectiveMap = new Map<string, ParsedVivaGoalsRow>();
+    objectives.forEach(obj => {
+      objectiveMap.set(obj.externalId, obj);
+    });
+
+    // Build adjacency list: child -> parent
+    // And count in-degrees (number of dependencies)
+    const inDegree = new Map<string, number>();
+    const children = new Map<string, string[]>(); // parent -> children
+
+    objectives.forEach(obj => {
+      inDegree.set(obj.externalId, 0);
+      children.set(obj.externalId, []);
+    });
+
+    // Build graph: for each objective with a parent, add edge
+    objectives.forEach(obj => {
+      if (obj.parentExternalId) {
+        // Check if parent exists in current batch
+        if (objectiveMap.has(obj.parentExternalId)) {
+          const parentChildren = children.get(obj.parentExternalId) || [];
+          parentChildren.push(obj.externalId);
+          children.set(obj.parentExternalId, parentChildren);
+          inDegree.set(obj.externalId, (inDegree.get(obj.externalId) || 0) + 1);
+        }
+        // If parent doesn't exist in batch, it might be in database (in-degree stays 0)
+      }
+    });
+
+    // Kahn's algorithm: start with nodes that have no dependencies
+    const queue: ParsedVivaGoalsRow[] = [];
+    const sorted: ParsedVivaGoalsRow[] = [];
+    const visited = new Set<string>();
+
+    // Find all root nodes (no parent or parent not in batch)
+    objectives.forEach(obj => {
+      if ((inDegree.get(obj.externalId) || 0) === 0) {
+        queue.push(obj);
+        visited.add(obj.externalId);
+      }
+    });
+
+    // Process queue
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      sorted.push(current);
+
+      // Process children
+      const currentChildren = children.get(current.externalId) || [];
+      for (const childId of currentChildren) {
+        const currentInDegree = (inDegree.get(childId) || 0) - 1;
+        inDegree.set(childId, currentInDegree);
+
+        if (currentInDegree === 0 && !visited.has(childId)) {
+          const childObj = objectiveMap.get(childId);
+          if (childObj) {
+            queue.push(childObj);
+            visited.add(childId);
+          }
+        }
+      }
+    }
+
+    // Add any remaining objectives (circular dependencies or disconnected)
+    objectives.forEach(obj => {
+      if (!visited.has(obj.externalId)) {
+        sorted.push(obj);
+      }
+    });
+
+    return sorted;
+  }
+
+  /**
    * Import a single Objective
    */
   private async importObjective(
     row: ParsedVivaGoalsRow,
     tenantId: string,
     userId: string,
+    externalIdToInternalId: Map<string, string>,
   ): Promise<any> {
     // Check if already imported (deduplication)
     const existing = await this.prisma.objective.findUnique({
@@ -188,21 +282,30 @@ export class OkrImportService {
     }
 
     // Resolve parent Objective if Aligned To is set
+    // First check current batch, then database
     let parentId: string | null = null;
     if (row.parentExternalId) {
-      const parent = await this.prisma.objective.findFirst({
-        where: {
-          tenantId,
-          source: this.SOURCE,
-          externalId: row.parentExternalId,
-        },
-      });
-      if (parent) {
-        parentId = parent.id;
+      // Check if parent was imported in current batch
+      if (externalIdToInternalId.has(row.parentExternalId)) {
+        parentId = externalIdToInternalId.get(row.parentExternalId)!;
       } else {
-        this.logger.warn(
-          `Parent objective with externalId ${row.parentExternalId} not found for "${row.title}"`,
-        );
+        // Check database for previously imported parent
+        const parent = await this.prisma.objective.findFirst({
+          where: {
+            tenantId,
+            source: this.SOURCE,
+            externalId: row.parentExternalId,
+          },
+        });
+        if (parent) {
+          parentId = parent.id;
+        } else {
+          // Parent not found - this shouldn't happen if topological sort worked correctly
+          this.logger.warn(
+            `Parent objective with externalId ${row.parentExternalId} not found for "${row.title}" - may need to import parent first`,
+          );
+          // Don't throw error - allow import to continue without parent link
+        }
       }
     }
 

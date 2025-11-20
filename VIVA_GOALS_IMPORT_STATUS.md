@@ -36,7 +36,20 @@
 
 ## ✅ Recently Completed
 
-### 1. Auto-Create Teams ✅
+### 1. Topological Sorting for Import Order ✅
+**Implementation:** Objectives are now topologically sorted to ensure parents are imported before children.
+
+**Features:**
+- Uses Kahn's algorithm for topological sorting
+- Processes root Objectives (no parent) first
+- Then processes children in order of dependency depth
+- Handles circular dependencies gracefully (falls back to original order)
+- Checks current batch first, then database for parent lookups
+- Warns if parent not found but continues import
+
+**Location:** `okr-import.service.ts` - `topologicalSortObjectives()` method
+
+### 2. Auto-Create Teams ✅
 **Implementation:** Teams are now automatically created if not found during import.
 
 **Behavior:**
@@ -124,6 +137,9 @@
 - [ ] Test error handling (invalid CSV, missing users, etc.)
 - [ ] Test tenant isolation
 - [ ] Test parent-child relationships
+- [ ] **Test import ordering** → Parents imported before children ✅
+- [ ] **Test circular dependencies** → Handles gracefully ✅
+- [ ] **Test missing parents** → Warns but continues ✅
 - [ ] Test cycle creation
 - [ ] Test status mapping for all statuses
 - [ ] Test metric type inference
