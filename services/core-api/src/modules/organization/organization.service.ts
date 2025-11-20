@@ -198,18 +198,15 @@ export class OrganizationService {
     // Explicitly check for true (handle null, undefined, false cases)
     const isSuperuser = Boolean(user.isSuperuser === true);
 
-    // Tenant isolation: enforce mutation rules (unless superuser)
-    // Superusers can create any organization (they have manage_tenant_settings permission)
-    // BUT: Superusers are read-only per RBAC_MATRIX.md - block superuser mutations
-    if (isSuperuser) {
-      throw new ForbiddenException('Superusers are read-only; cannot create organizations.');
-    }
-
-    // For organization creation, allow users without a tenant (creating their first organization)
-    // Users with a tenant cannot create additional organizations (only superusers can, but they're blocked above)
-    if (userOrganizationId && userOrganizationId !== '') {
-      // User already has a tenant - they cannot create additional organizations
-      throw new ForbiddenException('You already belong to an organization. Only superusers can create additional organizations.');
+    // Superusers can create any organization (system-level operation)
+    // Regular users can only create their first organization (when they don't have a tenant yet)
+    if (!isSuperuser) {
+      // For organization creation, allow users without a tenant (creating their first organization)
+      // Users with a tenant cannot create additional organizations (only superusers can)
+      if (userOrganizationId && userOrganizationId !== '') {
+        // User already has a tenant - they cannot create additional organizations
+        throw new ForbiddenException('You already belong to an organization. Only superusers can create additional organizations.');
+      }
     }
 
     // Check if slug already exists
