@@ -1207,6 +1207,7 @@ export class OkrReportingService {
           kr.createdAt,
           graceDays,
           now,
+          kr.startDate || null, // Pass startDate to calculator
         );
 
         // Only include DUE or OVERDUE

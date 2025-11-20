@@ -389,20 +389,35 @@ export class OkrImportService {
           tenantId,
         );
         if (contributorId) {
-          await this.prisma.objectiveContributor.upsert({
+          // Check if contributor already exists
+          const existing = await this.prisma.objectiveContributor.findFirst({
             where: {
-              objectiveId_userId: {
-                objectiveId: objective.id,
-                userId: contributorId,
-              },
-            },
-            create: {
+              tenantId,
               objectiveId: objective.id,
               userId: contributorId,
-              tenantId,
             },
-            update: {},
           });
+
+          if (existing) {
+            // Update existing contributor
+            await this.prisma.objectiveContributor.update({
+              where: { id: existing.id },
+              data: {
+                createdBy: userId, // Update createdBy to reflect import user
+              },
+            });
+          } else {
+            // Create new contributor
+            await this.prisma.objectiveContributor.create({
+              data: {
+                tenantId,
+                objectiveId: objective.id,
+                userId: contributorId,
+                role: 'CONTRIBUTOR',
+                createdBy: userId,
+              },
+            });
+          }
         }
       }
     }
@@ -608,20 +623,35 @@ export class OkrImportService {
           tenantId,
         );
         if (contributorId) {
-          await this.prisma.keyResultContributor.upsert({
+          // Check if contributor already exists
+          const existing = await this.prisma.keyResultContributor.findFirst({
             where: {
-              keyResultId_userId: {
-                keyResultId: keyResult.id,
-                userId: contributorId,
-              },
-            },
-            create: {
+              tenantId,
               keyResultId: keyResult.id,
               userId: contributorId,
-              tenantId,
             },
-            update: {},
           });
+
+          if (existing) {
+            // Update existing contributor
+            await this.prisma.keyResultContributor.update({
+              where: { id: existing.id },
+              data: {
+                createdBy: userId, // Update createdBy to reflect import user
+              },
+            });
+          } else {
+            // Create new contributor
+            await this.prisma.keyResultContributor.create({
+              data: {
+                tenantId,
+                keyResultId: keyResult.id,
+                userId: contributorId,
+                role: 'CONTRIBUTOR',
+                createdBy: userId,
+              },
+            });
+          }
         }
       }
     }
