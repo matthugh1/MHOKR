@@ -27,6 +27,15 @@ export interface VivaGoalsCSVRow {
   Checkins: string;
 }
 
+export interface ParsedCheckIn {
+  checkinDate: string; // "2025-03-10"
+  user: string; // "Roland Green"
+  note: string | null;
+  status: string | null; // "On Track", "Behind", etc.
+  currentValue: number | null; // Percentage or absolute value
+  activityDate: string; // "2025-03-10 20:57:08 UTC"
+}
+
 export interface ParsedVivaGoalsRow {
   externalId: string;
   title: string;
@@ -54,6 +63,7 @@ export interface ParsedVivaGoalsRow {
   status: string;
   lastCheckinNote: string | null;
   score: number | null;
+  checkins: ParsedCheckIn[]; // Parsed check-in history
 }
 
 @Injectable()
@@ -161,6 +171,10 @@ export class VivaGoalsCSVParserService {
     const objectTypeStr = getValue('Object Type');
     const objectType = this.parseObjectType(objectTypeStr);
 
+    // Parse check-ins
+    const checkinsStr = getValue('Checkins');
+    const checkins = this.parseCheckins(checkinsStr);
+
     return {
       externalId,
       title: getValue('Title'),
@@ -188,6 +202,7 @@ export class VivaGoalsCSVParserService {
       status: getValue('Status'),
       lastCheckinNote: getValue('Last Check-in Note') || null,
       score,
+      checkins,
     };
   }
 
@@ -242,6 +257,58 @@ export class VivaGoalsCSVParserService {
     }
     const parsed = parseFloat(value);
     return isNaN(parsed) ? null : parsed;
+  }
+
+  /**
+   * Parse check-ins from "Checkins" column
+   * Format: "Checkin Date: 2025-03-10; User: Roland Green; Note: ...; Status: On Track; Current Value: 25%; Activity Date: 2025-03-10 20:57:08 UTC;"
+   * Multiple check-ins are separated by commas
+   */
+  private parseCheckins(checkinsStr: string): ParsedCheckIn[] {
+    if (!checkinsStr || !checkinsStr.trim()) {
+      return [];
+    }
+
+    const checkins: ParsedCheckIn[] = [];
+    
+    // Split by comma to get individual check-ins (but be careful with commas in notes)
+    // Simple approach: split by "Checkin Date:" pattern
+    const checkinMatches = checkinsStr.match(/Checkin Date:\s*([^;]+);/g);
+    
+    if (!checkinMatches) {
+      return [];
+    }
+
+    for (const match of checkinMatches) {
+      // Extract the full check-in block
+      const startIdx = checkinsStr.indexOf(match);
+      let endIdx = checkinsStr.indexOf('Checkin Date:', startIdx + match.length);
+      if (endIdx === -1) {
+        endIdx = checkinsStr.length;
+      }
+      const checkinBlock = checkinsStr.substring(startIdx, endIdx);
+
+      // Parse individual fields
+      const checkinDateMatch = checkinBlock.match(/Checkin Date:\s*([^;]+)/);
+      const userMatch = checkinBlock.match(/User:\s*([^;]+)/);
+      const noteMatch = checkinBlock.match(/Note:\s*([^;]+)/);
+      const statusMatch = checkinBlock.match(/Status:\s*([^;]+)/);
+      const currentValueMatch = checkinBlock.match(/Current Value:\s*([^%]+)%?/);
+      const activityDateMatch = checkinBlock.match(/Activity Date:\s*([^;]+)/);
+
+      if (checkinDateMatch) {
+        checkins.push({
+          checkinDate: checkinDateMatch[1].trim(),
+          user: userMatch ? userMatch[1].trim() : '',
+          note: noteMatch ? noteMatch[1].trim() : null,
+          status: statusMatch ? statusMatch[1].trim() : null,
+          currentValue: currentValueMatch ? this.parseNumber(currentValueMatch[1].trim()) : null,
+          activityDate: activityDateMatch ? activityDateMatch[1].trim() : '',
+        });
+      }
+    }
+
+    return checkins;
   }
 }
 

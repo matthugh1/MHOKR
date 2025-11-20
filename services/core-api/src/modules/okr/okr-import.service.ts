@@ -260,9 +260,10 @@ export class OkrImportService {
       state: 'DRAFT' as const,
     };
 
+    let objective;
     if (existing) {
       // Update existing
-      const updated = await this.prisma.objective.update({
+      objective = await this.prisma.objective.update({
         where: { id: existing.id },
         data: {
           ...data,
@@ -272,39 +273,38 @@ export class OkrImportService {
         },
       });
       // Note: objectivesUpdated is tracked in the calling method
-      return updated;
     } else {
       // Create new
-      const objective = await this.prisma.objective.create({ data });
+      objective = await this.prisma.objective.create({ data });
+    }
 
-      // Add additional owners as contributors
-      if (row.owners.length > 1) {
-        for (let i = 1; i < row.owners.length; i++) {
-          const contributorId = await this.resolveUserNameToUserId(
-            row.owners[i],
-            tenantId,
-          );
-          if (contributorId) {
-            await this.prisma.objectiveContributor.upsert({
-              where: {
-                objectiveId_userId: {
-                  objectiveId: objective.id,
-                  userId: contributorId,
-                },
-              },
-              create: {
+    // Add/update additional owners as contributors (for both new and updated records)
+    if (row.owners.length > 1) {
+      for (let i = 1; i < row.owners.length; i++) {
+        const contributorId = await this.resolveUserNameToUserId(
+          row.owners[i],
+          tenantId,
+        );
+        if (contributorId) {
+          await this.prisma.objectiveContributor.upsert({
+            where: {
+              objectiveId_userId: {
                 objectiveId: objective.id,
                 userId: contributorId,
-                tenantId,
               },
-              update: {},
-            });
-          }
+            },
+            create: {
+              objectiveId: objective.id,
+              userId: contributorId,
+              tenantId,
+            },
+            update: {},
+          });
         }
       }
-
-      return objective;
     }
+
+    return objective;
   }
 
   /**
@@ -497,7 +497,7 @@ export class OkrImportService {
       });
     }
 
-    // Add additional owners as contributors
+    // Add/update additional owners as contributors (for both new and updated records)
     if (row.owners.length > 1) {
       for (let i = 1; i < row.owners.length; i++) {
         const contributorId = await this.resolveUserNameToUserId(
@@ -521,6 +521,11 @@ export class OkrImportService {
           });
         }
       }
+    }
+
+    // Import historical check-ins
+    if (row.checkins && row.checkins.length > 0) {
+      await this.importCheckIns(keyResult.id, row.checkins, tenantId);
     }
 
     return keyResult;
@@ -553,6 +558,7 @@ export class OkrImportService {
 
   /**
    * Resolve team name to Team ID (exact match, takes first if semicolon-separated)
+   * Auto-creates team if not found
    */
   private async resolveTeamNameToTeamId(
     teamName: string,
@@ -565,17 +571,75 @@ export class OkrImportService {
     // Handle semicolon-separated teams (take first)
     const firstTeam = teamName.split(';')[0].trim();
 
+    // Find team by name within tenant's workspaces
+    const workspace = await this.getOrCreateDefaultWorkspace(tenantId);
+    if (!workspace) {
+      this.logger.warn(`Could not get/create workspace for tenant ${tenantId}`);
+      return null;
+    }
+
     const team = await this.prisma.team.findFirst({
       where: {
         name: {
           equals: firstTeam,
           mode: 'insensitive',
         },
-        tenantId,
+        workspaceId: workspace.id,
       },
     });
 
-    return team?.id || null;
+    if (team) {
+      return team.id;
+    }
+
+    // Auto-create team if not found
+    try {
+      const newTeam = await this.prisma.team.create({
+        data: {
+          name: firstTeam,
+          workspaceId: workspace.id,
+        },
+      });
+      this.logger.log(`Auto-created team "${firstTeam}" in workspace ${workspace.id}`);
+      return newTeam.id;
+    } catch (error) {
+      this.logger.error(`Failed to create team "${firstTeam}": ${error}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get or create default workspace for tenant
+   */
+  private async getOrCreateDefaultWorkspace(tenantId: string): Promise<any | null> {
+    // Try to find existing workspace
+    const existing = await this.prisma.workspace.findFirst({
+      where: {
+        tenantId,
+      },
+      orderBy: {
+        createdAt: 'asc', // Get oldest workspace (likely default)
+      },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    // Create default workspace
+    try {
+      const workspace = await this.prisma.workspace.create({
+        data: {
+          tenantId,
+          name: 'Default Workspace',
+        },
+      });
+      this.logger.log(`Created default workspace for tenant ${tenantId}`);
+      return workspace;
+    } catch (error) {
+      this.logger.error(`Failed to create default workspace: ${error}`);
+      return null;
+    }
   }
 
   /**
@@ -714,6 +778,120 @@ export class OkrImportService {
 
     // Otherwise, assume actualProgress is already absolute
     return actualProgress;
+  }
+
+  /**
+   * Import historical check-ins for a Key Result
+   */
+  private async importCheckIns(
+    keyResultId: string,
+    checkins: Array<{
+      checkinDate: string;
+      user: string;
+      note: string | null;
+      status: string | null;
+      currentValue: number | null;
+      activityDate: string;
+    }>,
+    tenantId: string,
+  ): Promise<void> {
+    for (const checkin of checkins) {
+      try {
+        // Resolve user
+        const userId = await this.resolveUserNameToUserId(checkin.user, tenantId);
+        if (!userId) {
+          this.logger.warn(
+            `Could not resolve user "${checkin.user}" for check-in on ${checkin.checkinDate}`,
+          );
+          continue;
+        }
+
+        // Parse check-in date (prefer activityDate if available, otherwise use checkinDate)
+        const dateStr = checkin.activityDate || checkin.checkinDate;
+        const checkinDate = new Date(dateStr);
+        if (isNaN(checkinDate.getTime())) {
+          this.logger.warn(`Invalid check-in date: ${dateStr}`);
+          continue;
+        }
+
+        // Get key result to calculate value
+        const keyResult = await this.prisma.keyResult.findUnique({
+          where: { id: keyResultId },
+          select: { startValue: true, targetValue: true, unit: true },
+        });
+
+        if (!keyResult) {
+          continue;
+        }
+
+        // Calculate check-in value
+        // If currentValue is percentage, convert to absolute
+        let value: number;
+        if (checkin.currentValue !== null) {
+          if (keyResult.unit === '%') {
+            // Convert percentage to absolute value
+            value =
+              keyResult.startValue +
+              (checkin.currentValue / 100.0) *
+                (keyResult.targetValue - keyResult.startValue);
+          } else {
+            // Use as absolute value
+            value = checkin.currentValue;
+          }
+        } else {
+          // Default to start value if no current value provided
+          value = keyResult.startValue;
+        }
+
+        // Map confidence (default to 50 if not available)
+        // Could be enhanced to infer from status or other factors
+        const confidence = 50;
+
+        // Check if check-in already exists (by date and user)
+        const existing = await this.prisma.checkIn.findFirst({
+          where: {
+            keyResultId,
+            userId,
+            createdAt: {
+              gte: new Date(checkinDate.getTime() - 24 * 60 * 60 * 1000), // Within 24 hours
+              lte: new Date(checkinDate.getTime() + 24 * 60 * 60 * 1000),
+            },
+          },
+        });
+
+        if (existing) {
+          // Update existing check-in
+          await this.prisma.checkIn.update({
+            where: { id: existing.id },
+            data: {
+              value,
+              confidence,
+              note: checkin.note || null,
+              blockers: null, // Viva Goals doesn't have blockers field
+              createdAt: checkinDate, // Preserve original date
+            },
+          });
+        } else {
+          // Create new check-in
+          await this.prisma.checkIn.create({
+            data: {
+              keyResultId,
+              userId,
+              value,
+              confidence,
+              note: checkin.note || null,
+              blockers: null,
+              createdAt: checkinDate, // Use original check-in date
+            },
+          });
+        }
+      } catch (error) {
+        this.logger.error(
+          `Error importing check-in for key result ${keyResultId}: ${error}`,
+        );
+        // Continue with next check-in
+      }
+    }
   }
 }
 
