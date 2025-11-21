@@ -65,6 +65,13 @@ export interface ParsedVivaGoalsRow {
   lastCheckinNote: string | null;
   score: number | null;
   checkins: ParsedCheckIn[]; // Parsed check-in history
+  phasedTargets?: {
+    interval: string; // "monthly" | "quarterly" | "custom"
+    targets: Array<{
+      targetValue: number;
+      targetDate: string;
+    }>;
+  } | null;
 }
 
 @Injectable()

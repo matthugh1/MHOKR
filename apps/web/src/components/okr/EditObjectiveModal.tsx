@@ -22,6 +22,8 @@ import {
 import { SearchableUserSelect } from "@/components/okr/SearchableUserSelect"
 import { GoalTypeSelector } from "@/components/okr/GoalTypeSelector"
 import { OwnerList } from "@/components/okr/OwnerList"
+import { PhasedTargetTimeline } from "@/components/okr/PhasedTargetTimeline"
+import { PhasedTargetEditor } from "@/components/okr/PhasedTargetEditor"
 import { useTenantAdmin } from "@/hooks/useTenantAdmin"
 import { useTenantPermissions } from "@/hooks/useTenantPermissions"
 import { useToast } from "@/hooks/use-toast"
@@ -32,6 +34,7 @@ import {
   removeObjectiveOwner,
   type Owner,
 } from "@/lib/okr-owners-api"
+import type { PhasedTarget } from "@/lib/phased-targets-api"
 
 type OKRStatus = "NOT_STARTED" | "ON_TRACK" | "AT_RISK" | "OFF_TRACK" | "COMPLETED" | "CANCELLED"
 type VisibilityLevel = "PUBLIC_TENANT" | "PRIVATE"
@@ -92,6 +95,8 @@ export function EditObjectiveModal({
   const [isTogglingPublish, setIsTogglingPublish] = React.useState(false)
   const [owners, setOwners] = React.useState<Owner[]>([])
   const [isLoadingOwners, setIsLoadingOwners] = React.useState(false)
+  const [showPhasedTargetEditor, setShowPhasedTargetEditor] = React.useState(false)
+  const [editingPhasedTarget, setEditingPhasedTarget] = React.useState<PhasedTarget | null>(null)
 
   const { isTenantAdmin } = useTenantAdmin()
   const tenantPermissions = useTenantPermissions()
@@ -472,6 +477,24 @@ export function EditObjectiveModal({
           )}
 
           {/* W4.M1: Pillar UI removed - deprecated */}
+
+          {/* Phased Target Editor Modal */}
+          {objectiveId && objectiveData && (
+            <PhasedTargetEditor
+              isOpen={showPhasedTargetEditor}
+              onClose={() => {
+                setShowPhasedTargetEditor(false)
+                setEditingPhasedTarget(null)
+              }}
+              onSuccess={() => {
+                // Timeline will reload automatically via useEffect
+              }}
+              objectiveId={objectiveId}
+              startDate={objectiveData.startDate ? new Date(objectiveData.startDate) : undefined}
+              endDate={objectiveData.endDate ? new Date(objectiveData.endDate) : undefined}
+              existingTarget={editingPhasedTarget}
+            />
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>

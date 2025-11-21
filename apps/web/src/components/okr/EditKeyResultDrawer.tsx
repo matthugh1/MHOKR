@@ -25,6 +25,8 @@ import { GoalTypeSelector } from '@/components/okr/GoalTypeSelector'
 import { TagSelector } from '@/components/okr/TagSelector'
 import { ContributorSelector } from '@/components/okr/ContributorSelector'
 import { OwnerList } from '@/components/okr/OwnerList'
+import { PhasedTargetTimeline } from '@/components/okr/PhasedTargetTimeline'
+import { PhasedTargetEditor } from '@/components/okr/PhasedTargetEditor'
 import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import { useToast } from '@/hooks/use-toast'
 import api from '@/lib/api'
@@ -34,6 +36,7 @@ import {
   removeKeyResultOwner,
   type Owner,
 } from '@/lib/okr-owners-api'
+import type { PhasedTarget } from '@/lib/phased-targets-api'
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { StandardCycleSelector } from '@/components/okr/StandardCycleSelector'
 import { trapFocus, returnFocus, getActiveElement } from '@/lib/focus-trap'
@@ -116,6 +119,8 @@ export function EditKeyResultDrawer({
   const [activeTab, setActiveTab] = useState('basic')
   const [owners, setOwners] = useState<Owner[]>([])
   const [isLoadingOwners, setIsLoadingOwners] = useState(false)
+  const [showPhasedTargetEditor, setShowPhasedTargetEditor] = useState(false)
+  const [editingPhasedTarget, setEditingPhasedTarget] = useState<any>(null)
 
   const tenantPermissions = useTenantPermissions()
   const { toast } = useToast()
@@ -497,6 +502,24 @@ export function EditKeyResultDrawer({
                   </div>
                 )}
 
+                {/* Phased Targets / Milestones */}
+                {keyResultId && keyResultData && (
+                  <div className="space-y-1.5 border-t pt-4">
+                    <PhasedTargetTimeline
+                      keyResultId={keyResultId}
+                      canEdit={canEdit && !lockInfo.isLocked}
+                      onAdd={() => {
+                        setEditingPhasedTarget(null)
+                        setShowPhasedTargetEditor(true)
+                      }}
+                      onEdit={(target) => {
+                        setEditingPhasedTarget(target)
+                        setShowPhasedTargetEditor(true)
+                      }}
+                    />
+                  </div>
+                )}
+
                 <div className="space-y-1.5">
                   <Label htmlFor="kr-status">
                     Status <span className="text-red-500">*</span>
@@ -750,6 +773,27 @@ export function EditKeyResultDrawer({
         </div>
       </SheetContent>
     </Sheet>
+
+    {/* Phased Target Editor Modal */}
+    {keyResultId && keyResultData && (
+      <PhasedTargetEditor
+        isOpen={showPhasedTargetEditor}
+        onClose={() => {
+          setShowPhasedTargetEditor(false)
+          setEditingPhasedTarget(null)
+        }}
+        onSuccess={() => {
+          // Timeline will reload automatically via useEffect
+        }}
+        keyResultId={keyResultId}
+        startDate={keyResultData.startDate ? new Date(keyResultData.startDate) : undefined}
+        endDate={keyResultData.endDate ? new Date(keyResultData.endDate) : undefined}
+        startValue={keyResultData.startValue}
+        targetValue={keyResultData.targetValue}
+        existingTarget={editingPhasedTarget}
+      />
+    )}
+  </>
   )
 }
 

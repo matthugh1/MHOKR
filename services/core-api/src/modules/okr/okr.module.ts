@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { ObjectiveController } from './objective.controller';
 import { KeyResultController } from './key-result.controller';
 import { InitiativeController } from './initiative.controller';
+import { PhasedTargetController } from './phased-target.controller';
 import { PillarController } from './pillar.controller';
 import { PillarService } from './pillar.service';
 import { MeController } from './me.controller';
@@ -31,13 +32,14 @@ import { VivaGoalsJSONParserService } from './viva-goals-json-parser.service';
 import { OkrImportService } from './okr-import.service';
 import { ObjectiveOwnerService } from './objective-owner.service';
 import { KeyResultOwnerService } from './key-result-owner.service';
+import { PhasedTargetService } from './phased-target.service';
 import { RBACModule } from '../rbac/rbac.module';
 import { ActivityModule } from '../activity/activity.module';
 import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [forwardRef(() => RBACModule), forwardRef(() => ActivityModule), AuditModule],
-  controllers: [ObjectiveController, KeyResultController, InitiativeController, PillarController, MeController, OkrReportingController, OkrOverviewController, CheckInRequestController, OkrInsightsController, OkrCycleController],
+  controllers: [ObjectiveController, KeyResultController, InitiativeController, PillarController, MeController, OkrReportingController, OkrOverviewController, CheckInRequestController, OkrInsightsController, OkrCycleController, PhasedTargetController],
   providers: [
     ObjectiveService,
     KeyResultService,
@@ -59,12 +61,13 @@ import { AuditModule } from '../audit/audit.module';
     OkrImportService,
     ObjectiveOwnerService,
     KeyResultOwnerService,
+    PhasedTargetService,
     {
       provide: NOTIFICATION_PORT_TOKEN,
       useClass: LoggingNotificationAdapter, // Default: logging adapter; replace with EmailNotificationAdapter in production
     },
   ],
-  exports: [ObjectiveService, KeyResultService, InitiativeService, OkrProgressService, OkrGovernanceService, OkrReportingService, OkrVisibilityService, OkrInsightsService, CheckInRequestService, OkrCycleService, CycleGeneratorService, OkrStateTransitionService, CheckInReminderService, ObjectiveOwnerService, KeyResultOwnerService],
+  exports: [ObjectiveService, KeyResultService, InitiativeService, OkrProgressService, OkrGovernanceService, OkrReportingService, OkrVisibilityService, OkrInsightsService, CheckInRequestService, OkrCycleService, CycleGeneratorService, OkrStateTransitionService, CheckInReminderService, ObjectiveOwnerService, KeyResultOwnerService, PhasedTargetService],
 })
 export class OkrModule {}
 

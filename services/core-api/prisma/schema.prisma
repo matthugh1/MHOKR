@@ -32,6 +32,7 @@ model Organization {
   objectiveKeyResults            ObjectiveKeyResult[] // Objective-KeyResult junctions
   objectiveOwners                ObjectiveOwner[]     @relation("ObjectiveOwnerTenant")
   keyResultOwners                KeyResultOwner[]     @relation("KeyResultOwnerTenant")
+  phasedTargets                  PhasedTarget[]       @relation("PhasedTargetTenant")
   checkInRequests                CheckInRequest[] // Async check-in requests for this organization
   activities                     Activity[] // Activities belonging to this organization
   userLayouts                    UserLayout[] // User layouts belonging to this organization
@@ -246,6 +247,7 @@ model Objective {
   tags              ObjectiveTag[]
   contributors      ObjectiveContributor[]
   owners            ObjectiveOwner[]            @relation("ObjectiveOwners") // Multiple owners (in addition to primary ownerId)
+  phasedTargets     PhasedTarget[]              @relation("ObjectivePhasedTargets") // Milestones/phased targets
   keyResults        ObjectiveKeyResult[]
   initiatives       Initiative[]
   progressSnapshots ObjectiveProgressSnapshot[]
@@ -325,6 +327,7 @@ model KeyResult {
   tags            KeyResultTag[]
   contributors    KeyResultContributor[]
   owners          KeyResultOwner[]          @relation("KeyResultOwners") // Multiple owners (in addition to primary ownerId)
+  phasedTargets   PhasedTarget[]            @relation("KeyResultPhasedTargets") // Milestones/phased targets
   checkIns        CheckIn[]
   integrations    KRIntegration[]
   statusSnapshots KeyResultStatusSnapshot[]
@@ -543,6 +546,31 @@ model KeyResultOwner {
   @@map("key_result_owners")
 }
 
+// Phased Targets / Milestones for Objectives and Key Results
+model PhasedTarget {
+  id          String               @id @default(cuid())
+  tenantId    String // Tenant scoping for isolation
+  tenant      Organization         @relation("PhasedTargetTenant", fields: [tenantId], references: [id], onDelete: Cascade)
+  objectiveId String? // Optional: belongs to Objective
+  objective   Objective?           @relation("ObjectivePhasedTargets", fields: [objectiveId], references: [id], onDelete: Cascade)
+  keyResultId String? // Optional: belongs to Key Result
+  keyResult   KeyResult?           @relation("KeyResultPhasedTargets", fields: [keyResultId], references: [id], onDelete: Cascade)
+  interval    PhasedTargetInterval // MONTHLY, QUARTERLY, CUSTOM
+  targetValue Float // Target value for this milestone
+  targetDate  DateTime // Target date for this milestone
+  order       Int // Order of this milestone (1, 2, 3...) for sorting
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  // Validation: Must belong to either Objective or Key Result (not both, not neither)
+  @@index([tenantId])
+  @@index([objectiveId])
+  @@index([keyResultId])
+  @@index([targetDate])
+  @@index([order])
+  @@map("phased_targets")
+}
+
 model InitiativeContributor {
   id           String     @id @default(cuid())
   tenantId     String // Tenant scoping for isolation
@@ -652,6 +680,12 @@ enum CheckInCadence {
   BIWEEKLY
   MONTHLY
   NONE
+}
+
+enum PhasedTargetInterval {
+  MONTHLY
+  QUARTERLY
+  CUSTOM
 }
 
 // ==========================================

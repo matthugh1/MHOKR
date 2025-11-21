@@ -12,7 +12,8 @@ import { OkrCycleService } from './okr-cycle.service';
 import { OkrTenantGuard } from './tenant-guard';
 import { ObjectiveOwnerService } from './objective-owner.service';
 import { KeyResultOwnerService } from './key-result-owner.service';
-import { OKRStatus, MetricType, GoalType } from '@prisma/client';
+import { PhasedTargetService } from './phased-target.service';
+import { OKRStatus, MetricType, GoalType, PhasedTargetInterval } from '@prisma/client';
 
 export interface ImportResult {
   success: boolean;
@@ -43,6 +44,7 @@ export class OkrImportService {
     private cycleService: OkrCycleService,
     private objectiveOwnerService: ObjectiveOwnerService,
     private keyResultOwnerService: KeyResultOwnerService,
+    private phasedTargetService: PhasedTargetService,
   ) {}
 
   /**
@@ -330,6 +332,7 @@ export class OkrImportService {
       lastCheckinNote: null,
       score: null,
       checkins: [], // Check-ins imported separately
+      phasedTargets: jsonRow.phasedTargets || null,
     };
   }
 
@@ -604,6 +607,46 @@ export class OkrImportService {
       }
     }
 
+    // Import phased targets if present
+    if (row.phasedTargets && row.phasedTargets.targets && row.phasedTargets.targets.length > 0) {
+      try {
+        // Map interval from Viva Goals format to Prisma enum
+        const intervalMap: Record<string, PhasedTargetInterval> = {
+          'monthly': 'MONTHLY',
+          'quarterly': 'QUARTERLY',
+          'custom': 'CUSTOM',
+        };
+        const interval = intervalMap[row.phasedTargets.interval?.toLowerCase()] || 'CUSTOM';
+
+        // Create phased targets
+        for (let i = 0; i < row.phasedTargets.targets.length; i++) {
+          const target = row.phasedTargets.targets[i];
+          try {
+            await this.phasedTargetService.create(
+              {
+                objectiveId: objective.id,
+                interval,
+                targetValue: target.targetValue,
+                targetDate: target.targetDate,
+                order: i + 1,
+              },
+              tenantId,
+            );
+          } catch (error) {
+            // Log warning but don't fail import if phased target can't be created
+            this.logger.warn(
+              `Could not create phased target ${i + 1} for objective "${row.title}": ${(error as Error).message}`,
+            );
+          }
+        }
+      } catch (error) {
+        // Log warning but don't fail import
+        this.logger.warn(
+          `Could not import phased targets for objective "${row.title}": ${(error as Error).message}`,
+        );
+      }
+    }
+
     return objective;
   }
 
@@ -837,6 +880,46 @@ export class OkrImportService {
             );
           }
         }
+      }
+    }
+
+    // Import phased targets if present
+    if (row.phasedTargets && row.phasedTargets.targets && row.phasedTargets.targets.length > 0) {
+      try {
+        // Map interval from Viva Goals format to Prisma enum
+        const intervalMap: Record<string, PhasedTargetInterval> = {
+          'monthly': 'MONTHLY',
+          'quarterly': 'QUARTERLY',
+          'custom': 'CUSTOM',
+        };
+        const interval = intervalMap[row.phasedTargets.interval?.toLowerCase()] || 'CUSTOM';
+
+        // Create phased targets
+        for (let i = 0; i < row.phasedTargets.targets.length; i++) {
+          const target = row.phasedTargets.targets[i];
+          try {
+            await this.phasedTargetService.create(
+              {
+                keyResultId: keyResult.id,
+                interval,
+                targetValue: target.targetValue,
+                targetDate: target.targetDate,
+                order: i + 1,
+              },
+              tenantId,
+            );
+          } catch (error) {
+            // Log warning but don't fail import if phased target can't be created
+            this.logger.warn(
+              `Could not create phased target ${i + 1} for key result "${row.title}": ${(error as Error).message}`,
+            );
+          }
+        }
+      } catch (error) {
+        // Log warning but don't fail import
+        this.logger.warn(
+          `Could not import phased targets for key result "${row.title}": ${(error as Error).message}`,
+        );
       }
     }
 
