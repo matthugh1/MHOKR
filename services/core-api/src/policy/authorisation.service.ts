@@ -127,32 +127,73 @@ export class AuthorisationService {
     // For read actions with resources, check tenant boundary
     // (Visibility checks don't enforce tenant boundaries, so we must do it here)
     if (!isMutation && resourceContext.tenantId && userOrgId !== undefined) {
+      // Log tenant boundary check for debugging
+      console.log('[AUTHORISATION] Tenant boundary check', {
+        action,
+        isMutation,
+        resourceTenantId: resourceContext.tenantId,
+        userOrgId,
+        isSuperuser: userContext.isSuperuser,
+        userHasRolesForTenant: userContext.tenantRoles.has(resourceContext.tenantId),
+        allUserTenantIds: Array.from(userContext.tenantRoles.keys()),
+        userTenantRoles: Array.from(userContext.tenantRoles.entries()).map(([tid, roles]) => ({
+          tenantId: tid,
+          roles,
+        })),
+      });
+
       // SUPERUSER can read across tenants (read-only access)
       if (userContext.isSuperuser) {
         // Allow superuser to read (but not mutate)
       } else if (userOrgId === null || userOrgId === '') {
-        // User has no organisation - deny access
-        return {
-          allow: false,
-          reason: 'TENANT_BOUNDARY',
-          details: { message: 'You do not have permission to access resources without an organization.' },
-        };
+        // User has no organisation - check if they have roles for the resource tenant
+        if (resourceContext.tenantId && userContext.tenantRoles.has(resourceContext.tenantId)) {
+          // User has roles for this tenant, allow access
+          console.log('[AUTHORISATION] Allowing access: user has roles for tenant despite no JWT tenantId');
+        } else {
+          // User has no organisation and no roles for this tenant - deny access
+          console.log('[AUTHORISATION] Denying access: user has no org and no roles for tenant');
+          return {
+            allow: false,
+            reason: 'TENANT_BOUNDARY',
+            details: { message: 'You do not have permission to access resources without an organization.' },
+          };
+        }
       } else if (resourceContext.tenantId !== userOrgId) {
-        // Cross-tenant access attempt - deny
-        return {
-          allow: false,
-          reason: 'TENANT_BOUNDARY',
-          details: {
-            message: 'You do not have permission to access resources outside your organization.',
-            resourceTenantId: resourceContext.tenantId,
-            userTenantId: userOrgId,
-          },
-        };
+        // Resource tenantId doesn't match JWT tenantId
+        // But check if user has roles for the resource tenant (user might have multiple organizations)
+        if (userContext.tenantRoles.has(resourceContext.tenantId)) {
+          // User has roles for this tenant, allow access even if JWT tenantId differs
+          // This handles the case where a user has multiple organizations
+          console.log('[AUTHORISATION] Allowing access: user has roles for tenant despite JWT tenantId mismatch');
+        } else {
+          // Cross-tenant access attempt - user has no roles for this tenant
+          console.log('[AUTHORISATION] Denying access: tenant mismatch and no roles for resource tenant');
+          return {
+            allow: false,
+            reason: 'TENANT_BOUNDARY',
+            details: {
+              message: 'You do not have permission to access resources outside your organization.',
+              resourceTenantId: resourceContext.tenantId,
+              userTenantId: userOrgId,
+            },
+          };
+        }
+      } else {
+        console.log('[AUTHORISATION] Tenant IDs match, proceeding to RBAC check');
       }
     }
 
     // Check RBAC role permissions
+    console.log('[AUTHORISATION] Checking RBAC permissions', {
+      action,
+      resourceTenantId: resourceContext.tenantId,
+      userTenantRoles: resourceContext.tenantId 
+        ? Array.from(userContext.tenantRoles.get(resourceContext.tenantId) || [])
+        : [],
+    });
     const rbacAllowed = can(userContext, action, resourceContext);
+    console.log('[AUTHORISATION] RBAC check result', { action, rbacAllowed });
     if (!rbacAllowed) {
       // Enhanced error details for debugging
       const tenantRoles = resourceContext.tenantId 

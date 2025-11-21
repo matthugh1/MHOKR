@@ -4,15 +4,17 @@ import * as React from "react"
 import { useState, useRef, useEffect, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { OkrBadge } from "./OkrBadge"
 import { PillarBadge } from "./PillarBadge"
 import { AvatarCircle } from "@/components/dashboard/AvatarCircle"
-import { Edit2, Trash2, History, Plus, ChevronDown, ChevronUp, MoreVertical, Info, CheckCircle, TrendingUp, Calendar } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { Edit2, Trash2, History, Plus, ChevronDown, ChevronUp, MoreVertical, Info, CheckCircle, TrendingUp, Calendar, Target, BarChart3, Rocket, AlertCircle } from "lucide-react"
+import { cn, clampProgress, formatNumber } from "@/lib/utils"
 import { InlineInsightBar } from "./InlineInsightBar"
 import { RbacWhyTooltip } from "@/components/rbac/RbacWhyTooltip"
 import { WhyCantIInspector } from "./WhyCantIInspector"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { InlineTitleEditor } from "./inline-editors/InlineTitleEditor"
 import { InlineOwnerEditor } from "./inline-editors/InlineOwnerEditor"
 import { InlineStatusEditor } from "./inline-editors/InlineStatusEditor"
@@ -30,15 +32,18 @@ import { ProgressBreakdownTooltip } from "./ProgressBreakdownTooltip"
 import { ObjectiveProgressTrendChart } from "./ObjectiveProgressTrendChart"
 import { KeyResultStatusTrendChart } from "./KeyResultStatusTrendChart"
 import { InitiativeStatusTrendChart } from "./InitiativeStatusTrendChart"
+import { ProgressSlider } from "./ProgressSlider"
+import { InlineHistoryPreview } from "./InlineHistoryPreview"
 
 export interface ObjectiveRowProps {
   objective: {
     id: string
     title: string
-    status: 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED'
+    status: 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED' | 'NOT_STARTED'
     publishState?: 'PUBLISHED' | 'DRAFT' // W4.M1: New field from backend
     progress: number
     isPublished: boolean // W4.M1: Kept for backward compatibility
+    goalType?: 'ASPIRATIONAL' | 'COMMITTED'
     cycleName?: string
     cycleLabel?: string
     cycleStatus?: string
@@ -69,12 +74,17 @@ export interface ObjectiveRowProps {
       lastCheckInDate?: string | null
       nextCheckInDue?: string | null
       weight?: number // Weight from ObjectiveKeyResult junction table
+      goalType?: 'ASPIRATIONAL' | 'COMMITTED'
+      teamId?: string | null
     }>
     initiatives?: Array<{
       id: string
       title: string
       description?: string
       status?: string
+      progress?: number
+      goalType?: 'ASPIRATIONAL' | 'COMMITTED'
+      teamId?: string | null
       dueDate?: string
       keyResultId?: string
       keyResultTitle?: string
@@ -89,7 +99,7 @@ export interface ObjectiveRowProps {
   onAddInitiative: (objectiveId: string, objectiveName: string) => void
   onEdit: (objectiveId: string) => void
   onDelete: (objectiveId: string) => void
-  onOpenHistory?: () => void
+  onOpenHistory?: (entityType?: 'OBJECTIVE' | 'KEY_RESULT', entityId?: string) => void
   onAddInitiativeToKr?: (krId: string) => void
   onAddCheckIn?: (krId: string) => void
   onEditKeyResult?: (krId: string) => void
@@ -104,10 +114,15 @@ export interface ObjectiveRowProps {
   onContextualAddInitiative?: (objectiveId: string, objectiveTitle: string) => void // Story 5: Contextual Initiative creation
   availableUsers?: Array<{ id: string; name: string; email?: string }>
   onUpdate?: () => void // Callback when inline edit succeeds (optional - for targeted refresh)
+  hierarchyLevel?: number // For hierarchy view indentation
+  hasChildren?: boolean // Whether this objective has child objectives
+  isHierarchyExpanded?: boolean // Whether children are expanded in hierarchy view
 }
 
 const getStatusBadge = (status: string) => {
   switch (status) {
+    case 'NOT_STARTED':
+      return { tone: 'neutral' as const, label: 'Not started' }
     case 'ON_TRACK':
       return { tone: 'good' as const, label: 'On track' }
     case 'AT_RISK':
@@ -219,7 +234,10 @@ const formatLastCheckIn = (dateString?: string | null) => {
 const formatNextCheckIn = (cadence?: string, lastCheckIn?: string | null) => {
   if (!cadence || cadence === 'NONE') return null
   
+  // Match backend: check-in-due-calculator.ts uses these values
   let daysBetween = 7
+  const graceDays = 2 // Match backend grace period
+  
   switch (cadence) {
     case 'WEEKLY':
       daysBetween = 7
@@ -228,7 +246,7 @@ const formatNextCheckIn = (cadence?: string, lastCheckIn?: string | null) => {
       daysBetween = 14
       break
     case 'MONTHLY':
-      daysBetween = 31
+      daysBetween = 30 // Match backend: check-in-due-calculator.ts uses 30 days
       break
     default:
       return null
@@ -243,8 +261,17 @@ const formatNextCheckIn = (cadence?: string, lastCheckIn?: string | null) => {
   const diffTime = nextCheckInDate.getTime() - now.getTime()
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
   
-  if (diffDays < 0) {
-    return { text: `Overdue by ${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? '' : 's'}`, isOverdue: true }
+  // Calculate overdue threshold: cadence + grace period (matches backend logic)
+  const overdueThreshold = daysBetween + graceDays
+  
+  // Determine status: overdue if past cadence + grace, due if past cadence but within grace
+  if (diffDays < -graceDays) {
+    // Overdue: past the grace period
+    const daysOverdue = Math.abs(diffDays) - graceDays
+    return { text: `Overdue by ${daysOverdue} day${daysOverdue === 1 ? '' : 's'}`, isOverdue: true }
+  } else if (diffDays < 0) {
+    // Due but within grace period (not yet overdue)
+    return { text: `Due (${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? '' : 's'} grace)`, isOverdue: false, isDueSoon: true }
   } else if (diffDays === 0) {
     return { text: 'Due today', isOverdue: false, isDueSoon: true }
   } else if (diffDays <= 3) {
@@ -350,6 +377,7 @@ const getProgressBarColor = (status: string) => {
 const formatProgressLabel = (kr: {
   currentValue?: number
   targetValue?: number
+  progress?: number
   unit?: string
 }): string => {
   if (kr.currentValue === undefined || kr.targetValue === undefined) {
@@ -358,14 +386,40 @@ const formatProgressLabel = (kr: {
   
   const current = kr.currentValue
   const target = kr.targetValue
+  const progress = kr.progress !== undefined ? Math.round(clampProgress(kr.progress)) : undefined
   const unit = kr.unit || ''
   
+  // Calculate progress if not provided
+  let calculatedProgress: number | undefined = progress
+  if (calculatedProgress === undefined && target !== 0) {
+    // Simple calculation: (current / target) * 100
+    calculatedProgress = Math.round((current / target) * 100)
+  }
+  
+  // Format based on unit type
   if (unit.toLowerCase() === 'percentage') {
-    return `${Math.round(current)}% of ${Math.round(target)}%`
+    // For percentage units, show: Current: 80% / Target: 90% (89% complete)
+    if (calculatedProgress !== undefined) {
+      return `Current: ${Math.round(current)}% / Target: ${Math.round(target)}% (${calculatedProgress}% complete)`
+    }
+    return `Current: ${Math.round(current)}% / Target: ${Math.round(target)}%`
   } else if (unit.toLowerCase() === 'seconds') {
-    return `${Math.round(current)}s → ${Math.round(target)}s target`
+    // For seconds: Current: 80s / Target: 90s (89% complete)
+    if (calculatedProgress !== undefined) {
+      return `Current: ${Math.round(current)}s / Target: ${Math.round(target)}s (${calculatedProgress}% complete)`
+    }
+    return `Current: ${Math.round(current)}s / Target: ${Math.round(target)}s`
   } else {
-    return `${current} of ${target} ${unit}`.trim()
+    // For other units: Current: 80 / Target: 90 (89% complete)
+    // Use formatNumber to handle M/K suffixes for large numbers
+    const currentFormatted = formatNumber(current)
+    const targetFormatted = formatNumber(target)
+    // Don't display "Number" as a unit - it's redundant
+    const unitDisplay = unit && unit.toLowerCase() !== 'number' ? ` ${unit}` : ''
+    if (calculatedProgress !== undefined) {
+      return `Current: ${currentFormatted}${unitDisplay} / Target: ${targetFormatted}${unitDisplay} (${calculatedProgress}% complete)`
+    }
+    return `Current: ${currentFormatted}${unitDisplay} / Target: ${targetFormatted}${unitDisplay}`
   }
 }
 
@@ -426,6 +480,9 @@ export function ObjectiveRow({
   onContextualAddInitiative,
   availableUsers = [],
   onUpdate,
+  hierarchyLevel = 0,
+  hasChildren = false,
+  isHierarchyExpanded = false,
 }: ObjectiveRowProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
@@ -635,7 +692,7 @@ export function ObjectiveRow({
     }
   }
   
-  const handleUpdateObjectiveStatus = async (status: 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED') => {
+  const handleUpdateObjectiveStatus = async (status: 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED' | 'NOT_STARTED') => {
     // Optimistic update
     setOptimisticObjective(prev => ({ ...prev, status }))
     
@@ -816,9 +873,16 @@ export function ObjectiveRow({
       if (errorInfo.variant === 'destructive') {
         toastVariant = 'destructive'
       }
+      
+      // Check for permission errors specifically
+      const errorMessage = error.response?.data?.message || errorInfo.message
+      const isPermissionError = error.response?.status === 403
+      
       toast({
         title: 'Could not save',
-        description: errorInfo.message,
+        description: isPermissionError 
+          ? 'You don\'t have permission to perform this action.'
+          : errorMessage,
         variant: toastVariant,
       })
       
@@ -826,6 +890,61 @@ export function ObjectiveRow({
     }
   }
   
+  // Calculate currentValue from progress percentage
+  // Assumes INCREASE metric type (most common)
+  const calculateCurrentValueFromProgress = (
+    progress: number,
+    startValue: number | undefined,
+    targetValue: number | undefined
+  ): number | undefined => {
+    if (startValue === undefined || targetValue === undefined) return undefined
+    if (targetValue === startValue) return startValue
+    
+    // For INCREASE: progress = ((current - start) / (target - start)) * 100
+    // So: current = start + (progress / 100) * (target - start)
+    return startValue + (progress / 100) * (targetValue - startValue)
+  }
+
+  const handleUpdateKeyResultProgress = async (krId: string, progress: number) => {
+    const kr = optimisticObjective.keyResults?.find(k => k.id === krId)
+    if (!kr || kr.startValue === undefined || kr.targetValue === undefined) {
+      console.error('Cannot update progress: missing KR data', { krId, kr, startValue: kr?.startValue, targetValue: kr?.targetValue })
+      throw new Error('Cannot update progress: missing required data')
+    }
+
+    // Optimistic update for progress
+    setOptimisticObjective(prev => ({
+      ...prev,
+      keyResults: prev.keyResults?.map(k => k.id === krId ? { ...k, progress } : k),
+    }))
+
+    const newCurrentValue = calculateCurrentValueFromProgress(
+      progress,
+      kr.startValue,
+      kr.targetValue
+    )
+
+    if (newCurrentValue === undefined) {
+      console.error('Cannot calculate currentValue from progress', { progress, startValue: kr.startValue, targetValue: kr.targetValue })
+      throw new Error('Cannot calculate current value from progress')
+    }
+
+    try {
+      await handleUpdateKeyResultCurrent(krId, newCurrentValue)
+      // Progress will be updated from server response in handleUpdateKeyResultCurrent
+    } catch (error) {
+      // Revert optimistic update on error
+      const originalKr = objective.keyResults?.find(k => k.id === krId)
+      if (originalKr) {
+        setOptimisticObjective(prev => ({
+          ...prev,
+          keyResults: prev.keyResults?.map(k => k.id === krId ? originalKr : k),
+        }))
+      }
+      throw error
+    }
+  }
+
   const handleUpdateKeyResultTarget = async (krId: string, value: number | undefined) => {
     // Optimistic update
     setOptimisticObjective(prev => ({
@@ -1059,11 +1178,16 @@ export function ObjectiveRow({
         tabIndex={0}
         aria-label={`${isExpanded ? 'Collapse' : 'Expand'} objective: ${objective.title}`}
       >
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           {/* Left block: Title, status, publication, cycle, owner */}
-          <div className="flex flex-col md:flex-row md:items-center gap-2 flex-1 min-w-0">
-            {/* Title - Inline Editor */}
-            <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+          <div className="flex flex-col gap-2 flex-1 min-w-0">
+            {/* Title - Inline Editor with hierarchy indicator */}
+            <div className="flex items-start gap-2 flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+              {/* Hierarchy indicator icon - only show for parent objectives */}
+              {hierarchyLevel === 0 && hasChildren && (
+                <Target className="h-4 w-4 text-purple-500 flex-shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1 min-w-0 break-words">
                 <InlineTitleEditor
                   value={optimisticObjective.title}
                   onSave={handleUpdateObjectiveTitle}
@@ -1074,87 +1198,119 @@ export function ObjectiveRow({
                   disabled={isSuperuserReadOnly}
                 />
               </div>
+            </div>
               
-              {/* Badges row - W4.M1: Separate Status and Publish State chips */}
+              {/* Badges row - Essential items only, secondary items in tooltip */}
               <div className="flex items-center gap-2 flex-wrap">
-              {/* Status chip - Progress state - Inline Editor */}
-              <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
-                <InlineStatusEditor
-                  currentStatus={optimisticObjective.status}
-                  onSave={handleUpdateObjectiveStatus}
-                  canEdit={canEditInline}
-                  lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                  ariaLabel="Edit objective status"
-                  resource={objectiveForHook}
-                  disabled={isSuperuserReadOnly}
-                  renderBadge={(status, label, tone) => (
-                    <OkrBadge tone={tone === 'success' ? 'good' : tone === 'warning' ? 'warn' : 'bad'}>
-                      {label}
-                    </OkrBadge>
+                {/* Essential: Status chip - Progress state - Inline Editor */}
+                <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
+                  <InlineStatusEditor
+                    currentStatus={optimisticObjective.status}
+                    onSave={handleUpdateObjectiveStatus}
+                    canEdit={canEditInline}
+                    lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                    ariaLabel="Edit objective status"
+                    resource={objectiveForHook}
+                    disabled={isSuperuserReadOnly}
+                    renderBadge={(status, label, tone) => (
+                      <OkrBadge tone={tone === 'success' ? 'good' : tone === 'warning' ? 'warn' : 'bad'}>
+                        {label}
+                      </OkrBadge>
+                    )}
+                  />
+                  {/* Show tooltip if status is auto-calculated from Key Results */}
+                  {keyResults.length > 0 && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3 w-3 text-muted-foreground cursor-help" aria-label="Status information" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Status calculated from Key Results</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   )}
-                />
-                {/* Show tooltip if status is auto-calculated from Key Results */}
-                {keyResults.length > 0 && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="h-3 w-3 text-muted-foreground cursor-help" aria-label="Status information" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="text-xs">Status calculated from Key Results</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                </div>
+                
+                {/* Essential: Publish State chip - Governance state - Inline Editor */}
+                <div onClick={(e) => e.stopPropagation()}>
+                  <InlinePublishEditor
+                    currentIsPublished={optimisticObjective.isPublished}
+                    onSave={handleUpdateObjectivePublishStatus}
+                    canEdit={canEditInline}
+                    canPublish={canPublish}
+                    canUnpublish={canUnpublish}
+                    lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                    ariaLabel="Edit objective publish status"
+                    resource={objectiveForHook}
+                    disabled={isSuperuserReadOnly}
+                  />
+                </div>
+                
+                {/* Essential: Owner chip - Inline Editor */}
+                <div onClick={(e) => e.stopPropagation()}>
+                  <InlineOwnerEditor
+                    currentOwner={optimisticObjective.owner}
+                    availableUsers={availableUsers}
+                    onSave={handleUpdateObjectiveOwner}
+                    canEdit={canEditInline}
+                    lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                    ariaLabel="Edit objective owner"
+                    resource={objectiveForHook}
+                    disabled={isSuperuserReadOnly}
+                    size="sm"
+                  />
+                </div>
+                
+                {/* Cycle - Keep visible as it's contextually important */}
+                {optimisticObjective.cycleLabel && (
+                  <>
+                    <span className={cyclePill.className}>
+                      {cyclePill.text}
+                    </span>
+                    {cyclePill.activeChip && (
+                      <span className={cyclePill.activeChip.className}>
+                        {cyclePill.activeChip.text}
+                      </span>
+                    )}
+                  </>
+                )}
+                
+                {/* Secondary info - Grouped in popover (Pillar, Goal Type) */}
+                {(optimisticObjective.pillarId || optimisticObjective.goalType) && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
+                        aria-label="View additional information"
+                      >
+                        <Info className="h-3 w-3" />
+                        <span className="hidden sm:inline">More</span>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="space-y-2 text-xs">
+                        {optimisticObjective.pillarId && (
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-neutral-500 min-w-[60px]">Pillar:</span>
+                            <PillarBadge pillarId={optimisticObjective.pillarId} />
+                          </div>
+                        )}
+                        {optimisticObjective.goalType && (
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-neutral-500 min-w-[60px]">Goal Type:</span>
+                            <Badge variant="outline" className="text-xs">
+                              {optimisticObjective.goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 )}
               </div>
-              
-              {/* Publish State chip - Governance state - Inline Editor */}
-              <div onClick={(e) => e.stopPropagation()}>
-                <InlinePublishEditor
-                  currentIsPublished={optimisticObjective.isPublished}
-                  onSave={handleUpdateObjectivePublishStatus}
-                  canEdit={canEditInline}
-                  canPublish={canPublish}
-                  canUnpublish={canUnpublish}
-                  lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                  ariaLabel="Edit objective publish status"
-                  resource={objectiveForHook}
-                  disabled={isSuperuserReadOnly}
-                />
-              </div>
-              
-              {/* Cycle pill */}
-              {optimisticObjective.cycleLabel && (
-                <>
-                  <span className={cyclePill.className}>
-                    {cyclePill.text}
-                  </span>
-                  {cyclePill.activeChip && (
-                    <span className={cyclePill.activeChip.className}>
-                      {cyclePill.activeChip.text}
-                    </span>
-                  )}
-                </>
-              )}
-              
-              {/* Pillar badge */}
-              <PillarBadge pillarId={optimisticObjective.pillarId} />
-              
-              {/* Owner chip - Inline Editor */}
-              <div onClick={(e) => e.stopPropagation()}>
-                <InlineOwnerEditor
-                  currentOwner={optimisticObjective.owner}
-                  availableUsers={availableUsers}
-                  onSave={handleUpdateObjectiveOwner}
-                  canEdit={canEditInline}
-                  lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                  ariaLabel="Edit objective owner"
-                  resource={objectiveForHook}
-                  disabled={isSuperuserReadOnly}
-                  size="sm"
-                />
-              </div>
-            </div>
           </div>
 
           {/* Middle block: Progress bar and micro-metrics (hidden on mobile) */}
@@ -1169,10 +1325,11 @@ export function ObjectiveRow({
                   transition={{ type: 'spring', damping: 20, stiffness: 300 }}
                 />
               </div>
-              {/* Show breakdown tooltip if Objective has Key Results */}
-              {keyResults.length > 0 && (
+              {/* Show breakdown tooltip if Objective has Key Results or child objectives */}
+              {(keyResults.length > 0 || hasChildren) && (
                 <div className="flex items-center gap-1">
                   <ProgressBreakdownTooltip
+                    objectiveId={objective.id}
                     objectiveProgress={objective.progress}
                     keyResults={keyResults.map(kr => ({
                       id: kr.id,
@@ -1187,7 +1344,11 @@ export function ObjectiveRow({
                         <span className="text-[10px] text-muted-foreground font-medium cursor-help">Auto</span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="text-xs">Progress calculated from Key Results</p>
+                        <p className="text-xs">
+                          {keyResults.length > 0 
+                            ? 'Progress calculated from Key Results'
+                            : 'Progress calculated from Child Objectives'}
+                        </p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -1195,30 +1356,24 @@ export function ObjectiveRow({
               )}
             </div>
             
-            {/* Micro-metrics pills */}
-            <div className="flex items-center gap-2 text-[11px]">
-              {/* Check-in discipline pill */}
-              {overdueCount === 0 ? (
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500 text-white font-medium leading-none whitespace-nowrap">
-                  All check-ins on time
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white font-medium leading-none whitespace-nowrap">
-                  Overdue check-ins
-                </span>
-              )}
-              
-              {/* Update freshness pill */}
-              {objective.lowestConfidence === null ? (
-                <span className="px-2 py-0.5 rounded-full bg-neutral-200 text-neutral-700 font-medium leading-none whitespace-nowrap">
-                  No recent update
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 rounded-full bg-neutral-200 text-neutral-700 font-medium leading-none whitespace-nowrap">
-                  Updated recently
-                </span>
-              )}
-            </div>
+            {/* Micro-metrics pills - Only show when there are issues (progressive disclosure) */}
+            {(overdueCount > 0 || (objective.lowestConfidence === null && keyResults.length > 0)) && (
+              <div className="flex items-center gap-2 text-[11px]">
+                {/* Check-in discipline pill - Only show if overdue */}
+                {overdueCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white font-medium leading-none whitespace-nowrap">
+                    {overdueCount} overdue check-in{overdueCount !== 1 ? 's' : ''}
+                  </span>
+                )}
+                
+                {/* Update freshness pill - Only show if stale (no recent update) */}
+                {objective.lowestConfidence === null && keyResults.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium leading-none whitespace-nowrap">
+                    No recent update
+                  </span>
+                )}
+              </div>
+            )}
             
             {/* Inline Insight Bar */}
             {isExpanded && (
@@ -1236,15 +1391,39 @@ export function ObjectiveRow({
             )}
           </div>
 
-          {/* Right block: Action buttons */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {/* Story 5: Contextual Add menu (replaces individual + KR and + Initiative buttons) */}
+          {/* Right block: Action buttons - Grouped by importance */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* History button - Prominent primary action */}
+            {onOpenHistory && (
+              <div onClick={(e) => e.stopPropagation()}>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 hover:bg-violet-50 hover:text-violet-600"
+                        onClick={() => onOpenHistory('OBJECTIVE', objective.id)}
+                        aria-label="View history"
+                      >
+                        <History className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>View activity history</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            )}
+            
+            {/* Primary Actions Group: Add items */}
             {(canCreateKeyResult || canCreateInitiative) && (
               <div className="relative" ref={addMenuRef} onClick={(e) => e.stopPropagation()}>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0"
+                  className="h-8 w-8 p-0 hover:bg-violet-50 hover:text-violet-600"
                   onClick={() => {
                     setAddMenuOpen(!addMenuOpen)
                     onOpenContextualAddMenu?.()
@@ -1324,50 +1503,52 @@ export function ObjectiveRow({
               </div>
             )}
             
-            {/* Edit button - hidden if not permitted */}
-            {onEdit && canEdit && (
-              <div onClick={(e) => e.stopPropagation()}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-2 text-[12px] font-medium"
-                  onClick={() => onEdit(objective.id)}
-                  aria-label="Edit objective"
-                >
-                  Edit
-                </Button>
-              </div>
-            )}
-            {/* Why? inspector for blocked edit */}
-            {onEdit && !canEdit && (
-              <div onClick={(e) => e.stopPropagation()}>
-                <WhyCantIInspector
-                  action="edit_okr"
-                  resource={objectiveForHook}
-                  className="ml-1"
-                />
-              </div>
-            )}
-            
-            {/* Menu button - only show if at least one action is available */}
-            {((onDelete && canDelete) || (typeof onOpenHistory === 'function')) ? (
-              <div className="relative" ref={menuRef} onClick={(e) => e.stopPropagation()}>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => setMenuOpen(!menuOpen)}
-                  aria-label="More actions"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
+            {/* Secondary Actions Group: Edit and More menu */}
+            <div className="flex items-center gap-1 border-l border-neutral-200 pl-2">
+              {/* Edit button - hidden if not permitted */}
+              {onEdit && canEdit && (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-[12px] font-medium hover:bg-neutral-100"
+                    onClick={() => onEdit(objective.id)}
+                    aria-label="Edit objective"
+                  >
+                    Edit
+                  </Button>
+                </div>
+              )}
+              {/* Why? inspector for blocked edit */}
+              {onEdit && !canEdit && (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <WhyCantIInspector
+                    action="edit_okr"
+                    resource={objectiveForHook}
+                    className="ml-1"
+                  />
+                </div>
+              )}
+              
+              {/* Menu button - only show if at least one action is available (history now has its own button) */}
+              {onDelete && canDelete ? (
+                <div className="relative" ref={menuRef} onClick={(e) => e.stopPropagation()}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 hover:bg-neutral-100"
+                    onClick={() => setMenuOpen(!menuOpen)}
+                    aria-label="More actions"
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
                 
                 {/* Menu dropdown */}
                 {menuOpen && (
                   <div className="absolute right-0 top-full mt-1 rounded-md border bg-white shadow-lg text-[13px] z-50 min-w-[160px]">
                     {onDelete && canDelete && (
                       <button
-                        className="w-full px-3 py-2 text-left hover:bg-neutral-100 rounded-t-md text-rose-600"
+                        className="w-full px-3 py-2 text-left hover:bg-neutral-100 rounded-md text-rose-600"
                         onClick={() => {
                           onDelete(objective.id)
                           setMenuOpen(false)
@@ -1376,31 +1557,21 @@ export function ObjectiveRow({
                         Delete Objective
                       </button>
                     )}
-                    {onOpenHistory != null && (
-                      <button
-                        className={`w-full px-3 py-2 text-left hover:bg-neutral-100 ${((onDelete && canDelete)) ? 'rounded-b-md' : 'rounded-t-md rounded-b-md'}`}
-                        onClick={() => {
-                          onOpenHistory()
-                          setMenuOpen(false)
-                        }}
-                      >
-                        View history
-                      </button>
-                    )}
                   </div>
                 )}
               </div>
             ) : null}
-            {/* Why? inspector for blocked delete */}
-            {onDelete && !canDelete && (
-              <div onClick={(e) => e.stopPropagation()}>
-                <WhyCantIInspector
-                  action="delete_okr"
-                  resource={objectiveForHook}
-                  className="ml-1"
-                />
-              </div>
-            )}
+              {/* Why? inspector for blocked delete */}
+              {onDelete && !canDelete && (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <WhyCantIInspector
+                    action="delete_okr"
+                    resource={objectiveForHook}
+                    className="ml-1"
+                  />
+                </div>
+              )}
+            </div>
             
             {/* Chevron */}
             <motion.div
@@ -1435,7 +1606,8 @@ export function ObjectiveRow({
             
             {/* Key Results block */}
             <div className="mb-4">
-              <h4 className="text-[13px] font-medium text-neutral-700 mb-2">
+              <h4 className="text-[13px] font-medium text-neutral-700 mb-2 flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-violet-600" />
                 Key Results
               </h4>
               {keyResults.length > 0 ? (
@@ -1443,7 +1615,7 @@ export function ObjectiveRow({
                   {keyResults.map((kr) => {
                     const krStatusBadge = getStatusBadge(kr.status || 'ON_TRACK')
                     const cadenceLabel = getCadenceLabel(kr.checkInCadence)
-                    const progressLabel = formatProgressLabel(kr)
+                    const progressLabel = formatProgressLabel({ ...kr, progress: kr.progress })
                     const krProgressBarColor = getProgressBarColor(kr.status || 'ON_TRACK')
                     const isKrExpanded = expandedKeyResults.has(kr.id)
                     
@@ -1467,6 +1639,7 @@ export function ObjectiveRow({
                               <div className="flex flex-col gap-2 flex-1 min-w-0">
                                 {/* Title - Inline Editor with Edit button */}
                                 <div className="flex items-center gap-2 group">
+                                  <BarChart3 className="h-3.5 w-3.5 text-violet-600 flex-shrink-0" />
                                   <div onClick={(e) => e.stopPropagation()} className="flex-1 min-w-0">
                                     <InlineTitleEditor
                                       value={kr.title}
@@ -1500,6 +1673,11 @@ export function ObjectiveRow({
                                   <OkrBadge tone={krStatusBadge.tone}>
                                     {krStatusBadge.label}
                                   </OkrBadge>
+                                  {kr.goalType && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {kr.goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
+                                    </Badge>
+                                  )}
                                   {kr.checkInCadence && kr.checkInCadence !== 'NONE' && (
                                     <OkrBadge tone="neutral">
                                       {cadenceLabel}
@@ -1530,14 +1708,47 @@ export function ObjectiveRow({
                                 </div>
                               </div>
                               
-                              {/* Chevron */}
-                              <motion.div
-                                animate={{ rotate: isKrExpanded ? 180 : 0 }}
-                                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                                className="ml-1 flex-shrink-0"
-                              >
-                                <ChevronDown className="h-4 w-4 text-neutral-400" />
-                              </motion.div>
+                              {/* Right side: Actions and Chevron */}
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {/* Quick Check-in Button - Prominent primary action */}
+                                {onAddCheckIn && canCheckInOnKeyResult && canCheckInOnKeyResult(kr.id) && (
+                                  <div onClick={(e) => e.stopPropagation()}>
+                                    <Button
+                                      variant={kr.isOverdue ? "default" : "default"}
+                                      size="sm"
+                                      className={cn(
+                                        "h-8 px-3 text-[12px] font-semibold whitespace-nowrap shadow-sm",
+                                        kr.isOverdue 
+                                          ? "bg-rose-500 hover:bg-rose-600 text-white" 
+                                          : "bg-violet-600 hover:bg-violet-700 text-white"
+                                      )}
+                                      onClick={() => onAddCheckIn(kr.id)}
+                                      aria-label={`Check in for ${kr.title}`}
+                                    >
+                                      {kr.isOverdue ? (
+                                        <>
+                                          <AlertCircle className="h-3.5 w-3.5 mr-1.5" />
+                                          Check in
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+                                          Check in
+                                        </>
+                                      )}
+                                    </Button>
+                                  </div>
+                                )}
+                                
+                                {/* Chevron */}
+                                <motion.div
+                                  animate={{ rotate: isKrExpanded ? 180 : 0 }}
+                                  transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                                  className="ml-1"
+                                >
+                                  <ChevronDown className="h-4 w-4 text-neutral-400" />
+                                </motion.div>
+                              </div>
                             </div>
                           </div>
 
@@ -1552,6 +1763,43 @@ export function ObjectiveRow({
                                 className="border-t border-neutral-200 bg-violet-50/20"
                               >
                                 <div className="p-4 space-y-4">
+                                  {/* Quick Actions Bar - Check-in at top (Prominent) */}
+                                  {onAddCheckIn && canCheckInOnKeyResult && canCheckInOnKeyResult(kr.id) && (
+                                    <div className="flex items-center justify-between pb-4 border-b border-neutral-200 bg-violet-50/50 -mx-4 px-4 py-3 rounded-lg">
+                                      <div className="flex items-center gap-3 flex-1">
+                                        <Button
+                                          variant="default"
+                                          size="default"
+                                          className={cn(
+                                            "h-9 px-4 text-[13px] font-semibold shadow-md",
+                                            kr.isOverdue 
+                                              ? "bg-rose-500 hover:bg-rose-600 text-white" 
+                                              : "bg-violet-600 hover:bg-violet-700 text-white"
+                                          )}
+                                          onClick={() => onAddCheckIn(kr.id)}
+                                          aria-label={`Check in for ${kr.title}`}
+                                        >
+                                          {kr.isOverdue ? (
+                                            <>
+                                              <AlertCircle className="h-4 w-4 mr-2" />
+                                              Check in (Overdue)
+                                            </>
+                                          ) : (
+                                            <>
+                                              <CheckCircle className="h-4 w-4 mr-2" />
+                                              Check in
+                                            </>
+                                          )}
+                                        </Button>
+                                        {kr.lastCheckInDate && (
+                                          <span className="text-[11px] text-neutral-600 font-medium">
+                                            Last: {formatLastCheckIn(kr.lastCheckInDate)?.text || 'Unknown'}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                                  
                                   {/* Metrics Section */}
                                   <div className="space-y-3">
                                     <div className="flex items-center justify-between">
@@ -1575,56 +1823,100 @@ export function ObjectiveRow({
                                         </div>
                                       )}
                                     </div>
+                                    {/* Progress Slider - Always show (handles read-only case internally) */}
+                                    {kr.progress !== undefined && 
+                                     kr.startValue !== undefined && 
+                                     kr.targetValue !== undefined && (
+                                      <div className="pl-3" onClick={(e) => e.stopPropagation()}>
+                                        <ProgressSlider
+                                          progress={kr.progress}
+                                          onSave={async (progress) => {
+                                            try {
+                                              await handleUpdateKeyResultProgress(kr.id, progress)
+                                            } catch (error) {
+                                              console.error('Failed to update progress via slider:', error)
+                                              throw error // Re-throw so ProgressSlider can handle it
+                                            }
+                                          }}
+                                          canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                          disabled={isSuperuserReadOnly}
+                                          label="Progress"
+                                        />
+                                        {canEditKeyResult && canEditKeyResult(kr.id) && !isSuperuserReadOnly && (
+                                          <p className="text-[10px] text-neutral-500 mt-1 ml-[60px]">
+                                            Drag to adjust progress. Values update automatically.
+                                          </p>
+                                        )}
+                                      </div>
+                                    )}
+                                    
                                     {(kr.currentValue !== undefined || kr.targetValue !== undefined) && (
-                                      <div className="flex items-center gap-2 flex-wrap pl-3">
-                                        <InlineNumericEditor
-                                          label="Current"
-                                          value={kr.currentValue}
-                                          onSave={(value) => handleUpdateKeyResultCurrent(kr.id, value)}
-                                          canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
-                                          lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                                          ariaLabel="Edit key result current value"
-                                          resource={objectiveForHook}
-                                          disabled={isSuperuserReadOnly}
-                                          unit={kr.unit || ''}
-                                          allowEmpty={false}
-                                        />
-                                        <span className="text-[12px] text-neutral-400">/</span>
-                                        <InlineNumericEditor
-                                          label="Target"
-                                          value={kr.targetValue}
-                                          onSave={(value) => handleUpdateKeyResultTarget(kr.id, value)}
-                                          canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
-                                          lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                                          ariaLabel="Edit key result target value"
-                                          resource={objectiveForHook}
-                                          disabled={isSuperuserReadOnly}
-                                          unit={kr.unit || ''}
-                                          allowEmpty={false}
-                                        />
+                                      <div className="space-y-2 pl-3">
+                                        {/* Current and Target Values */}
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[11px] text-neutral-500 font-medium">Current Value:</span>
+                                            <InlineNumericEditor
+                                              label="Current"
+                                              value={kr.currentValue}
+                                              onSave={(value) => handleUpdateKeyResultCurrent(kr.id, value)}
+                                              canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                              lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                              ariaLabel="Edit key result current value"
+                                              resource={objectiveForHook}
+                                              disabled={isSuperuserReadOnly}
+                                              unit={kr.unit || ''}
+                                              allowEmpty={false}
+                                            />
+                                          </div>
+                                          <span className="text-[12px] text-neutral-400">/</span>
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[11px] text-neutral-500 font-medium">Target Value:</span>
+                                            <InlineNumericEditor
+                                              label="Target"
+                                              value={kr.targetValue}
+                                              onSave={(value) => handleUpdateKeyResultTarget(kr.id, value)}
+                                              canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                              lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                              ariaLabel="Edit key result target value"
+                                              resource={objectiveForHook}
+                                              disabled={isSuperuserReadOnly}
+                                              unit={kr.unit || ''}
+                                              allowEmpty={false}
+                                            />
+                                          </div>
+                                        </div>
+                                        {/* Progress Percentage - Single source of truth */}
                                         {kr.progress !== undefined && (
-                                          <span className="text-[12px] text-neutral-600 font-medium flex items-center gap-1">
-                                            ({Math.round(kr.progress)}%)
-                                            {kr.status === 'ON_TRACK' && (
-                                              <span className="text-emerald-500" aria-label="On track">↑</span>
-                                            )}
-                                            {kr.status === 'AT_RISK' && (
-                                              <span className="text-amber-500" aria-label="At risk">→</span>
-                                            )}
-                                            {(kr.status === 'OFF_TRACK' || kr.status === 'BLOCKED') && (
-                                              <span className="text-rose-500" aria-label="Blocked or off track">↓</span>
-                                            )}
-                                          </span>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-[11px] text-neutral-500 font-medium">Progress:</span>
+                                            <span className="text-[12px] text-neutral-700 font-semibold flex items-center gap-1">
+                                              {Math.round(clampProgress(kr.progress))}%
+                                              {kr.status === 'ON_TRACK' && (
+                                                <span className="text-emerald-500" aria-label="On track">↑</span>
+                                              )}
+                                              {kr.status === 'AT_RISK' && (
+                                                <span className="text-amber-500" aria-label="At risk">→</span>
+                                              )}
+                                              {(kr.status === 'OFF_TRACK' || kr.status === 'BLOCKED') && (
+                                                <span className="text-rose-500" aria-label="Blocked or off track">↓</span>
+                                              )}
+                                            </span>
+                                          </div>
                                         )}
                                       </div>
                                     )}
                                     
                                     {/* Owner */}
-                                    {kr.ownerId && availableUsers.length > 0 && (
+                                    {kr.ownerId && (
                                       <div className="flex items-center gap-1.5 pl-3">
                                         <span className="text-[11px] text-neutral-500">Owner:</span>
                                         <InlineOwnerEditor
-                                          currentOwner={availableUsers.find(u => u.id === kr.ownerId) || { id: kr.ownerId, name: 'Unknown' }}
+                                          currentOwner={
+                                            kr.owner 
+                                              ? { id: kr.owner.id, name: kr.owner.name, email: kr.owner.email }
+                                              : availableUsers.find(u => u.id === kr.ownerId) || { id: kr.ownerId, name: 'Unknown' }
+                                          }
                                           availableUsers={availableUsers}
                                           onSave={(userId) => handleUpdateKeyResultOwner(kr.id, userId)}
                                           canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
@@ -1664,6 +1956,21 @@ export function ObjectiveRow({
                                             </span>
                                           </div>
                                         )}
+                                      </div>
+                                    )}
+                                    
+                                    {/* History Preview */}
+                                    {onOpenHistory && (
+                                      <div onClick={(e) => e.stopPropagation()}>
+                                        <InlineHistoryPreview
+                                          entityType="KEY_RESULT"
+                                          entityId={kr.id}
+                                          availableUsers={availableUsers}
+                                          onViewFullHistory={() => {
+                                            onOpenHistory('KEY_RESULT', kr.id)
+                                          }}
+                                          limit={3}
+                                        />
                                       </div>
                                     )}
                                     
@@ -1767,12 +2074,23 @@ export function ObjectiveRow({
                                                       <div className="flex items-start justify-between gap-2">
                                                         <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                                                           <div className="flex items-center gap-2">
+                                                            <Rocket className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
                                                             <div className="text-[12px] text-neutral-900 font-medium">
                                                               {init.title}
                                                             </div>
                                                             <OkrBadge tone={initStatusBadge.tone}>
                                                               {initStatusBadge.label}
                                                             </OkrBadge>
+                                                            {init.goalType && (
+                                                              <Badge variant="outline" className="text-xs">
+                                                                {init.goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
+                                                              </Badge>
+                                                            )}
+                                                            {init.progress !== undefined && init.progress !== null && (
+                                                              <Badge variant="secondary" className="text-xs">
+                                                                {init.progress}%
+                                                              </Badge>
+                                                            )}
                                                           </div>
                                                           <div className="flex items-center gap-2 flex-wrap">
                                                             {dueDateInfo && (
@@ -1885,12 +2203,23 @@ export function ObjectiveRow({
                                                       <div className="flex items-start justify-between gap-2">
                                                         <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                                                           <div className="flex items-center gap-2">
+                                                            <Rocket className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
                                                             <div className="text-[12px] text-neutral-900 font-medium">
                                                               {init.title}
                                                             </div>
                                                             <OkrBadge tone={initStatusBadge.tone}>
                                                               {initStatusBadge.label}
                                                             </OkrBadge>
+                                                            {init.goalType && (
+                                                              <Badge variant="outline" className="text-xs">
+                                                                {init.goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
+                                                              </Badge>
+                                                            )}
+                                                            {init.progress !== undefined && init.progress !== null && (
+                                                              <Badge variant="secondary" className="text-xs">
+                                                                {init.progress}%
+                                                              </Badge>
+                                                            )}
                                                           </div>
                                                           <div className="flex items-center gap-2 flex-wrap">
                                                             {dueDateInfo && (
@@ -1981,6 +2310,7 @@ export function ObjectiveRow({
                                                       <div className="flex items-start justify-between gap-2">
                                                         <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                                                           <div className="flex items-center gap-2">
+                                                            <Rocket className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
                                                             <div className="text-[12px] text-neutral-900 font-medium">
                                                               {init.title}
                                                             </div>
@@ -2087,30 +2417,6 @@ export function ObjectiveRow({
                                     <KeyResultTrendChart keyResultId={kr.id} />
                                     <KeyResultStatusTrendChart keyResultId={kr.id} />
                                   </div>
-                                  
-                                  {/* Actions Section */}
-                                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-neutral-200">
-                                    {onAddCheckIn && canCheckInOnKeyResult && canCheckInOnKeyResult(kr.id) && (
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-7 px-3 text-[11px] font-medium"
-                                        onClick={() => onAddCheckIn(kr.id)}
-                                      >
-                                        Check in
-                                      </Button>
-                                    )}
-                                    {onAddCheckIn && canCheckInOnKeyResult && !canCheckInOnKeyResult(kr.id) && (
-                                      <WhyCantIInspector
-                                        action="check_in_kr"
-                                        resource={{
-                                          id: kr.id,
-                                          parentObjective: objectiveForHook,
-                                        }}
-                                        className="text-[10px]"
-                                      />
-                                    )}
-                                  </div>
                                 </div>
                               </motion.div>
                             )}
@@ -2145,7 +2451,7 @@ export function ObjectiveRow({
                 return (
                   <div className="mt-4">
                     <h4 className="text-[13px] font-medium text-neutral-700 mb-2 flex items-center gap-2">
-                      <span className="w-1 h-4 bg-emerald-400 rounded-full"></span>
+                      <Rocket className="h-4 w-4 text-emerald-600" />
                       Initiatives
                     </h4>
                     <div className="rounded-lg border border-dashed border-emerald-200 bg-emerald-50/30 p-4 text-center">
@@ -2174,7 +2480,7 @@ export function ObjectiveRow({
                 <div className="mt-4">
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-[13px] font-medium text-neutral-700 flex items-center gap-2">
-                      <span className="w-1 h-4 bg-emerald-400 rounded-full"></span>
+                      <Rocket className="h-4 w-4 text-emerald-600" />
                       Objective-Level Initiatives ({totalInitiatives})
                     </h4>
                     {canCreateInitiative && (

@@ -32,13 +32,13 @@ import { EditFormTabs, EditFormState } from './components/EditFormTabs'
 import { ObjectiveNode, KeyResultNode, InitiativeNode } from './components/EnhancedNodes'
 import { useAutoSave } from './hooks/useAutoSave'
 import { CycleSelector } from '@/components/ui/CycleSelector'
-import { 
-  calculateEndDate, 
-  formatDateForInput, 
-  formatPeriod, 
-  getQuarterFromDate, 
-  getQuarterDates, 
-  getMonthDates, 
+import {
+  calculateEndDate,
+  formatDateForInput,
+  formatPeriod,
+  getQuarterFromDate,
+  getQuarterDates,
+  getMonthDates,
   getYearDates,
   getAvailableYears,
   getMonthName,
@@ -83,13 +83,13 @@ export default function BuilderPage() {
     },
     onSaveError: () => setSavingState('idle'),
   })
-  const { 
-    defaultOKRContext, 
+  const {
+    defaultOKRContext,
     currentOrganization,
-    currentWorkspace, 
-    currentTeam, 
+    currentWorkspace,
+    currentTeam,
     currentOKRLevel,
-    loading: workspaceLoading 
+    loading: workspaceLoading
   } = useWorkspace()
   const { user } = useAuth()
   const tenantPermissions = useTenantPermissions()
@@ -178,11 +178,11 @@ export default function BuilderPage() {
       .replace(/-+/g, '-') // Collapse multiple hyphens
       .replace(/^-|-$/g, '') // Remove leading/trailing hyphens
   }
-  
+
   // Helper to map raw objective from API to view model with timeframeKey
   const mapObjectiveToViewModel = (rawObjective: any): any => {
     let timeframeKey: string = 'unassigned'
-    
+
     // Priority 1: cycleId
     if (rawObjective.cycleId) {
       timeframeKey = rawObjective.cycleId
@@ -200,7 +200,7 @@ export default function BuilderPage() {
       timeframeKey = normaliseLabelToKey(rawObjective.timeframeLabel)
     }
     // Priority 4: fallback to 'unassigned'
-    
+
     return {
       ...rawObjective,
       timeframeKey,
@@ -252,7 +252,7 @@ export default function BuilderPage() {
     if (!selectedTimeframeKey || selectedTimeframeKey === 'all') {
       return nodesWithTimeframeKey
     }
-    
+
     return nodesWithTimeframeKey.filter(node => {
       // Only filter objectives by timeframeKey
       if (node.type === 'objective') {
@@ -297,7 +297,7 @@ export default function BuilderPage() {
     try {
       // Build query params with organizationId if available
       const queryParams = currentOrganization?.id ? `?tenantId=${currentOrganization.id}` : ''
-      
+
       // Load objectives, key results, initiatives, and user layout
       const [objectivesRes, , initiativesRes, userLayoutRes] = await Promise.all([
         api.get(`/objectives${queryParams}`),
@@ -317,7 +317,7 @@ export default function BuilderPage() {
         if (userLayoutMap[userLayoutKey]) {
           return userLayoutMap[userLayoutKey]
         }
-        
+
         // 2. Fall back to default position
         return defaultPosition
       }
@@ -340,24 +340,24 @@ export default function BuilderPage() {
             ? activeCycles.find(c => c.id === obj.cycleId)!.status
             : null,
         }
-        
+
         const canView = tenantPermissions.canViewObjective(objectiveForPerms)
         if (!canView) {
           return // Skip this objective entirely - don't create node or edges
         }
-        
-        const defaultPosition = obj.positionX !== null && obj.positionY !== null 
+
+        const defaultPosition = obj.positionX !== null && obj.positionY !== null
           ? { x: obj.positionX, y: obj.positionY }
           : getDefaultNodePosition('objective', index)
-        
+
         const position = getNodePosition('OBJECTIVE', obj.id, defaultPosition)
-        
+
         // Map objective to view model to get timeframeKey
         const objectiveViewModel = mapObjectiveToViewModel(obj)
-        
+
         // Check permissions for this objective
         const canEditObjective = tenantPermissions.canEditObjective(objectiveForPerms)
-        
+
         loadedNodes.push({
           id: `obj-${obj.id}`,
           type: 'objective',
@@ -396,20 +396,20 @@ export default function BuilderPage() {
             // The actual KeyResult is nested in krJunction.keyResult
             const kr = krJunction.keyResult
             if (!kr) return // Skip if keyResult is missing
-            
+
             // Check if user can view this key result (inherits from parent objective)
             const canViewKR = tenantPermissions.canSeeKeyResult(kr, objectiveForPerms)
             if (!canViewKR) {
               return // Skip this key result entirely
             }
-            
+
             const krNodeId = `kr-${kr.id}`
             const defaultPosition = kr.positionX !== null && kr.positionY !== null
               ? { x: kr.positionX, y: kr.positionY }
               : getDefaultNodePosition('keyResult', krIndex, index)
-            
+
             const position = getNodePosition('KEY_RESULT', kr.id, defaultPosition)
-            
+
             // Check permissions for this key result
             const krForPerms = {
               id: kr.id,
@@ -420,7 +420,7 @@ export default function BuilderPage() {
               parentObjective: objectiveForPerms,
             }
             const canEditKR = tenantPermissions.canEditKeyResult(krForPerms)
-            
+
             loadedNodes.push({
               id: krNodeId,
               type: 'keyResult',
@@ -447,7 +447,7 @@ export default function BuilderPage() {
                 parentObjective: objectiveForPerms,
               },
             })
-            
+
             // Connect KR to Objective (only if both nodes exist)
             loadedEdges.push({
               id: `e-${obj.id}-${kr.id}`,
@@ -481,9 +481,9 @@ export default function BuilderPage() {
         const defaultPosition = init.positionX !== null && init.positionY !== null
           ? { x: init.positionX, y: init.positionY }
           : getDefaultNodePosition('initiative', index)
-        
+
         const position = getNodePosition('INITIATIVE', init.id, defaultPosition)
-        
+
         loadedNodes.push({
           id: initNodeId,
           type: 'initiative',
@@ -518,7 +518,7 @@ export default function BuilderPage() {
       } else {
         setNodes(loadedNodes)
       }
-      
+
       setEdges(loadedEdges)
     } catch (error) {
       console.error('Failed to load OKRs:', error)
@@ -526,18 +526,18 @@ export default function BuilderPage() {
   }
 
   const handleEditNode = (nodeId: string, data: any) => {
-    console.log('Opening edit panel for node:', nodeId, data)
+
     setEditingNode({ id: nodeId, data })
-    
+
     // Initialize form data
     const initStartDate = data.startDate ? new Date(data.startDate) : new Date()
     const initPeriod = data.period || Period.QUARTERLY
-    
+
     const fallbackOwnerName =
       (user?.firstName && user?.lastName)
         ? `${user.firstName} ${user.lastName}`
         : user?.email || ''
-    
+
     setEditingFormData({
       label: data.label || '',
       description: data.description || '',
@@ -604,9 +604,9 @@ export default function BuilderPage() {
   const handleSaveNode = async (nodeId: string, updatedData: any) => {
     // Clear previous alignment errors
     setAlignmentError(null)
-    
+
     try {
-      console.log('Saving node:', nodeId, updatedData)
+
       const nodeTypePrefix = nodeId.split('-')[0]
       const okrId = updatedData.okrId
 
@@ -627,21 +627,21 @@ export default function BuilderPage() {
             endDate: updatedData.endDate ? new Date(updatedData.endDate).toISOString() : undefined,
             visibilityLevel: updatedData.visibilityLevel || 'PUBLIC_TENANT',
           })
-          
+
           // Update parent-child edge if parent changed
           const currentNode = nodes.find(n => n.id === nodeId)
           const oldParentId = currentNode?.data.parentId
           const newParentId = updatedData.parentId
-          
+
           // If parent changed, update edges
           if (oldParentId !== newParentId) {
             // Remove old parent edge if it exists
             if (oldParentId) {
-            setEdges((prev: Edge[]) => prev.filter((e: Edge) => 
-              !(e.source.endsWith(oldParentId) && e.target === nodeId && e.data?.type === 'parent-child')
-            ))
+              setEdges((prev: Edge[]) => prev.filter((e: Edge) =>
+                !(e.source.endsWith(oldParentId) && e.target === nodeId && e.data?.type === 'parent-child')
+              ))
             }
-            
+
             // Add new parent edge if parent is set
             if (newParentId) {
               const parentNode = nodes.find(n => n.data.okrId === newParentId)
@@ -675,7 +675,7 @@ export default function BuilderPage() {
             visibilityLevel: updatedData.visibilityLevel || 'PUBLIC_TENANT',
           })
           updatedData.okrId = res.data.id
-          
+
           // Auto-create visual edge if parent objective is selected
           if (updatedData.parentId) {
             const parentNode = nodes.find(n => n.data.okrId === updatedData.parentId)
@@ -709,7 +709,7 @@ export default function BuilderPage() {
           // Create new key result - can be standalone or linked to objective
           const linkedObjectiveEdge = edges.find(e => e.target === nodeId && e.source?.startsWith('obj-'))
           let objectiveId = null
-          
+
           if (linkedObjectiveEdge) {
             const linkedObjective = nodes.find(n => n.id === linkedObjectiveEdge.source)
             if (linkedObjective?.data.okrId) {
@@ -746,7 +746,7 @@ export default function BuilderPage() {
           // Create new initiative
           const linkedKREdge = edges.find(e => e.target === nodeId && e.source?.startsWith('kr-'))
           const linkedObjEdge = edges.find(e => e.target === nodeId && e.source?.startsWith('obj-'))
-          
+
           let keyResultId = null
           let objectiveId = null
 
@@ -764,16 +764,16 @@ export default function BuilderPage() {
             }
           }
 
-              const res = await api.post('/initiatives', {
-                title: updatedData.label,
-                ownerId: updatedData.ownerId || defaultOKRContext.ownerId,
-                status: updatedData.status || 'NOT_STARTED',
-                keyResultId,
-                objectiveId,
-                period: updatedData.period || null,
-                startDate: updatedData.startDate ? new Date(updatedData.startDate).toISOString() : null,
-                endDate: updatedData.endDate ? new Date(updatedData.endDate).toISOString() : null,
-              })
+          const res = await api.post('/initiatives', {
+            title: updatedData.label,
+            ownerId: updatedData.ownerId || defaultOKRContext.ownerId,
+            status: updatedData.status || 'NOT_STARTED',
+            keyResultId,
+            objectiveId,
+            period: updatedData.period || null,
+            startDate: updatedData.startDate ? new Date(updatedData.startDate).toISOString() : null,
+            endDate: updatedData.endDate ? new Date(updatedData.endDate).toISOString() : null,
+          })
           updatedData.okrId = res.data.id
         }
       }
@@ -785,10 +785,10 @@ export default function BuilderPage() {
         )
       )
       setEditingNode(null)
-      console.log('Node saved successfully!')
+
     } catch (error: any) {
       console.error('Failed to save node:', error)
-      
+
       // Extract alignment error codes for inline display
       const errorCode = error.response?.data?.code
       const errorMessage = error.response?.data?.message
@@ -797,7 +797,7 @@ export default function BuilderPage() {
         // Don't show alert for alignment errors - they're shown inline
         return
       }
-      
+
       // Show alert for other errors
       alert(`Failed to save: ${error.response?.data?.message || error.message || 'Unknown error'}`)
     }
@@ -857,7 +857,7 @@ export default function BuilderPage() {
   const handleAddNode = (type: 'objective' | 'keyResult' | 'initiative') => {
     // Map type to short prefix for ID
     const typePrefix = type === 'objective' ? 'obj' : type === 'keyResult' ? 'kr' : 'init'
-    
+
     const newNode: Node = {
       id: `${typePrefix}-${Date.now()}`,
       type,
@@ -896,27 +896,27 @@ export default function BuilderPage() {
       // Determine edge type and styling based on connection
       const sourceType = params.source?.split('-')[0]
       const targetType = params.target?.split('-')[0]
-      
+
       let edgeData = { type: 'default' }
       let edgeStyle = { stroke: '#94a3b8', strokeWidth: 2 }
-      
+
       if (sourceType === 'obj' && targetType === 'obj') {
         edgeData = { type: 'parent-child' }
         edgeStyle = { stroke: '#3b82f6', strokeWidth: 2 }
       }
-      
-      setEdges((eds: Edge[]) => addEdge({ 
-        ...params, 
-        animated: true, 
+
+      setEdges((eds: Edge[]) => addEdge({
+        ...params,
+        animated: true,
         style: edgeStyle,
         data: edgeData
       }, eds))
-      
+
       // Save connection to backend
       try {
         const sourceNode = nodes.find((n) => n.id === params.source)
         const targetNode = nodes.find((n) => n.id === params.target)
-        
+
         if (sourceNode?.data.okrId && targetNode?.data.okrId) {
           // Link objective to key result
           if (sourceType === 'obj' && targetType === 'kr') {
@@ -935,7 +935,7 @@ export default function BuilderPage() {
             await api.patch(`/objectives/${targetNode.data.okrId}`, {
               parentId: sourceNode.data.okrId,
             })
-            console.log(`Updated objective ${targetNode.data.label} to have parent ${sourceNode.data.label}`)
+
           }
         }
       } catch (error) {
@@ -959,7 +959,7 @@ export default function BuilderPage() {
                 await api.patch(`/objectives/${targetNode.data.okrId}`, {
                   parentId: null,
                 })
-                console.log(`Removed parent relationship from objective ${targetNode.data.label}`)
+
               } catch (error) {
                 console.error('Failed to remove parent relationship:', error)
               }
@@ -967,7 +967,7 @@ export default function BuilderPage() {
           }
         }
       }
-      
+
       // Apply the changes to the edges
       onEdgesChangeBase(changes)
     },
@@ -982,11 +982,11 @@ export default function BuilderPage() {
         .filter(node => node.data.okrId)
         .map(node => {
           const nodeTypePrefix = node.id.split('-')[0]
-          const entityType = 
+          const entityType =
             nodeTypePrefix === 'obj' ? 'OBJECTIVE' :
-            nodeTypePrefix === 'kr' ? 'KEY_RESULT' :
-            'INITIATIVE'
-          
+              nodeTypePrefix === 'kr' ? 'KEY_RESULT' :
+                'INITIATIVE'
+
           return {
             entityType,
             entityId: node.data.okrId,
@@ -997,7 +997,7 @@ export default function BuilderPage() {
 
       // Save all positions in a single batch request
       await api.post('/layout/save', { layouts })
-      
+
       alert('Layout saved successfully!')
     } catch (error) {
       console.error('Failed to save layout:', error)
@@ -1012,8 +1012,8 @@ export default function BuilderPage() {
   if (selectedTimeframeLabel) {
     badges.push({ label: `Viewing: ${selectedTimeframeLabel}`, tone: 'neutral' as const })
   }
-  if (!workspaceLoading && currentWorkspace && currentOrganization && 
-      currentWorkspace.tenantId === currentOrganization.id) {
+  if (!workspaceLoading && currentWorkspace && currentOrganization &&
+    currentWorkspace.tenantId === currentOrganization.id) {
     const workspaceBadge = currentTeam && currentTeam.workspaceId === currentWorkspace.id
       ? `${currentWorkspace.name} • ${currentTeam.name}`
       : currentWorkspace.name
@@ -1061,8 +1061,8 @@ export default function BuilderPage() {
                     }}
                   />
                   {!isEmpty && (
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={handleAutoLayout}
                       className="gap-2"
@@ -1106,7 +1106,7 @@ export default function BuilderPage() {
               <Background />
               <Controls />
               <MiniMap />
-              
+
               {/* Empty State */}
               {isEmpty && (
                 <Panel position="top-center" className="bg-transparent">
@@ -1118,7 +1118,7 @@ export default function BuilderPage() {
                     <p className="text-sm text-neutral-600 mb-6">
                       Build your OKR structure visually. Start with an Objective, then add Key Results and Initiatives.
                     </p>
-                    <Button 
+                    <Button
                       onClick={() => setShowNodeCreator(true)}
                       className="gap-2"
                     >
@@ -1172,7 +1172,7 @@ export default function BuilderPage() {
                           <X className="h-4 w-4" />
                         </Button>
                       </div>
-                      
+
                       {/* OKR Level Context */}
                       {levelDisplay && (
                         <div className="pb-3 border-b border-neutral-200">
@@ -1203,7 +1203,7 @@ export default function BuilderPage() {
                           <span className="text-xs">Initiative</span>
                         </div>
                       </div>
-                      
+
                       {/* Instructions */}
                       <div className="pt-3 border-t border-neutral-200 space-y-1.5">
                         <div className="flex items-start gap-2 text-xs text-neutral-600">
@@ -1229,7 +1229,7 @@ export default function BuilderPage() {
                 <Panel position="top-right" className="bg-white p-4 rounded-lg shadow-lg border border-neutral-200 min-w-[220px]">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold text-sm">Add Node</h3>
-                    <button 
+                    <button
                       onClick={() => setShowNodeCreator(false)}
                       className="text-neutral-400 hover:text-neutral-600"
                     >
@@ -1353,12 +1353,12 @@ export default function BuilderPage() {
                 teamId: editingFormData.teamId as string | null || null,
                 parentObjective: editingFormData.parentObjective && typeof editingFormData.parentObjective === 'object' && 'id' in editingFormData.parentObjective
                   ? {
-                      id: (editingFormData.parentObjective as any).id as string,
-                      tenantId: (editingFormData.parentObjective as any).tenantId as string | null | undefined,
-                      isPublished: (editingFormData.parentObjective as any).isPublished as boolean | undefined,
-                      cycle: (editingFormData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
-                      cycleStatus: (editingFormData.parentObjective as any).cycleStatus as string | null | undefined,
-                    }
+                    id: (editingFormData.parentObjective as any).id as string,
+                    tenantId: (editingFormData.parentObjective as any).tenantId as string | null | undefined,
+                    isPublished: (editingFormData.parentObjective as any).isPublished as boolean | undefined,
+                    cycle: (editingFormData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
+                    cycleStatus: (editingFormData.parentObjective as any).cycleStatus as string | null | undefined,
+                  }
                   : null,
               })
             }
@@ -1415,12 +1415,12 @@ export default function BuilderPage() {
                 teamId: editingFormData.teamId as string | null || null,
                 parentObjective: editingFormData.parentObjective && typeof editingFormData.parentObjective === 'object' && 'id' in editingFormData.parentObjective
                   ? {
-                      id: (editingFormData.parentObjective as any).id as string,
-                      tenantId: (editingFormData.parentObjective as any).tenantId as string | null | undefined,
-                      isPublished: (editingFormData.parentObjective as any).isPublished as boolean | undefined,
-                      cycle: (editingFormData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
-                      cycleStatus: (editingFormData.parentObjective as any).cycleStatus as string | null | undefined,
-                    }
+                    id: (editingFormData.parentObjective as any).id as string,
+                    tenantId: (editingFormData.parentObjective as any).tenantId as string | null | undefined,
+                    isPublished: (editingFormData.parentObjective as any).isPublished as boolean | undefined,
+                    cycle: (editingFormData.parentObjective as any).cycle as { id: string; status: string } | null | undefined,
+                    cycleStatus: (editingFormData.parentObjective as any).cycleStatus as string | null | undefined,
+                  }
                   : null,
               })
               return lockInfo.isLocked ? lockInfo.message : undefined
@@ -1458,24 +1458,24 @@ function _EditNodeForm({
   onCancel: () => void
   onDelete: (id: string) => void
 }) {
-  const { 
+  const {
     organizations,
-    workspaces, 
+    workspaces,
     teams,
     defaultOKRContext,
     currentOrganization
   } = useWorkspace()
   const { user } = useAuth()
-  
+
   // Initialize smart selectors based on existing date or defaults
   const initStartDate = data.startDate ? new Date(data.startDate) : new Date()
   const initPeriod = data.period || Period.QUARTERLY
-  
+
   const fallbackOwnerName =
     (user?.firstName && user?.lastName)
       ? `${user.firstName} ${user.lastName}`
       : user?.email || ''
-  
+
   const [formData, setFormData] = useState({
     label: data.label || '',
     description: data.description || '',
@@ -1500,7 +1500,7 @@ function _EditNodeForm({
     month: initStartDate.getMonth(),
     year: initStartDate.getFullYear(),
   })
-  
+
   const [showOwnerDropdown, setShowOwnerDropdown] = useState(false)
   const [showContextDropdown, setShowContextDropdown] = useState(false)
   const [showParentDropdown, setShowParentDropdown] = useState(false)
@@ -1509,9 +1509,9 @@ function _EditNodeForm({
   const [parentSearch, setParentSearch] = useState('')
   const [availableUsers, setAvailableUsers] = useState<any[]>([])
   const [availableObjectives, setAvailableObjectives] = useState<any[]>([])
-  
+
   const nodeType = nodeId.split('-')[0]
-  console.log('EditNodeForm - nodeId:', nodeId, 'nodeType:', nodeType)
+
 
   // Load available users for owner selection
   useEffect(() => {
@@ -1572,8 +1572,8 @@ function _EditNodeForm({
 
   const getOwnerDisplay = () => {
     if (formData.ownerId === user?.id) {
-      const userName = user?.firstName && user?.lastName 
-        ? `${user.firstName} ${user.lastName}` 
+      const userName = user?.firstName && user?.lastName
+        ? `${user.firstName} ${user.lastName}`
         : user?.email || 'You'
       return `👤 ${userName}`
     }
@@ -1645,8 +1645,8 @@ function _EditNodeForm({
                     {/* Current user option */}
                     <button
                       onClick={() => {
-                        const userName = user?.firstName && user?.lastName 
-                          ? `${user.firstName} ${user.lastName}` 
+                        const userName = user?.firstName && user?.lastName
+                          ? `${user.firstName} ${user.lastName}`
                           : user?.email || ''
                         setFormData({ ...formData, ownerId: user?.id || '', ownerName: userName })
                         setShowOwnerDropdown(false)
@@ -1654,8 +1654,8 @@ function _EditNodeForm({
                       className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
                     >
                       <User className="h-4 w-4" />
-                      {user?.firstName && user?.lastName 
-                        ? `${user.firstName} ${user.lastName}` 
+                      {user?.firstName && user?.lastName
+                        ? `${user.firstName} ${user.lastName}`
                         : user?.email || 'You'} (You)
                     </button>
                     {/* Other users */}
@@ -1717,7 +1717,7 @@ function _EditNodeForm({
                       <User className="h-4 w-4" />
                       Personal
                     </button>
-                    
+
                     {/* Organization */}
                     {organizations
                       .filter(org => org.name.toLowerCase().includes(contextSearch.toLowerCase()))
@@ -1734,7 +1734,7 @@ function _EditNodeForm({
                           {org.name} (Organization)
                         </button>
                       ))}
-                    
+
                     {/* Workspaces */}
                     {workspaces
                       .filter(ws => ws.name.toLowerCase().includes(contextSearch.toLowerCase()))
@@ -1751,7 +1751,7 @@ function _EditNodeForm({
                           {ws.name} (Workspace)
                         </button>
                       ))}
-                    
+
                     {/* Teams */}
                     {teams
                       .filter(team => team.name.toLowerCase().includes(contextSearch.toLowerCase()))
@@ -1811,10 +1811,10 @@ function _EditNodeForm({
                       <Target className="h-4 w-4" />
                       No parent (top-level objective)
                     </button>
-                    
+
                     {/* Available objectives */}
                     {availableObjectives
-                      .filter(obj => 
+                      .filter(obj =>
                         obj.id !== data.id && // Don't allow self as parent
                         obj.title.toLowerCase().includes(parentSearch.toLowerCase())
                       )
@@ -1871,7 +1871,7 @@ function _EditNodeForm({
                 onChange={(e) => {
                   const newPeriod = e.target.value as Period
                   let dates = { startDate: formData.startDate, endDate: formData.endDate }
-                  
+
                   // Auto-calculate dates based on new period
                   if (newPeriod === Period.QUARTERLY) {
                     const quarterDates = getQuarterDates(formData.quarter, formData.year)
@@ -1892,9 +1892,9 @@ function _EditNodeForm({
                       endDate: formatDateForInput(yearDates.endDate)
                     }
                   }
-                  
-                  setFormData({ 
-                    ...formData, 
+
+                  setFormData({
+                    ...formData,
                     period: newPeriod,
                     ...dates
                   })
@@ -2116,8 +2116,8 @@ function _EditNodeForm({
                     {/* Current user option */}
                     <button
                       onClick={() => {
-                        const userName = user?.firstName && user?.lastName 
-                          ? `${user.firstName} ${user.lastName}` 
+                        const userName = user?.firstName && user?.lastName
+                          ? `${user.firstName} ${user.lastName}`
                           : user?.email || ''
                         setFormData({ ...formData, ownerId: user?.id || '', ownerName: userName })
                         setShowOwnerDropdown(false)
@@ -2125,8 +2125,8 @@ function _EditNodeForm({
                       className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
                     >
                       <User className="h-4 w-4" />
-                      {user?.firstName && user?.lastName 
-                        ? `${user.firstName} ${user.lastName}` 
+                      {user?.firstName && user?.lastName
+                        ? `${user.firstName} ${user.lastName}`
                         : user?.email || 'You'} (You)
                     </button>
                     {/* Other users */}
@@ -2199,10 +2199,10 @@ function _EditNodeForm({
             <div className="text-sm font-medium mb-1">Progress</div>
             <div className="flex items-center gap-2">
               <div className="flex-1 bg-slate-200 rounded-full h-2">
-                <div 
+                <div
                   className="bg-green-500 h-2 rounded-full transition-all"
-                  style={{ 
-                    width: `${Math.min(100, ((formData.current || 0) / (formData.target || 1)) * 100)}%` 
+                  style={{
+                    width: `${Math.min(100, ((formData.current || 0) / (formData.target || 1)) * 100)}%`
                   }}
                 />
               </div>
@@ -2267,7 +2267,7 @@ function _EditNodeForm({
                 <div>
                   <Label htmlFor="quarter">Quarter</Label>
                   <select id="quarter" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.quarter} onChange={(e) => {
-                    const newQuarter = parseInt(e.target.value); const dates = getQuarterDates(newQuarter, formData.year); setFormData({...formData, quarter: newQuarter, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate)})
+                    const newQuarter = parseInt(e.target.value); const dates = getQuarterDates(newQuarter, formData.year); setFormData({ ...formData, quarter: newQuarter, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate) })
                   }}>
                     <option value={1}>Q1 (Jan - Mar)</option><option value={2}>Q2 (Apr - Jun)</option><option value={3}>Q3 (Jul - Sep)</option><option value={4}>Q4 (Oct - Dec)</option>
                   </select>
@@ -2275,7 +2275,7 @@ function _EditNodeForm({
                 <div>
                   <Label htmlFor="year">Year</Label>
                   <select id="year" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.year} onChange={(e) => {
-                    const newYear = parseInt(e.target.value); const dates = getQuarterDates(formData.quarter, newYear); setFormData({...formData, year: newYear, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate)})
+                    const newYear = parseInt(e.target.value); const dates = getQuarterDates(formData.quarter, newYear); setFormData({ ...formData, year: newYear, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate) })
                   }}>
                     {getAvailableYears().map(year => (<option key={year} value={year}>{year}</option>))}
                   </select>
@@ -2288,7 +2288,7 @@ function _EditNodeForm({
                 <div>
                   <Label htmlFor="month">Month</Label>
                   <select id="month" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.month} onChange={(e) => {
-                    const newMonth = parseInt(e.target.value); const dates = getMonthDates(newMonth, formData.year); setFormData({...formData, month: newMonth, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate)})
+                    const newMonth = parseInt(e.target.value); const dates = getMonthDates(newMonth, formData.year); setFormData({ ...formData, month: newMonth, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate) })
                   }}>
                     {Array.from({ length: 12 }, (_, i) => (<option key={i} value={i}>{getMonthName(i)}</option>))}
                   </select>
@@ -2296,7 +2296,7 @@ function _EditNodeForm({
                 <div>
                   <Label htmlFor="year">Year</Label>
                   <select id="year" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.year} onChange={(e) => {
-                    const newYear = parseInt(e.target.value); const dates = getMonthDates(formData.month, newYear); setFormData({...formData, year: newYear, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate)})
+                    const newYear = parseInt(e.target.value); const dates = getMonthDates(formData.month, newYear); setFormData({ ...formData, year: newYear, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate) })
                   }}>
                     {getAvailableYears().map(year => (<option key={year} value={year}>{year}</option>))}
                   </select>
@@ -2308,7 +2308,7 @@ function _EditNodeForm({
               <div className="mt-3">
                 <Label htmlFor="year">Year</Label>
                 <select id="year" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.year} onChange={(e) => {
-                  const newYear = parseInt(e.target.value); const dates = getYearDates(newYear); setFormData({...formData, year: newYear, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate)})
+                  const newYear = parseInt(e.target.value); const dates = getYearDates(newYear); setFormData({ ...formData, year: newYear, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate) })
                 }}>
                   {getAvailableYears().map(year => (<option key={year} value={year}>{year}</option>))}
                 </select>
@@ -2370,8 +2370,8 @@ function _EditNodeForm({
                     {/* Current user option */}
                     <button
                       onClick={() => {
-                        const userName = user?.firstName && user?.lastName 
-                          ? `${user.firstName} ${user.lastName}` 
+                        const userName = user?.firstName && user?.lastName
+                          ? `${user.firstName} ${user.lastName}`
                           : user?.email || ''
                         setFormData({ ...formData, ownerId: user?.id || '', ownerName: userName })
                         setShowOwnerDropdown(false)
@@ -2379,8 +2379,8 @@ function _EditNodeForm({
                       className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
                     >
                       <User className="h-4 w-4" />
-                      {user?.firstName && user?.lastName 
-                        ? `${user.firstName} ${user.lastName}` 
+                      {user?.firstName && user?.lastName
+                        ? `${user.firstName} ${user.lastName}`
                         : user?.email || 'You'} (You)
                     </button>
                     {/* Other users */}
@@ -2463,20 +2463,20 @@ function _EditNodeForm({
 
             {formData.period && formData.period === Period.QUARTERLY && (
               <div className="grid grid-cols-2 gap-4 mt-3">
-                <div><Label htmlFor="quarter">Quarter</Label><select id="quarter" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.quarter} onChange={(e) => { const newQuarter = parseInt(e.target.value); const dates = getQuarterDates(newQuarter, formData.year); setFormData({...formData, quarter: newQuarter, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate)}) }}><option value={1}>Q1 (Jan - Mar)</option><option value={2}>Q2 (Apr - Jun)</option><option value={3}>Q3 (Jul - Sep)</option><option value={4}>Q4 (Oct - Dec)</option></select></div>
-                <div><Label htmlFor="year">Year</Label><select id="year" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.year} onChange={(e) => { const newYear = parseInt(e.target.value); const dates = getQuarterDates(formData.quarter, newYear); setFormData({...formData, year: newYear, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate)}) }}>{getAvailableYears().map(year => (<option key={year} value={year}>{year}</option>))}</select></div>
+                <div><Label htmlFor="quarter">Quarter</Label><select id="quarter" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.quarter} onChange={(e) => { const newQuarter = parseInt(e.target.value); const dates = getQuarterDates(newQuarter, formData.year); setFormData({ ...formData, quarter: newQuarter, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate) }) }}><option value={1}>Q1 (Jan - Mar)</option><option value={2}>Q2 (Apr - Jun)</option><option value={3}>Q3 (Jul - Sep)</option><option value={4}>Q4 (Oct - Dec)</option></select></div>
+                <div><Label htmlFor="year">Year</Label><select id="year" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.year} onChange={(e) => { const newYear = parseInt(e.target.value); const dates = getQuarterDates(formData.quarter, newYear); setFormData({ ...formData, year: newYear, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate) }) }}>{getAvailableYears().map(year => (<option key={year} value={year}>{year}</option>))}</select></div>
               </div>
             )}
 
             {formData.period && formData.period === Period.MONTHLY && (
               <div className="grid grid-cols-2 gap-4 mt-3">
-                <div><Label htmlFor="month">Month</Label><select id="month" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.month} onChange={(e) => { const newMonth = parseInt(e.target.value); const dates = getMonthDates(newMonth, formData.year); setFormData({...formData, month: newMonth, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate)}) }}>{Array.from({ length: 12 }, (_, i) => (<option key={i} value={i}>{getMonthName(i)}</option>))}</select></div>
-                <div><Label htmlFor="year">Year</Label><select id="year" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.year} onChange={(e) => { const newYear = parseInt(e.target.value); const dates = getMonthDates(formData.month, newYear); setFormData({...formData, year: newYear, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate)}) }}>{getAvailableYears().map(year => (<option key={year} value={year}>{year}</option>))}</select></div>
+                <div><Label htmlFor="month">Month</Label><select id="month" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.month} onChange={(e) => { const newMonth = parseInt(e.target.value); const dates = getMonthDates(newMonth, formData.year); setFormData({ ...formData, month: newMonth, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate) }) }}>{Array.from({ length: 12 }, (_, i) => (<option key={i} value={i}>{getMonthName(i)}</option>))}</select></div>
+                <div><Label htmlFor="year">Year</Label><select id="year" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.year} onChange={(e) => { const newYear = parseInt(e.target.value); const dates = getMonthDates(formData.month, newYear); setFormData({ ...formData, year: newYear, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate) }) }}>{getAvailableYears().map(year => (<option key={year} value={year}>{year}</option>))}</select></div>
               </div>
             )}
 
             {formData.period && formData.period === Period.ANNUAL && (
-              <div className="mt-3"><Label htmlFor="year">Year</Label><select id="year" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.year} onChange={(e) => { const newYear = parseInt(e.target.value); const dates = getYearDates(newYear); setFormData({...formData, year: newYear, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate)}) }}>{getAvailableYears().map(year => (<option key={year} value={year}>{year}</option>))}</select></div>
+              <div className="mt-3"><Label htmlFor="year">Year</Label><select id="year" className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm" value={formData.year} onChange={(e) => { const newYear = parseInt(e.target.value); const dates = getYearDates(newYear); setFormData({ ...formData, year: newYear, startDate: formatDateForInput(dates.startDate), endDate: formatDateForInput(dates.endDate) }) }}>{getAvailableYears().map(year => (<option key={year} value={year}>{year}</option>))}</select></div>
             )}
 
             {formData.period && formData.period === Period.CUSTOM && (

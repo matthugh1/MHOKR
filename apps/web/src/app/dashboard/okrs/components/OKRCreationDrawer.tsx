@@ -27,6 +27,7 @@ import api from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 import { AlertCircle, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { StandardCycleSelector } from '@/components/okr/StandardCycleSelector'
+import { GoalTypeSelector } from '@/components/okr/GoalTypeSelector'
 import { Badge } from '@/components/ui/badge'
 import { TagSelector } from '@/components/okr/TagSelector'
 import { ContributorSelector } from '@/components/okr/ContributorSelector'
@@ -35,6 +36,9 @@ import { trapFocus, returnFocus, getActiveElement } from '@/lib/focus-trap'
 import { mapErrorToMessage } from '@/lib/error-mapping'
 import { useUxTiming } from '@/hooks/useUxTiming'
 import { DrawerFormSkeleton } from '@/components/ui/skeletons'
+import { MetricTypeSelector } from '@/components/okr/MetricTypeSelector'
+import { UnitInput } from '@/components/okr/UnitInput'
+import { MetricType } from '@okr-nexus/types'
 
 interface OKRCreationDrawerProps {
   isOpen: boolean
@@ -64,6 +68,7 @@ type Step = 'basics' | 'visibility' | 'key-results' | 'review'
     cycleId: string
     parentId?: string
     pillarId?: string
+    goalType?: 'ASPIRATIONAL' | 'COMMITTED'
     visibilityLevel: 'PUBLIC_TENANT' | 'PRIVATE' // W4.M1: EXEC_ONLY removed
     whitelist?: string[]
   }
@@ -73,9 +78,11 @@ interface DraftKeyResult {
   title: string
   targetValue: number
   startValue: number
-  metricType: 'INCREASE' | 'DECREASE' | 'MAINTAIN' | 'PERCENTAGE' | 'CUSTOM'
+  metricType: MetricType
   unit: string
   ownerId: string
+  goalType?: 'ASPIRATIONAL' | 'COMMITTED'
+  teamId?: string | null
 }
 
 export function OKRCreationDrawer({
@@ -100,6 +107,7 @@ export function OKRCreationDrawer({
     description: '',
     ownerId: user?.id || '',
     cycleId: activeCycles.length > 0 ? activeCycles[0].id : '',
+    goalType: 'ASPIRATIONAL',
     visibilityLevel: 'PUBLIC_TENANT',
   })
   const [draftKRs, setDraftKRs] = useState<DraftKeyResult[]>([])
@@ -138,7 +146,9 @@ export function OKRCreationDrawer({
     targetValue: number
     startValue: number
     unit: string
-    metricType: 'INCREASE' | 'DECREASE' | 'MAINTAIN' | 'PERCENTAGE' | 'CUSTOM'
+    metricType: MetricType
+    goalType?: 'ASPIRATIONAL' | 'COMMITTED'
+    teamId?: string | null
     weight?: number
   }>({
     title: '',
@@ -148,7 +158,9 @@ export function OKRCreationDrawer({
     targetValue: 100,
     startValue: 0,
     unit: 'units',
-    metricType: 'INCREASE',
+    metricType: MetricType.INCREASE,
+    goalType: 'ASPIRATIONAL',
+    teamId: null,
     weight: 1.0,
   })
   // Initiative mode state
@@ -157,6 +169,9 @@ export function OKRCreationDrawer({
     objectiveId: string | null
     keyResultId: string | null
     ownerId: string
+    goalType?: 'ASPIRATIONAL' | 'COMMITTED'
+    teamId?: string | null
+    progress?: number | null
     status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'BLOCKED'
     dueDate: string
   }>({
@@ -164,6 +179,9 @@ export function OKRCreationDrawer({
     objectiveId: effectiveParentForInitiative.objectiveId,
     keyResultId: effectiveParentForInitiative.keyResultId,
     ownerId: user?.id || '',
+    goalType: 'ASPIRATIONAL',
+    teamId: null,
+    progress: null,
     status: 'NOT_STARTED',
     dueDate: '',
   })
@@ -265,6 +283,12 @@ export function OKRCreationDrawer({
     if (isOpen && currentOrganization?.id) {
       api.get(`/okr/creation-context?tenantId=${currentOrganization.id}`)
         .then((res) => {
+          console.log('[OKRCreationDrawer] Creation context response:', {
+            canAssignOthers: res.data.canAssignOthers,
+            allowedOwnersCount: res.data.allowedOwners?.length || 0,
+            canEdit: res.data.canAssignOthers,
+            fullResponse: res.data
+          })
           setAllowedVisibilityLevels(res.data.allowedVisibilityLevels || ['PUBLIC_TENANT'])
           setAllowedOwners(res.data.allowedOwners || [])
           setCanAssignOthers(res.data.canAssignOthers || false)
@@ -344,7 +368,7 @@ export function OKRCreationDrawer({
         targetValue: 100,
         startValue: 0,
         unit: 'units',
-        metricType: 'INCREASE',
+        metricType: MetricType.INCREASE,
       })
       setInitiativeData({
         title: '',
@@ -410,9 +434,11 @@ export function OKRCreationDrawer({
       title: '',
       targetValue: 100,
       startValue: 0,
-      metricType: 'INCREASE',
+      metricType: MetricType.INCREASE,
       unit: 'units',
       ownerId: draftObjective.ownerId, // Default to Objective owner
+      goalType: 'ASPIRATIONAL',
+      teamId: null,
     }
     setDraftKRs([...draftKRs, newKR])
   }
@@ -606,6 +632,7 @@ export function OKRCreationDrawer({
           description: draftObjective.description || undefined,
           ownerUserId: draftObjective.ownerId,
           cycleId: draftObjective.cycleId,
+          goalType: draftObjective.goalType || 'ASPIRATIONAL',
           visibilityLevel: draftObjective.visibilityLevel as 'PUBLIC_TENANT' | 'PRIVATE',
           whitelistUserIds: draftObjective.visibilityLevel === 'PRIVATE' 
             ? (draftObjective.whitelist || [])
@@ -615,11 +642,13 @@ export function OKRCreationDrawer({
         },
         keyResults: draftKRs.map(kr => ({
           title: kr.title,
-          metricType: kr.metricType as 'NUMERIC' | 'PERCENT' | 'BOOLEAN' | 'CUSTOM',
+          metricType: kr.metricType,
           targetValue: kr.targetValue,
           ownerUserId: kr.ownerId,
           startValue: kr.startValue,
           unit: kr.unit,
+          goalType: kr.goalType || 'ASPIRATIONAL',
+          teamId: kr.teamId || undefined,
         })),
       }
 
@@ -816,6 +845,14 @@ export function OKRCreationDrawer({
             </div>
           )}
         </div>
+
+        <GoalTypeSelector
+          value={draftObjective.goalType || 'ASPIRATIONAL'}
+          onValueChange={(value) => setDraftObjective((prev) => ({ ...prev, goalType: value }))}
+          label="Goal Type"
+          id="objective-goal-type"
+          disabled={isSubmitting}
+        />
 
         <div className="space-y-2">
           <Label htmlFor="parent">
@@ -1072,33 +1109,16 @@ export function OKRCreationDrawer({
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor={`kr-metric-${kr.id}`}>Metric Type</Label>
-                <Select
-                  value={kr.metricType}
-                  onValueChange={(value: DraftKeyResult['metricType']) => updateKeyResult(kr.id, { metricType: value })}
-                >
-                  <SelectTrigger id={`kr-metric-${kr.id}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="INCREASE">Increase</SelectItem>
-                    <SelectItem value="DECREASE">Decrease</SelectItem>
-                    <SelectItem value="MAINTAIN">Maintain</SelectItem>
-                    <SelectItem value="PERCENTAGE">Percentage</SelectItem>
-                    <SelectItem value="CUSTOM">Custom</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor={`kr-unit-${kr.id}`}>Unit</Label>
-                <Input
-                  id={`kr-unit-${kr.id}`}
-                  value={kr.unit}
-                  onChange={(e) => updateKeyResult(kr.id, { unit: e.target.value })}
-                  placeholder="e.g., users, hours, %"
-                />
-              </div>
+              <MetricTypeSelector
+                value={kr.metricType}
+                onValueChange={(value) => updateKeyResult(kr.id, { metricType: value })}
+                id={`kr-metric-${kr.id}`}
+              />
+              <UnitInput
+                value={kr.unit}
+                onValueChange={(value) => updateKeyResult(kr.id, { unit: value })}
+                id={`kr-unit-${kr.id}`}
+              />
             </div>
 
             <div className="space-y-2">
@@ -1115,6 +1135,13 @@ export function OKRCreationDrawer({
                 required
               />
             </div>
+
+            <GoalTypeSelector
+              value={kr.goalType || 'ASPIRATIONAL'}
+              onValueChange={(value) => updateKeyResult(kr.id, { goalType: value })}
+              label="Goal Type"
+              id={`kr-goal-type-${kr.id}`}
+            />
           </div>
         ))}
       </div>
@@ -1243,6 +1270,8 @@ export function OKRCreationDrawer({
           startValue: krData.startValue,
           unit: krData.unit,
           metricType: krData.metricType,
+          goalType: krData.goalType || 'ASPIRATIONAL',
+          teamId: krData.teamId || undefined,
           tenantId: currentOrganization?.id,
         })
 
@@ -1445,33 +1474,16 @@ export function OKRCreationDrawer({
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="kr-metric">Metric Type</Label>
-            <Select
-              value={krData.metricType}
-              onValueChange={(value: typeof krData.metricType) => setKrData(prev => ({ ...prev, metricType: value }))}
-            >
-              <SelectTrigger id="kr-metric">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="INCREASE">Increase</SelectItem>
-                <SelectItem value="DECREASE">Decrease</SelectItem>
-                <SelectItem value="MAINTAIN">Maintain</SelectItem>
-                <SelectItem value="PERCENTAGE">Percentage</SelectItem>
-                <SelectItem value="CUSTOM">Custom</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="kr-unit">Unit</Label>
-            <Input
-              id="kr-unit"
-              value={krData.unit}
-              onChange={(e) => setKrData(prev => ({ ...prev, unit: e.target.value }))}
-              placeholder="e.g., users, hours, %"
-            />
-          </div>
+          <MetricTypeSelector
+            value={krData.metricType}
+            onValueChange={(value) => setKrData(prev => ({ ...prev, metricType: value }))}
+            id="kr-metric"
+          />
+          <UnitInput
+            value={krData.unit}
+            onValueChange={(value) => setKrData(prev => ({ ...prev, unit: value }))}
+            id="kr-unit"
+          />
         </div>
       </div>
     )
@@ -1505,6 +1517,9 @@ export function OKRCreationDrawer({
           title: initiativeData.title,
           ownerId: initiativeData.ownerId,
           status: initiativeData.status,
+          goalType: initiativeData.goalType || 'ASPIRATIONAL',
+          teamId: initiativeData.teamId || undefined,
+          progress: initiativeData.progress !== null && initiativeData.progress !== undefined ? initiativeData.progress : undefined,
           tenantId: currentOrganization?.id,
         }
         if (objectiveIdToUse) payload.objectiveId = objectiveIdToUse
@@ -1670,6 +1685,30 @@ export function OKRCreationDrawer({
               <SelectItem value="BLOCKED">Blocked</SelectItem>
             </SelectContent>
           </Select>
+        </div>
+
+        <GoalTypeSelector
+          value={initiativeData.goalType || 'ASPIRATIONAL'}
+          onValueChange={(value) => setInitiativeData(prev => ({ ...prev, goalType: value }))}
+          label="Goal Type"
+          id="init-goal-type"
+        />
+
+        <div className="space-y-2">
+          <Label htmlFor="init-progress">Progress (0-100)</Label>
+          <Input
+            id="init-progress"
+            type="number"
+            min="0"
+            max="100"
+            value={initiativeData.progress ?? ''}
+            onChange={(e) => {
+              const value = e.target.value === '' ? null : parseFloat(e.target.value)
+              setInitiativeData(prev => ({ ...prev, progress: value !== null && !isNaN(value) ? value : null }))
+            }}
+            placeholder="Enter progress percentage (optional)"
+          />
+          <p className="text-xs text-muted-foreground">Progress percentage from 0 to 100</p>
         </div>
 
         <div className="space-y-2">

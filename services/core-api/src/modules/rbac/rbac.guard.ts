@@ -80,7 +80,10 @@ export class RBACGuard implements CanActivate {
 
     // Set tenant context for Prisma middleware (defense-in-depth)
     // This allows the middleware to automatically filter queries
-    return withTenantContext(user?.tenantId, async () => {
+    const userTenantId = user?.tenantId;
+    this.logger.debug(`[RBAC Guard] Setting tenant context: ${userTenantId} for user ${user?.id}`);
+    
+    return withTenantContext(userTenantId, async () => {
       return this.performAuthorizationCheck(context, action, resourceContextFn, request, user);
     });
   }
@@ -173,9 +176,22 @@ export class RBACGuard implements CanActivate {
       // Try to extract from request params/body
       try {
         resourceContext = buildResourceContextFromRequest(request);
+        this.logger.debug(`[RBAC Guard] Built resourceContext from buildResourceContextFromRequest`, {
+          action,
+          userId: user.id,
+          resourceContext,
+          params: request.params,
+          url: request.url,
+          path: request.path,
+        });
       } catch (error) {
         // Fallback to manual extraction
-        const extractedContext = this.extractResourceContextFromRequest(request);
+        this.logger.debug(`[RBAC Guard] buildResourceContextFromRequest failed, using extractResourceContextFromRequest`, {
+          action,
+          userId: user.id,
+          error: (error as Error).message,
+        });
+        const extractedContext = await this.extractResourceContextFromRequest(request);
         
         // If tenantId couldn't be extracted, try to derive it from user context
         if (!extractedContext || !extractedContext.tenantId) {
@@ -196,7 +212,7 @@ export class RBACGuard implements CanActivate {
               let tenantId = '';
               
               // 1. First try: extract from request body/params/query (POST/PUT requests often have tenantId in body)
-              const extracted = this.extractResourceContextFromRequest(request);
+              const extracted = await this.extractResourceContextFromRequest(request);
               if (extracted?.tenantId) {
                 tenantId = extracted.tenantId;
                 this.logger.debug(`Extracted tenantId from request: ${tenantId}`, {
@@ -265,9 +281,25 @@ export class RBACGuard implements CanActivate {
         } else {
           // Use the extracted context
           resourceContext = extractedContext;
+          this.logger.debug(`[RBAC Guard] Using extracted resourceContext`, {
+            action,
+            userId: user.id,
+            resourceContext,
+            params: request.params,
+            url: request.url,
+          });
         }
       }
     }
+
+    // Log final resource context before authorization check
+    this.logger.log(`[RBAC Guard] Final resource context for authorization`, {
+      action,
+      userId: user.id,
+      resourceContext,
+      userTenantId: user.tenantId,
+      userTenantRoles: Array.from(userContext.tenantRoles.keys()),
+    });
 
     // Use centralised authorisation service if enabled
     if (this.useAuthCentre) {
@@ -283,6 +315,13 @@ export class RBACGuard implements CanActivate {
           ? userContext.tenantRoles.get(resourceContext.tenantId) || []
           : [];
         
+        // Get all tenant IDs the user has roles for
+        const allUserTenantIds = Array.from(userContext.tenantRoles.keys());
+        const allUserTenantRoles = Array.from(userContext.tenantRoles.entries()).map(([tid, roles]) => ({
+          tenantId: tid,
+          roles: roles,
+        }));
+        
         const debugInfo = {
           userId: user.id,
           userEmail: user.email,
@@ -290,8 +329,14 @@ export class RBACGuard implements CanActivate {
           action,
           resourceContext,
           tenantRoles,
+          resourceTenantId: resourceContext.tenantId,
+          allUserTenantIds,
+          allUserTenantRoles,
           isSuperuser: userContext.isSuperuser,
           reason: decision.reason,
+          requestUrl: request.url,
+          requestPath: request.path,
+          requestParams: request.params,
         };
         
         this.logger.error('RBAC Authorization Failed', JSON.stringify(debugInfo, null, 2));
@@ -329,6 +374,13 @@ export class RBACGuard implements CanActivate {
         ? userContextForDebug.tenantRoles.get(resourceContext.tenantId) || []
         : [];
       
+      // Get all tenant IDs the user has roles for
+      const allUserTenantIds = Array.from(userContextForDebug.tenantRoles.keys());
+      const allUserTenantRoles = Array.from(userContextForDebug.tenantRoles.entries()).map(([tid, roles]) => ({
+        tenantId: tid,
+        roles: roles,
+      }));
+      
       // Additional debug info
       const debugInfo = {
         userId: user.id,
@@ -337,8 +389,13 @@ export class RBACGuard implements CanActivate {
         action,
         resourceContext,
         tenantRoles,
-        allTenantRoles: Array.from(userContextForDebug.tenantRoles.entries()),
+        resourceTenantId: resourceContext.tenantId,
+        allUserTenantIds,
+        allUserTenantRoles,
         isSuperuser: userContextForDebug.isSuperuser,
+        requestUrl: request.url,
+        requestPath: request.path,
+        requestParams: request.params,
       };
       
       this.logger.error('RBAC Authorization Failed', JSON.stringify(debugInfo, null, 2));
@@ -354,9 +411,16 @@ export class RBACGuard implements CanActivate {
         tenantId: resourceContext.tenantId,
       });
       
-      throw new ForbiddenException(
-        `User does not have permission to ${action}. TenantId: ${resourceContext.tenantId}, UserTenantId: ${user.tenantId}, TenantRoles: ${JSON.stringify(tenantRoles)}`,
-      );
+        const allTenantIdsStr = allUserTenantIds.join(', ');
+        const tenantRolesStr = tenantRoles.length > 0 ? tenantRoles.join(', ') : 'none';
+        throw new ForbiddenException(
+          `User does not have permission to ${action}. ` +
+          `Resource TenantId: ${resourceContext.tenantId}, ` +
+          `User TenantId: ${user.tenantId}, ` +
+          `Roles for this tenant: [${tenantRolesStr}], ` +
+          `User has roles in tenants: [${allTenantIdsStr}]. ` +
+          `Check server logs for full debug info.`,
+        );
     }
 
     return true;
@@ -366,34 +430,120 @@ export class RBACGuard implements CanActivate {
    * Extract resource context from request
    * 
    * Tries to extract tenantId, workspaceId, teamId from request params or body.
+   * Also handles scopeType/scopeId pattern used by RBAC assignment endpoints.
    */
-  private extractResourceContextFromRequest(request: any): ResourceContext | null {
+  private async extractResourceContextFromRequest(request: any): Promise<ResourceContext | null> {
     const params = request.params || {};
     const body = request.body || {};
     const query = request.query || {};
     const url = request.url || '';
     const method = request.method || '';
 
+    // Check if this is an RBAC assignment request with scopeType/scopeId
+    const scopeType = body.scopeType || params.scopeType || query.scopeType;
+    const scopeId = body.scopeId || params.scopeId || query.scopeId;
+
+    if (scopeType && scopeId) {
+      // Handle scopeType/scopeId pattern
+      if (scopeType === 'PLATFORM') {
+        // PLATFORM scope is superuser-only, use empty tenantId
+        return {
+          tenantId: '',
+          workspaceId: null,
+          teamId: null,
+        };
+      }
+
+      if (scopeType === 'TENANT') {
+        // For TENANT scope, scopeId is the tenantId
+        return {
+          tenantId: scopeId,
+          workspaceId: null,
+          teamId: null,
+        };
+      }
+
+      if (scopeType === 'WORKSPACE') {
+        // For WORKSPACE scope, need to fetch workspace to get tenantId
+        try {
+          const workspace = await this.prisma.workspace.findUnique({
+            where: { id: scopeId },
+            select: { tenantId: true },
+          });
+          if (workspace) {
+            return {
+              tenantId: workspace.tenantId,
+              workspaceId: scopeId,
+              teamId: null,
+            };
+          }
+        } catch (error) {
+          this.logger.warn(`Failed to fetch workspace for scopeId ${scopeId}`, error);
+        }
+        // Fallback: return null to let caller use user.tenantId
+        return null;
+      }
+
+      if (scopeType === 'TEAM') {
+        // For TEAM scope, need to fetch team to get workspaceId and tenantId
+        try {
+          const team = await this.prisma.team.findUnique({
+            where: { id: scopeId },
+            include: {
+              workspace: {
+                select: { tenantId: true },
+              },
+            },
+          });
+          if (team) {
+            return {
+              tenantId: team.workspace.tenantId,
+              workspaceId: team.workspaceId,
+              teamId: scopeId,
+            };
+          }
+        } catch (error) {
+          this.logger.warn(`Failed to fetch team for scopeId ${scopeId}`, error);
+        }
+        // Fallback: return null to let caller use user.tenantId
+        return null;
+      }
+    }
+
     // For DELETE /organizations/:id, the id param is the tenantId
     // Check URL pattern to determine context
-    const isOrganizationRoute = url.includes('/organizations/') || url.startsWith('/organizations/');
+    const path = request.path || request.route?.path || url.split('?')[0] || '';
+    const isOrganizationRoute = 
+      url.includes('/organizations/') || 
+      url.startsWith('/organizations/') ||
+      path.includes('/organizations/') ||
+      path.startsWith('/organizations/') ||
+      (request.route && request.route.path && request.route.path.includes('/organizations/'));
     
     // Log for debugging
     this.logger.debug(`Extracting resource context`, {
       url,
+      path,
       method,
       params,
       isOrganizationRoute,
       hasParamsId: !!params.id,
+      routePath: request.route?.path,
     });
     
     // Prefer params, then body, then query
     // For organization routes, params.id is the tenantId
-    const tenantId =
-      params.tenantId || 
-      (isOrganizationRoute && params.id ? params.id : null) || // For /organizations/:id routes
-      body.tenantId || 
-      query.tenantId;
+    let tenantId = params.tenantId;
+    
+    // If no explicit tenantId param, check if this is an organization route
+    if (!tenantId && isOrganizationRoute && params.id) {
+      tenantId = params.id;
+    }
+    
+    // Fallback to body or query
+    if (!tenantId) {
+      tenantId = body.tenantId || query.tenantId;
+    }
     const workspaceId =
       params.workspaceId || body.workspaceId || query.workspaceId;
     const teamId = params.teamId || body.teamId || query.teamId;

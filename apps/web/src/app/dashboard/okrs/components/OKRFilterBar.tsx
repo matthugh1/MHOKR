@@ -19,8 +19,8 @@ import api from '@/lib/api'
 interface OKRFilterBarProps {
   searchQuery: string
   onSearchChange: (value: string) => void
-  selectedStatus: 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED' | null
-  onStatusChange: (status: 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED' | null) => void
+  selectedStatus: 'NOT_STARTED' | 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED' | null
+  onStatusChange: (status: 'NOT_STARTED' | 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED' | null) => void
   selectedScope: 'my' | 'team-workspace' | 'tenant'
   onScopeChange: (scope: 'my' | 'team-workspace' | 'tenant') => void
   availableScopes: Array<'my' | 'team-workspace' | 'tenant'>
@@ -108,7 +108,7 @@ export function OKRFilterBar({
     })
   }
 
-  const handleStatusChange = (status: 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED' | null) => {
+  const handleStatusChange = (status: 'NOT_STARTED' | 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED' | null) => {
     onStatusChange(status)
     // Telemetry: filter applied (status)
     track('filter_applied', {
@@ -237,6 +237,19 @@ export function OKRFilterBar({
             aria-pressed={selectedStatus === null}
           >
             All statuses
+          </button>
+          <button
+            className={cn(
+              "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none h-9",
+              selectedStatus === 'NOT_STARTED'
+                ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
+                : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
+            )}
+            onClick={() => handleStatusChange('NOT_STARTED')}
+            aria-label="Filter by status: Not started"
+            aria-pressed={selectedStatus === 'NOT_STARTED'}
+          >
+            Not started
           </button>
           <button
             className={cn(

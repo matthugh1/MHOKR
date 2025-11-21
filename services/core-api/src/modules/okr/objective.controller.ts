@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { ObjectiveService } from './objective.service';
+import { OkrProgressService } from './okr-progress.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction, RequireActionWithContext } from '../rbac';
 import { RBACService } from '../rbac/rbac.service';
@@ -20,6 +21,7 @@ export class ObjectiveController {
 
   constructor(
     private readonly objectiveService: ObjectiveService,
+    private readonly okrProgressService: OkrProgressService,
     private readonly prisma: PrismaService,
     private readonly rbacService: RBACService,
   ) {

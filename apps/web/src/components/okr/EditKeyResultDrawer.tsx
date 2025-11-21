@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SearchableUserSelect } from '@/components/okr/SearchableUserSelect'
+import { GoalTypeSelector } from '@/components/okr/GoalTypeSelector'
 import { TagSelector } from '@/components/okr/TagSelector'
 import { ContributorSelector } from '@/components/okr/ContributorSelector'
 import { useTenantPermissions } from '@/hooks/useTenantPermissions'
@@ -30,9 +31,11 @@ import { AlertCircle, Loader2 } from 'lucide-react'
 import { StandardCycleSelector } from '@/components/okr/StandardCycleSelector'
 import { trapFocus, returnFocus, getActiveElement } from '@/lib/focus-trap'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { MetricTypeSelector } from '@/components/okr/MetricTypeSelector'
+import { UnitInput } from '@/components/okr/UnitInput'
+import { MetricType } from '@okr-nexus/types'
 
-type OKRStatus = 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'COMPLETED' | 'CANCELLED'
-type MetricType = 'INCREASE' | 'DECREASE' | 'MAINTAIN' | 'PERCENTAGE' | 'CUSTOM'
+type OKRStatus = 'NOT_STARTED' | 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'COMPLETED' | 'CANCELLED'
 type CheckInCadence = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'NONE'
 type VisibilityLevel = 'PUBLIC_TENANT' | 'PRIVATE'
 
@@ -51,6 +54,8 @@ export interface EditKeyResultDrawerProps {
     currentValue: number
     unit?: string
     status: OKRStatus
+    goalType?: 'ASPIRATIONAL' | 'COMMITTED'
+    teamId?: string | null
     checkInCadence?: CheckInCadence
     cycleId?: string
     startDate?: string
@@ -62,6 +67,7 @@ export interface EditKeyResultDrawerProps {
     objectiveIds?: string[]
   } | null
   availableUsers: Array<{ id: string; name: string; email?: string }>
+  availableTeams?: Array<{ id: string; name: string; workspaceId?: string }>
   activeCycles: Array<{ id: string; name: string; status: string }>
   currentOrganization: { id: string } | null
   onClose: () => void
@@ -73,6 +79,7 @@ export function EditKeyResultDrawer({
   keyResultId,
   keyResultData,
   availableUsers,
+  availableTeams = [],
   activeCycles,
   currentOrganization,
   onClose,
@@ -81,12 +88,14 @@ export function EditKeyResultDrawer({
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [ownerId, setOwnerId] = useState('')
-  const [metricType, setMetricType] = useState<MetricType>('INCREASE')
+  const [metricType, setMetricType] = useState<MetricType>(MetricType.INCREASE)
   const [startValue, setStartValue] = useState<number>(0)
   const [targetValue, setTargetValue] = useState<number>(100)
   const [currentValue, setCurrentValue] = useState<number>(0)
   const [unit, setUnit] = useState('')
   const [status, setStatus] = useState<OKRStatus>('ON_TRACK')
+  const [goalType, setGoalType] = useState<'ASPIRATIONAL' | 'COMMITTED'>('ASPIRATIONAL')
+  const [teamId, setTeamId] = useState<string | null>(null)
   const [checkInCadence, setCheckInCadence] = useState<CheckInCadence>('NONE')
   const [cycleId, setCycleId] = useState<string>('')
   const [startDate, setStartDate] = useState<string>('')
@@ -198,12 +207,18 @@ export function EditKeyResultDrawer({
     setTitle(data.title || '')
     setDescription(data.description || '')
     setOwnerId(data.ownerId || '')
-    setMetricType(data.metricType || 'INCREASE')
+    // Map invalid metric types to valid ones
+    const validMetricType = (data.metricType && Object.values(MetricType).includes(data.metricType as MetricType))
+      ? (data.metricType as MetricType)
+      : MetricType.INCREASE
+    setMetricType(validMetricType)
     setStartValue(data.startValue ?? 0)
     setTargetValue(data.targetValue ?? 100)
     setCurrentValue(data.currentValue ?? 0)
     setUnit(data.unit || '')
     setStatus(data.status || 'ON_TRACK')
+    setGoalType(data.goalType || 'ASPIRATIONAL')
+    setTeamId(data.teamId || null)
     setCheckInCadence(data.checkInCadence || 'NONE')
     setCycleId(data.cycleId || '')
     setStartDate(data.startDate ? data.startDate.split('T')[0] : '')
@@ -310,6 +325,8 @@ export function EditKeyResultDrawer({
         currentValue,
         unit: unit.trim() || null,
         status,
+        goalType,
+        teamId: teamId || null,
         checkInCadence: checkInCadence === 'NONE' ? null : checkInCadence,
         cycleId: cycleId || null,
         startDate: startDate || null,
@@ -465,6 +482,7 @@ export function EditKeyResultDrawer({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="NOT_STARTED">Not Started</SelectItem>
                       <SelectItem value="ON_TRACK">On Track</SelectItem>
                       <SelectItem value="AT_RISK">At Risk</SelectItem>
                       <SelectItem value="OFF_TRACK">Off Track</SelectItem>
@@ -473,6 +491,39 @@ export function EditKeyResultDrawer({
                     </SelectContent>
                   </Select>
                 </div>
+
+                <GoalTypeSelector
+                  value={goalType}
+                  onValueChange={setGoalType}
+                  label="Goal Type"
+                  id="kr-goal-type"
+                  disabled={lockInfo.isLocked || !canEdit}
+                />
+
+                {availableTeams.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="kr-team">
+                      Team
+                    </Label>
+                    <Select
+                      value={teamId || 'none'}
+                      onValueChange={(value) => setTeamId(value === 'none' ? null : value)}
+                      disabled={lockInfo.isLocked || !canEdit}
+                    >
+                      <SelectTrigger id="kr-team" className="h-9">
+                        <SelectValue placeholder="Select team (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {availableTeams.map((team) => (
+                          <SelectItem key={team.id} value={team.id}>
+                            {team.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             </TabsContent>
 
@@ -522,36 +573,18 @@ export function EditKeyResultDrawer({
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="kr-metric">Metric Type</Label>
-                    <Select
-                      value={metricType}
-                      onValueChange={(value) => setMetricType(value as MetricType)}
-                      disabled={lockInfo.isLocked || !canEdit}
-                    >
-                      <SelectTrigger id="kr-metric" className="h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="INCREASE">Increase</SelectItem>
-                        <SelectItem value="DECREASE">Decrease</SelectItem>
-                        <SelectItem value="MAINTAIN">Maintain</SelectItem>
-                        <SelectItem value="PERCENTAGE">Percentage</SelectItem>
-                        <SelectItem value="CUSTOM">Custom</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="kr-unit">Unit</Label>
-                    <Input
-                      id="kr-unit"
-                      value={unit}
-                      onChange={(e) => setUnit(e.target.value)}
-                      placeholder="e.g., users, hours, %"
-                      disabled={lockInfo.isLocked || !canEdit}
-                      className="h-9"
-                    />
-                  </div>
+                  <MetricTypeSelector
+                    value={metricType}
+                    onValueChange={setMetricType}
+                    disabled={lockInfo.isLocked || !canEdit}
+                    id="kr-metric"
+                  />
+                  <UnitInput
+                    value={unit}
+                    onValueChange={setUnit}
+                    disabled={lockInfo.isLocked || !canEdit}
+                    id="kr-unit"
+                  />
                 </div>
               </div>
             </TabsContent>

@@ -1,0 +1,332 @@
+[
+  {
+    "ID": 88606,
+    "OKR ID": 1354005,
+    "Comment": "@Frederic Laziou based on the LTP that I have from Stephen, I make Upsell/Crossell for FY24 51.85m not 60m, has this changed??",
+    "Created By": {
+      "ID": 169963,
+      "Name": "Roland Green",
+      "Email": "roland.green@puzzel.com"
+    },
+    "Created At": "2023-11-23 09:51:24"
+  },
+  {
+    "ID": 88925,
+    "OKR ID": 1353834,
+    "Comment": "Will be managed by Shaun when he starts",
+    "Created By": {
+      "ID": 169735,
+      "Name": "Frederic Laziou",
+      "Email": "frederic.laziou@puzzel.com"
+    },
+    "Created At": "2023-11-28 11:50:06"
+  },
+  {
+    "ID": 88926,
+    "OKR ID": 1327101,
+    "Comment": "FL reach out to former colleagues. 1 candidate identified (PJ Verhoef) and Ollie working on sourcing.",
+    "Created By": {
+      "ID": 169735,
+      "Name": "Frederic Laziou",
+      "Email": "frederic.laziou@puzzel.com"
+    },
+    "Created At": "2023-11-28 11:52:01"
+  },
+  {
+    "ID": 89079,
+    "OKR ID": 1365525,
+    "Comment": "Usage reporting from each product\nOperational processes\nTime reporting\nLicenses restrictions",
+    "Created By": {
+      "ID": 163989,
+      "Name": "Matt Hughes",
+      "Email": "matt.hughes@puzzel.com"
+    },
+    "Created At": "2023-11-29 16:03:34"
+  },
+  {
+    "ID": 89501,
+    "OKR ID": 1328094,
+    "Comment": "This is generic, and should be lifted to sit above the SI migration project, not below.",
+    "Created By": {
+      "ID": 173279,
+      "Name": "Christer Stormyrbakken",
+      "Email": "christer.stormyrbakken@puzzel.com"
+    },
+    "Created At": "2023-12-05 13:44:51"
+  },
+  {
+    "ID": 90582,
+    "OKR ID": 1373425,
+    "Comment": "Should we prioritize it?",
+    "Created By": {
+      "ID": 173279,
+      "Name": "Christer Stormyrbakken",
+      "Email": "christer.stormyrbakken@puzzel.com"
+    },
+    "Created At": "2023-12-18 11:10:27"
+  },
+  {
+    "ID": 91767,
+    "OKR ID": 1437530,
+    "Comment": "Ensure both Nordics and UK case studies are delivered, in several formats like written or video",
+    "Created By": {
+      "ID": 169904,
+      "Name": "Gabi Warren",
+      "Email": "gabi.warren@puzzel.com"
+    },
+    "Created At": "2024-01-09 09:13:58"
+  },
+  {
+    "ID": 92155,
+    "OKR ID": 1385763,
+    "Comment": "Next step is to align with Pål and agree on target number of customers",
+    "Created By": {
+      "ID": 173030,
+      "Name": "Sofia Rossi",
+      "Email": "sofia.rossi@puzzel.com"
+    },
+    "Created At": "2024-01-12 08:25:15"
+  },
+  {
+    "ID": 92522,
+    "OKR ID": 1363520,
+    "Comment": "@jan: https://puzzel.atlassian.net/browse/ABD-22",
+    "Created By": {
+      "ID": 165478,
+      "Name": "Alexander Lunde",
+      "Email": "alexander.lunde@puzzel.com"
+    },
+    "Created At": "2024-01-16 10:42:20"
+  },
+  {
+    "ID": 92912,
+    "OKR ID": 1471165,
+    "Comment": "Plan documented on https://puzzel.atlassian.net/wiki/x/B4DV9w",
+    "Created By": {
+      "ID": 173279,
+      "Name": "Christer Stormyrbakken",
+      "Email": "christer.stormyrbakken@puzzel.com"
+    },
+    "Created At": "2024-01-19 07:27:15"
+  },
+  {
+    "ID": 95715,
+    "OKR ID": 1328045,
+    "Comment": "Hi @Gabi Warren, we haven't talked about this KR but I guess you mean assets as customer cases, speakers for events etc. In that case I have an Objective called Establish Customer Advocacy Program, that covers the topic. If that's correct I suggest that I merge these. Please advice.",
+    "Created By": {
+      "ID": 173604,
+      "Name": "Morgan Sandberg",
+      "Email": "morgan.sandberg@puzzel.com"
+    },
+    "Created At": "2024-02-14 07:46:59"
+  },
+  {
+    "ID": 98378,
+    "OKR ID": 1361341,
+    "Comment": "@Roland Green: how are progressing on success plans for A and B customers?",
+    "Created By": {
+      "ID": 169735,
+      "Name": "Frederic Laziou",
+      "Email": "frederic.laziou@puzzel.com"
+    },
+    "Created At": "2024-03-06 19:17:53"
+  },
+  {
+    "ID": 98379,
+    "OKR ID": 1354001,
+    "Comment": "@Roland Green KR still not defined. Define or remove!",
+    "Created By": {
+      "ID": 169735,
+      "Name": "Frederic Laziou",
+      "Email": "frederic.laziou@puzzel.com"
+    },
+    "Created At": "2024-03-06 19:18:35"
+  },
+  {
+    "ID": 98380,
+    "OKR ID": 1353665,
+    "Comment": "@Elin Filipp: Even if not new data points, can you update progress (i.e. tools, cadence...) in order to follow progress. Thx!",
+    "Created By": {
+      "ID": 169735,
+      "Name": "Frederic Laziou",
+      "Email": "frederic.laziou@puzzel.com"
+    },
+    "Created At": "2024-03-06 19:23:58"
+  },
+  {
+    "ID": 98381,
+    "OKR ID": 1353741,
+    "Comment": "@Richard Holland: please update here in order to follow progress (as for other OKRs). Thx!",
+    "Created By": {
+      "ID": 169735,
+      "Name": "Frederic Laziou",
+      "Email": "frederic.laziou@puzzel.com"
+    },
+    "Created At": "2024-03-06 19:27:24"
+  },
+  {
+    "ID": 98510,
+    "OKR ID": 1395227,
+    "Comment": "Updated article in Confluence: https://puzzel.atlassian.net/wiki/spaces/OWO/pages/995786787/Support+tickets+OWO+3.line+in+Jira+from+Puzzel+Support+PCM\n\nThis now include OWO requirements from all teams, except Agent team. We expect to have completed this article on 8th March",
+    "Created By": {
+      "ID": 173032,
+      "Name": "Jon Magnus Hushovd",
+      "Email": "jon.magnus.hushovd@puzzel.com"
+    },
+    "Created At": "2024-03-07 13:25:09"
+  },
+  {
+    "ID": 98559,
+    "OKR ID": 1361367,
+    "Comment": "A comprehensive plan has been written for CSM and this will be put into production early Q2",
+    "Created By": {
+      "ID": 169963,
+      "Name": "Roland Green",
+      "Email": "roland.green@puzzel.com"
+    },
+    "Created At": "2024-03-07 21:13:06"
+  },
+  {
+    "ID": 99201,
+    "OKR ID": 1389384,
+    "Comment": "James Henderson has created the first draft at this template and it will now be tweaked: \nMarket research \nEngage with Sales – specifically around what they’re seeing in publications, what the competition are doing, in their opinion what has landed and what will land, and how best they would use this to present the value of Puzzel \nEngage with Account Management – what are our customers in this vertical actually using? What do they like? What do they want? On service reviews, what have they presented about their strategy going forward? \nEngage with Marketing – How can the above scenarios fit in to broader messaging around Puzzel? \n \nScenario planning \nThis is a collaborative process with the AEs representing this vertical.  \nFirstly, design 5 scenarios. Not every scenario needs to include every module we can think of.  \nA good narrative across the scenarios is ‘these are the problems we’re solving for LIVE customers’ > ‘this is what the vertical is moving towards right now’ > ‘this is the future of the vertical’. This allows us to position ourselves as vertical leaders and show the value of Puzzel USPs such as DE. \nWork together to create a brief. Typically this is a document detailing each demo scenario blow-by-blow – more of a user guide. \nWork together to create ‘Problem > what we show > the value it brings’ slides. These are key when presenting to new business – you won’t be walking through Puzzel feature by feature, so tell-show-tell will prevent the prospect from getting lost. \nAim for 5 scenarios, that can be ran through in anywhere from 5-15 minutes each, depending on the context of the meeting. \n \nDemo building \nPut these scenarios together! Ideally this will live on a separate tenant. This means anybody can log in and demo to the same effect, and it also stops demo clashes. \nCreate other assets needed, such as website pages, or tailored DE banners – start this early as it may need others, i.e Michal, or the DE team. \nAfter iteration 1 of each scenario is complete, record them, complete with talk track, and share with sales team and colleagues for feedback. \nIn parallel to this, the AEs should be updating their slideware. \n \nIterating – internal \nEnsure a running cadence with the relevant AEs. Run through each demo scenario, and tailor as feedback dictates. \nUpdate your demo assets, and document as necessary. \nOnce built, rehearse both demo scenarios and slideware, to ensure any proper demos are seamless. \nAt this time it would be appropriate to make a technical document too, to ensure other SEs can pick up and go. \n \nIterating – partners \nRun the same process as above, but with partners this time. They’ll have a less Puzzel-centric view than your colleagues. Additionally, this will drum up interest in Puzzel’s new approach. \nUpdate demo assets and documentation. \n \nIterating – prospects \nHere’s the exciting part! Run these past a prospect. \nCatch up after with the AE. What landed? What could have been smoother? What caused confusion, and what warranted a deep dive? \nIterate and go again! \n \nFuture \nWork on creating more scenarios. There are more than 5 use cases per vertical, and as our understanding of the vertical/demo success grows, as should our demo suite.",
+    "Created By": {
+      "ID": 173171,
+      "Name": "Sundeep Boughan",
+      "Email": "sundeep.boughan@puzzel.com"
+    },
+    "Created At": "2024-03-13 08:45:09"
+  },
+  {
+    "ID": 99203,
+    "OKR ID": 1389385,
+    "Comment": "We have now presented the Housing Verticalised Demos to 5 key stake holders",
+    "Created By": {
+      "ID": 173171,
+      "Name": "Sundeep Boughan",
+      "Email": "sundeep.boughan@puzzel.com"
+    },
+    "Created At": "2024-03-13 08:46:14"
+  },
+  {
+    "ID": 99204,
+    "OKR ID": 1434823,
+    "Comment": "This has now been done for Housing. The format of the template exists",
+    "Created By": {
+      "ID": 173171,
+      "Name": "Sundeep Boughan",
+      "Email": "sundeep.boughan@puzzel.com"
+    },
+    "Created At": "2024-03-13 08:47:23"
+  },
+  {
+    "ID": 99220,
+    "OKR ID": 1356773,
+    "Comment": "@Richard Holland can you update this OKR please sir?",
+    "Created By": {
+      "ID": 169963,
+      "Name": "Roland Green",
+      "Email": "roland.green@puzzel.com"
+    },
+    "Created At": "2024-03-13 09:45:44"
+  },
+  {
+    "ID": 99221,
+    "OKR ID": 1353741,
+    "Comment": "@Richard Holland and this one please",
+    "Created By": {
+      "ID": 169963,
+      "Name": "Roland Green",
+      "Email": "roland.green@puzzel.com"
+    },
+    "Created At": "2024-03-13 09:46:33"
+  },
+  {
+    "ID": 99222,
+    "OKR ID": 1327848,
+    "Comment": "@Richard Holland and final one here please",
+    "Created By": {
+      "ID": 169963,
+      "Name": "Roland Green",
+      "Email": "roland.green@puzzel.com"
+    },
+    "Created At": "2024-03-13 09:46:55"
+  },
+  {
+    "ID": 99224,
+    "OKR ID": 1354568,
+    "Comment": "@Richard Holland can you improve on my comment below please",
+    "Created By": {
+      "ID": 169963,
+      "Name": "Roland Green",
+      "Email": "roland.green@puzzel.com"
+    },
+    "Created At": "2024-03-13 09:49:25"
+  },
+  {
+    "ID": 141258,
+    "OKR ID": 1358959,
+    "Comment": "Not reached goal at end of year. Main reasons for that are delays in migrations ans sunsettings (Vergic platform, rewrite of SMS platform, migration to Puzzel ID and migratiron to Customer Insight)",
+    "Created By": {
+      "ID": 172759,
+      "Name": "Jan Rygh",
+      "Email": "jan.rygh@puzzel.com"
+    },
+    "Created At": "2024-12-30 11:47:19"
+  },
+  {
+    "ID": 149454,
+    "OKR ID": 2503081,
+    "Comment": "Written and designed, to be launched at Elevate",
+    "Created By": {
+      "ID": 169904,
+      "Name": "Gabi Warren",
+      "Email": "gabi.warren@puzzel.com"
+    },
+    "Created At": "2025-03-12 08:31:16"
+  },
+  {
+    "ID": 153397,
+    "OKR ID": 2352319,
+    "Comment": "Best practice (Standard VA Chat Agent) has been defined and communicated. Pending is Mail and Voice. Mail has been defined by expected hours and Voice too, but not written out in complete detail with phases. Also, to implement mail and Voice we currently struggle with 2 main things: Mail is heavy on implementation hours which challenges the first level while we have little experience with voice. To push on the overall OKRs of both fast tracking (from implementation side) and halving implementation time (as I recall as a product OKR), we have planned for 3 days workshop next week gathering both tech, product and AI enablement to push on this.",
+    "Created By": {
+      "ID": 310688,
+      "Name": "Ida Østergård Nielsen",
+      "Email": "ida.nielsen@puzzel.com"
+    },
+    "Created At": "2025-04-07 09:54:47"
+  },
+  {
+    "ID": 159094,
+    "OKR ID": 2433638,
+    "Comment": "@Ulf Sahlin Could you please update this one? If it is not the right measurement to follow progress for Azure migration, let's adjust the key result",
+    "Created By": {
+      "ID": 225281,
+      "Name": "Signe Roesgaard-Gran",
+      "Email": "signe.roesgaard.gran@puzzel.com"
+    },
+    "Created At": "2025-06-11 09:04:13"
+  },
+  {
+    "ID": 159097,
+    "OKR ID": 2437124,
+    "Comment": "@Ulf Sahlin Could you please update àll DORA OKR's",
+    "Created By": {
+      "ID": 225281,
+      "Name": "Signe Roesgaard-Gran",
+      "Email": "signe.roesgaard.gran@puzzel.com"
+    },
+    "Created At": "2025-06-11 09:06:55"
+  },
+  {
+    "ID": 168058,
+    "OKR ID": 2851157,
+    "Comment": "5.3m raised, 2.3m in August with 50% of team",
+    "Created By": {
+      "ID": 173173,
+      "Name": "Ram Sagoo",
+      "Email": "raminder.sagoo@puzzel.com"
+    },
+    "Created At": "2025-08-07 15:05:05"
+  }
+]

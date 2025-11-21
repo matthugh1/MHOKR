@@ -86,12 +86,12 @@ describe('Check-in Due Calculator', () => {
     });
 
     it('should handle BIWEEKLY cadence correctly', () => {
-      const lastCheckInAt = new Date('2024-12-30T10:00:00Z'); // 16 days ago (BIWEEKLY = 14, grace = 2, so overdue after 16)
+      const lastCheckInAt = new Date('2024-12-29T10:00:00Z'); // 17 days ago (BIWEEKLY = 14, grace = 2, so overdue after 16)
       const result = calculateCheckInDueStatus('BIWEEKLY', lastCheckInAt, krCreatedAt, 2, now);
       
       expect(result.status).toBe('OVERDUE');
       expect(result.cadenceDays).toBe(14);
-      expect(result.daysSinceLastCheckIn).toBe(16);
+      expect(result.daysSinceLastCheckIn).toBe(17);
     });
 
     it('should handle MONTHLY cadence correctly', () => {
@@ -101,6 +101,26 @@ describe('Check-in Due Calculator', () => {
       expect(result.status).toBe('OVERDUE');
       expect(result.cadenceDays).toBe(30);
       expect(result.daysSinceLastCheckIn).toBe(36);
+    });
+
+    it('should return ON_TIME for KR created in the future (no check-ins)', () => {
+      const futureDate = new Date('2026-01-15T10:00:00Z'); // Future date
+      const result = calculateCheckInDueStatus('WEEKLY', null, futureDate, 2, now);
+      
+      expect(result.status).toBe('ON_TIME');
+      expect(result.isDue).toBe(false);
+      expect(result.isOverdue).toBe(false);
+      expect(result.daysSinceLastCheckIn).toBe(0);
+    });
+
+    it('should return ON_TIME for KR with check-in in the future', () => {
+      const futureCheckIn = new Date('2026-01-15T10:00:00Z'); // Future check-in date
+      const result = calculateCheckInDueStatus('WEEKLY', futureCheckIn, krCreatedAt, 2, now);
+      
+      expect(result.status).toBe('ON_TIME');
+      expect(result.isDue).toBe(false);
+      expect(result.isOverdue).toBe(false);
+      expect(result.daysSinceLastCheckIn).toBe(0);
     });
 
     it('should return ON_TIME for NONE cadence', () => {
@@ -119,6 +139,43 @@ describe('Check-in Due Calculator', () => {
       
       expect(resultWithGrace2.status).toBe('OVERDUE'); // 10 > 7 + 2
       expect(resultWithGrace5.status).toBe('DUE'); // 10 <= 7 + 5
+    });
+
+    it('should use startDate instead of createdAt when startDate has passed and no check-ins', () => {
+      const startDate = new Date('2025-01-05T10:00:00Z'); // 10 days ago (past)
+      const result = calculateCheckInDueStatus('WEEKLY', null, krCreatedAt, 2, now, startDate);
+      
+      expect(result.daysSinceLastCheckIn).toBe(10); // Days since startDate, not createdAt
+      expect(result.isDue).toBe(true);
+      expect(result.isOverdue).toBe(true); // 10 > 7 + 2
+    });
+
+    it('should return ON_TIME when startDate is in the future and no check-ins', () => {
+      const futureStartDate = new Date('2026-01-15T10:00:00Z'); // Future date
+      const result = calculateCheckInDueStatus('WEEKLY', null, krCreatedAt, 2, now, futureStartDate);
+      
+      expect(result.status).toBe('ON_TIME');
+      expect(result.isDue).toBe(false);
+      expect(result.isOverdue).toBe(false);
+      expect(result.daysSinceLastCheckIn).toBe(0);
+    });
+
+    it('should use createdAt when startDate is null and no check-ins', () => {
+      const result = calculateCheckInDueStatus('WEEKLY', null, krCreatedAt, 2, now, null);
+      
+      expect(result.daysSinceLastCheckIn).toBe(14); // Days since createdAt
+      expect(result.isDue).toBe(true);
+      expect(result.isOverdue).toBe(true);
+    });
+
+    it('should use lastCheckInAt over startDate when check-ins exist', () => {
+      const startDate = new Date('2025-01-05T10:00:00Z'); // 10 days ago
+      const lastCheckInAt = new Date('2025-01-10T10:00:00Z'); // 5 days ago
+      const result = calculateCheckInDueStatus('WEEKLY', lastCheckInAt, krCreatedAt, 2, now, startDate);
+      
+      expect(result.daysSinceLastCheckIn).toBe(5); // Days since last check-in, not startDate
+      expect(result.isDue).toBe(false);
+      expect(result.isOverdue).toBe(false);
     });
   });
 });

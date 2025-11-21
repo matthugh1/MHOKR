@@ -925,6 +925,9 @@ export default function OKRsPage() {
       const krData = kr.keyResult || kr
       const weight = kr.weight ?? 1.0 // Extract weight from junction table, default to 1.0
       
+      // Get owner from unified response or fallback to availableUsers
+      const krOwner = krData.owner || kr.owner || availableUsers.find(u => u.id === (krData.ownerId || kr.ownerId))
+      
       return {
         id: krId,
         title: krData.title || kr.title,
@@ -937,6 +940,11 @@ export default function OKRsPage() {
         checkInCadence: krData.checkInCadence || kr.cadence,
         isOverdue,
         ownerId: krData.ownerId || kr.ownerId,
+        owner: krOwner ? {
+          id: krOwner.id || krOwner.id,
+          name: krOwner.name || krOwner.name || 'Unknown',
+          email: krOwner.email || krOwner.email || null,
+        } : null,
         weight, // Include weight from junction table
       }
     })
@@ -1033,6 +1041,8 @@ export default function OKRsPage() {
       initiatives,
       overdueCountForObjective,
       lowestConfidence,
+      tenantId: rawObj.tenantId || rawObj.organizationId, // Use tenantId from backend, fallback to organizationId
+      organizationId: rawObj.organizationId, // Keep for backward compatibility
     }
   }
 
@@ -1384,7 +1394,17 @@ export default function OKRsPage() {
                   onAddInitiativeToObjective: handleAddInitiativeToObjectiveClick,
                   onAddInitiativeToKr: handleAddInitiativeToKrClick,
                   onAddCheckIn: handleAddCheckIn,
-                  onOpenHistory: handleOpenActivityDrawer,
+                  onOpenHistory: (entityType?: 'OBJECTIVE' | 'KEY_RESULT', entityId?: string) => {
+                    if (entityType && entityId) {
+                      const entityTitle = entityType === 'OBJECTIVE' 
+                        ? okrs.find(o => o.id === entityId)?.title
+                        : okrs.flatMap(o => o.keyResults || []).find(kr => kr.id === entityId)?.title
+                      handleOpenActivityDrawer(entityType, entityId, entityTitle)
+                    } else {
+                      // Fallback for backward compatibility
+                      handleOpenActivityDrawer('OBJECTIVE', objective.id, objective.title)
+                    }
+                  },
                   onEditKeyResult: handleEditKeyResult,
                   onOpenContextualAddMenu: handleOpenContextualAddMenu,
                   onContextualAddKeyResult: handleContextualAddKeyResult,
@@ -1419,7 +1439,17 @@ export default function OKRsPage() {
                   onAddInitiativeToObjective: handleAddInitiativeToObjectiveClick,
                   onAddInitiativeToKr: handleAddInitiativeToKrClick,
                   onAddCheckIn: handleAddCheckIn,
-                  onOpenHistory: handleOpenActivityDrawer,
+                  onOpenHistory: (entityType?: 'OBJECTIVE' | 'KEY_RESULT', entityId?: string) => {
+                    if (entityType && entityId) {
+                      const entityTitle = entityType === 'OBJECTIVE' 
+                        ? okrs.find(o => o.id === entityId)?.title
+                        : okrs.flatMap(o => o.keyResults || []).find(kr => kr.id === entityId)?.title
+                      handleOpenActivityDrawer(entityType, entityId, entityTitle)
+                    } else {
+                      // Fallback for backward compatibility
+                      handleOpenActivityDrawer('OBJECTIVE', objective.id, objective.title)
+                    }
+                  },
                   onEditKeyResult: handleEditKeyResult,
                   // Story 5: Contextual Add menu handlers
                   onOpenContextualAddMenu: handleOpenContextualAddMenu,
@@ -1615,8 +1645,14 @@ export default function OKRsPage() {
                 setShowNewCheckIn(false)
                 setActiveCheckInKrId(null)
                 handleReloadOKRs()
-              } catch (err) {
+              } catch (err: any) {
                 console.error('Failed to create check-in', err)
+                const errorMessage = err.response?.data?.message || err.message || 'Failed to create check-in'
+                toast({
+                  title: 'Could not save',
+                  description: errorMessage,
+                  variant: 'destructive',
+                })
               }
             }}
           />

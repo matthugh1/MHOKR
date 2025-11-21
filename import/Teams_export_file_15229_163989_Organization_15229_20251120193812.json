@@ -1,0 +1,13 @@
+[
+{"ID":42835,"Team Name":"All Puzzel","Parent Team":"","Team Owners":[{"ID":169735,"Name":"Frederic Laziou","Email":"frederic.laziou@puzzel.com"}],"Team Type":"Classic","Status":"Active","Description":""},
+{"ID":42848,"Team Name":"Commercial","Parent Team":"All Puzzel","Team Owners":[{"ID":169963,"Name":"Roland Green","Email":"roland.green@puzzel.com"}],"Team Type":"Classic","Status":"Active","Description":""},
+{"ID":45257,"Team Name":"CSG","Parent Team":"All Puzzel","Team Owners":[{"ID":169959,"Name":"Jo Sverre Lindem","Email":"jo.sverre.lindem@puzzel.com"}],"Team Type":"Classic","Status":"Active","Description":null},
+{"ID":45147,"Team Name":"Finance","Parent Team":"All Puzzel","Team Owners":[{"ID":169961,"Name":"Stephen Grist","Email":"stephen.grist@puzzel.com"}],"Team Type":"Classic","Status":"Active","Description":null},
+{"ID":59723,"Team Name":"GRP-SS GLT","Parent Team":"","Team Owners":[{"ID":169735,"Name":"Frederic Laziou","Email":"frederic.laziou@puzzel.com"}],"Team Type":"Modern","Status":"Active","Description":"Global Leadership Team site"},
+{"ID":45146,"Team Name":"HR","Parent Team":"All Puzzel","Team Owners":[{"ID":169962,"Name":"Elin Filipp","Email":"elin.filipp@puzzel.com"}],"Team Type":"Classic","Status":"Active","Description":""},
+{"ID":42849,"Team Name":"Marketing","Parent Team":"All Puzzel","Team Owners":[{"ID":169904,"Name":"Gabi Warren","Email":"gabi.warren@puzzel.com"}],"Team Type":"Classic","Status":"Active","Description":""},
+{"ID":71427,"Team Name":"Marketing","Parent Team":"","Team Owners":[{"ID":169904,"Name":"Gabi Warren","Email":"gabi.warren@puzzel.com"},{"ID":173178,"Name":"Jordy van Gent","Email":"jordy.vangent@puzzel.com"},{"ID":310482,"Name":"Raïsa Van Olden","Email":"raisa.vanolden@puzzel.com"}],"Team Type":"Modern","Status":"Archived","Description":"Marketing"},
+{"ID":71409,"Team Name":"OLT","Parent Team":"","Team Owners":[{"ID":173031,"Name":"Scott Maryan","Email":"scott.maryan@puzzel.com"},{"ID":303714,"Name":"Nikki Aston","Email":"nikki.aston@puzzel.com"}],"Team Type":"Classic","Status":"Active","Description":null},
+{"ID":42843,"Team Name":"Product & Technology","Parent Team":"All Puzzel","Team Owners":[{"ID":225281,"Name":"Signe Roesgaard-Gran","Email":"signe.roesgaard.gran@puzzel.com"}],"Team Type":"Classic","Status":"Active","Description":""},
+{"ID":42836,"Team Name":"Revenue Operations","Parent Team":"All Puzzel","Team Owners":[{"ID":165477,"Name":"Harriet Edwards","Email":"harriet.edwards@puzzel.com"}],"Team Type":"Classic","Status":"Active","Description":""}
+]

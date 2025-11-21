@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select"
 import { SearchableUserSelect } from "@/components/okr/SearchableUserSelect"
 
-type OKRStatus = "ON_TRACK" | "AT_RISK" | "OFF_TRACK" | "COMPLETED" | "CANCELLED"
+type OKRStatus = "NOT_STARTED" | "ON_TRACK" | "AT_RISK" | "OFF_TRACK" | "COMPLETED" | "CANCELLED"
 type VisibilityLevel = "PUBLIC_TENANT" | "PRIVATE"
 type CheckInCadence = "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "NONE"
 
@@ -238,6 +238,7 @@ export function NewKeyResultModal({
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="NOT_STARTED">Not Started</SelectItem>
                 <SelectItem value="ON_TRACK">On Track</SelectItem>
                 <SelectItem value="AT_RISK">At Risk</SelectItem>
                 <SelectItem value="OFF_TRACK">Off Track</SelectItem>

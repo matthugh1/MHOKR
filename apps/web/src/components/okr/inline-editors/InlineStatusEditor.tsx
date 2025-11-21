@@ -11,7 +11,7 @@ import { Check, Loader2, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { RbacWhyTooltip } from '@/components/rbac/RbacWhyTooltip'
 
-type ObjectiveStatus = 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED'
+type ObjectiveStatus = 'NOT_STARTED' | 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED'
 
 interface StatusOption {
   value: ObjectiveStatus
@@ -20,6 +20,7 @@ interface StatusOption {
 }
 
 const STATUS_OPTIONS: StatusOption[] = [
+  { value: 'NOT_STARTED', label: 'Not started', tone: 'neutral' },
   { value: 'ON_TRACK', label: 'On track', tone: 'success' },
   { value: 'AT_RISK', label: 'At risk', tone: 'warning' },
   { value: 'OFF_TRACK', label: 'Off track', tone: 'danger' },

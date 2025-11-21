@@ -90,11 +90,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const fetchUserContext = async () => {
     try {
-      console.log('Fetching user context...')
-      
+
+
       // Check if superuser first
       const isSuper = await checkSuperuserStatus()
-      
+
       let userContextData
       let allOrganizationsData: Organization[] = []
 
@@ -109,7 +109,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           const orgsResponse = await api.get('/organizations')
           allOrganizationsData = orgsResponse.data || []
         }
-        
+
         // Still get user context for workspaces/teams
         const contextResponse = await api.get('/users/me/context')
         userContextData = contextResponse.data
@@ -120,14 +120,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
 
       setUserId(userContextData.user.id)
-      
+
       // Set organizations
       if (isSuper && allOrganizationsData.length > 0) {
         setOrganizations(allOrganizationsData)
       } else {
         setOrganizations(userContextData.organizations || (userContextData.organization ? [userContextData.organization] : []))
       }
-      
+
       setWorkspaces(userContextData.workspaces || [])
       setTeams(userContextData.teams || [])
 
@@ -136,32 +136,43 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       const savedWorkspaceId = localStorage.getItem('currentWorkspaceId')
       const savedTeamId = localStorage.getItem('currentTeamId')
 
-      // Determine which organizations are available
-      const availableOrganizations = isSuper && allOrganizationsData.length > 0 
-        ? allOrganizationsData 
+      // SINGLE-TENANT ACCESS: Users can only access their primary organization
+      // For superusers, they can still see all organizations, but regular users get only their primary org
+      const availableOrganizations = isSuper && allOrganizationsData.length > 0
+        ? allOrganizationsData
         : (userContextData.organizations || (userContextData.organization ? [userContextData.organization] : []))
 
-      // Set organization - auto-select first one if none selected
-      if (savedOrganizationId && availableOrganizations.find((o: Organization) => o.id === savedOrganizationId)) {
-        const savedOrg = availableOrganizations.find((o: Organization) => o.id === savedOrganizationId)
-        setCurrentOrganization(savedOrg)
-      } else if (availableOrganizations.length > 0) {
-        // Auto-select first organization on login
-        const firstOrg = availableOrganizations[0]
-        setCurrentOrganization(firstOrg)
-        localStorage.setItem('currentOrganizationId', firstOrg.id)
-        
-        // Also set OKR level to organization if we have one
-        if (firstOrg) {
-          setCurrentOKRLevel('organization')
-          localStorage.setItem('currentOKRLevel', 'organization')
+      // Set organization - use primary organization (single org for non-superusers)
+      // For regular users, there's only one organization (their primary org)
+      if (availableOrganizations.length > 0) {
+        // For non-superusers, use the primary organization (should be only one)
+        // For superusers, check localStorage or use first one
+        let orgToSet: Organization | null = null;
+
+        if (isSuper && savedOrganizationId) {
+          // Superuser: check if saved org is still available
+          orgToSet = availableOrganizations.find((o: Organization) => o.id === savedOrganizationId) || null;
+        }
+
+        if (!orgToSet && availableOrganizations.length > 0) {
+          // Use first (and only for non-superusers) organization
+          orgToSet = availableOrganizations[0];
+        }
+
+        if (orgToSet) {
+          setCurrentOrganization(orgToSet);
+          localStorage.setItem('currentOrganizationId', orgToSet.id);
+
+          // Also set OKR level to organization if we have one
+          setCurrentOKRLevel('organization');
+          localStorage.setItem('currentOKRLevel', 'organization');
         }
       }
 
       // Set workspace - but only if it belongs to the selected organization
       // For superusers viewing an org they're not part of, don't set workspace/team
       const selectedOrgId = savedOrganizationId || (availableOrganizations.length > 0 ? availableOrganizations[0].id : null)
-      
+
       if (isSuper && selectedOrgId) {
         // For superusers: Only set workspace/team if they belong to the selected organization
         // We'll fetch workspaces for the org in selectOrganization, so clear these for now
@@ -224,6 +235,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const selectOrganization = async (organizationId: string) => {
     const newOrganization = organizations.find(o => o.id === organizationId)
     if (newOrganization) {
+      // SINGLE-TENANT ACCESS: For non-superusers, validate they can only select their primary org
+      // This should already be enforced by backend, but add frontend validation for UX
+      if (!isSuperuser) {
+        // Non-superusers can only access their primary organization
+        // The organizations array should only contain their primary org, but validate anyway
+        const userPrimaryOrg = organizations.find(o => o.id === organizationId);
+        if (!userPrimaryOrg) {
+          console.warn('[Workspace Context] Non-superuser attempted to select non-primary organization');
+          return; // Silently fail - user shouldn't see this option anyway
+        }
+      }
+
       setCurrentOrganization(newOrganization)
       localStorage.setItem('currentOrganizationId', organizationId)
 
@@ -231,15 +254,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       if (isSuperuser) {
         // Check if user has any workspace/team memberships in the selected organization
         const userWorkspacesInOrg = workspaces.filter(w => w.tenantId === organizationId)
-        
+
         if (userWorkspacesInOrg.length > 0) {
           // User is a member: set their workspace/team in this org
           const savedWorkspaceId = localStorage.getItem('currentWorkspaceId')
           const savedWorkspace = userWorkspacesInOrg.find(w => w.id === savedWorkspaceId) || userWorkspacesInOrg[0]
-          
+
           setCurrentWorkspace(savedWorkspace)
           localStorage.setItem('currentWorkspaceId', savedWorkspace.id)
-          
+
           // Set team if available
           const userTeamsInWorkspace = teams.filter(t => t.workspaceId === savedWorkspace.id)
           if (userTeamsInWorkspace.length > 0) {

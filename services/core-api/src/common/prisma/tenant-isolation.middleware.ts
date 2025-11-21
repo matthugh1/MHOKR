@@ -19,7 +19,13 @@ export const tenantContext = new AsyncLocalStorage<{
  * Get current tenant context from AsyncLocalStorage
  */
 export function getTenantContext(): string | null | undefined {
-  return tenantContext.getStore()?.tenantId;
+  const store = tenantContext.getStore();
+  const tenantId = store?.tenantId;
+  // Log for debugging (can be removed later)
+  if (tenantId === undefined) {
+    console.warn('[getTenantContext] No tenant context found in AsyncLocalStorage');
+  }
+  return tenantId;
 }
 
 /**
@@ -29,6 +35,16 @@ export function withTenantContext<T>(
   tenantId: string | null | undefined,
   fn: () => T,
 ): T {
+  return tenantContext.run({ tenantId }, fn);
+}
+
+/**
+ * Run an async function with tenant context
+ */
+export async function withTenantContextAsync<T>(
+  tenantId: string | null | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
   return tenantContext.run({ tenantId }, fn);
 }
 
@@ -59,6 +75,8 @@ export function createTenantIsolationMiddleware() {
       'strategicPillar',
       'activity',      // ADD THIS
       'userLayout',    // ADD THIS
+      'user',          // Users table - filtered via role_assignments relationship
+      'roleAssignment', // Role assignments table - filtered by scope
     ];
 
     // Skip if not a tenant-scoped model

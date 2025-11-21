@@ -137,7 +137,7 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
             daysBetween = 14
             break
           case 'MONTHLY':
-            daysBetween = 31
+            daysBetween = 30 // Match backend: check-in-due-calculator.ts uses 30 days
             break
         }
         const nextDue = new Date(lastCheckIn.getTime() + daysBetween * 24 * 60 * 60 * 1000)
@@ -242,8 +242,10 @@ function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[
     initiatives,
     overdueCountForObjective,
     lowestConfidence,
+    parentId: rawObj.parentId || null, // Add parentId for hierarchy
     ownerId: rawObj.ownerId,
-    organizationId: rawObj.organizationId,
+    tenantId: rawObj.tenantId || rawObj.organizationId, // Use tenantId from backend, fallback to organizationId
+    organizationId: rawObj.organizationId, // Keep for backward compatibility
     workspaceId: rawObj.workspaceId,
     teamId: rawObj.teamId,
     cycleId: rawObj.cycle?.id || rawObj.cycleId,
@@ -303,11 +305,21 @@ export function OKRPageContainer({
       setLoading(true)
       setPermissionError(null)
       
+      // Check if we should use hierarchy view (when objectives have parentId relationships)
+      // We'll detect this after first load, but for now always enable hierarchy view
+      // to ensure complete hierarchy is loaded
+      const useHierarchyView = true // Always fetch complete hierarchy for now
+      
       const params = new URLSearchParams({
         tenantId: currentOrganization.id,
         page: currentPage.toString(),
         pageSize: pageSize.toString(),
       })
+      
+      // Enable hierarchy view to fetch complete hierarchy (all root + descendants)
+      if (useHierarchyView) {
+        params.set('hierarchyView', 'true')
+      }
       
       if (selectedCycleId) {
         params.set('cycleId', selectedCycleId)
@@ -546,7 +558,8 @@ export function OKRPageContainer({
       const objectiveForHook = {
         id: okr.id,
         ownerId: okr.ownerId,
-        organizationId: okr.organizationId,
+        tenantId: okr.organizationId || okr.tenantId, // Use organizationId as tenantId (they're the same)
+        organizationId: okr.organizationId, // Keep for backward compatibility
         workspaceId: okr.workspaceId,
         teamId: okr.teamId,
         isPublished: okr.isPublished,
@@ -568,7 +581,7 @@ export function OKRPageContainer({
         return tenantPermissions.canEditKeyResult({
           id: kr.id,
           ownerId: kr.ownerId || okr.ownerId,
-          organizationId: okr.organizationId,
+          tenantId: okr.organizationId || okr.tenantId, // Use organizationId as tenantId (they're the same)
           workspaceId: okr.workspaceId,
           teamId: okr.teamId,
           parentObjective: objectiveForHook,
@@ -588,7 +601,7 @@ export function OKRPageContainer({
         return tenantPermissions.canCheckInOnKeyResult({
           id: kr.id,
           ownerId: kr.ownerId || okr.ownerId,
-          organizationId: okr.organizationId,
+          tenantId: okr.organizationId || okr.tenantId, // Use organizationId as tenantId (they're the same)
           workspaceId: okr.workspaceId,
           teamId: okr.teamId,
           parentObjective: objectiveForHook,

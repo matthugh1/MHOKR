@@ -110,13 +110,13 @@ export function InlineTitleEditor({
       >
         <div
           className={cn(
-            'flex items-center gap-1.5 text-neutral-900',
+            'flex items-start gap-1.5 text-neutral-900 break-words',
             className
           )}
         >
-          <span>{value}</span>
+          <span className="break-words">{value}</span>
           {lockReason && (
-            <Lock className="h-3 w-3 text-neutral-400" aria-hidden="true" />
+            <Lock className="h-3 w-3 text-neutral-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
           )}
         </div>
       </RbacWhyTooltip>
@@ -183,7 +183,7 @@ export function InlineTitleEditor({
         }
       }}
       className={cn(
-        'text-left truncate text-[14px] font-medium text-neutral-900 hover:bg-neutral-50 px-1 py-0.5 rounded -mx-1 transition-colors',
+        'text-left break-words text-[14px] font-medium text-neutral-900 hover:bg-neutral-50 px-1 py-0.5 rounded -mx-1 transition-colors w-full',
         className
       )}
       role="button"

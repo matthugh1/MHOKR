@@ -18,3 +18,5 @@ ALTER TABLE "objectives" ADD COLUMN "lastReviewedAt" TIMESTAMP(3);
 ALTER TYPE "ActivityAction" ADD VALUE IF NOT EXISTS 'REVIEWED';
 
 
+
+

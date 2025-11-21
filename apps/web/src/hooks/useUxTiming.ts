@@ -18,10 +18,11 @@ export function useUxTiming(name: string) {
     const elapsedMs = Math.round(elapsed)
 
     // Log through existing telemetry or console fallback
-    console.log(`[Telemetry] ${name}`, {
-      durationMs: elapsedMs,
-      timestamp: new Date().toISOString(),
-    })
+    // Log through existing telemetry or console fallback
+    // console.log(`[Telemetry] ${name}`, {
+    //   durationMs: elapsedMs,
+    //   timestamp: new Date().toISOString(),
+    // })
 
     startTimeRef.current = null
     return elapsedMs
@@ -35,10 +36,10 @@ export function markTiming(name: string): () => number {
   const start = performance.now()
   return () => {
     const elapsed = Math.round(performance.now() - start)
-    console.log(`[Telemetry] ${name}`, {
-      durationMs: elapsed,
-      timestamp: new Date().toISOString(),
-    })
+    // console.log(`[Telemetry] ${name}`, {
+    //   durationMs: elapsed,
+    //   timestamp: new Date().toISOString(),
+    // })
     return elapsed
   }
 }

@@ -71,6 +71,7 @@ export class OkrOverviewController {
   @ApiQuery({ name: 'ownerId', required: false, type: String, description: 'Filter by owner user ID' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
   @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Items per page (default: 20, max: 50)' })
+  @ApiQuery({ name: 'hierarchyView', required: false, type: Boolean, description: 'If true, fetch complete hierarchy (all root objectives + descendants, ignores pagination)' })
   @ApiResponse({ 
     status: 200, 
     description: 'Paginated list of objectives with key results and initiatives',
@@ -96,6 +97,7 @@ export class OkrOverviewController {
     @Query('ownerId') ownerId: string | undefined,
     @Query('page') page: string | undefined,
     @Query('pageSize') pageSize: string | undefined,
+    @Query('hierarchyView') hierarchyView: string | undefined,
     @Req() req: any,
   ) {
     try {
@@ -120,6 +122,9 @@ export class OkrOverviewController {
       }
 
       const requesterUserId = req.user.id;
+
+      // Parse hierarchy view flag
+      const isHierarchyView = hierarchyView === 'true' || hierarchyView === '1';
 
       // Parse pagination parameters
       const pageNum = page ? parseInt(page, 10) : 1;
@@ -253,54 +258,210 @@ export class OkrOverviewController {
       // This ensures RLS filters by the requested organization, not just the JWT tenantId
       // The user's access to this tenantId has already been validated by RBACGuard
       return await withTenantContextAsync(tenantId, async () => {
-        // Fetch ALL objectives matching filters (before visibility filtering)
+        // Fetch objectives matching filters (before visibility filtering)
         // NOTE: Tenant context is now set to the query param tenantId
         // This ensures RLS session variables are set correctly before the query executes
         let allObjectives;
         try {
-          console.log(`[OKR Overview] Fetching objectives with tenantId=${tenantId}, userTenantId=${userOrganizationId}`);
-          allObjectives = await this.prisma.objective.findMany({
-        where,
-        include: {
-          keyResults: {
-            select: {
-              id: true,
-              weight: true,
-              keyResult: {
-                select: {
-                  id: true,
-                  title: true,
-                  status: true,
-                  progress: true,
-                  startValue: true,
-                  targetValue: true,
-                  currentValue: true,
-                  unit: true,
-                  ownerId: true,
-                  cycleId: true, // Include cycleId scalar field (but not the cycle relation)
-                  checkInCadence: true,
+          console.log(`[OKR Overview] Fetching objectives with tenantId=${tenantId}, userTenantId=${userOrganizationId}, hierarchyView=${isHierarchyView}`);
+          
+          if (isHierarchyView) {
+            // Hierarchy view: Fetch all root objectives + all their descendants
+            // Step 1: Fetch all root objectives (parentId is null)
+            const rootObjectives = await this.prisma.objective.findMany({
+              where: {
+                ...where,
+                parentId: null,
+              },
+              include: {
+                keyResults: {
+                  select: {
+                    id: true,
+                    weight: true,
+                    keyResult: {
+                      select: {
+                        id: true,
+                        title: true,
+                        status: true,
+                        progress: true,
+                        startValue: true,
+                        targetValue: true,
+                        currentValue: true,
+                        unit: true,
+                        ownerId: true,
+                        owner: {
+                          select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                          },
+                        },
+                        cycleId: true,
+                        checkInCadence: true,
+                      },
+                    },
+                  },
+                },
+                initiatives: true,
+                cycle: {
+                  select: {
+                    id: true,
+                    name: true,
+                    status: true,
+                  },
+                },
+                owner: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                  },
                 },
               },
-            },
-          },
-          initiatives: true, // Include all initiative fields (we only need id, title, status, dueDate, keyResultId)
-          cycle: {
-            select: {
-              id: true,
-              name: true,
-              status: true,
-            },
-          },
-          owner: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+              orderBy: { createdAt: 'desc' }, // Sort root objectives by creation date
+            });
+
+            // Step 2: Recursively fetch all descendants of root objectives
+            const rootIds = rootObjectives.map(o => o.id);
+            const allDescendantIds = new Set<string>();
+            
+            // Recursive function to collect all descendant IDs
+            const collectDescendants = async (parentIds: string[]) => {
+              if (parentIds.length === 0) return;
+              
+              const children = await this.prisma.objective.findMany({
+                where: {
+                  ...where,
+                  parentId: { in: parentIds },
+                },
+                select: { id: true },
+              });
+              
+              const childIds = children.map(c => c.id);
+              childIds.forEach(id => allDescendantIds.add(id));
+              
+              // Recursively fetch grandchildren
+              if (childIds.length > 0) {
+                await collectDescendants(childIds);
+              }
+            };
+            
+            await collectDescendants(rootIds);
+            
+            // Step 3: Fetch all descendants with full data
+            const descendants = allDescendantIds.size > 0
+              ? await this.prisma.objective.findMany({
+                  where: {
+                    ...where,
+                    id: { in: Array.from(allDescendantIds) },
+                  },
+                  include: {
+                    keyResults: {
+                      select: {
+                        id: true,
+                        weight: true,
+                        keyResult: {
+                          select: {
+                            id: true,
+                            title: true,
+                            status: true,
+                            progress: true,
+                            startValue: true,
+                            targetValue: true,
+                            currentValue: true,
+                            unit: true,
+                            ownerId: true,
+                            owner: {
+                              select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                              },
+                            },
+                            cycleId: true,
+                            checkInCadence: true,
+                          },
+                        },
+                      },
+                    },
+                    initiatives: true,
+                    cycle: {
+                      select: {
+                        id: true,
+                        name: true,
+                        status: true,
+                      },
+                    },
+                    owner: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                      },
+                    },
+                  },
+                })
+              : [];
+            
+            // Combine root objectives and descendants
+            allObjectives = [...rootObjectives, ...descendants];
+          } else {
+            // Regular view: Fetch with pagination support
+            allObjectives = await this.prisma.objective.findMany({
+              where,
+              include: {
+                keyResults: {
+                  select: {
+                    id: true,
+                    weight: true,
+                    keyResult: {
+                      select: {
+                        id: true,
+                        title: true,
+                        status: true,
+                        progress: true,
+                        startValue: true,
+                        targetValue: true,
+                        currentValue: true,
+                        unit: true,
+                        ownerId: true,
+                        owner: {
+                          select: {
+                            id: true,
+                            name: true,
+                            email: true,
+                          },
+                        },
+                        cycleId: true,
+                        checkInCadence: true,
+                      },
+                    },
+                  },
+                },
+                initiatives: true,
+                cycle: {
+                  select: {
+                    id: true,
+                    name: true,
+                    status: true,
+                  },
+                },
+                owner: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                  },
+                },
+              },
+              orderBy: [
+                // First, prioritize root objectives (parentId is null)
+                { parentId: 'asc' }, // null values come first with 'asc'
+                // Then by creation date (most recent first)
+                { createdAt: 'desc' },
+              ],
+            });
+          }
       } catch (queryError: any) {
         // Error logging kept for debugging
         console.error('[OKR OVERVIEW] Database query error:', queryError?.message, queryError?.stack);
@@ -354,10 +515,17 @@ export class OkrOverviewController {
     
     // Removed debug logging - use structured logging service in production
 
-    // Apply pagination to filtered results
-    const skip = (pageNum - 1) * pageSizeNum;
-    const take = pageSizeNum;
-    const paginatedObjectives = visibleObjectives.slice(skip, skip + take);
+    // Apply pagination to filtered results (skip if hierarchy view)
+    let paginatedObjectives;
+    if (isHierarchyView) {
+      // Hierarchy view: Return all visible objectives (complete hierarchy)
+      paginatedObjectives = visibleObjectives;
+    } else {
+      // Regular view: Apply pagination
+      const skip = (pageNum - 1) * pageSizeNum;
+      const take = pageSizeNum;
+      paginatedObjectives = visibleObjectives.slice(skip, skip + take);
+    }
 
     // Fetch all initiatives for these objectives' Key Results
     const keyResultIds = paginatedObjectives.flatMap(o => 
@@ -493,6 +661,13 @@ export class OkrOverviewController {
             currentValue: kr.currentValue,
             unit: kr.unit,
             ownerId: kr.ownerId,
+            owner: kr.owner
+              ? {
+                  id: kr.owner.id,
+                  name: kr.owner.name,
+                  email: kr.owner.email,
+                }
+              : null,
             initiatives: krInitiatives.map((i) => ({
               id: i.id,
               title: i.title,

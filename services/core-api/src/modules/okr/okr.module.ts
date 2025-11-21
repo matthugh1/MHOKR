@@ -27,6 +27,7 @@ import { CheckInReminderScheduler } from './check-in-reminder.scheduler';
 import { LoggingNotificationAdapter } from './logging-notification.adapter';
 import { NOTIFICATION_PORT_TOKEN } from './notification.constants';
 import { VivaGoalsCSVParserService } from './viva-goals-csv-parser.service';
+import { VivaGoalsJSONParserService } from './viva-goals-json-parser.service';
 import { OkrImportService } from './okr-import.service';
 import { RBACModule } from '../rbac/rbac.module';
 import { ActivityModule } from '../activity/activity.module';
@@ -52,6 +53,7 @@ import { AuditModule } from '../audit/audit.module';
     CheckInReminderService,
     CheckInReminderScheduler,
     VivaGoalsCSVParserService,
+    VivaGoalsJSONParserService,
     OkrImportService,
     {
       provide: NOTIFICATION_PORT_TOKEN,

@@ -73,7 +73,13 @@ export class CheckInReminderService {
             notIn: ['COMPLETED', 'CANCELLED'],
           },
         },
-        include: {
+        select: {
+          id: true,
+          title: true,
+          ownerId: true,
+          checkInCadence: true,
+          createdAt: true,
+          startDate: true, // Include startDate for overdue calculation
           checkIns: {
             orderBy: { createdAt: 'desc' },
             take: 1,
@@ -113,6 +119,7 @@ export class CheckInReminderService {
           kr.createdAt,
           this.graceDays,
           now,
+          kr.startDate || null, // Pass startDate to calculator
         );
 
         // Skip if not due or overdue

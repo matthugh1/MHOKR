@@ -1,16 +1,19 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Req, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { OrganizationService } from './organization.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
-import { OkrTenantGuard } from '../okr/tenant-guard';
+import { RBACService } from '../rbac/rbac.service';
 
 @ApiTags('Organizations')
 @Controller('organizations')
 @UseGuards(JwtAuthGuard, RBACGuard)
 @ApiBearerAuth()
 export class OrganizationController {
-  constructor(private readonly organizationService: OrganizationService) {}
+  constructor(
+    private readonly organizationService: OrganizationService,
+    private readonly rbacService: RBACService,
+  ) {}
 
   @Get('current')
   @ApiOperation({ summary: 'Get current user\'s organization' })
@@ -57,10 +60,16 @@ export class OrganizationController {
   @RequireAction('manage_users')
   @ApiOperation({ summary: 'Get all members of organization (tenant-isolated)' })
   async getMembers(@Param('id') id: string, @Req() req: any) {
-    // Tenant isolation: verify organisation belongs to caller's tenant
+    // Tenant isolation: verify user has roles for this organization
+    // RBAC guard already checks permissions, but we verify tenant access here
     // SUPERUSER (null) can view members of any organization
     if (req.user.tenantId !== null) {
-      OkrTenantGuard.assertSameTenant(id, req.user.tenantId);
+      // Check if user has roles for this organization (handles multi-org users)
+      const userContext = await this.rbacService.buildUserContext(req.user.id, false);
+      if (!userContext.tenantRoles.has(id) && !userContext.isSuperuser) {
+        // User doesn't have roles for this organization
+        throw new ForbiddenException('You do not have permission to access this organization.');
+      }
     }
     return this.organizationService.getMembers(id);
   }

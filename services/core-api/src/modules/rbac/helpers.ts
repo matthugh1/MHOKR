@@ -87,14 +87,31 @@ export function buildResourceContextFromRequest(request: any): ResourceContext {
   const params = request.params || {};
   const body = request.body || {};
   const query = request.query || {};
+  const url = request.url || '';
+  const path = request.path || request.route?.path || url.split('?')[0] || '';
 
-  const tenantId =
-    params.tenantId ||
-    params.tenantId ||
-    body.tenantId ||
-    body.tenantId ||
-    query.tenantId ||
-    query.tenantId;
+  // Check if this is an organization route where params.id is the tenantId
+  // Check both URL and path to handle different request formats
+  const isOrganizationRoute = 
+    url.includes('/organizations/') || 
+    url.startsWith('/organizations/') ||
+    path.includes('/organizations/') ||
+    path.startsWith('/organizations/') ||
+    (request.route && request.route.path && request.route.path.includes('/organizations/'));
+
+  // For organization routes, params.id is always the tenantId
+  // Check this first before other sources
+  let tenantId = params.tenantId;
+  
+  // If no explicit tenantId param, check if this is an organization route
+  if (!tenantId && isOrganizationRoute && params.id) {
+    tenantId = params.id;
+  }
+  
+  // Fallback to body or query
+  if (!tenantId) {
+    tenantId = body.tenantId || query.tenantId;
+  }
 
   if (!tenantId) {
     throw new Error('tenantId is required in resource context');
@@ -109,6 +126,9 @@ export function buildResourceContextFromRequest(request: any): ResourceContext {
 
 /**
  * Build resource context from Key Result ID
+ * 
+ * Key Results inherit their RBAC context from their parent Objective.
+ * This function builds a ResourceContext using the parent Objective's data.
  */
 export async function buildResourceContextFromKeyResult(
   prisma: PrismaService,
@@ -119,16 +139,17 @@ export async function buildResourceContextFromKeyResult(
     select: {
       id: true,
       ownerId: true,
-      visibilityLevel: true,
-      isPublished: true,
       objectives: {
         select: {
           objective: {
             select: {
               id: true,
+              ownerId: true,
               tenantId: true,
               workspaceId: true,
               teamId: true,
+              visibilityLevel: true,
+              isPublished: true,
             },
           },
         },
@@ -143,14 +164,15 @@ export async function buildResourceContextFromKeyResult(
 
   const objective = keyResult.objectives[0].objective;
 
+  // Use parent Objective's data for RBAC context (Key Results inherit from Objectives)
   const okr: OKREntity = {
-    id: keyResult.id,
-    ownerId: keyResult.ownerId,
+    id: objective.id, // Use Objective ID for RBAC checks
+    ownerId: objective.ownerId,
     tenantId: objective.tenantId || '',
     workspaceId: objective.workspaceId,
     teamId: objective.teamId,
-    visibilityLevel: keyResult.visibilityLevel as any,
-    isPublished: keyResult.isPublished || false,
+    visibilityLevel: objective.visibilityLevel as any,
+    isPublished: objective.isPublished || false,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

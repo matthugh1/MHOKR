@@ -7,6 +7,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { VivaGoalsCSVParserService, ParsedVivaGoalsRow } from './viva-goals-csv-parser.service';
+import { VivaGoalsJSONParserService, ParsedVivaGoalsJSONRow } from './viva-goals-json-parser.service';
 import { OkrCycleService } from './okr-cycle.service';
 import { OkrTenantGuard } from './tenant-guard';
 import { OKRStatus, MetricType, GoalType } from '@prisma/client';
@@ -36,6 +37,7 @@ export class OkrImportService {
   constructor(
     private prisma: PrismaService,
     private csvParser: VivaGoalsCSVParserService,
+    private jsonParser: VivaGoalsJSONParserService,
     private cycleService: OkrCycleService,
   ) {}
 
@@ -149,6 +151,182 @@ export class OkrImportService {
     }
 
     return result;
+  }
+
+  /**
+   * Import OKRs from Viva Goals JSON content
+   */
+  async importFromJSON(
+    jsonContent: string,
+    tenantId: string,
+    userId: string,
+  ): Promise<ImportResult> {
+    OkrTenantGuard.assertCanMutateTenant(tenantId);
+
+    // Parse JSON
+    const parsedRows = this.jsonParser.parseObjectives(jsonContent);
+    if (parsedRows.length === 0) {
+      throw new BadRequestException('JSON file is empty or invalid');
+    }
+
+    // Convert JSON format to CSV format for reuse of existing import logic
+    const csvFormatRows: ParsedVivaGoalsRow[] = parsedRows.map(row => 
+      this.convertJSONRowToCSVRow(row)
+    );
+
+    const result: ImportResult = {
+      success: true,
+      objectivesCreated: 0,
+      objectivesUpdated: 0,
+      keyResultsCreated: 0,
+      keyResultsUpdated: 0,
+      errors: [],
+      warnings: [],
+    };
+
+    // Separate Objectives and Key Results
+    const objectives = csvFormatRows.filter(r => r.objectType === 'Objective');
+    const keyResults = csvFormatRows.filter(r => r.objectType === 'Key result');
+
+    // Build external ID to internal ID mapping for parent lookups
+    const externalIdToInternalId = new Map<string, string>();
+
+    // Topologically sort Objectives to ensure parents are imported before children
+    const sortedObjectives = this.topologicalSortObjectives(objectives);
+    
+    if (sortedObjectives.length !== objectives.length) {
+      result.warnings.push(
+        `Some objectives could not be sorted (circular dependencies or missing parents) - importing in original order`,
+      );
+      sortedObjectives.length = 0;
+      sortedObjectives.push(...objectives);
+    }
+
+    // Process Objectives in topological order
+    for (let i = 0; i < sortedObjectives.length; i++) {
+      const row = sortedObjectives[i];
+      try {
+        const wasUpdate = await this.isObjectiveExisting(row.externalId, tenantId);
+        const objective = await this.importObjective(row, tenantId, userId, externalIdToInternalId);
+        if (objective) {
+          externalIdToInternalId.set(row.externalId, objective.id);
+          if (wasUpdate) {
+            result.objectivesUpdated++;
+          } else {
+            result.objectivesCreated++;
+          }
+        }
+      } catch (error) {
+        result.success = false;
+        const originalIndex = objectives.findIndex(o => o.externalId === row.externalId);
+        result.errors.push({
+          row: originalIndex >= 0 ? originalIndex + 1 : i + 1,
+          externalId: row.externalId,
+          title: row.title,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        this.logger.error(`Error importing objective ${row.externalId}: ${error}`);
+      }
+    }
+
+    // Process Key Results
+    for (let i = 0; i < keyResults.length; i++) {
+      try {
+        const row = keyResults[i];
+        const wasUpdate = await this.isKeyResultExisting(row.externalId, tenantId);
+        const keyResult = await this.importKeyResult(
+          row,
+          tenantId,
+          userId,
+          externalIdToInternalId,
+        );
+        if (keyResult) {
+          if (wasUpdate) {
+            result.keyResultsUpdated++;
+          } else {
+            result.keyResultsCreated++;
+          }
+        }
+      } catch (error) {
+        result.success = false;
+        result.errors.push({
+          row: objectives.length + i + 1,
+          externalId: keyResults[i].externalId,
+          title: keyResults[i].title,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        this.logger.error(`Error importing key result ${keyResults[i].externalId}: ${error}`);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Convert ParsedVivaGoalsJSONRow to ParsedVivaGoalsRow format
+   */
+  private convertJSONRowToCSVRow(jsonRow: ParsedVivaGoalsJSONRow): ParsedVivaGoalsRow {
+    // Extract parent info from alignment or parentIds
+    let parentExternalId: string | null = null;
+    let parentTitle: string | null = null;
+    let parentWeight: number | null = null;
+
+    if (jsonRow.parentIds && jsonRow.parentIds.length > 0) {
+      const firstParentId = jsonRow.parentIds[0];
+      parentExternalId = String(firstParentId);
+      // Try to find title from alignment
+      if (jsonRow.alignment) {
+        const parentAlignment = jsonRow.alignment.find(a => a.id === firstParentId);
+        if (parentAlignment) {
+          parentTitle = parentAlignment.title;
+          parentWeight = parentAlignment.weight;
+        }
+      }
+    }
+
+    // Convert owners array to names array
+    const ownerNames = jsonRow.owners.map(o => o.name);
+    const creatorName = jsonRow.creator?.name || null;
+
+    // Get first team name
+    const teamName = jsonRow.teams.length > 0 ? jsonRow.teams[0].name : null;
+
+    // Get period name
+    const periodName = jsonRow.timePeriod?.name || '';
+
+    return {
+      externalId: jsonRow.externalId,
+      title: jsonRow.title,
+      team: teamName,
+      creator: creatorName,
+      owners: ownerNames,
+      period: periodName,
+      startDate: jsonRow.startDate || '',
+      endDate: jsonRow.endDate || '',
+      description: jsonRow.description,
+      alignedTo: jsonRow.alignment ? JSON.stringify(jsonRow.alignment) : null,
+      parentTitle: parentTitle ?? null,
+      parentWeight: parentWeight ?? null,
+      parentExternalId: parentExternalId ?? null,
+      metricName: jsonRow.metricName ?? null,
+      unit: jsonRow.unit ?? null,
+      target: jsonRow.target ?? null,
+      objectType: jsonRow.type === 'Key result' ? 'Key result' : 'Objective',
+      goalType: jsonRow.goalType || 'Aspirational',
+      start: jsonRow.start ?? null,
+      createdAt: jsonRow.createdAt ?? null,
+      lastCheckin: jsonRow.lastCheckin ?? null,
+      // Handle Progress field correctly based on unit
+      // When unit is "Number" or "Dollar", Progress is the currentValue, not a percentage
+      // When unit is "Percentage", Progress might be currentValue or completion %
+      progress: jsonRow.progress ?? null, // Store Progress field for calculateCurrentValue
+      progressPercent: this.determineProgressPercent(jsonRow),
+      actualProgress: jsonRow.actualProgress ?? null,
+      status: jsonRow.status || 'On Track',
+      lastCheckinNote: null,
+      score: null,
+      checkins: [], // Check-ins imported separately
+    };
   }
 
   /**
@@ -342,6 +520,9 @@ export class OkrImportService {
       throw new BadRequestException(`Invalid dates for "${row.title}"`);
     }
 
+    // Build metadata object with all Viva Goals data not yet in dedicated fields
+    const metadata = this.buildObjectiveMetadata(row);
+
     const data = {
       tenantId,
       title: row.title,
@@ -362,6 +543,7 @@ export class OkrImportService {
       importedBy: userId,
       visibilityLevel: 'PUBLIC_TENANT' as const,
       state: 'DRAFT' as const,
+      metadata: Object.keys(metadata).length > 0 ? metadata : null,
     };
 
     let objective;
@@ -535,24 +717,30 @@ export class OkrImportService {
     // Map goal type
     const goalType = this.mapGoalType(row.goalType);
 
-    // Infer metric type
+    // Infer metric type (use targetType from JSON if available)
     const metricType = this.inferMetricType(
       row.start || 0,
       row.target || 100,
       row.unit,
+      (row as any).targetType, // VivaGoals Target Type
     );
 
-    // Calculate current value from actual progress percentage
+    // Calculate current value from actual progress percentage or Progress field
+    // For JSON imports, Progress field might be the currentValue when unit is "Number" or "Dollar"
     const currentValue = this.calculateCurrentValue(
       row.start || 0,
       row.target || 100,
       row.actualProgress,
       row.unit,
+      row.progress ?? null, // Pass Progress field for JSON imports
     );
 
     // Parse dates
     const startDate = row.startDate ? new Date(row.startDate) : null;
     const endDate = row.endDate ? new Date(row.endDate) : null;
+
+    // Build metadata object with all Viva Goals data not yet in dedicated fields
+    const metadata = this.buildKeyResultMetadata(row);
 
     const data = {
       tenantId,
@@ -578,6 +766,7 @@ export class OkrImportService {
       importedBy: userId,
       visibilityLevel: 'PUBLIC_TENANT' as const,
       state: 'DRAFT' as const,
+      metadata: Object.keys(metadata).length > 0 ? metadata : null,
     };
 
     let keyResult;
@@ -707,31 +896,72 @@ export class OkrImportService {
       });
 
       if (existingByEmail) {
-        // User exists but not in this tenant - update primaryOrganizationId
-        await this.prisma.user.update({
-          where: { id: existingByEmail.id },
-          data: {
-            primaryOrganizationId: tenantId,
-          },
+        // User exists but not in this tenant - update primaryOrganizationId and create role assignment
+        await this.prisma.$transaction(async (tx) => {
+          // Update primary organization
+          await tx.user.update({
+            where: { id: existingByEmail.id },
+            data: {
+              primaryOrganizationId: tenantId,
+            },
+          });
+
+          // Check if role assignment already exists
+          const existingAssignment = await tx.roleAssignment.findFirst({
+            where: {
+              userId: existingByEmail.id,
+              scopeType: 'TENANT',
+              scopeId: tenantId,
+            },
+          });
+
+          // Create role assignment if it doesn't exist
+          if (!existingAssignment) {
+            await tx.roleAssignment.create({
+              data: {
+                userId: existingByEmail.id,
+                role: 'TENANT_VIEWER',
+                scopeType: 'TENANT',
+                scopeId: tenantId,
+              },
+            });
+            this.logger.log(`Created role assignment for user ${email} in tenant ${tenantId}`);
+          }
         });
         this.logger.log(`Updated user ${email} to tenant ${tenantId}`);
         return existingByEmail.id;
       }
 
-      // Create new user
+      // Create new user with role assignment
       const defaultPassword = 'changeme'; // Default password for imported users
       const passwordHash = await bcrypt.hash(defaultPassword, 10);
 
-      const newUser = await this.prisma.user.create({
-        data: {
-          email,
-          name: trimmedName,
-          passwordHash,
-          primaryOrganizationId: tenantId,
-        },
+      const newUser = await this.prisma.$transaction(async (tx) => {
+        // Create user
+        const user = await tx.user.create({
+          data: {
+            email,
+            name: trimmedName,
+            passwordHash,
+            primaryOrganizationId: tenantId,
+          },
+        });
+
+        // Create tenant role assignment so user appears in UI
+        // Default to TENANT_VIEWER role for imported users (can be upgraded later)
+        await tx.roleAssignment.create({
+          data: {
+            userId: user.id,
+            role: 'TENANT_VIEWER', // RBAC role - users can be upgraded to TENANT_ADMIN later
+            scopeType: 'TENANT',
+            scopeId: tenantId,
+          },
+        });
+
+        return user;
       });
 
-      this.logger.log(`Auto-created user "${trimmedName}" with email ${email} for tenant ${tenantId}`);
+      this.logger.log(`Auto-created user "${trimmedName}" with email ${email} for tenant ${tenantId} with TENANT_VIEWER role`);
       return newUser.id;
     } catch (error) {
       this.logger.error(`Failed to create user "${trimmedName}": ${error}`);
@@ -941,6 +1171,106 @@ export class OkrImportService {
   /**
    * Map Viva Goals goal type to GoalType enum
    */
+  /**
+   * Build metadata object for Objective from parsed Viva Goals row
+   */
+  private buildObjectiveMetadata(row: ParsedVivaGoalsRow): Record<string, any> {
+    const metadata: Record<string, any> = {};
+    const jsonRow = row as any; // Cast to access additional fields
+    
+    // Store phased targets in metadata (until Ticket 1 is implemented)
+    if (jsonRow.phasedTargets) {
+      metadata.phasedTargets = jsonRow.phasedTargets;
+    }
+    
+    // Store delegation in metadata (until Ticket 3 is implemented)
+    if (jsonRow.delegatedTo) {
+      metadata.delegatedTo = jsonRow.delegatedTo;
+    }
+    
+    // Store check-in owners in metadata (until Ticket 4 is implemented)
+    if (jsonRow.checkInOwners && jsonRow.checkInOwners.length > 0) {
+      metadata.checkInOwners = jsonRow.checkInOwners;
+    }
+    
+    // Store permissions in metadata (until Ticket 2 is implemented)
+    if (jsonRow.permissions) {
+      metadata.permissions = jsonRow.permissions;
+    }
+    
+    // Store progress config in metadata (until Ticket 5 is implemented)
+    if (jsonRow.progressConfig) {
+      metadata.progressConfig = jsonRow.progressConfig;
+    }
+    
+    // Store score in metadata
+    if (jsonRow.score !== null && jsonRow.score !== undefined) {
+      metadata.score = jsonRow.score;
+    }
+    
+    // Store last check-in date (will migrate to lastCheckInAt field in Ticket 8)
+    if (jsonRow.lastCheckin) {
+      metadata.lastCheckIn = jsonRow.lastCheckin;
+    }
+    
+    return metadata;
+  }
+  
+  /**
+   * Build metadata object for Key Result from parsed Viva Goals row
+   */
+  private buildKeyResultMetadata(row: ParsedVivaGoalsRow): Record<string, any> {
+    const metadata: Record<string, any> = {};
+    const jsonRow = row as any; // Cast to access additional fields
+    
+    // Store phased targets
+    if (jsonRow.phasedTargets) {
+      metadata.phasedTargets = jsonRow.phasedTargets;
+    }
+    
+    // Store delegation
+    if (jsonRow.delegatedTo) {
+      metadata.delegatedTo = jsonRow.delegatedTo;
+    }
+    
+    // Store check-in owners
+    if (jsonRow.checkInOwners && jsonRow.checkInOwners.length > 0) {
+      metadata.checkInOwners = jsonRow.checkInOwners;
+    }
+    
+    // Store permissions
+    if (jsonRow.permissions) {
+      metadata.permissions = jsonRow.permissions;
+    }
+    
+    // Store progress config
+    if (jsonRow.progressConfig) {
+      metadata.progressConfig = jsonRow.progressConfig;
+    }
+    
+    // Store outcome details (for Ticket 6 enhancement)
+    if (jsonRow.outcome) {
+      metadata.outcome = jsonRow.outcome;
+    }
+    
+    // Store metric name (will migrate to metricName field)
+    if (jsonRow.metricName) {
+      metadata.metricName = jsonRow.metricName;
+    }
+    
+    // Store score
+    if (jsonRow.score !== null && jsonRow.score !== undefined) {
+      metadata.score = jsonRow.score;
+    }
+    
+    // Store last check-in date
+    if (jsonRow.lastCheckin) {
+      metadata.lastCheckIn = jsonRow.lastCheckin;
+    }
+    
+    return metadata;
+  }
+
   private mapGoalType(vivaGoalType: string): GoalType | null {
     const normalized = vivaGoalType?.toLowerCase().trim() || '';
     if (normalized.includes('aspirational')) {
@@ -952,13 +1282,34 @@ export class OkrImportService {
   }
 
   /**
-   * Infer metric type from Start/Target relationship
+   * Infer metric type from Start/Target relationship or VivaGoals Target Type
    */
   private inferMetricType(
     start: number,
     target: number,
     unit: string | null,
+    targetType?: string | null,
   ): MetricType {
+    // Use VivaGoals Target Type if available (most accurate)
+    if (targetType) {
+      switch (targetType) {
+        case 'Reach':
+        case 'Find a baseline':
+          return MetricType.REACH;
+        case 'Increase From':
+          return MetricType.INCREASE;
+        case 'Decrease From':
+          return MetricType.DECREASE;
+        case 'Stay Above':
+        case 'Stay Below':
+          return MetricType.MAINTAIN;
+        default:
+          // Fall through to inference
+          break;
+      }
+    }
+
+    // Fallback: Infer from Start/Target relationship
     // Special case: percentage-based metrics with Start=0, Target=100
     if (unit === '%' && start === 0 && target === 100) {
       return MetricType.REACH;
@@ -974,14 +1325,68 @@ export class OkrImportService {
   }
 
   /**
-   * Calculate current value from actual progress percentage
+   * Determine progress percentage from JSON row
+   * Handles the fact that Progress field can be currentValue (for Number/Dollar units) or percentage
+   */
+  private determineProgressPercent(jsonRow: ParsedVivaGoalsJSONRow): number | null {
+    // If explicit progressPercent exists, use it
+    if (jsonRow.progressPercent !== null && jsonRow.progressPercent !== undefined) {
+      return jsonRow.progressPercent;
+    }
+
+    // If Progress field exists and unit is "Number" or "Dollar", Progress is currentValue
+    // Calculate percentage from currentValue/targetValue
+    if (jsonRow.progress !== null && jsonRow.progress !== undefined && jsonRow.target !== null && jsonRow.target !== undefined) {
+      const unit = jsonRow.unit?.toLowerCase() || '';
+      
+      // For Number or Dollar units, Progress is the currentValue
+      if (unit === 'number' || unit === 'dollar') {
+        if (jsonRow.target > 0) {
+          return (jsonRow.progress / jsonRow.target) * 100;
+        }
+      }
+      
+      // For Percentage unit, Progress might be currentValue (0-100) or completion %
+      // If it's > 100, it's likely completion %, otherwise it's currentValue
+      if (unit === 'percentage') {
+        if (jsonRow.progress > 100) {
+          // It's completion percentage
+          return jsonRow.progress;
+        } else {
+          // It's currentValue, calculate completion %
+          if (jsonRow.target > 0) {
+            return (jsonRow.progress / jsonRow.target) * 100;
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Calculate current value from actual progress percentage or Progress field
    */
   private calculateCurrentValue(
     start: number,
     target: number,
     actualProgress: number | null,
     unit: string | null,
+    progressValue?: number | null, // Progress field from JSON (might be currentValue)
   ): number {
+    // If Progress field exists and unit is "Number" or "Dollar", use it as currentValue
+    if (progressValue !== null && progressValue !== undefined) {
+      const unitLower = unit?.toLowerCase() || '';
+      if (unitLower === 'number' || unitLower === 'dollar') {
+        return progressValue; // Progress IS the currentValue
+      }
+      // For Percentage unit, if Progress <= 100, it's currentValue
+      if (unitLower === 'percentage' && progressValue <= 100) {
+        return progressValue;
+      }
+    }
+
+    // Fallback to actualProgress calculation
     if (actualProgress === null) {
       return start; // Default to start value
     }

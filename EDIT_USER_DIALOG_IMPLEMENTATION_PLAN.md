@@ -263,3 +263,5 @@ After analyzing the edit user dialog in `apps/web/src/app/dashboard/settings/peo
 - Role assignment automatically updates if assignment exists (backend handles this)
 - Need to ensure proper permission checks before showing edit options
 
+
+

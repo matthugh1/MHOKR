@@ -80,10 +80,10 @@ export class RBACService {
       }
     }
 
-    // Check if user is superuser
+    // Check if user is superuser and get primary organization
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, isSuperuser: true },
+      select: { id: true, isSuperuser: true, primaryOrganizationId: true },
     });
 
     if (!user) {
@@ -92,9 +92,22 @@ export class RBACService {
 
     const isSuperuser = user.isSuperuser || false;
 
-    // Load all role assignments for this user
+    // SINGLE-TENANT ACCESS: Filter role assignments to only include primary organization
+    // For non-superusers, only include tenant roles for their primary organization
+    // Superusers can have roles in any organization
     const roleAssignments = await this.prisma.roleAssignment.findMany({
-      where: { userId },
+      where: {
+        userId,
+        // Include all non-tenant roles, or tenant roles for primary org only (unless superuser)
+        ...(isSuperuser || !user.primaryOrganizationId
+          ? {} // Superuser or no primary org: include all
+          : {
+              OR: [
+                { scopeType: { not: 'TENANT' } }, // Include workspace, team, platform roles
+                { scopeType: 'TENANT', scopeId: user.primaryOrganizationId }, // Only primary org tenant roles
+              ],
+            }),
+      },
     });
 
     // Log role assignments for debugging

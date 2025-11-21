@@ -2,18 +2,27 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Re
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { KeyResultService } from './key-result.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RBACGuard, RequireAction } from '../rbac';
+import { RBACGuard, RequireAction, RequireActionWithContext } from '../rbac';
 import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 import { recordCheckInHistoryFetch, checkInTelemetry } from './check-in-telemetry';
+import { buildResourceContextFromKeyResult } from '../rbac/helpers';
+import { PrismaService } from '../../common/prisma/prisma.service';
 
 @ApiTags('Key Results')
 @Controller('key-results')
 @UseGuards(JwtAuthGuard, RBACGuard)
 @ApiBearerAuth()
 export class KeyResultController {
+  // Store prisma reference for use in decorator (workaround for decorator context limitation)
+  private static prismaInstance: PrismaService | null = null;
+
   constructor(
     private readonly keyResultService: KeyResultService,
-  ) {}
+    prisma: PrismaService,
+  ) {
+    // Store prisma instance for decorator access
+    KeyResultController.prismaInstance = prisma;
+  }
 
   @Get()
   @RequireAction('view_okr')
@@ -62,7 +71,14 @@ export class KeyResultController {
 
   @Patch(':id')
   @UseGuards(RateLimitGuard)
-  @RequireAction('edit_okr')
+  @RequireActionWithContext('edit_okr', async (req) => {
+    // Build resource context from Key Result ID (which includes parent Objective context)
+    const keyResultId = req.params.id;
+    if (!KeyResultController.prismaInstance) {
+      throw new Error('PrismaService not initialized');
+    }
+    return await buildResourceContextFromKeyResult(KeyResultController.prismaInstance, keyResultId);
+  })
   @ApiOperation({ summary: 'Update key result', description: 'Emits activity events (UPDATED, STATE_CHANGE if state transitions) and audit logs.' })
   async update(@Param('id') id: string, @Body() data: any, @Req() req: any) {
     // Check if user can edit this key result (via parent objective)
@@ -96,7 +112,14 @@ export class KeyResultController {
   }
 
   @Post(':id/check-in')
-  @RequireAction('edit_okr')
+  @RequireActionWithContext('edit_okr', async (req) => {
+    // Build resource context from Key Result ID (which includes parent Objective context)
+    const keyResultId = req.params.id;
+    if (!KeyResultController.prismaInstance) {
+      throw new Error('PrismaService not initialized');
+    }
+    return await buildResourceContextFromKeyResult(KeyResultController.prismaInstance, keyResultId);
+  })
   @ApiOperation({ summary: 'Create check-in' })
   async checkIn(@Param('id') id: string, @Body() data: any, @Req() req: any) {
     // Check if user can edit this key result

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Input } from '@/components/ui/input'
 import { Check, X, Loader2, Lock } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, formatNumber } from '@/lib/utils'
 import { RbacWhyTooltip } from '@/components/rbac/RbacWhyTooltip'
 
 interface InlineNumericEditorProps {
@@ -125,9 +125,12 @@ export function InlineNumericEditor({
   }
 
   const formatDisplayValue = () => {
-    if (value === undefined || value === null) return '—'
-    const formatted = value % 1 === 0 ? value.toString() : value.toFixed(1)
-    return unit ? `${formatted} ${unit}` : formatted
+    const formatted = formatNumber(value)
+    // Handle special unit cases
+    if (!unit) return formatted
+    if (unit.toLowerCase() === 'percentage') return `${formatted}%`
+    if (unit.toLowerCase() === 'number') return formatted // Don't show "Number" as unit
+    return `${formatted} ${unit}`
   }
 
   if (!canEdit || disabled) {
@@ -174,7 +177,11 @@ export function InlineNumericEditor({
             aria-label={ariaLabel}
             placeholder={allowEmpty ? '—' : '0'}
           />
-          {unit && <span className="text-[12px] text-neutral-500">{unit}</span>}
+          {unit && unit.toLowerCase() !== 'number' && (
+            <span className="text-[12px] text-neutral-500">
+              {unit.toLowerCase() === 'percentage' ? '%' : unit}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-0.5 flex-shrink-0">
           {isSaving ? (
@@ -230,6 +237,8 @@ export function InlineNumericEditor({
     </button>
   )
 }
+
+
 
 
 

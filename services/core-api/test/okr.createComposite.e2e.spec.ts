@@ -193,6 +193,7 @@ describe('POST /okr/create-composite - W5.M1 Integration Tests', () => {
           ownerUserId: tenantAdminUser.id,
           cycleId: activeCycle.id,
           visibilityLevel: 'PUBLIC_TENANT',
+          goalType: 'COMMITTED',
         },
         keyResults: [
           {
@@ -202,6 +203,7 @@ describe('POST /okr/create-composite - W5.M1 Integration Tests', () => {
             ownerUserId: tenantAdminUser.id,
             startValue: 100,
             updateCadence: 'MONTHLY',
+            goalType: 'COMMITTED',
           },
         ],
       };
@@ -236,8 +238,143 @@ describe('POST /okr/create-composite - W5.M1 Integration Tests', () => {
       expect(createdObjective.title).toBe('Reduce churn Q1');
       expect(createdObjective.publishState).toBe('PUBLISHED');
       expect(createdObjective.status).toBe('ON_TRACK');
+      expect(createdObjective.goalType).toBe('COMMITTED');
       expect(createdObjective.keyResults).toHaveLength(1);
       expect(createdObjective.keyResults[0].title).toBe('NRR ≥ 110%');
+      expect(createdObjective.keyResults[0].goalType).toBe('COMMITTED');
+      // Verify createdBy is auto-populated
+      expect(createdObjective.createdBy).toBe(tenantAdminUser.id);
+    });
+  });
+
+  describe('Viva Goals Features', () => {
+    it('should create Objective with NOT_STARTED status', async () => {
+      const payload = {
+        objective: {
+          title: 'New Objective Not Started',
+          ownerUserId: tenantAdminUser.id,
+          cycleId: activeCycle.id,
+          visibilityLevel: 'PUBLIC_TENANT',
+          status: 'NOT_STARTED',
+          goalType: 'ASPIRATIONAL',
+        },
+        keyResults: [],
+      };
+
+      const response = await request(app.getHttpServer())
+        .post('/okr/create-composite')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send(payload)
+        .expect(200);
+
+      expect(response.body.status).toBe('NOT_STARTED');
+      expect(response.body.goalType).toBe('ASPIRATIONAL');
+    });
+
+    it('should create Key Result with teamId', async () => {
+      // Create a team first
+      const testWorkspace = await prisma.workspace.create({
+        data: {
+          name: 'Test Workspace',
+          tenantId: testOrg.id,
+        },
+      });
+
+      const testTeam = await prisma.team.create({
+        data: {
+          name: 'Test Team',
+          workspaceId: testWorkspace.id,
+        },
+      });
+
+      const payload = {
+        objective: {
+          title: 'Objective with Team KR',
+          ownerUserId: tenantAdminUser.id,
+          cycleId: activeCycle.id,
+          visibilityLevel: 'PUBLIC_TENANT',
+        },
+        keyResults: [
+          {
+            title: 'KR with Team',
+            metricType: 'PERCENT',
+            targetValue: 100,
+            ownerUserId: tenantAdminUser.id,
+            startValue: 0,
+            teamId: testTeam.id,
+          },
+        ],
+      };
+
+      const response = await request(app.getHttpServer())
+        .post('/okr/create-composite')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send(payload)
+        .expect(200);
+
+      const kr = await prisma.keyResult.findUnique({
+        where: { id: response.body.keyResultIds[0] },
+      });
+
+      expect(kr?.teamId).toBe(testTeam.id);
+
+      // Cleanup
+      await prisma.objective.delete({ where: { id: response.body.objectiveId } });
+      await prisma.team.delete({ where: { id: testTeam.id } });
+      await prisma.workspace.delete({ where: { id: testWorkspace.id } });
+    });
+
+    it('should create Initiative with goalType, teamId, and progress', async () => {
+      const objective = await prisma.objective.create({
+        data: {
+          title: 'Parent Objective',
+          ownerId: tenantAdminUser.id,
+          tenantId: testOrg.id,
+          cycleId: activeCycle.id,
+          status: 'ON_TRACK',
+          progress: 0,
+        },
+      });
+
+      const testWorkspace = await prisma.workspace.create({
+        data: {
+          name: 'Test Workspace',
+          tenantId: testOrg.id,
+        },
+      });
+
+      const testTeam = await prisma.team.create({
+        data: {
+          name: 'Test Team',
+          workspaceId: testWorkspace.id,
+        },
+      });
+
+      const payload = {
+        title: 'Test Initiative',
+        objectiveId: objective.id,
+        ownerId: tenantAdminUser.id,
+        goalType: 'COMMITTED',
+        teamId: testTeam.id,
+        progress: 75,
+      };
+
+      const response = await request(app.getHttpServer())
+        .post('/initiatives')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send(payload)
+        .expect(201);
+
+      expect(response.body.goalType).toBe('COMMITTED');
+      expect(response.body.teamId).toBe(testTeam.id);
+      expect(response.body.progress).toBe(75);
+      expect(response.body.createdBy).toBe(tenantAdminUser.id);
+
+      // Cleanup
+      await prisma.initiative.delete({ where: { id: response.body.id } });
+      await prisma.team.delete({ where: { id: testTeam.id } });
+      await prisma.workspace.delete({ where: { id: testWorkspace.id } });
+      await prisma.objective.delete({ where: { id: objective.id } });
     });
   });
 

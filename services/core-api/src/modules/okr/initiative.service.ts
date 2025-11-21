@@ -301,6 +301,67 @@ export class InitiativeService {
       throw new BadRequestException('tenantId is required for Initiative creation');
     }
 
+    // Auto-populate createdBy from userId if not provided
+    if (!data.createdBy) {
+      data.createdBy = userId;
+    }
+
+    // Set default goalType if not provided
+    if (!data.goalType) {
+      data.goalType = 'ASPIRATIONAL';
+    }
+
+    // Handle teamId: inherit from parent Objective/KeyResult if not provided
+    if (!data.teamId) {
+      if (data.objectiveId) {
+        const parentObjective = await this.prisma.objective.findUnique({
+          where: { id: data.objectiveId },
+          select: { teamId: true },
+        });
+        if (parentObjective?.teamId) {
+          data.teamId = parentObjective.teamId;
+        }
+      } else if (data.keyResultId) {
+        const parentKeyResult = await this.prisma.keyResult.findUnique({
+          where: { id: data.keyResultId },
+          select: { teamId: true },
+        });
+        if (parentKeyResult?.teamId) {
+          data.teamId = parentKeyResult.teamId;
+        }
+      }
+    }
+
+    // Validate teamId if provided
+    if (data.teamId) {
+      const team = await this.prisma.team.findUnique({
+        where: { id: data.teamId },
+        select: { id: true, workspaceId: true },
+      });
+
+      if (!team) {
+        throw new NotFoundException(`Team with ID ${data.teamId} not found`);
+      }
+
+      // Verify team belongs to same tenant (via workspace)
+      if (team.workspaceId) {
+        const workspace = await this.prisma.workspace.findUnique({
+          where: { id: team.workspaceId },
+          select: { tenantId: true },
+        });
+        if (workspace && workspace.tenantId !== data.tenantId) {
+          throw new BadRequestException('Team does not belong to the specified tenant');
+        }
+      }
+    }
+
+    // Validate progress if provided (0-100)
+    if (data.progress !== undefined && data.progress !== null) {
+      if (typeof data.progress !== 'number' || data.progress < 0 || data.progress > 100) {
+        throw new BadRequestException('Progress must be a number between 0 and 100');
+      }
+    }
+
     // Remove fields that don't exist on the Initiative model
     // tenantId is now a field, so keep it
     const { ...prismaData } = data;
@@ -327,7 +388,11 @@ export class InitiativeService {
           tenantId: created.tenantId,
           cycleId: created.cycleId,
           ownerId: created.ownerId,
+          teamId: created.teamId,
+          createdBy: created.createdBy,
           status: created.status,
+          progress: created.progress,
+          goalType: created.goalType,
           startDate: created.startDate,
           endDate: created.endDate,
           dueDate: created.dueDate,
@@ -441,6 +506,42 @@ export class InitiativeService {
       );
     }
 
+    // Validate teamId if provided
+    if (data.teamId !== undefined) {
+      if (data.teamId === null) {
+        // Allow clearing teamId
+        data.teamId = null;
+      } else {
+        const team = await this.prisma.team.findUnique({
+          where: { id: data.teamId },
+          select: { id: true, workspaceId: true },
+        });
+
+        if (!team) {
+          throw new NotFoundException(`Team with ID ${data.teamId} not found`);
+        }
+
+        // Verify team belongs to same tenant (via workspace)
+        const tenantId = existing.objective?.tenantId || existing.tenantId;
+        if (team.workspaceId && tenantId) {
+          const workspace = await this.prisma.workspace.findUnique({
+            where: { id: team.workspaceId },
+            select: { tenantId: true },
+          });
+          if (workspace && workspace.tenantId !== tenantId) {
+            throw new BadRequestException('Team does not belong to the specified tenant');
+          }
+        }
+      }
+    }
+
+    // Validate progress if provided (0-100)
+    if (data.progress !== undefined && data.progress !== null) {
+      if (typeof data.progress !== 'number' || data.progress < 0 || data.progress > 100) {
+        throw new BadRequestException('Progress must be a number between 0 and 100');
+      }
+    }
+
     const updated = await this.prisma.initiative.update({
       where: { id },
       data,
@@ -496,7 +597,11 @@ export class InitiativeService {
           tenantId: initiativeBefore.tenantId,
           cycleId: initiativeBefore.cycleId,
           ownerId: initiativeBefore.ownerId,
+          teamId: initiativeBefore.teamId,
+          createdBy: initiativeBefore.createdBy,
           status: initiativeBefore.status,
+          progress: initiativeBefore.progress,
+          goalType: initiativeBefore.goalType,
           startDate: initiativeBefore.startDate,
           endDate: initiativeBefore.endDate,
           dueDate: initiativeBefore.dueDate,
@@ -514,7 +619,11 @@ export class InitiativeService {
           tenantId: updated.tenantId,
           cycleId: updated.cycleId,
           ownerId: updated.ownerId,
+          teamId: updated.teamId,
+          createdBy: updated.createdBy,
           status: updated.status,
+          progress: updated.progress,
+          goalType: updated.goalType,
           startDate: updated.startDate,
           endDate: updated.endDate,
           dueDate: updated.dueDate,

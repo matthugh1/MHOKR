@@ -10,19 +10,19 @@ export class AuthService {
     private jwtService: JwtService,
     private prisma: PrismaService,
     private rbacService: RBACService,
-  ) {}
+  ) { }
 
-  async register(data: { 
-    email: string; 
-    password: string; 
-    firstName: string; 
+  async register(data: {
+    email: string;
+    password: string;
+    firstName: string;
     lastName: string;
     tenantId: string; // REQUIRED - all users must belong to an organization
     workspaceId: string; // REQUIRED - all users must belong to a workspace
   }) {
     // Normalize email to lowercase for case-insensitive storage
     const normalizedEmail = data.email.toLowerCase().trim();
-    
+
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
@@ -113,7 +113,7 @@ export class AuthService {
 
     // Return user without password
     const { passwordHash, ...userWithoutPassword } = user;
-    
+
     return {
       user: {
         ...userWithoutPassword,
@@ -129,9 +129,9 @@ export class AuthService {
   async login(email: string, password: string) {
     // Normalize email to lowercase for case-insensitive login
     const normalizedEmail = email.toLowerCase().trim();
-    
-    console.log(`[AUTH] Login attempt for email: ${normalizedEmail}`);
-    
+
+
+
     // Find user
     const user = await this.prisma.user.findUnique({
       where: { email: normalizedEmail },
@@ -155,7 +155,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    console.log(`[AUTH] Login successful for user ${user.id} (${normalizedEmail})`);
+
 
     // CRITICAL: Verify user has at least one tenant role assignment
     // Users without role assignments cannot authenticate (tenantId would be undefined)
@@ -184,7 +184,7 @@ export class AuthService {
     // Return user without password
     const { passwordHash, ...userWithoutPassword } = user;
     const nameParts = user.name.split(' ');
-    
+
     return {
       user: {
         ...userWithoutPassword,
@@ -201,14 +201,14 @@ export class AuthService {
     // This method verifies Keycloak tokens and syncs users to our database
     // Token is fully verified before this point.
     // If verification fails, we throw UnauthorizedException.
-    
+
     // Note: This method should use the JwksVerifier, but we need to inject it
     // For now, we decode and verify manually - in production, use JwksVerifier service
-    
+
     try {
       // Decode token to check algorithm
       const decoded = this.jwtService.decode(token, { complete: true }) as any;
-      
+
       if (!decoded || !decoded.header || !decoded.payload) {
         throw new UnauthorizedException('Invalid token format');
       }
@@ -217,10 +217,10 @@ export class AuthService {
       // For now, if it's HS256, verify with our secret
       if (decoded.header.alg === 'HS256') {
         const payload = this.jwtService.verify(token) as any;
-        
+
         // Normalize email to lowercase for case-insensitive storage
         const normalizedEmail = payload.email?.toLowerCase().trim();
-        
+
         // Sync or create user in our database
         const user = await this.prisma.user.upsert({
           where: { id: payload.sub },
@@ -274,7 +274,7 @@ export class AuthService {
   async validateUser(userId: string) {
     // MUST NOT trust unverified data.
     // This method should only be called after token is cryptographically verified.
-    
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -285,7 +285,7 @@ export class AuthService {
 
     const { passwordHash, ...userWithoutPassword } = user;
     const nameParts = user.name.split(' ');
-    
+
     return {
       ...userWithoutPassword,
       firstName: nameParts[0] || '',

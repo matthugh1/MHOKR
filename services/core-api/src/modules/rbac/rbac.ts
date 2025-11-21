@@ -613,13 +613,28 @@ function canManageUsers(
 ): boolean {
   const tenantId = resourceContext.tenantId;
 
+  console.log('[RBAC] canManageUsers check', {
+    tenantId,
+    hasTenantId: !!tenantId,
+    tenantRolesForTenant: tenantId ? userContext.tenantRoles.get(tenantId) || [] : [],
+    allTenantIds: Array.from(userContext.tenantRoles.keys()),
+    allTenantRoles: Array.from(userContext.tenantRoles.entries()).map(([tid, roles]) => ({
+      tenantId: tid,
+      roles,
+    })),
+    workspaceId: resourceContext.workspaceId,
+    teamId: resourceContext.teamId,
+  });
+
   // TENANT_OWNER can manage any user in their tenant
   if (hasTenantOwnerRole(userContext, tenantId)) {
+    console.log('[RBAC] canManageUsers: ALLOWED - user has TENANT_OWNER role');
     return true;
   }
 
   // TENANT_ADMIN can manage users in their tenant
   if (hasTenantAdminRole(userContext, tenantId)) {
+    console.log('[RBAC] canManageUsers: ALLOWED - user has TENANT_ADMIN role');
     // Cannot demote/remove TENANT_OWNER
     if (resourceContext.targetUserId) {
       // Would need to check if target user is TENANT_OWNER (would require DB lookup)
@@ -630,15 +645,18 @@ function canManageUsers(
   
   // WORKSPACE_LEAD can add/remove EXISTING tenant users to/from workspace
   if (resourceContext.workspaceId && hasWorkspaceLeadRole(userContext, resourceContext.workspaceId)) {
+    console.log('[RBAC] canManageUsers: ALLOWED - user has WORKSPACE_LEAD role');
     // Can only add existing users, not create new ones
     return true;
   }
 
   // TEAM_LEAD can add/remove EXISTING workspace members to/from team
   if (resourceContext.teamId && hasTeamLeadRole(userContext, resourceContext.teamId)) {
+    console.log('[RBAC] canManageUsers: ALLOWED - user has TEAM_LEAD role');
     return true;
   }
 
+  console.log('[RBAC] canManageUsers: DENIED - user does not have required role');
   return false;
 }
 

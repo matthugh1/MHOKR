@@ -484,6 +484,16 @@ export class ObjectiveService {
       data.state = this.stateTransitionService.calculateObjectiveStateFromLegacy(status, isPublished);
     }
 
+    // Auto-populate createdBy from userId if not provided
+    if (!data.createdBy) {
+      data.createdBy = _userId;
+    }
+
+    // Set default goalType if not provided
+    if (!data.goalType) {
+      data.goalType = 'ASPIRATIONAL';
+    }
+
     const createdObjective = await this.prisma.objective.create({
       data,
       include: {
@@ -786,6 +796,16 @@ export class ObjectiveService {
       // (The visibility service already handles whitelist lookup from organization metadata)
     }
 
+    // Auto-populate createdBy from userId if not provided
+    if (!objectiveCreateData.createdBy) {
+      objectiveCreateData.createdBy = _userId;
+    }
+
+    // Set default goalType if not provided
+    if (!objectiveCreateData.goalType) {
+      objectiveCreateData.goalType = 'ASPIRATIONAL';
+    }
+
     // Use transaction to create Objective and Key Results atomically
     const result = await this.prisma.$transaction(async (tx) => {
       // Create Objective
@@ -808,7 +828,14 @@ export class ObjectiveService {
           status: 'ON_TRACK',
           cycleId: objectiveData.cycleId, // Sync cycleId from parent Objective
           tenantId: userTenantId!, // Use userTenantId (already validated, cannot be null/undefined here)
+          createdBy: _userId, // Auto-populate createdBy
+          goalType: 'ASPIRATIONAL', // Default goalType
         };
+
+        // Inherit teamId from parent Objective
+        if (objectiveCreateData.teamId) {
+          krCreateData.teamId = objectiveCreateData.teamId;
+        }
 
         // Calculate initial progress
         if (krCreateData.currentValue !== undefined && krCreateData.startValue !== undefined && krCreateData.targetValue !== undefined && krCreateData.metricType) {

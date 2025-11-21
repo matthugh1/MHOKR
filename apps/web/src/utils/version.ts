@@ -50,11 +50,6 @@ export async function getVersionInfo(): Promise<VersionInfo> {
  * Logs version information to console (for DevTools verification)
  */
 export async function logVersionInfo(): Promise<void> {
-  const version = await getVersionInfo()
-  console.log('[Version] Build Information:', {
-    appVersion: version.appVersion,
-    buildTimestamp: version.buildTimestamp,
-    backendGitTag: version.backendGitTag,
-  })
 }
+
 

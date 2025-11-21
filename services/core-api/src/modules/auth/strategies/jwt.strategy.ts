@@ -3,7 +3,6 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from '../auth.service';
-import { PrismaService } from '../../../common/prisma/prisma.service';
 import { FeatureFlagService } from '../../rbac/feature-flag.service';
 
 /**
@@ -24,7 +23,6 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(
     configService: ConfigService,
     private authService: AuthService,
-    private prisma: PrismaService,
     private featureFlagService: FeatureFlagService,
   ) {
     super({
@@ -89,22 +87,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       };
     }
     
-    // Get user's primary organization (first org they belong to)
-    // TODO [phase7-hardening]: Support multi-org users (current logic only uses first org membership)
-    // Phase 2: Read from RBAC system instead of legacy OrganizationMember table
-    const orgAssignment = await this.prisma.roleAssignment.findFirst({
-      where: {
-        userId: user.id,
-        scopeType: 'TENANT',
-      },
-      select: { scopeId: true },
-      orderBy: { createdAt: 'asc' },  // Get first membership (primary org)
-    });
-    
-    // CRITICAL: Non-superuser users MUST have at least one tenant role assignment
-    // If tenantId is undefined, user cannot authenticate (JWT should never be issued without role assignments)
-    if (!user.isSuperuser && !orgAssignment) {
-      console.error(`[JWT STRATEGY] User ${user.id} (${user.email}) has no tenant role assignments - authentication should have failed`);
+    // SINGLE-TENANT ACCESS: Use primaryOrganizationId as the ONLY source of truth
+    // Users can only access their primary organization. Multi-tenant access is disabled.
+    // Roles determine permissions within the primary organization.
+    if (!user.primaryOrganizationId) {
+      console.error(`[JWT STRATEGY] User ${user.id} (${user.email}) has no primaryOrganizationId - user account is not properly configured`);
       throw new UnauthorizedException('User account is not properly configured. Please contact support.');
     }
     
@@ -113,7 +100,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
     // tenantId rules:
     // - null        => superuser (global read-only; can view all organisations)
-    // - <string>    => normal user (scoped to that organisation)
+    // - <string>    => normal user (scoped to their primary organisation only)
     // - undefined   => INVALID STATE - should never happen (authentication should have failed)
     //
     // IMPORTANT:
@@ -122,7 +109,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     // null      = platform-level superuser.
     return {
       ...user,
-      tenantId: orgAssignment!.scopeId,  // Non-null assertion: we've verified orgAssignment exists above
+      tenantId: user.primaryOrganizationId, // Single source of truth: primary organization only
       features: {
         rbacInspector: featureFlags.rbacInspector,
         okrTreeView: featureFlags.okrTreeView,

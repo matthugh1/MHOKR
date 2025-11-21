@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { ObjectiveRow } from '@/components/okr/ObjectiveRow'
+import { OKRHierarchyList } from './components/OKRHierarchyList'
 import { cn } from '@/lib/utils'
 
 interface PreparedObjective {
   id: string
   title: string
-  status: 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED'
+  status: 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED' | 'NOT_STARTED'
   publishState?: 'PUBLISHED' | 'DRAFT' // W4.M1: New field
   progress: number
   isPublished: boolean // W4.M1: Kept for backward compatibility
@@ -15,6 +16,7 @@ interface PreparedObjective {
   cycleLabel?: string
   cycleStatus?: string
   visibilityLevel?: string
+  parentId?: string | null // Add parentId for hierarchy
   owner: {
     id: string
     name: string
@@ -48,6 +50,10 @@ interface PreparedObjective {
   canEditKeyResult?: (krId: string) => boolean
   canCheckInOnKeyResult?: (krId: string) => boolean
   objectiveForHook: any
+  ownerId?: string
+  organizationId?: string
+  workspaceId?: string
+  teamId?: string
 }
 
 interface OKRListVirtualisedProps {
@@ -205,6 +211,30 @@ export function OKRListVirtualised({
     }
     return offset
   }, [objectives, visibleRange.startIndex, expandedObjectiveId])
+  
+  // Check if any objectives have parentId (hierarchy exists)
+  const hasHierarchy = useMemo(() => {
+    return objectives.some(obj => obj.parentId)
+  }, [objectives])
+  
+  // Use hierarchy view if hierarchy exists, otherwise use flat list
+  if (hasHierarchy) {
+    return (
+      <div
+        ref={containerRef}
+        className="relative w-full overflow-y-auto"
+        style={{ maxHeight: 'calc(100vh - 300px)', minHeight: '400px' }}
+      >
+        <OKRHierarchyList
+          objectives={objectives}
+          expandedObjectiveId={expandedObjectiveId}
+          onToggleObjective={onToggleObjective}
+          onAction={onAction}
+          availableUsers={availableUsers}
+        />
+      </div>
+    )
+  }
   
   const renderObjectiveRow = (objective: PreparedObjective) => {
     return (

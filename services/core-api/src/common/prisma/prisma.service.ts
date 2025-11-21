@@ -18,6 +18,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         'initiative', 'checkInRequest', 'strategicPillar', 'organization',
         'activity',      // ADD THIS
         'userLayout',    // ADD THIS
+        'user',          // Users table - RLS enabled
+        'roleAssignment', // Role assignments table - RLS enabled
       ];
       
       // Skip if not a tenant-scoped model or if it's a metadata/internal query
@@ -39,21 +41,31 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           // Use SET (session-level) instead of SET LOCAL (transaction-level)
           // This works for both transaction and non-transaction queries
           // Connection pool will reset variables when connection is returned
+          // NOTE: Using app.current_organization_id to match RLS policies
           const tenantIdValue = tenantId === null ? 'NULL' : `'${String(tenantId).replace(/'/g, "''")}'`;
+          
+          // Log for debugging (can be removed later)
+          if (params.model && String(params.model) === 'objective') {
+            console.log(`[PrismaService] Setting RLS variables for ${params.model}: tenantId=${tenantId}, isSuperuser=${isSuperuser}`);
+          }
+          
           await this.$executeRawUnsafe(
-            `SET app.current_tenant_id = ${tenantIdValue}`
+            `SET app.current_organization_id = ${tenantIdValue}`
           );
           await this.$executeRawUnsafe(
-            `SET app.user_is_superuser = ${isSuperuser}`
+            `SET app.user_is_superuser = '${isSuperuser ? 'true' : 'false'}'`
           );
         } catch (error) {
           // If setting session variables fails, log but don't block
           // This allows the application to continue working if RLS is not fully configured
-          console.warn('[PrismaService] Failed to set RLS session variables:', error);
+          console.error('[PrismaService] Failed to set RLS session variables:', error);
         } finally {
           // Clean up flag
           delete (params as any).__rlsVariablesSet;
         }
+      } else if (tenantId === undefined && params.model && String(params.model) === 'objective') {
+        // Log when tenant context is missing (this should not happen for authenticated requests)
+        console.warn(`[PrismaService] No tenant context available for ${params.model} query - RLS may not filter correctly`);
       }
       
       return next(params);

@@ -20,12 +20,13 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { SearchableUserSelect } from "@/components/okr/SearchableUserSelect"
+import { GoalTypeSelector } from "@/components/okr/GoalTypeSelector"
 import { useTenantAdmin } from "@/hooks/useTenantAdmin"
 import { useTenantPermissions } from "@/hooks/useTenantPermissions"
 import { useToast } from "@/hooks/use-toast"
 import api from "@/lib/api"
 
-type OKRStatus = "ON_TRACK" | "AT_RISK" | "OFF_TRACK" | "COMPLETED" | "CANCELLED"
+type OKRStatus = "NOT_STARTED" | "ON_TRACK" | "AT_RISK" | "OFF_TRACK" | "COMPLETED" | "CANCELLED"
 type VisibilityLevel = "PUBLIC_TENANT" | "PRIVATE"
 
 export interface EditObjectiveModalProps {
@@ -76,12 +77,13 @@ export function EditObjectiveModal({
   const [workspaceId, setWorkspaceId] = React.useState<string>("")
   const [cycleId, setCycleId] = React.useState<string>("")
   const [status, setStatus] = React.useState<OKRStatus>("ON_TRACK")
+  const [goalType, setGoalType] = React.useState<'ASPIRATIONAL' | 'COMMITTED'>('ASPIRATIONAL')
   const [visibilityLevel, setVisibilityLevel] = React.useState<VisibilityLevel>("PUBLIC_TENANT")
   const [isPublished, setIsPublished] = React.useState(false)
   // W4.M1: pillarId removed - deprecated
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [isTogglingPublish, setIsTogglingPublish] = React.useState(false)
-  
+
   const { isTenantAdmin } = useTenantAdmin()
   const tenantPermissions = useTenantPermissions()
   const { toast } = useToast()
@@ -94,16 +96,17 @@ export function EditObjectiveModal({
       setWorkspaceId(objectiveData.workspaceId || "")
       setCycleId(objectiveData.cycleId || "")
       setStatus(objectiveData.status || "ON_TRACK")
+      setGoalType(objectiveData.goalType || "ASPIRATIONAL")
       setVisibilityLevel(objectiveData.visibilityLevel || "PUBLIC_TENANT")
       setIsPublished(objectiveData.isPublished || false)
       // W4.M1: pillarId removed
     }
   }, [isOpen, objectiveData])
-  
+
   // Check if user can publish/unpublish
   const canPublish = React.useMemo(() => {
     if (!objectiveData || !objectiveId) return false
-    return isTenantAdmin || 
+    return isTenantAdmin ||
       (objectiveData.workspaceId && tenantPermissions.canEditObjective({
         id: objectiveId,
         ownerId: objectiveData.ownerId,
@@ -115,7 +118,7 @@ export function EditObjectiveModal({
         cycleStatus: null,
       }))
   }, [isTenantAdmin, objectiveData, objectiveId, tenantPermissions])
-  
+
   const canUnpublish = React.useMemo(() => {
     if (!objectiveData || !objectiveId) return false
     return isTenantAdmin || tenantPermissions.canEditObjective({
@@ -146,6 +149,7 @@ export function EditObjectiveModal({
         workspaceId: workspaceId || undefined,
         cycleId: cycleId || undefined,
         status,
+        goalType,
         visibilityLevel,
         // W4.M1: pillarId removed
       })
@@ -251,6 +255,7 @@ export function EditObjectiveModal({
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="NOT_STARTED">Not Started</SelectItem>
                 <SelectItem value="ON_TRACK">On Track</SelectItem>
                 <SelectItem value="AT_RISK">At Risk</SelectItem>
                 <SelectItem value="OFF_TRACK">Off Track</SelectItem>
@@ -259,6 +264,13 @@ export function EditObjectiveModal({
               </SelectContent>
             </Select>
           </div>
+
+          <GoalTypeSelector
+            value={goalType}
+            onValueChange={setGoalType}
+            label="Goal Type"
+            id="edit-goal-type"
+          />
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="edit-visibility">
@@ -289,7 +301,7 @@ export function EditObjectiveModal({
                     {isPublished ? 'Published' : 'Draft'}
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
-                    {isPublished 
+                    {isPublished
                       ? 'This objective is published and locked. Only organization administrators can edit published objectives.'
                       : 'This objective is in draft mode and can be edited freely.'}
                   </p>
@@ -300,31 +312,18 @@ export function EditObjectiveModal({
                     onClick={async (e) => {
                       e.preventDefault()
                       e.stopPropagation()
-                      
-                      console.log('[EditObjectiveModal] Publish button clicked', {
-                        objectiveId,
-                        isTogglingPublish,
-                        isPublished,
-                        canPublish,
-                        canUnpublish,
-                      })
-                      
+
+
+
                       if (!objectiveId || isTogglingPublish) {
-                        console.log('[EditObjectiveModal] Early return - no objectiveId or already toggling')
                         return
                       }
-                      
+
                       const canToggle = isPublished ? canUnpublish : canPublish
-                      
-                      console.log('[EditObjectiveModal] Permission check', {
-                        canToggle,
-                        isPublished,
-                        canPublish,
-                        canUnpublish,
-                      })
-                      
+
+
+
                       if (!canToggle) {
-                        console.log('[EditObjectiveModal] Permission denied')
                         toast({
                           title: 'Permission denied',
                           description: isPublished
@@ -336,20 +335,18 @@ export function EditObjectiveModal({
                       }
 
                       const newIsPublished = !isPublished
-                      console.log('[EditObjectiveModal] Toggling publish status', { newIsPublished })
                       setIsTogglingPublish(true)
-                      
+
                       try {
-                        const response = await api.patch(`/objectives/${objectiveId}`, { 
-                          isPublished: newIsPublished 
+                        const response = await api.patch(`/objectives/${objectiveId}`, {
+                          isPublished: newIsPublished
                         })
-                        
-                        console.log('[EditObjectiveModal] Publish status updated successfully', response.data)
+
                         setIsPublished(newIsPublished)
-                        
+
                         toast({
                           title: newIsPublished ? 'Objective published' : 'Objective unpublished',
-                          description: newIsPublished 
+                          description: newIsPublished
                             ? 'This objective is now published and locked for editing.'
                             : 'This objective is now in draft mode and can be edited.',
                         })

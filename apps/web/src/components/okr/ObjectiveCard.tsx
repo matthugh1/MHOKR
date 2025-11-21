@@ -9,6 +9,7 @@ import { AvatarCircle } from "@/components/dashboard/AvatarCircle"
 import { Edit2, Trash2, History, Lock, Plus, Info } from "lucide-react"
 import { ProgressBreakdownTooltip } from "./ProgressBreakdownTooltip"
 import { ObjectiveProgressTrendChart } from "./ObjectiveProgressTrendChart"
+import { formatNumber, clampProgress } from "@/lib/utils"
 
 export interface ObjectiveCardProps {
   objectiveId?: string // Optional - needed for trend chart
@@ -349,7 +350,7 @@ export function ObjectiveCard({
             <span className="text-xs text-neutral-600">Progress</span>
             <div className="flex items-center gap-1.5">
               <span className="text-sm font-semibold text-neutral-900">
-                {Math.round(progressPct)}%
+                {Math.round(clampProgress(progressPct))}%
               </span>
               {/* Show breakdown tooltip if Objective has Key Results */}
               {keyResults.length > 0 && (
@@ -408,7 +409,9 @@ export function ObjectiveCard({
                 if (kr.currentValue !== undefined && kr.targetValue !== undefined && 
                     typeof kr.currentValue === 'number' && typeof kr.targetValue === 'number' && kr.targetValue > 0) {
                   const progressPct = Math.round((kr.currentValue / kr.targetValue) * 100)
-                  progressLabel = `${progressPct}% of ${kr.targetValue}${kr.unit ? ` ${kr.unit}` : ''}`
+                  // Don't display "Number" as a unit - it's redundant
+                  const unitDisplay = kr.unit && kr.unit.toLowerCase() !== 'number' ? ` ${kr.unit}` : ''
+                  progressLabel = `${Math.round(clampProgress(progressPct))}% of ${formatNumber(kr.targetValue)}${unitDisplay}`
                 }
                 
                 return (
@@ -434,7 +437,11 @@ export function ObjectiveCard({
                         {kr.currentValue !== undefined && kr.targetValue !== undefined && 
                          kr.startValue !== undefined && (
                           <div className="text-[12px] leading-snug text-neutral-500">
-                            {kr.currentValue} {kr.unit || ''} → target {kr.targetValue} {kr.unit || ''}
+                            {(() => {
+                              // Don't display "Number" as a unit - it's redundant
+                              const unitDisplay = kr.unit && kr.unit.toLowerCase() !== 'number' ? ` ${kr.unit}` : ''
+                              return `${formatNumber(kr.currentValue)}${unitDisplay} → target ${formatNumber(kr.targetValue)}${unitDisplay}`
+                            })()}
                           </div>
                         )}
                         {kr.isOverdue && (

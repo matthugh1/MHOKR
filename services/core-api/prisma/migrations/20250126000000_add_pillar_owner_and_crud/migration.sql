@@ -14,3 +14,5 @@ CREATE INDEX "strategic_pillars_tenantId_ownerId_idx" ON "strategic_pillars"("te
 ALTER TYPE "EntityType" ADD VALUE IF NOT EXISTS 'PILLAR';
 
 
+
+

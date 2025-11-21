@@ -400,6 +400,50 @@ export class KeyResultService {
       data.state = this.stateTransitionService.calculateKeyResultStateFromLegacy(status, isPublished);
     }
 
+    // Auto-populate createdBy from userId if not provided
+    if (!data.createdBy) {
+      data.createdBy = _userId;
+    }
+
+    // Set default goalType if not provided
+    if (!data.goalType) {
+      data.goalType = 'ASPIRATIONAL';
+    }
+
+    // Handle teamId: inherit from parent Objective if not provided
+    if (!data.teamId && objectiveId) {
+      const parentObjective = await this.prisma.objective.findUnique({
+        where: { id: objectiveId },
+        select: { teamId: true },
+      });
+      if (parentObjective?.teamId) {
+        data.teamId = parentObjective.teamId;
+      }
+    }
+
+    // Validate teamId if provided
+    if (data.teamId) {
+      const team = await this.prisma.team.findUnique({
+        where: { id: data.teamId },
+        select: { id: true, workspaceId: true },
+      });
+
+      if (!team) {
+        throw new NotFoundException(`Team with ID ${data.teamId} not found`);
+      }
+
+      // Verify team belongs to same tenant (via workspace)
+      if (team.workspaceId) {
+        const workspace = await this.prisma.workspace.findUnique({
+          where: { id: team.workspaceId },
+          select: { tenantId: true },
+        });
+        if (workspace && workspace.tenantId !== data.tenantId) {
+          throw new BadRequestException('Team does not belong to the specified tenant');
+        }
+      }
+    }
+
     const createdKr = await this.prisma.keyResult.create({
       data,
     }).catch((error) => {
@@ -437,6 +481,9 @@ export class KeyResultService {
           unit: createdKr.unit,
           status: createdKr.status,
           progress: createdKr.progress,
+          goalType: createdKr.goalType,
+          teamId: createdKr.teamId,
+          createdBy: createdKr.createdBy,
           visibilityLevel: createdKr.visibilityLevel,
           isPublished: createdKr.isPublished,
           state: createdKr.state,
@@ -608,6 +655,34 @@ export class KeyResultService {
         krBefore.targetValue,
         krBefore.metricType as any,
       );
+    }
+
+    // Validate teamId if provided
+    if (data.teamId !== undefined) {
+      if (data.teamId === null) {
+        // Allow clearing teamId
+        data.teamId = null;
+      } else {
+        const team = await this.prisma.team.findUnique({
+          where: { id: data.teamId },
+          select: { id: true, workspaceId: true },
+        });
+
+        if (!team) {
+          throw new NotFoundException(`Team with ID ${data.teamId} not found`);
+        }
+
+        // Verify team belongs to same tenant (via workspace)
+        if (team.workspaceId) {
+          const workspace = await this.prisma.workspace.findUnique({
+            where: { id: team.workspaceId },
+            select: { tenantId: true },
+          });
+          if (workspace && objectiveOrgId && workspace.tenantId !== objectiveOrgId) {
+            throw new BadRequestException('Team does not belong to the specified tenant');
+          }
+        }
+      }
     }
     
     const updatedKr = await this.prisma.keyResult.update({

@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { SearchableUserSelect } from "@/components/okr/SearchableUserSelect"
+import { GoalTypeSelector } from "@/components/okr/GoalTypeSelector"
 
 type InitiativeStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "BLOCKED"
 
@@ -33,10 +34,14 @@ export interface NewInitiativeModalProps {
     title: string
     ownerId: string
     status: InitiativeStatus
+    goalType?: 'ASPIRATIONAL' | 'COMMITTED'
+    teamId?: string | null
+    progress?: number | null
     dueDate?: string
   }) => Promise<void>
   // Options for dropdowns (parent should provide these)
   availableUsers?: Array<{ id: string; name: string; email?: string }>
+  availableTeams?: Array<{ id: string; name: string; workspaceId?: string }>
 }
 
 export function NewInitiativeModal({
@@ -47,10 +52,14 @@ export function NewInitiativeModal({
   onClose,
   onSubmit,
   availableUsers = [],
+  availableTeams = [],
 }: NewInitiativeModalProps) {
   const [title, setTitle] = React.useState("")
   const [ownerId, setOwnerId] = React.useState("")
   const [status, setStatus] = React.useState<InitiativeStatus>("NOT_STARTED")
+  const [goalType, setGoalType] = React.useState<'ASPIRATIONAL' | 'COMMITTED'>('ASPIRATIONAL')
+  const [teamId, setTeamId] = React.useState<string | null>(null)
+  const [progress, setProgress] = React.useState<number | null>(null)
   const [dueDate, setDueDate] = React.useState("")
   const [isSubmitting, setIsSubmitting] = React.useState(false)
 
@@ -68,12 +77,18 @@ export function NewInitiativeModal({
         title: title.trim(),
         ownerId,
         status,
+        goalType,
+        teamId: teamId || undefined,
+        progress: progress !== null ? progress : undefined,
         dueDate: dueDate || undefined,
       })
       // Reset form
       setTitle("")
       setOwnerId("")
       setStatus("NOT_STARTED")
+      setGoalType("ASPIRATIONAL")
+      setTeamId(null)
+      setProgress(null)
       setDueDate("")
       onClose()
     } catch (error) {
@@ -89,6 +104,9 @@ export function NewInitiativeModal({
       setTitle("")
       setOwnerId("")
       setStatus("NOT_STARTED")
+      setGoalType("ASPIRATIONAL")
+      setTeamId(null)
+      setProgress(null)
       setDueDate("")
       onClose()
     }
@@ -164,6 +182,52 @@ export function NewInitiativeModal({
                 <SelectItem value="BLOCKED">Blocked</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <GoalTypeSelector
+            value={goalType}
+            onValueChange={setGoalType}
+            label="Goal Type"
+            id="init-goal-type"
+          />
+
+          {availableTeams.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="team">Team</Label>
+              <Select
+                value={teamId || 'none'}
+                onValueChange={(value) => setTeamId(value === 'none' ? null : value)}
+              >
+                <SelectTrigger id="team">
+                  <SelectValue placeholder="Select team (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {availableTeams.map((team) => (
+                    <SelectItem key={team.id} value={team.id}>
+                      {team.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="progress">Progress (0-100)</Label>
+            <Input
+              id="progress"
+              type="number"
+              min="0"
+              max="100"
+              value={progress ?? ''}
+              onChange={(e) => {
+                const value = e.target.value === '' ? null : parseFloat(e.target.value)
+                setProgress(value !== null && !isNaN(value) ? value : null)
+              }}
+              placeholder="Enter progress percentage (optional)"
+            />
+            <p className="text-xs text-muted-foreground">Progress percentage from 0 to 100</p>
           </div>
 
           <div className="flex flex-col gap-2">

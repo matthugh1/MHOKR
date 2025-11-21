@@ -18,6 +18,7 @@
 import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { withTenantContext } from '../prisma/tenant-isolation.middleware';
 
 @Injectable()
 export class TenantContextInterceptor implements NestInterceptor {
@@ -30,7 +31,17 @@ export class TenantContextInterceptor implements NestInterceptor {
     
     // Skip if already set (idempotent - allows middleware to set it for public routes)
     if ((request as any).tenantId !== undefined) {
-      return next.handle();
+      // Still need to set AsyncLocalStorage context for Prisma middleware
+      const existingTenantId = (request as any).tenantId;
+      return new Observable(observer => {
+        withTenantContext(existingTenantId, () => {
+          next.handle().subscribe({
+            next: (value) => observer.next(value),
+            error: (err) => observer.error(err),
+            complete: () => observer.complete(),
+          });
+        });
+      });
     }
 
     // Get user from request (set by JWT guard)
@@ -42,45 +53,60 @@ export class TenantContextInterceptor implements NestInterceptor {
       return next.handle();
     }
 
+    // Determine tenantId
+    let tenantId: string | null | undefined = undefined;
+    let isSuperuser = false;
+
     // Superuser => tenantId: null
     if (user.isSuperuser || user.tenantId === null) {
-      (request as any).tenantId = null;
-      (request as any).isSuperuser = true;
+      tenantId = null;
+      isSuperuser = true;
       this.logger.debug(`TenantContextInterceptor: Superuser detected, tenantId=null`);
-      return next.handle();
     }
-
     // Normal user => use tenantId from JWT (already set by jwt.strategy.validate())
-    if (user.tenantId && typeof user.tenantId === 'string') {
-      (request as any).tenantId = user.tenantId;
-      (request as any).isSuperuser = false;
-      this.logger.log(`TenantContextInterceptor: ✅ Tenant context set from JWT, tenantId=${user.tenantId} for user ${user.id}`);
-      return next.handle();
+    else if (user.tenantId && typeof user.tenantId === 'string') {
+      tenantId = user.tenantId;
+      isSuperuser = false;
+      this.logger.log(`TenantContextInterceptor: ✅ Tenant context set from JWT, tenantId=${tenantId} for user ${user.id}`);
     }
-
     // Fallback: Look up tenant from role assignments (shouldn't happen in normal flow)
-    // This handles edge cases where jwt.strategy didn't set tenantId
-    this.logger.warn(`TenantContextInterceptor: tenantId not in JWT, performing fallback lookup for user ${user.id}`);
-    
-    const orgAssignment = await this.prisma.roleAssignment.findFirst({
-      where: {
-        userId: user.id,
-        scopeType: 'TENANT',
-      },
-      select: { scopeId: true },
-      orderBy: { createdAt: 'asc' },
-    });
+    else {
+      this.logger.warn(`TenantContextInterceptor: tenantId not in JWT, performing fallback lookup for user ${user.id}`);
+      
+      const orgAssignment = await this.prisma.roleAssignment.findFirst({
+        where: {
+          userId: user.id,
+          scopeType: 'TENANT',
+        },
+        select: { scopeId: true },
+        orderBy: { createdAt: 'asc' },
+      });
 
-    if (orgAssignment) {
-      (request as any).tenantId = orgAssignment.scopeId;
-      (request as any).isSuperuser = false;
-      this.logger.debug(`TenantContextInterceptor: Tenant context set from fallback lookup, tenantId=${orgAssignment.scopeId}`);
-    } else {
-      // No tenant found - but don't block here
-      // TenantMutationGuard will handle mutations and throw appropriate error
-      this.logger.debug(`TenantContextInterceptor: No tenant found for user ${user.id}, leaving undefined for TenantMutationGuard to handle`);
+      if (orgAssignment) {
+        tenantId = orgAssignment.scopeId;
+        isSuperuser = false;
+        this.logger.debug(`TenantContextInterceptor: Tenant context set from fallback lookup, tenantId=${tenantId}`);
+      } else {
+        // No tenant found - but don't block here
+        // TenantMutationGuard will handle mutations and throw appropriate error
+        this.logger.debug(`TenantContextInterceptor: No tenant found for user ${user.id}, leaving undefined for TenantMutationGuard to handle`);
+      }
     }
-    
-    return next.handle();
+
+    // Set on request for other guards/interceptors
+    (request as any).tenantId = tenantId;
+    (request as any).isSuperuser = isSuperuser;
+
+    // CRITICAL: Set AsyncLocalStorage context so Prisma middleware can read it
+    // This ensures RLS session variables are set before Prisma queries execute
+    return new Observable(observer => {
+      withTenantContext(tenantId, () => {
+        next.handle().subscribe({
+          next: (value) => observer.next(value),
+          error: (err) => observer.error(err),
+          complete: () => observer.complete(),
+        });
+      });
+    });
   }
 }

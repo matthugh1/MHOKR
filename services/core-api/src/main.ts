@@ -15,7 +15,7 @@ async function bootstrap() {
   // Global request logging middleware for debugging
   app.use((req: any, _res: any, next: any) => {
     if (req.method === 'DELETE' && req.path.includes('key-results')) {
-      console.log(`[MAIN] ${req.method} ${req.path} - Route: ${req.route?.path || 'not matched'}`);
+      // console.log(`[MAIN] ${req.method} ${req.path} - Route: ${req.route?.path || 'not matched'}`);
     }
     next();
   });

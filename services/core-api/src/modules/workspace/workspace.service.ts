@@ -434,6 +434,8 @@ export class WorkspaceService {
       return [];
     }
 
+    const organizationName = workspace.tenant?.name || null;
+
     // Get members from RBAC system (Phase 2 - primary source)
     // Get workspace-level role assignments
     const workspaceAssignments = await this.prisma.roleAssignment.findMany({
@@ -442,7 +444,16 @@ export class WorkspaceService {
         scopeId: workspaceId,
       },
       include: {
-        user: true,
+        user: {
+          include: {
+            primaryOrganization: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -458,7 +469,16 @@ export class WorkspaceService {
         scopeId: { in: teams.map(t => t.id) },
       },
       include: {
-        user: true,
+        user: {
+          include: {
+            primaryOrganization: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -469,7 +489,16 @@ export class WorkspaceService {
         scopeId: workspace.tenantId,
       },
       include: {
-        user: true,
+        user: {
+          include: {
+            primaryOrganization: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -489,12 +518,17 @@ export class WorkspaceService {
       if (!userMap.has(assignment.userId)) {
         userMap.set(assignment.userId, {
           ...assignment.user,
+          organizationName: assignment.user.primaryOrganization?.name || organizationName,
           teams: [],
           workspaceRole: null,
           orgRole: null,
         });
       }
       const user = userMap.get(assignment.userId);
+      // Ensure organizationName is set if not already
+      if (!user.organizationName) {
+        user.organizationName = assignment.user.primaryOrganization?.name || organizationName;
+      }
       user.teams.push({
         id: team.id,
         name: team.name,
@@ -509,12 +543,17 @@ export class WorkspaceService {
       if (!userMap.has(assignment.userId)) {
         userMap.set(assignment.userId, {
           ...assignment.user,
+          organizationName: assignment.user.primaryOrganization?.name || organizationName,
           teams: [],
           workspaceRole: legacyRole,
           orgRole: null,
         });
       } else {
         const user = userMap.get(assignment.userId);
+        // Ensure organizationName is set if not already
+        if (!user.organizationName) {
+          user.organizationName = assignment.user.primaryOrganization?.name || organizationName;
+        }
         user.workspaceRole = legacyRole;
       }
     });
@@ -526,17 +565,26 @@ export class WorkspaceService {
       if (!userMap.has(assignment.userId)) {
         userMap.set(assignment.userId, {
           ...assignment.user,
+          organizationName: assignment.user.primaryOrganization?.name || organizationName,
           teams: [],
           workspaceRole: null,
           orgRole: legacyRole,
         });
       } else {
         const user = userMap.get(assignment.userId);
+        // Ensure organizationName is set if not already
+        if (!user.organizationName) {
+          user.organizationName = assignment.user.primaryOrganization?.name || organizationName;
+        }
         user.orgRole = legacyRole;
       }
     });
 
-    return Array.from(userMap.values());
+    return Array.from(userMap.values()).map(user => {
+      // Clean up the user object - remove nested primaryOrganization relation
+      const { primaryOrganization, ...userWithoutOrg } = user;
+      return userWithoutOrg;
+    });
   }
 
   async verifyUserAccess(workspaceId: string, userId: string): Promise<boolean> {

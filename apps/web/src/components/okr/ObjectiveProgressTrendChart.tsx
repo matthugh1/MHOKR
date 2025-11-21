@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
 import { format } from 'date-fns'
+import { clampProgress } from '@/lib/utils'
 
 interface TrendPoint {
   timestamp: string
@@ -225,7 +226,7 @@ export function ObjectiveProgressTrendChart({ objectiveId, className = '' }: Obj
         <span>{trendData.length} snapshot{trendData.length !== 1 ? 's' : ''}</span>
         {trendData.length > 0 && (
           <span>
-            Latest: {Math.round(trendData[trendData.length - 1].progress)}%
+            Latest: {Math.round(clampProgress(trendData[trendData.length - 1].progress))}%
           </span>
         )}
       </div>

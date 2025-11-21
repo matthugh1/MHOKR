@@ -45,15 +45,38 @@ export function SearchableUserSelect({
 }: SearchableUserSelectProps) {
   const [open, setOpen] = React.useState(false)
 
-  const selectedUser = availableUsers.find((user) => user.id === value)
+  // Deduplicate users by ID to prevent duplicate key errors
+  const uniqueUsers = React.useMemo(() => {
+    const seen = new Set<string>()
+    return availableUsers.filter((user) => {
+      if (seen.has(user.id)) {
+        return false
+      }
+      seen.add(user.id)
+      return true
+    })
+  }, [availableUsers])
+
+  const selectedUser = uniqueUsers.find((user) => user.id === value)
+
+  // Debug logging
+  React.useEffect(() => {
+    if (open) {
+
+    }
+  }, [open, disabled, uniqueUsers.length, availableUsers.length])
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open && !disabled} onOpenChange={(newOpen: boolean) => {
+      if (!disabled) {
+        setOpen(newOpen)
+      }
+    }}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
           role="combobox"
-          aria-expanded={open}
+          aria-expanded={open && !disabled}
           className={cn(
             'w-full justify-between',
             !selectedUser && 'text-muted-foreground'
@@ -74,14 +97,17 @@ export function SearchableUserSelect({
           <CommandList>
             <CommandEmpty>No users found.</CommandEmpty>
             <CommandGroup>
-              {availableUsers.map((user) => (
+              {uniqueUsers.map((user) => (
                 <CommandItem
                   key={user.id}
                   value={`${user.name} ${user.email || ''}`}
                   onSelect={() => {
+
                     onValueChange(user.id)
                     setOpen(false)
                   }}
+                  className="cursor-pointer !opacity-100 !pointer-events-auto"
+                  style={{ opacity: 1, pointerEvents: 'auto' }}
                 >
                   <Check
                     className={cn(

@@ -3,7 +3,8 @@
 import * as React from "react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Info } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, clampProgress } from "@/lib/utils"
+import api from "@/lib/api"
 
 export interface KeyResultContribution {
   id: string
@@ -12,9 +13,19 @@ export interface KeyResultContribution {
   weight?: number // Optional - defaults to 1.0 if not provided
 }
 
+export interface ChildObjectiveContribution {
+  id: string
+  title: string
+  progress: number
+  weight?: number // Optional - defaults to 1.0 if not provided
+}
+
 export interface ProgressBreakdownTooltipProps {
+  objectiveId: string
   objectiveProgress: number
-  keyResults: KeyResultContribution[]
+  keyResults?: KeyResultContribution[]
+  childObjectives?: ChildObjectiveContribution[]
+  calculationMethod?: 'WEIGHTED_AVERAGE' | 'SIMPLE_AVERAGE' | 'MANUAL' | 'NONE'
   className?: string
 }
 
@@ -36,48 +47,130 @@ export interface ProgressBreakdownTooltipProps {
  * ```
  */
 export function ProgressBreakdownTooltip({
+  objectiveId,
   objectiveProgress,
-  keyResults,
+  keyResults = [],
+  childObjectives = [],
+  calculationMethod,
   className,
 }: ProgressBreakdownTooltipProps) {
-  // Don't show if no key results
-  if (!keyResults || keyResults.length === 0) {
+  const [breakdown, setBreakdown] = React.useState<{
+    totalProgress: number
+    contributions: Array<{
+      id: string
+      title: string
+      type: 'KEY_RESULT' | 'CHILD_OBJECTIVE'
+      progress: number
+      weight: number
+      contribution: number
+      percentage: number
+    }>
+    calculationMethod: 'WEIGHTED_AVERAGE' | 'SIMPLE_AVERAGE' | 'MANUAL' | 'NONE'
+  } | null>(null)
+  const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+
+  // Fetch contribution breakdown from API when tooltip is opened
+  const fetchBreakdown = React.useCallback(async () => {
+    if (breakdown || loading) return // Already fetched or fetching
+
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await api.get(`/objectives/${objectiveId}/progress-contribution`)
+      setBreakdown(response.data)
+    } catch (err: any) {
+      console.error('Failed to fetch progress contribution breakdown:', err)
+      setError(err.response?.data?.message || 'Failed to load breakdown')
+      // Fall back to client-side calculation if API fails
+    } finally {
+      setLoading(false)
+    }
+  }, [objectiveId, breakdown, loading])
+
+  // Don't show if manual progress or no contributions
+  if (calculationMethod === 'MANUAL' || calculationMethod === 'NONE') {
     return null
   }
 
-  // Calculate weighted contributions
+  // Use API breakdown if available, otherwise fall back to props
+  const useApiData = breakdown !== null && !error
+  const apiContributions = breakdown?.contributions || []
+  
+  // Fallback: Use Key Results if available, otherwise use child Objectives
+  const fallbackItems = keyResults.length > 0 ? keyResults : childObjectives
+  const fallbackItemType = keyResults.length > 0 ? 'Key Result' : 'Child Objective'
+
+  const items = useApiData 
+    ? apiContributions.map(c => ({
+        id: c.id,
+        title: c.title,
+        progress: c.progress,
+        weight: c.weight,
+        type: c.type,
+      }))
+    : fallbackItems
+
+  const itemType = useApiData
+    ? (apiContributions[0]?.type === 'KEY_RESULT' ? 'Key Result' : 'Child Objective')
+    : fallbackItemType
+
+  if (!items || items.length === 0) {
+    return null
+  }
+
+  // Calculate weighted contributions (only if not using API data)
   const contributions = React.useMemo(() => {
-    const totalWeight = keyResults.reduce(
-      (sum, kr) => sum + (kr.weight ?? 1.0),
+    if (useApiData && breakdown) {
+      // Use API breakdown data directly
+      return breakdown.contributions.map(c => ({
+        id: c.id,
+        title: c.title,
+        progress: c.progress,
+        weight: c.weight,
+        contribution: c.contribution,
+        contributionPercent: c.contribution,
+        type: c.type,
+      }))
+    }
+
+    // Fallback: calculate from props
+    const totalWeight = items.reduce(
+      (sum, item) => sum + (item.weight ?? 1.0),
       0
     )
 
-    return keyResults.map(kr => {
-      const weight = kr.weight ?? 1.0
+    return items.map(item => {
+      const weight = item.weight ?? 1.0
       const contribution = totalWeight > 0
-        ? (kr.progress * weight) / totalWeight
-        : kr.progress / keyResults.length
+        ? (item.progress * weight) / totalWeight
+        : item.progress / items.length
 
       return {
-        ...kr,
+        ...item,
         weight,
         contribution,
         contributionPercent: contribution,
+        type: 'KEY_RESULT' as const, // Default type for fallback
       }
     })
-  }, [keyResults])
+  }, [items, useApiData, breakdown])
 
   // Format the calculation string
   const calculationParts = contributions.map((c, i) => {
     const prefix = i > 0 ? ' + ' : ''
-    return `${prefix}(${c.title}: ${Math.round(c.progress)}% × ${c.weight})`
+    return `${prefix}(${c.title}: ${Math.round(clampProgress(c.progress))}% × ${c.weight})`
   })
 
   const calculationString = `${Math.round(objectiveProgress)}% = ${calculationParts.join('')}`
 
   return (
     <TooltipProvider>
-      <Tooltip>
+      <Tooltip onOpenChange={(open) => {
+        if (open) {
+          fetchBreakdown()
+        }
+      }}>
         <TooltipTrigger asChild>
           <Info
             className={cn(
@@ -122,16 +215,31 @@ export function ProgressBreakdownTooltip({
                     />
                   </div>
                   <div className="flex items-center justify-between text-[10px] text-neutral-500">
-                    <span>KR Progress: {Math.round(contribution.progress)}%</span>
+                    <span>{(contribution as any).type === 'CHILD_OBJECTIVE' ? 'Child Objective' : 'Key Result'} Progress: {Math.round(clampProgress(contribution.progress))}%</span>
                     <span>Weight: {contribution.weight}</span>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="text-[10px] text-neutral-500 pt-1 border-t border-neutral-200">
-              Progress calculated from Key Results using weighted average
-            </div>
+            {loading && (
+              <div className="text-[10px] text-neutral-500 pt-1 border-t border-neutral-200">
+                Loading breakdown...
+              </div>
+            )}
+            {error && (
+              <div className="text-[10px] text-red-500 pt-1 border-t border-neutral-200">
+                {error}
+              </div>
+            )}
+            {!loading && !error && (
+              <div className="text-[10px] text-neutral-500 pt-1 border-t border-neutral-200">
+                Progress calculated from {useApiData 
+                  ? (breakdown?.calculationMethod === 'WEIGHTED_AVERAGE' ? `${itemType}s` : 'items')
+                  : (keyResults.length > 0 ? 'Key Results' : 'Child Objectives')
+                } using {useApiData && breakdown?.calculationMethod === 'WEIGHTED_AVERAGE' ? 'weighted' : 'simple'} average
+              </div>
+            )}
           </div>
         </TooltipContent>
       </Tooltip>

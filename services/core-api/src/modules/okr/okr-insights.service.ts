@@ -150,7 +150,7 @@ export class OkrInsightsService {
         continue;
       }
 
-      // Determine max age based on cadence
+      // Determine max age based on cadence (match check-in-due-calculator.ts)
       let maxAgeDays: number;
       switch (kr.checkInCadence) {
         case 'WEEKLY':
@@ -160,7 +160,7 @@ export class OkrInsightsService {
           maxAgeDays = 14;
           break;
         case 'MONTHLY':
-          maxAgeDays = 31;
+          maxAgeDays = 30; // Match backend: check-in-due-calculator.ts uses 30 days
           break;
         default:
           continue;

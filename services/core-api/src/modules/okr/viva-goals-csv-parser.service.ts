@@ -58,6 +58,7 @@ export interface ParsedVivaGoalsRow {
   start: number | null;
   createdAt: string | null;
   lastCheckin: string | null;
+  progress?: number | null; // Progress field from JSON (might be currentValue for Number/Dollar units)
   progressPercent: number | null;
   actualProgress: number | null;
   status: string;

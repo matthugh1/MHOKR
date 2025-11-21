@@ -183,88 +183,130 @@ export class UserService {
     // Build RBAC user context to get role assignments (Phase 4: RBAC only)
     const rbacContext = await this.rbacService.buildUserContext(userId, true);
 
-    // Get organizations from RBAC tenant role assignments
-    const tenantAssignments = await this.prisma.roleAssignment.findMany({
-      where: {
-        userId,
-        scopeType: 'TENANT',
-        scopeId: { not: null },
-      },
-    });
-
-    // Get unique organization IDs
-    const tenantIds = [...new Set(
-      tenantAssignments
-        .map(ta => ta.scopeId)
-        .filter((id): id is string => id !== null)
-    )];
-
-    // Fetch organizations
-    const organizations = tenantIds.length > 0
-      ? await this.prisma.organization.findMany({
-          where: { id: { in: tenantIds } },
+    // SINGLE-TENANT ACCESS: Return only the user's primary organization
+    // Multi-tenant access is disabled - users can only access their primary organization.
+    const primaryOrg = user.primaryOrganizationId
+      ? await this.prisma.organization.findUnique({
+          where: { id: user.primaryOrganizationId },
         })
-      : [];
+      : null;
 
-    // Get workspaces from RBAC workspace role assignments
-    const workspaceAssignments = await this.prisma.roleAssignment.findMany({
-      where: {
-        userId,
-        scopeType: 'WORKSPACE',
-        scopeId: { not: null },
-      },
-    });
+    // Return single organization (array format for backward compatibility with frontend)
+    const organizations = primaryOrg ? [primaryOrg] : [];
 
-    // Get unique workspace IDs
-    const workspaceIds = [...new Set(
-      workspaceAssignments
-        .map(wa => wa.scopeId)
-        .filter((id): id is string => id !== null)
-    )];
+    // Check if user is TENANT_ADMIN or TENANT_OWNER - they should see all workspaces in their tenant
+    const tenantRoles = rbacContext.tenantRoles.get(user.primaryOrganizationId || '') || new Set();
+    const isTenantAdmin = tenantRoles.has('TENANT_ADMIN') || tenantRoles.has('TENANT_OWNER');
 
-    // Fetch workspaces with relations
-    const directWorkspaces = workspaceIds.length > 0
-      ? await this.prisma.workspace.findMany({
-          where: { id: { in: workspaceIds } },
-          include: {
-            tenant: true,
-            parentWorkspace: true,
-            childWorkspaces: true,
+    let directWorkspaces: any[] = [];
+
+    if (isTenantAdmin && user.primaryOrganizationId) {
+      // TENANT_ADMIN/TENANT_OWNER: Return all workspaces in their organization
+      directWorkspaces = await this.prisma.workspace.findMany({
+        where: {
+          tenantId: user.primaryOrganizationId,
+        },
+        include: {
+          tenant: true,
+          parentWorkspace: true,
+          childWorkspaces: true,
+        },
+      });
+    } else {
+      // Regular users: Get workspaces from RBAC workspace role assignments
+      // Filter to only include workspaces in the primary organization
+      const workspaceAssignments = await this.prisma.roleAssignment.findMany({
+        where: {
+          userId,
+          scopeType: 'WORKSPACE',
+          scopeId: { not: null },
+        },
+      });
+
+      // Get unique workspace IDs
+      const workspaceIds = [...new Set(
+        workspaceAssignments
+          .map(wa => wa.scopeId)
+          .filter((id): id is string => id !== null)
+      )];
+
+      // Fetch workspaces with relations, then filter to primary org only
+      const allDirectWorkspaces = workspaceIds.length > 0
+        ? await this.prisma.workspace.findMany({
+            where: { id: { in: workspaceIds } },
+            include: {
+              tenant: true,
+              parentWorkspace: true,
+              childWorkspaces: true,
+            },
+          })
+        : [];
+
+      // Filter workspaces to only include those in primary organization
+      directWorkspaces = user.primaryOrganizationId
+        ? allDirectWorkspaces.filter(ws => ws.tenantId === user.primaryOrganizationId)
+        : allDirectWorkspaces;
+    }
+
+    let teamsWithWorkspaces: any[] = [];
+
+    if (isTenantAdmin && user.primaryOrganizationId) {
+      // TENANT_ADMIN/TENANT_OWNER: Return all teams in workspaces belonging to their organization
+      teamsWithWorkspaces = await this.prisma.team.findMany({
+        where: {
+          workspace: {
+            tenantId: user.primaryOrganizationId,
           },
-        })
-      : [];
-
-    // Get teams from RBAC team role assignments
-    const teamAssignments = await this.prisma.roleAssignment.findMany({
-      where: {
-        userId,
-        scopeType: 'TEAM',
-        scopeId: { not: null },
-      },
-    });
-
-    // Get unique team IDs
-    const teamIds = [...new Set(
-      teamAssignments
-        .map(ta => ta.scopeId)
-        .filter((id): id is string => id !== null)
-    )];
-
-    // Fetch teams with workspace relations
-    const teamsWithWorkspaces = teamIds.length > 0
-      ? await this.prisma.team.findMany({
-          where: { id: { in: teamIds } },
-          include: {
-            workspace: {
-              include: {
-                tenant: true,
-                parentWorkspace: true,
-                childWorkspaces: true,
-              },
+        },
+        include: {
+          workspace: {
+            include: {
+              tenant: true,
+              parentWorkspace: true,
+              childWorkspaces: true,
             },
           },
-        })
-      : [];
+        },
+      });
+    } else {
+      // Regular users: Get teams from RBAC team role assignments
+      // Filter to only include teams whose workspace belongs to primary organization
+      const teamAssignments = await this.prisma.roleAssignment.findMany({
+        where: {
+          userId,
+          scopeType: 'TEAM',
+          scopeId: { not: null },
+        },
+      });
+
+      // Get unique team IDs
+      const teamIds = [...new Set(
+        teamAssignments
+          .map(ta => ta.scopeId)
+          .filter((id): id is string => id !== null)
+      )];
+
+      // Fetch teams with workspace relations, then filter to primary org only
+      const allTeamsWithWorkspaces = teamIds.length > 0
+        ? await this.prisma.team.findMany({
+            where: { id: { in: teamIds } },
+            include: {
+              workspace: {
+                include: {
+                  tenant: true,
+                  parentWorkspace: true,
+                  childWorkspaces: true,
+                },
+              },
+            },
+          })
+        : [];
+
+      // Filter teams to only include those whose workspace belongs to primary organization
+      teamsWithWorkspaces = user.primaryOrganizationId
+        ? allTeamsWithWorkspaces.filter(team => team.workspace.tenantId === user.primaryOrganizationId)
+        : allTeamsWithWorkspaces;
+    }
 
     // Extract indirect workspaces from teams
     const indirectWorkspaces = teamsWithWorkspaces
@@ -437,12 +479,13 @@ export class UserService {
 
     // Create user and role assignments atomically in a single transaction
     const user = await this.prisma.$transaction(async (tx) => {
-      // Create user
+      // Create user with primaryOrganizationId
       const newUser = await tx.user.create({
         data: {
           email: data.email,
           name: data.name,
           passwordHash: hashedPassword,
+          primaryOrganizationId: data.tenantId, // Set primary organization
         },
         select: {
           id: true,

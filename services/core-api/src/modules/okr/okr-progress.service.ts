@@ -31,7 +31,11 @@ export class OkrProgressService {
     // Load the objective with its relationships
     const objective = await this.prisma.objective.findUnique({
       where: { id: objectiveId },
-      include: {
+      select: {
+        id: true,
+        progress: true,
+        status: true,
+        manualProgress: true,
         keyResults: {
           select: {
             weight: true,
@@ -46,6 +50,8 @@ export class OkrProgressService {
           select: {
             id: true,
             progress: true,
+            weight: true,
+            manualProgress: true, // Include to skip manual progress children
           },
         },
         parent: {
@@ -58,6 +64,11 @@ export class OkrProgressService {
 
     if (!objective) {
       return; // Objective doesn't exist, skip
+    }
+
+    // If manual progress is enabled, skip auto-calculation
+    if (objective.manualProgress) {
+      return; // Don't recalculate - user has manually set progress
     }
 
     let newProgress = objective.progress; // Default to current value
@@ -86,15 +97,29 @@ export class OkrProgressService {
         }
       }
     }
-    // Priority 2: Calculate from child Objectives if no KRs
+    // Priority 2: Calculate from child Objectives if no KRs (weighted average)
     else if (objective.children && objective.children.length > 0) {
-      const childProgresses = objective.children
-        .map(child => child.progress)
-        .filter(progress => progress !== null && progress !== undefined && !isNaN(progress));
+      // Filter valid progress values and extract weight (skip children with manual progress)
+      const weightedChildren = objective.children
+        .filter(child => !child.manualProgress) // Skip children with manual progress
+        .map(child => ({
+          progress: child.progress,
+          weight: child.weight ?? 1.0, // Default to 1.0 if weight is null/undefined
+        }))
+        .filter(child => child.progress !== null && child.progress !== undefined && !isNaN(child.progress));
 
-      if (childProgresses.length > 0) {
-        const sum = childProgresses.reduce((acc, p) => acc + p, 0);
-        newProgress = sum / childProgresses.length;
+      if (weightedChildren.length > 0) {
+        // Calculate weighted average: sum(weight * progress) / sum(weight)
+        const totalWeight = weightedChildren.reduce((acc, child) => acc + child.weight, 0);
+        
+        if (totalWeight > 0) {
+          const weightedSum = weightedChildren.reduce((acc, child) => acc + (child.weight * child.progress), 0);
+          newProgress = weightedSum / totalWeight;
+        } else {
+          // Fallback to simple average if all weights are zero or negative
+          const sum = weightedChildren.reduce((acc, child) => acc + child.progress, 0);
+          newProgress = sum / weightedChildren.length;
+        }
       }
     }
     // Priority 3: If no children or KRs, leave as-is (or set to 0 if brand new)
@@ -339,6 +364,161 @@ export class OkrProgressService {
   async refreshObjectiveProgressAndStatusCascade(objectiveId: string): Promise<void> {
     await this.recalculateObjectiveProgress(objectiveId);
     await this.recalculateObjectiveStatus(objectiveId);
+  }
+
+  /**
+   * Calculate progress contribution breakdown for an Objective.
+   * Returns detailed information about how each KR/child contributes to the parent's progress.
+   * 
+   * @param objectiveId - The Objective ID to analyze
+   * @returns Contribution breakdown with weights and percentages
+   */
+  async getProgressContributionBreakdown(objectiveId: string): Promise<{
+    totalProgress: number;
+    contributions: Array<{
+      id: string;
+      title: string;
+      type: 'KEY_RESULT' | 'CHILD_OBJECTIVE';
+      progress: number;
+      weight: number;
+      contribution: number; // How much this contributes to total (weight * progress / totalWeight)
+      percentage: number; // Percentage contribution (contribution / totalProgress * 100)
+    }>;
+    calculationMethod: 'WEIGHTED_AVERAGE' | 'SIMPLE_AVERAGE' | 'MANUAL' | 'NONE';
+  }> {
+    const objective = await this.prisma.objective.findUnique({
+      where: { id: objectiveId },
+      select: {
+        id: true,
+        progress: true,
+        manualProgress: true,
+        keyResults: {
+          select: {
+            weight: true,
+            keyResult: {
+              select: {
+                id: true,
+                title: true,
+                progress: true,
+              },
+            },
+          },
+        },
+        children: {
+          select: {
+            id: true,
+            title: true,
+            progress: true,
+            weight: true,
+            manualProgress: true,
+          },
+        },
+      },
+    });
+
+    if (!objective) {
+      throw new Error(`Objective ${objectiveId} not found`);
+    }
+
+    // If manual progress, return manual status
+    if (objective.manualProgress) {
+      return {
+        totalProgress: objective.progress,
+        contributions: [],
+        calculationMethod: 'MANUAL',
+      };
+    }
+
+    const contributions: Array<{
+      id: string;
+      title: string;
+      type: 'KEY_RESULT' | 'CHILD_OBJECTIVE';
+      progress: number;
+      weight: number;
+      contribution: number;
+      percentage: number;
+    }> = [];
+
+    // Priority 1: Calculate from Key Results
+    if (objective.keyResults && objective.keyResults.length > 0) {
+      const weightedKRs = objective.keyResults
+        .map(objKr => ({
+          id: objKr.keyResult.id,
+          title: objKr.keyResult.title,
+          progress: objKr.keyResult.progress,
+          weight: objKr.weight ?? 1.0,
+        }))
+        .filter(kr => kr.progress !== null && kr.progress !== undefined && !isNaN(kr.progress));
+
+      if (weightedKRs.length > 0) {
+        const totalWeight = weightedKRs.reduce((acc, kr) => acc + kr.weight, 0);
+        
+        if (totalWeight > 0) {
+          weightedKRs.forEach(kr => {
+            const contribution = (kr.weight * kr.progress) / totalWeight;
+            contributions.push({
+              id: kr.id,
+              title: kr.title,
+              type: 'KEY_RESULT',
+              progress: kr.progress,
+              weight: kr.weight,
+              contribution,
+              percentage: objective.progress > 0 ? (contribution / objective.progress) * 100 : 0,
+            });
+          });
+        }
+
+        return {
+          totalProgress: objective.progress,
+          contributions,
+          calculationMethod: 'WEIGHTED_AVERAGE',
+        };
+      }
+    }
+
+    // Priority 2: Calculate from child Objectives
+    if (objective.children && objective.children.length > 0) {
+      const weightedChildren = objective.children
+        .filter(child => !child.manualProgress)
+        .map(child => ({
+          id: child.id,
+          title: child.title,
+          progress: child.progress,
+          weight: child.weight ?? 1.0,
+        }))
+        .filter(child => child.progress !== null && child.progress !== undefined && !isNaN(child.progress));
+
+      if (weightedChildren.length > 0) {
+        const totalWeight = weightedChildren.reduce((acc, child) => acc + child.weight, 0);
+        
+        if (totalWeight > 0) {
+          weightedChildren.forEach(child => {
+            const contribution = (child.weight * child.progress) / totalWeight;
+            contributions.push({
+              id: child.id,
+              title: child.title,
+              type: 'CHILD_OBJECTIVE',
+              progress: child.progress,
+              weight: child.weight,
+              contribution,
+              percentage: objective.progress > 0 ? (contribution / objective.progress) * 100 : 0,
+            });
+          });
+        }
+
+        return {
+          totalProgress: objective.progress,
+          contributions,
+          calculationMethod: 'WEIGHTED_AVERAGE',
+        };
+      }
+    }
+
+    return {
+      totalProgress: objective.progress,
+      contributions: [],
+      calculationMethod: 'NONE',
+    };
   }
 
   /**

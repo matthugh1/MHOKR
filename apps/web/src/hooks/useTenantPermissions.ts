@@ -128,7 +128,7 @@ export function useTenantPermissions(): PermissionChecks {
       if (objective.tenantId && currentOrganization?.id === objective.tenantId) {
         const org = currentOrganization as any
         const userId = user?.id
-        
+
         if (!userId) {
           return false
         }
@@ -139,7 +139,7 @@ export function useTenantPermissions(): PermissionChecks {
             return true
           }
         }
-        
+
         if (org.execOnlyWhitelist && Array.isArray(org.execOnlyWhitelist)) {
           if (org.execOnlyWhitelist.includes(userId)) {
             return true
@@ -219,23 +219,14 @@ export function useTenantPermissions(): PermissionChecks {
       // Tenant admins can view PRIVATE OKRs, but regular users cannot
       const canView = canViewObjective(objective)
       if (!canView) {
-        console.log('[canEditObjective] Cannot view objective:', {
-          objectiveId: objective.id,
-          visibilityLevel: objective.visibilityLevel,
-          tenantId: objective.tenantId,
-        })
+
         return false
       }
 
       // Tenant admins/owners can override locks, so check that first
       const canOverride = canOverrideLocks(objective.tenantId)
-      console.log('[canEditObjective] Permission check:', {
-        objectiveId: objective.id,
-        canOverride,
-        tenantId: objective.tenantId,
-        isPublished: objective.isPublished,
-      })
-      
+
+
       // Check publish lock: if published, only tenant admin/owner can edit
       const isPublished = objective.isPublished === true
       if (isPublished && !canOverride) {
@@ -251,7 +242,7 @@ export function useTenantPermissions(): PermissionChecks {
       // If tenant admin can override locks, allow edit regardless of RBAC
       // This allows tenant admins to edit PRIVATE OKRs (they can view them, so they can edit them)
       if (canOverride) {
-        console.log('[canEditObjective] Allowing edit - tenant admin can override')
+
         return true
       }
 
@@ -263,7 +254,7 @@ export function useTenantPermissions(): PermissionChecks {
         teamId: objective.teamId || undefined,
       })
 
-      console.log('[canEditObjective] RBAC check result:', canEditRBAC)
+
       return canEditRBAC
     }
   }, [permissions, canOverrideLocks, isCycleLocked, getCycleStatus, canViewObjective])
@@ -278,7 +269,7 @@ export function useTenantPermissions(): PermissionChecks {
 
       // Tenant admins/owners can override locks, so check that first
       const canOverride = canOverrideLocks(objective.tenantId)
-      
+
       // Check publish lock: if published, only tenant admin/owner can delete
       const isPublished = objective.isPublished === true
       if (isPublished && !canOverride) {
@@ -311,9 +302,12 @@ export function useTenantPermissions(): PermissionChecks {
 
   const canEditKeyResult = useMemo(() => {
     return (keyResult: KeyResult): boolean => {
+      // Get tenantId from KR or parent objective
+      const krTenantId = keyResult.tenantId || keyResult.parentObjective?.tenantId
+
       // Tenant admins/owners can override locks, so check that first
-      const canOverride = canOverrideLocks(keyResult.tenantId || keyResult.parentObjective?.tenantId)
-      
+      const canOverride = canOverrideLocks(krTenantId)
+
       // Check publish/cycle lock from parent objective
       const parentObjective = keyResult.parentObjective
       if (parentObjective) {
@@ -336,9 +330,10 @@ export function useTenantPermissions(): PermissionChecks {
       }
 
       // Otherwise, check basic RBAC edit permission for the KR
+      // Use tenantId from parent objective if KR doesn't have it (already set above)
       const canEditRBAC = permissions.canEditOKR({
         ownerId: keyResult.ownerId,
-        tenantId: keyResult.tenantId || undefined,
+        tenantId: krTenantId || undefined,
         workspaceId: keyResult.workspaceId || undefined,
         teamId: keyResult.teamId || undefined,
       })
@@ -371,7 +366,7 @@ export function useTenantPermissions(): PermissionChecks {
       // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
       // Backend is source of truth for publish lock and cycle lock.
       // Frontend mirrors that logic only for UX messaging, not for enforcement.
-      
+
       // SUPERUSER read-only check
       if (permissions.isSuperuser) {
         return {
@@ -380,7 +375,7 @@ export function useTenantPermissions(): PermissionChecks {
           message: 'Platform administrator (read-only). You can view, but not change OKR content.',
         }
       }
-      
+
       const isPublished = objective.isPublished === true
       const canOverride = canOverrideLocks(objective.tenantId)
       const cycleStatus = getCycleStatus(objective)
@@ -418,7 +413,7 @@ export function useTenantPermissions(): PermissionChecks {
       // NOTE: This surface is internal-tenant-only and is not exposed to external design partners.
       // Backend is source of truth for publish lock and cycle lock.
       // Frontend mirrors that logic only for UX messaging, not for enforcement.
-      
+
       // SUPERUSER read-only check
       if (permissions.isSuperuser) {
         return {
@@ -427,7 +422,7 @@ export function useTenantPermissions(): PermissionChecks {
           message: 'Platform administrator (read-only). You can view, but not change OKR content.',
         }
       }
-      
+
       const parentObjective = keyResult.parentObjective
       if (!parentObjective) {
         // No parent objective info available

@@ -196,8 +196,15 @@ function PeopleSettings() {
       try {
         const res = await api.get(`/organizations/${organization.id}/members`)
         setPeople(res.data)
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to load organization members:', error)
+        console.error('Error details:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          message: error.response?.data?.message,
+          data: error.response?.data,
+          organizationId: organization.id,
+        })
       } finally {
         setLoading(false)
       }
@@ -1220,7 +1227,12 @@ function PeopleSettings() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {person.orgRole && (
+                          {person.organizationName ? (
+                            <div className="flex items-center gap-2">
+                              <Building2 className="h-4 w-4 text-slate-400" />
+                              <span className="text-sm font-medium">{person.organizationName}</span>
+                            </div>
+                          ) : person.orgRole ? (
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -1233,6 +1245,8 @@ function PeopleSettings() {
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
+                          ) : (
+                            <span className="text-slate-400 text-sm">—</span>
                           )}
                         </TableCell>
                         <TableCell>
