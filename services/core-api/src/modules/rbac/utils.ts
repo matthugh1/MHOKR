@@ -135,10 +135,28 @@ export async function getHighestPriorityRole(
 }
 
 /**
- * Check if user is owner of a resource
+ * Check if user is owner of a resource (primary owner only)
+ * @deprecated Use isOwnerOfOKR for OKRs to check all owners
  */
 export function isOwner(userId: string, resourceOwnerId: string): boolean {
   return userId === resourceOwnerId;
+}
+
+/**
+ * Check if user is an owner of an OKR (checks both primary ownerId and additional owners)
+ */
+export function isOwnerOfOKR(userId: string, okr: { ownerId: string; allOwnerIds?: string[] }): boolean {
+  // Check primary owner
+  if (okr.ownerId === userId) {
+    return true;
+  }
+  
+  // Check additional owners if available
+  if (okr.allOwnerIds && okr.allOwnerIds.includes(userId)) {
+    return true;
+  }
+  
+  return false;
 }
 
 /**

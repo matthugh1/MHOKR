@@ -29,6 +29,8 @@ import { NOTIFICATION_PORT_TOKEN } from './notification.constants';
 import { VivaGoalsCSVParserService } from './viva-goals-csv-parser.service';
 import { VivaGoalsJSONParserService } from './viva-goals-json-parser.service';
 import { OkrImportService } from './okr-import.service';
+import { ObjectiveOwnerService } from './objective-owner.service';
+import { KeyResultOwnerService } from './key-result-owner.service';
 import { RBACModule } from '../rbac/rbac.module';
 import { ActivityModule } from '../activity/activity.module';
 import { AuditModule } from '../audit/audit.module';
@@ -55,12 +57,14 @@ import { AuditModule } from '../audit/audit.module';
     VivaGoalsCSVParserService,
     VivaGoalsJSONParserService,
     OkrImportService,
+    ObjectiveOwnerService,
+    KeyResultOwnerService,
     {
       provide: NOTIFICATION_PORT_TOKEN,
       useClass: LoggingNotificationAdapter, // Default: logging adapter; replace with EmailNotificationAdapter in production
     },
   ],
-  exports: [ObjectiveService, KeyResultService, InitiativeService, OkrProgressService, OkrGovernanceService, OkrReportingService, OkrVisibilityService, OkrInsightsService, CheckInRequestService, OkrCycleService, CycleGeneratorService, OkrStateTransitionService, CheckInReminderService],
+  exports: [ObjectiveService, KeyResultService, InitiativeService, OkrProgressService, OkrGovernanceService, OkrReportingService, OkrVisibilityService, OkrInsightsService, CheckInRequestService, OkrCycleService, CycleGeneratorService, OkrStateTransitionService, CheckInReminderService, ObjectiveOwnerService, KeyResultOwnerService],
 })
 export class OkrModule {}
 

@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { KeyResultService } from './key-result.service';
+import { KeyResultOwnerService } from './key-result-owner.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction, RequireActionWithContext } from '../rbac';
 import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
@@ -18,6 +19,7 @@ export class KeyResultController {
 
   constructor(
     private readonly keyResultService: KeyResultService,
+    private readonly keyResultOwnerService: KeyResultOwnerService,
     prisma: PrismaService,
   ) {
     // Store prisma instance for decorator access
@@ -347,6 +349,87 @@ export class KeyResultController {
     @Req() req: any,
   ) {
     return this.keyResultService.listContributors(keyResultId, req.user.tenantId);
+  }
+
+  // ==========================================
+  // Owner Management (Multiple Owners)
+  // ==========================================
+
+  @Post(':id/owners')
+  @UseGuards(RateLimitGuard)
+  @RequireActionWithContext('edit_okr', async (req) => {
+    if (!KeyResultController.prismaInstance) {
+      throw new Error('PrismaService not initialized');
+    }
+    return await buildResourceContextFromKeyResult(KeyResultController.prismaInstance, req.params.id);
+  })
+  @ApiOperation({ summary: 'Add owner to key result', description: 'Adds an additional owner to a Key Result. Primary owner cannot be removed via this endpoint.' })
+  @ApiResponse({ status: 201, description: 'Owner added successfully' })
+  @ApiResponse({ status: 400, description: 'User is already an owner' })
+  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Key Result or user not found' })
+  async addOwner(
+    @Param('id') keyResultId: string,
+    @Body() body: { userId: string },
+    @Req() req: any,
+  ) {
+    // Check if user can edit this key result
+    const canEdit = await this.keyResultService.canEdit(req.user.id, keyResultId, req.user.tenantId);
+    if (!canEdit) {
+      throw new ForbiddenException('You do not have permission to edit this key result');
+    }
+
+    return this.keyResultOwnerService.addOwner(
+      keyResultId,
+      body.userId,
+      req.user.tenantId!,
+      req.user.id,
+    );
+  }
+
+  @Delete(':id/owners/:userId')
+  @UseGuards(RateLimitGuard)
+  @RequireActionWithContext('edit_okr', async (req) => {
+    if (!KeyResultController.prismaInstance) {
+      throw new Error('PrismaService not initialized');
+    }
+    return await buildResourceContextFromKeyResult(KeyResultController.prismaInstance, req.params.id);
+  })
+  @ApiOperation({ summary: 'Remove owner from key result', description: 'Removes an additional owner from a Key Result. Primary owner cannot be removed via this endpoint.' })
+  @ApiResponse({ status: 200, description: 'Owner removed successfully' })
+  @ApiResponse({ status: 400, description: 'Cannot remove primary owner' })
+  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Key Result not found or user is not an owner' })
+  async removeOwner(
+    @Param('id') keyResultId: string,
+    @Param('userId') userId: string,
+    @Req() req: any,
+  ) {
+    // Check if user can edit this key result
+    const canEdit = await this.keyResultService.canEdit(req.user.id, keyResultId, req.user.tenantId);
+    if (!canEdit) {
+      throw new ForbiddenException('You do not have permission to edit this key result');
+    }
+
+    await this.keyResultOwnerService.removeOwner(
+      keyResultId,
+      userId,
+      req.user.tenantId!,
+    );
+
+    return { success: true };
+  }
+
+  @Get(':id/owners')
+  @RequireAction('view_okr')
+  @ApiOperation({ summary: 'List owners for key result', description: 'Returns all owners (including primary owner) for a Key Result.' })
+  @ApiResponse({ status: 200, description: 'List of owners with isPrimary flag' })
+  @ApiResponse({ status: 404, description: 'Key Result not found' })
+  async listOwners(
+    @Param('id') keyResultId: string,
+    @Req() req: any,
+  ) {
+    return this.keyResultOwnerService.getOwners(keyResultId, req.user.tenantId!);
   }
 
   /**

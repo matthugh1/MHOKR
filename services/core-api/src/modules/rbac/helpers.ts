@@ -24,6 +24,11 @@ export async function buildResourceContextFromOKR(
       ownerId: true,
       visibilityLevel: true,
       isPublished: true,
+      owners: {
+        select: {
+          userId: true,
+        },
+      },
     },
   });
 
@@ -31,7 +36,11 @@ export async function buildResourceContextFromOKR(
     throw new Error(`OKR ${okrId} not found`);
   }
 
-  const okr: OKREntity = {
+  // Collect all owner IDs (primary + additional owners)
+  const allOwnerIds = new Set<string>([objective.ownerId]);
+  objective.owners.forEach(owner => allOwnerIds.add(owner.userId));
+
+  const okr: OKREntity & { allOwnerIds?: string[] } = {
     id: objective.id,
     ownerId: objective.ownerId,
     tenantId: objective.tenantId || '',
@@ -41,6 +50,7 @@ export async function buildResourceContextFromOKR(
     isPublished: objective.isPublished || false,
     createdAt: new Date(),
     updatedAt: new Date(),
+    allOwnerIds: Array.from(allOwnerIds), // Store all owner IDs for permission checks
   };
 
   // Load tenant for config flags
@@ -139,6 +149,11 @@ export async function buildResourceContextFromKeyResult(
     select: {
       id: true,
       ownerId: true,
+      owners: {
+        select: {
+          userId: true,
+        },
+      },
       objectives: {
         select: {
           objective: {
@@ -150,6 +165,11 @@ export async function buildResourceContextFromKeyResult(
               teamId: true,
               visibilityLevel: true,
               isPublished: true,
+              owners: {
+                select: {
+                  userId: true,
+                },
+              },
             },
           },
         },
@@ -164,8 +184,13 @@ export async function buildResourceContextFromKeyResult(
 
   const objective = keyResult.objectives[0].objective;
 
+  // Collect all owner IDs from both Key Result and Objective (Key Results inherit from Objectives)
+  const allOwnerIds = new Set<string>([objective.ownerId, keyResult.ownerId]);
+  objective.owners.forEach(owner => allOwnerIds.add(owner.userId));
+  keyResult.owners.forEach(owner => allOwnerIds.add(owner.userId));
+
   // Use parent Objective's data for RBAC context (Key Results inherit from Objectives)
-  const okr: OKREntity = {
+  const okr: OKREntity & { allOwnerIds?: string[] } = {
     id: objective.id, // Use Objective ID for RBAC checks
     ownerId: objective.ownerId,
     tenantId: objective.tenantId || '',
@@ -175,6 +200,7 @@ export async function buildResourceContextFromKeyResult(
     isPublished: objective.isPublished || false,
     createdAt: new Date(),
     updatedAt: new Date(),
+    allOwnerIds: Array.from(allOwnerIds), // Store all owner IDs for permission checks
   };
 
   return {

@@ -2,6 +2,7 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Re
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { ObjectiveService } from './objective.service';
 import { OkrProgressService } from './okr-progress.service';
+import { ObjectiveOwnerService } from './objective-owner.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction, RequireActionWithContext } from '../rbac';
 import { RBACService } from '../rbac/rbac.service';
@@ -22,6 +23,7 @@ export class ObjectiveController {
   constructor(
     private readonly objectiveService: ObjectiveService,
     private readonly okrProgressService: OkrProgressService,
+    private readonly objectiveOwnerService: ObjectiveOwnerService,
     private readonly prisma: PrismaService,
     private readonly rbacService: RBACService,
   ) {
@@ -328,6 +330,97 @@ export class ObjectiveController {
     @Req() req: any,
   ) {
     return this.objectiveService.listContributors(objectiveId, req.user.tenantId);
+  }
+
+  // ==========================================
+  // Owner Management (Multiple Owners)
+  // ==========================================
+
+  @Post(':id/owners')
+  @UseGuards(RateLimitGuard)
+  @RequireActionWithContext('edit_okr', async (req) => {
+    const prisma = ObjectiveController.prismaInstance;
+    if (!prisma) {
+      throw new Error('Prisma instance not available');
+    }
+    return buildResourceContextFromOKR(prisma, req.params.id);
+  })
+  @ApiOperation({ summary: 'Add owner to objective', description: 'Adds an additional owner to an Objective. Primary owner cannot be removed via this endpoint.' })
+  @ApiResponse({ status: 201, description: 'Owner added successfully' })
+  @ApiResponse({ status: 400, description: 'User is already an owner' })
+  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Objective or user not found' })
+  async addOwner(
+    @Param('id') objectiveId: string,
+    @Body() body: { userId: string },
+    @Req() req: any,
+  ) {
+    // Check if user can edit this OKR
+    const canEdit = await this.objectiveService.canEdit(
+      req.user.id,
+      objectiveId,
+      req.user.tenantId,
+    );
+    if (!canEdit) {
+      throw new ForbiddenException('You do not have permission to edit this OKR');
+    }
+
+    return this.objectiveOwnerService.addOwner(
+      objectiveId,
+      body.userId,
+      req.user.tenantId!,
+      req.user.id,
+    );
+  }
+
+  @Delete(':id/owners/:userId')
+  @UseGuards(RateLimitGuard)
+  @RequireActionWithContext('edit_okr', async (req) => {
+    const prisma = ObjectiveController.prismaInstance;
+    if (!prisma) {
+      throw new Error('Prisma instance not available');
+    }
+    return buildResourceContextFromOKR(prisma, req.params.id);
+  })
+  @ApiOperation({ summary: 'Remove owner from objective', description: 'Removes an additional owner from an Objective. Primary owner cannot be removed via this endpoint.' })
+  @ApiResponse({ status: 200, description: 'Owner removed successfully' })
+  @ApiResponse({ status: 400, description: 'Cannot remove primary owner' })
+  @ApiResponse({ status: 403, description: 'Forbidden - insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Objective not found or user is not an owner' })
+  async removeOwner(
+    @Param('id') objectiveId: string,
+    @Param('userId') userId: string,
+    @Req() req: any,
+  ) {
+    // Check if user can edit this OKR
+    const canEdit = await this.objectiveService.canEdit(
+      req.user.id,
+      objectiveId,
+      req.user.tenantId,
+    );
+    if (!canEdit) {
+      throw new ForbiddenException('You do not have permission to edit this OKR');
+    }
+
+    await this.objectiveOwnerService.removeOwner(
+      objectiveId,
+      userId,
+      req.user.tenantId!,
+    );
+
+    return { success: true };
+  }
+
+  @Get(':id/owners')
+  @RequireAction('view_okr')
+  @ApiOperation({ summary: 'List owners for objective', description: 'Returns all owners (including primary owner) for an Objective.' })
+  @ApiResponse({ status: 200, description: 'List of owners with isPrimary flag' })
+  @ApiResponse({ status: 404, description: 'Objective not found' })
+  async listOwners(
+    @Param('id') objectiveId: string,
+    @Req() req: any,
+  ) {
+    return this.objectiveOwnerService.getOwners(objectiveId, req.user.tenantId!);
   }
 
   // ==========================================

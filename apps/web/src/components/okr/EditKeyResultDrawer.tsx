@@ -24,9 +24,16 @@ import { SearchableUserSelect } from '@/components/okr/SearchableUserSelect'
 import { GoalTypeSelector } from '@/components/okr/GoalTypeSelector'
 import { TagSelector } from '@/components/okr/TagSelector'
 import { ContributorSelector } from '@/components/okr/ContributorSelector'
+import { OwnerList } from '@/components/okr/OwnerList'
 import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import { useToast } from '@/hooks/use-toast'
 import api from '@/lib/api'
+import {
+  getKeyResultOwners,
+  addKeyResultOwner,
+  removeKeyResultOwner,
+  type Owner,
+} from '@/lib/okr-owners-api'
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { StandardCycleSelector } from '@/components/okr/StandardCycleSelector'
 import { trapFocus, returnFocus, getActiveElement } from '@/lib/focus-trap'
@@ -107,6 +114,8 @@ export function EditKeyResultDrawer({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('basic')
+  const [owners, setOwners] = useState<Owner[]>([])
+  const [isLoadingOwners, setIsLoadingOwners] = useState(false)
 
   const tenantPermissions = useTenantPermissions()
   const { toast } = useToast()
@@ -455,7 +464,7 @@ export function EditKeyResultDrawer({
 
                 <div className="space-y-1.5">
                   <Label htmlFor="kr-owner">
-                    Owner <span className="text-red-500">*</span>
+                    Primary Owner <span className="text-red-500">*</span>
                   </Label>
                   <SearchableUserSelect
                     value={ownerId}
@@ -467,6 +476,26 @@ export function EditKeyResultDrawer({
                     disabled={lockInfo.isLocked || !canEdit}
                   />
                 </div>
+
+                {/* Multiple Owners Management */}
+                {keyResultId && (
+                  <div className="space-y-1.5 border-t pt-4">
+                    {isLoadingOwners ? (
+                      <div className="text-sm text-neutral-500">Loading owners...</div>
+                    ) : (
+                      <OwnerList
+                        owners={owners}
+                        availableUsers={availableUsers}
+                        onAddOwner={handleAddOwner}
+                        onRemoveOwner={handleRemoveOwner}
+                        canEdit={canEdit && !lockInfo.isLocked}
+                        resourceType="keyResult"
+                        resourceId={keyResultId}
+                        size="md"
+                      />
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <Label htmlFor="kr-status">

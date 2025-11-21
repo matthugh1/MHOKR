@@ -30,6 +30,8 @@ model Organization {
   cycles                         Cycle[] // OKR cycles/quarters for this organization
   tags                           Tag[] // Tags for this organization
   objectiveKeyResults            ObjectiveKeyResult[] // Objective-KeyResult junctions
+  objectiveOwners                ObjectiveOwner[]     @relation("ObjectiveOwnerTenant")
+  keyResultOwners                KeyResultOwner[]     @relation("KeyResultOwnerTenant")
   checkInRequests                CheckInRequest[] // Async check-in requests for this organization
   activities                     Activity[] // Activities belonging to this organization
   userLayouts                    UserLayout[] // User layouts belonging to this organization
@@ -99,6 +101,10 @@ model User {
   objectiveContributions     ObjectiveContributor[]  @relation("ObjectiveContributor")
   keyResultContributions     KeyResultContributor[]  @relation("KeyResultContributor")
   initiativeContributions    InitiativeContributor[] @relation("InitiativeContributor")
+  objectiveOwnerships        ObjectiveOwner[]        @relation("ObjectiveOwnerUser")
+  keyResultOwnerships        KeyResultOwner[]        @relation("KeyResultOwnerUser")
+  objectiveOwnershipsCreated ObjectiveOwner[]        @relation("ObjectiveOwnerCreator")
+  keyResultOwnershipsCreated KeyResultOwner[]        @relation("KeyResultOwnerCreator")
   ownedPillars               StrategicPillar[]       @relation("StrategicPillarOwner")
   permissionAudits           PermissionAudit[]       @relation("PermissionAuditUser")
   permissionAuditsPerformed  PermissionAudit[]       @relation("PermissionAuditPerformedBy")
@@ -239,6 +245,7 @@ model Objective {
   manualProgress    Boolean                     @default(false)
   tags              ObjectiveTag[]
   contributors      ObjectiveContributor[]
+  owners            ObjectiveOwner[]            @relation("ObjectiveOwners") // Multiple owners (in addition to primary ownerId)
   keyResults        ObjectiveKeyResult[]
   initiatives       Initiative[]
   progressSnapshots ObjectiveProgressSnapshot[]
@@ -317,6 +324,7 @@ model KeyResult {
   objectives      ObjectiveKeyResult[]
   tags            KeyResultTag[]
   contributors    KeyResultContributor[]
+  owners          KeyResultOwner[]          @relation("KeyResultOwners") // Multiple owners (in addition to primary ownerId)
   checkIns        CheckIn[]
   integrations    KRIntegration[]
   statusSnapshots KeyResultStatusSnapshot[]
@@ -477,6 +485,26 @@ model ObjectiveContributor {
   @@map("objective_contributors")
 }
 
+// Multiple owners for Objectives (in addition to primary ownerId)
+model ObjectiveOwner {
+  id          String       @id @default(cuid())
+  tenantId    String // Tenant scoping for isolation
+  tenant      Organization @relation("ObjectiveOwnerTenant", fields: [tenantId], references: [id], onDelete: Cascade)
+  objectiveId String
+  objective   Objective    @relation("ObjectiveOwners", fields: [objectiveId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User         @relation("ObjectiveOwnerUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  createdBy   String? // User ID who added this owner
+  creator     User?        @relation("ObjectiveOwnerCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, objectiveId, userId]) // Prevent duplicate owners on same objective
+  @@index([tenantId])
+  @@index([objectiveId])
+  @@index([userId])
+  @@map("objective_owners")
+}
+
 model KeyResultContributor {
   id          String    @id @default(cuid())
   tenantId    String // Tenant scoping for isolation
@@ -493,6 +521,26 @@ model KeyResultContributor {
   @@index([userId])
   @@index([tenantId])
   @@map("key_result_contributors")
+}
+
+// Multiple owners for Key Results (in addition to primary ownerId)
+model KeyResultOwner {
+  id          String       @id @default(cuid())
+  tenantId    String // Tenant scoping for isolation
+  tenant      Organization @relation("KeyResultOwnerTenant", fields: [tenantId], references: [id], onDelete: Cascade)
+  keyResultId String
+  keyResult   KeyResult    @relation("KeyResultOwners", fields: [keyResultId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User         @relation("KeyResultOwnerUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  createdBy   String? // User ID who added this owner
+  creator     User?        @relation("KeyResultOwnerCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, keyResultId, userId]) // Prevent duplicate owners on same key result
+  @@index([tenantId])
+  @@index([keyResultId])
+  @@index([userId])
+  @@map("key_result_owners")
 }
 
 model InitiativeContributor {

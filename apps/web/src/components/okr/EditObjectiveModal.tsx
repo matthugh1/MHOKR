@@ -21,10 +21,17 @@ import {
 } from "@/components/ui/select"
 import { SearchableUserSelect } from "@/components/okr/SearchableUserSelect"
 import { GoalTypeSelector } from "@/components/okr/GoalTypeSelector"
+import { OwnerList } from "@/components/okr/OwnerList"
 import { useTenantAdmin } from "@/hooks/useTenantAdmin"
 import { useTenantPermissions } from "@/hooks/useTenantPermissions"
 import { useToast } from "@/hooks/use-toast"
 import api from "@/lib/api"
+import {
+  getObjectiveOwners,
+  addObjectiveOwner,
+  removeObjectiveOwner,
+  type Owner,
+} from "@/lib/okr-owners-api"
 
 type OKRStatus = "NOT_STARTED" | "ON_TRACK" | "AT_RISK" | "OFF_TRACK" | "COMPLETED" | "CANCELLED"
 type VisibilityLevel = "PUBLIC_TENANT" | "PRIVATE"
@@ -83,6 +90,8 @@ export function EditObjectiveModal({
   // W4.M1: pillarId removed - deprecated
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [isTogglingPublish, setIsTogglingPublish] = React.useState(false)
+  const [owners, setOwners] = React.useState<Owner[]>([])
+  const [isLoadingOwners, setIsLoadingOwners] = React.useState(false)
 
   const { isTenantAdmin } = useTenantAdmin()
   const tenantPermissions = useTenantPermissions()
@@ -102,6 +111,59 @@ export function EditObjectiveModal({
       // W4.M1: pillarId removed
     }
   }, [isOpen, objectiveData])
+
+  // Load owners when modal opens with an objective ID
+  React.useEffect(() => {
+    const loadOwners = async () => {
+      if (isOpen && objectiveId) {
+        setIsLoadingOwners(true)
+        try {
+          const ownersData = await getObjectiveOwners(objectiveId)
+          setOwners(ownersData)
+        } catch (error) {
+          console.error('Failed to load owners:', error)
+          setOwners([])
+        } finally {
+          setIsLoadingOwners(false)
+        }
+      } else {
+        setOwners([])
+      }
+    }
+
+    loadOwners()
+  }, [isOpen, objectiveId])
+
+  const handleAddOwner = async (userId: string) => {
+    if (!objectiveId) return
+    await addObjectiveOwner(objectiveId, userId)
+    // Reload owners
+    const ownersData = await getObjectiveOwners(objectiveId)
+    setOwners(ownersData)
+  }
+
+  const handleRemoveOwner = async (userId: string) => {
+    if (!objectiveId) return
+    await removeObjectiveOwner(objectiveId, userId)
+    // Reload owners
+    const ownersData = await getObjectiveOwners(objectiveId)
+    setOwners(ownersData)
+  }
+
+  // Check if user can edit (for owner management)
+  const canEditOwners = React.useMemo(() => {
+    if (!objectiveData || !objectiveId) return false
+    return tenantPermissions.canEditObjective({
+      id: objectiveId,
+      ownerId: objectiveData.ownerId,
+      tenantId: objectiveData.tenantId || null,
+      workspaceId: objectiveData.workspaceId || null,
+      teamId: objectiveData.teamId || null,
+      isPublished: isPublished,
+      cycle: null,
+      cycleStatus: null,
+    })
+  }, [objectiveData, objectiveId, isPublished, tenantPermissions])
 
   // Check if user can publish/unpublish
   const canPublish = React.useMemo(() => {
@@ -196,7 +258,7 @@ export function EditObjectiveModal({
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="edit-owner">
-              Owner <span className="text-red-500">*</span>
+              Primary Owner <span className="text-red-500">*</span>
             </Label>
             <SearchableUserSelect
               value={ownerId}
@@ -207,6 +269,26 @@ export function EditObjectiveModal({
               required
             />
           </div>
+
+          {/* Multiple Owners Management */}
+          {objectiveId && (
+            <div className="flex flex-col gap-2 border-t pt-4">
+              {isLoadingOwners ? (
+                <div className="text-sm text-neutral-500">Loading owners...</div>
+              ) : (
+                <OwnerList
+                  owners={owners}
+                  availableUsers={availableUsers}
+                  onAddOwner={handleAddOwner}
+                  onRemoveOwner={handleRemoveOwner}
+                  canEdit={canEditOwners}
+                  resourceType="objective"
+                  resourceId={objectiveId}
+                  size="md"
+                />
+              )}
+            </div>
+          )}
 
           {availableWorkspaces.length > 0 && (
             <div className="flex flex-col gap-2">

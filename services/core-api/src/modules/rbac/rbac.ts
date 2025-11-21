@@ -350,9 +350,14 @@ function canEditOKRAction(
   }
 
   // For draft (unpublished) OKRs, apply normal RBAC rules
-  // Owner can always edit their own OKRs
-  if (okr.ownerId === userContext.userId) {
-    console.log('[RBAC] canEditOKRAction: Allowed - user is owner');
+  // Owner can always edit their own OKRs (check both primary ownerId and additional owners)
+  const isOwner = okr.ownerId === userContext.userId || 
+    (okr as any).allOwnerIds?.includes(userContext.userId);
+  if (isOwner) {
+    console.log('[RBAC] canEditOKRAction: Allowed - user is owner', {
+      isPrimaryOwner: okr.ownerId === userContext.userId,
+      isAdditionalOwner: (okr as any).allOwnerIds?.includes(userContext.userId),
+    });
     return true;
   }
 
@@ -434,8 +439,10 @@ function canDeleteOKRAction(
   }
 
   // For draft (unpublished) OKRs, apply normal RBAC rules
-  // Owner can delete their own OKRs
-  if (okr.ownerId === userContext.userId) {
+  // Owner can delete their own OKRs (check both primary ownerId and additional owners)
+  const isOwner = okr.ownerId === userContext.userId || 
+    (okr as any).allOwnerIds?.includes(userContext.userId);
+  if (isOwner) {
     return true;
   }
 

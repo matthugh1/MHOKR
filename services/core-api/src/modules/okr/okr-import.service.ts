@@ -10,6 +10,8 @@ import { VivaGoalsCSVParserService, ParsedVivaGoalsRow } from './viva-goals-csv-
 import { VivaGoalsJSONParserService, ParsedVivaGoalsJSONRow } from './viva-goals-json-parser.service';
 import { OkrCycleService } from './okr-cycle.service';
 import { OkrTenantGuard } from './tenant-guard';
+import { ObjectiveOwnerService } from './objective-owner.service';
+import { KeyResultOwnerService } from './key-result-owner.service';
 import { OKRStatus, MetricType, GoalType } from '@prisma/client';
 
 export interface ImportResult {
@@ -39,6 +41,8 @@ export class OkrImportService {
     private csvParser: VivaGoalsCSVParserService,
     private jsonParser: VivaGoalsJSONParserService,
     private cycleService: OkrCycleService,
+    private objectiveOwnerService: ObjectiveOwnerService,
+    private keyResultOwnerService: KeyResultOwnerService,
   ) {}
 
   /**
@@ -543,7 +547,7 @@ export class OkrImportService {
       importedBy: userId,
       visibilityLevel: 'PUBLIC_TENANT' as const,
       state: 'DRAFT' as const,
-      metadata: Object.keys(metadata).length > 0 ? metadata : null,
+      metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
     };
 
     let objective;
@@ -564,42 +568,37 @@ export class OkrImportService {
       objective = await this.prisma.objective.create({ data });
     }
 
-    // Add/update additional owners as contributors (for both new and updated records)
+    // Add additional owners (for both new and updated records)
+    // Viva Goals supports multiple owners - add them as additional owners
     if (row.owners.length > 1) {
       for (let i = 1; i < row.owners.length; i++) {
-        const contributorId = await this.resolveUserNameToUserId(
+        const additionalOwnerId = await this.resolveUserNameToUserId(
           row.owners[i],
           tenantId,
         );
-        if (contributorId) {
-          // Check if contributor already exists
-          const existing = await this.prisma.objectiveContributor.findFirst({
-            where: {
+        if (additionalOwnerId && additionalOwnerId !== ownerId) {
+          try {
+            // Check if already an owner
+            const isOwner = await this.objectiveOwnerService.isOwner(
+              objective.id,
+              additionalOwnerId,
               tenantId,
-              objectiveId: objective.id,
-              userId: contributorId,
-            },
-          });
-
-          if (existing) {
-            // Update existing contributor
-            await this.prisma.objectiveContributor.update({
-              where: { id: existing.id },
-              data: {
-                createdBy: userId, // Update createdBy to reflect import user
-              },
-            });
-          } else {
-            // Create new contributor
-            await this.prisma.objectiveContributor.create({
-              data: {
+            );
+            
+            if (!isOwner) {
+              // Add as additional owner
+              await this.objectiveOwnerService.addOwner(
+                objective.id,
+                additionalOwnerId,
                 tenantId,
-                objectiveId: objective.id,
-                userId: contributorId,
-                role: 'CONTRIBUTOR',
-                createdBy: userId,
-              },
-            });
+                userId,
+              );
+            }
+          } catch (error) {
+            // Log warning but don't fail import if owner can't be added
+            this.logger.warn(
+              `Could not add additional owner "${row.owners[i]}" to objective "${row.title}": ${(error as Error).message}`,
+            );
           }
         }
       }
@@ -766,7 +765,7 @@ export class OkrImportService {
       importedBy: userId,
       visibilityLevel: 'PUBLIC_TENANT' as const,
       state: 'DRAFT' as const,
-      metadata: Object.keys(metadata).length > 0 ? metadata : null,
+      metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
     };
 
     let keyResult;
@@ -805,42 +804,37 @@ export class OkrImportService {
       });
     }
 
-    // Add/update additional owners as contributors (for both new and updated records)
+    // Add additional owners (for both new and updated records)
+    // Viva Goals supports multiple owners - add them as additional owners
     if (row.owners.length > 1) {
       for (let i = 1; i < row.owners.length; i++) {
-        const contributorId = await this.resolveUserNameToUserId(
+        const additionalOwnerId = await this.resolveUserNameToUserId(
           row.owners[i],
           tenantId,
         );
-        if (contributorId) {
-          // Check if contributor already exists
-          const existing = await this.prisma.keyResultContributor.findFirst({
-            where: {
+        if (additionalOwnerId && additionalOwnerId !== ownerId) {
+          try {
+            // Check if already an owner
+            const isOwner = await this.keyResultOwnerService.isOwner(
+              keyResult.id,
+              additionalOwnerId,
               tenantId,
-              keyResultId: keyResult.id,
-              userId: contributorId,
-            },
-          });
-
-          if (existing) {
-            // Update existing contributor
-            await this.prisma.keyResultContributor.update({
-              where: { id: existing.id },
-              data: {
-                createdBy: userId, // Update createdBy to reflect import user
-              },
-            });
-          } else {
-            // Create new contributor
-            await this.prisma.keyResultContributor.create({
-              data: {
+            );
+            
+            if (!isOwner) {
+              // Add as additional owner
+              await this.keyResultOwnerService.addOwner(
+                keyResult.id,
+                additionalOwnerId,
                 tenantId,
-                keyResultId: keyResult.id,
-                userId: contributorId,
-                role: 'CONTRIBUTOR',
-                createdBy: userId,
-              },
-            });
+                userId,
+              );
+            }
+          } catch (error) {
+            // Log warning but don't fail import if owner can't be added
+            this.logger.warn(
+              `Could not add additional owner "${row.owners[i]}" to key result "${row.title}": ${(error as Error).message}`,
+            );
           }
         }
       }

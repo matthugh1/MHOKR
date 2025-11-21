@@ -37,7 +37,10 @@ export function canViewOKR(
   }
 
   // Owner can always view their own OKRs (regardless of visibility level)
-  if (okr.ownerId === userContext.userId) {
+  // Check both primary ownerId and additional owners
+  const isOwner = okr.ownerId === userContext.userId || 
+    (okr as any).allOwnerIds?.includes(userContext.userId);
+  if (isOwner) {
     return true;
   }
 
