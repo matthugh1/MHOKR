@@ -226,6 +226,10 @@ export interface ResourceContext {
   
   // Tenant configuration (for visibility rule checks)
   tenant?: Tenant;
+  
+  // Workspace and team with ownership (for permission checks)
+  workspace?: { id: string; name: string; tenantId: string; ownerId?: string | null };
+  team?: { id: string; name: string; workspaceId: string; ownerId?: string | null };
 }
 
 /**

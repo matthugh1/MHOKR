@@ -46,7 +46,7 @@ interface OKROverviewResponse {
 }
 
 export default function DashboardPage() {
-  const { currentOrganization, isSuperuser } = useWorkspace()
+  const { currentOrganization, isSuperuser, loading: workspaceLoading } = useWorkspace()
   const { user } = useAuth()
   const permissions = usePermissions()
   const [loading, setLoading] = useState(true)
@@ -145,6 +145,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const fetchDashboard = async () => {
+      // Wait for workspace context to finish loading
+      if (workspaceLoading) {
+        return
+      }
+      
       if (!currentOrganization?.id) {
         setLoading(false)
         return
@@ -196,7 +201,7 @@ export default function DashboardPage() {
     }
 
     fetchDashboard()
-  }, [currentOrganization?.id, activeCycleId])
+  }, [currentOrganization?.id, activeCycleId, workspaceLoading])
 
   const getAttentionItemIcon = (type: string) => {
     switch (type) {
@@ -240,18 +245,8 @@ export default function DashboardPage() {
   }, [myOkrsAtRisk, attentionItems.length])
 
   const renderReadOnlyTooltip = (children: React.ReactNode) => {
-    if (!userRoles.isSuperuser) return children
-
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>{children}</TooltipTrigger>
-          <TooltipContent>
-            <p>Superuser access is read-only. You cannot modify OKR content.</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    )
+    // Superusers have full access - no tooltip needed
+    return children
   }
 
   return (
@@ -270,7 +265,6 @@ export default function DashboardPage() {
                 : 'Your OKRs and progress tracking.'}
               badges={[
                 { label: 'AI-assisted', tone: 'neutral' },
-                ...(userRoles.isSuperuser ? [{ label: 'Read-only', tone: 'warning' }] : [])
               ]}
             />
           </div>
@@ -281,7 +275,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-end gap-3 mb-6">
             <Link href="/dashboard/okrs">
               {renderReadOnlyTooltip(
-                <Button variant="outline" size="sm" className="gap-2" disabled={userRoles.isSuperuser}>
+                <Button variant="outline" size="sm" className="gap-2">
                   <Target className="w-4 h-4" />
                   View All OKRs
                   <ArrowRight className="w-4 h-4" />

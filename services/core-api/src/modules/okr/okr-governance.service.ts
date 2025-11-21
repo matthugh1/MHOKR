@@ -56,9 +56,9 @@ export class OkrGovernanceService {
       return;
     }
 
-    // Superuser cannot edit even published OKRs (read-only)
+    // Superuser can edit everything, including published OKRs
     if (actingUser.tenantId === null) {
-      throw new ForbiddenException('This OKR is published and can only be modified by admin roles');
+      return; // Superuser bypasses all locks
     }
 
     // Check if user has elevated role (TENANT_OWNER or TENANT_ADMIN)
@@ -107,9 +107,9 @@ export class OkrGovernanceService {
       return;
     }
 
-    // Superuser cannot edit even if parent is published (read-only)
+    // Superuser can edit everything, including published OKRs
     if (actingUser.tenantId === null) {
-      throw new ForbiddenException('This Key Result belongs to a published OKR and can only be modified by admin roles');
+      return; // Superuser bypasses all locks
     }
 
     // Check if user has elevated role (TENANT_OWNER or TENANT_ADMIN)
@@ -174,9 +174,9 @@ export class OkrGovernanceService {
 
     // LOCKED or ARCHIVED cycles require admin override
     if (cycleStatus === 'LOCKED' || cycleStatus === 'ARCHIVED') {
-      // Superuser is read-only, cannot bypass cycle lock
+      // Superuser can bypass cycle lock
       if (actingUser.tenantId === null) {
-        throw new ForbiddenException(`This cycle (${cycle.name || 'locked'}) is locked and can only be modified by admin roles`);
+        return; // Superuser bypasses all locks
       }
 
       // Check if user has TENANT_OWNER or TENANT_ADMIN role
@@ -248,9 +248,9 @@ export class OkrGovernanceService {
 
     // LOCKED or ARCHIVED cycles require admin override
     if (cycleStatus === 'LOCKED' || cycleStatus === 'ARCHIVED') {
-      // Superuser is read-only, cannot bypass cycle lock
+      // Superuser can bypass cycle lock
       if (actingUser.tenantId === null) {
-        throw new ForbiddenException(`This cycle (${cycle.name || 'locked'}) is locked and can only be modified by admin roles`);
+        return; // Superuser bypasses all locks
       }
 
       // Check if user has TENANT_OWNER or TENANT_ADMIN role via parent objective

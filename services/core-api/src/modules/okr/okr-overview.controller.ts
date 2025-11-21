@@ -797,9 +797,9 @@ export class OkrOverviewController {
         }
       }
 
-      // SUPERUSER cannot create (read-only)
+      // SUPERUSER can create everything
       if (userOrganizationId === null) {
-        canCreateObjective = false;
+        canCreateObjective = true;
       }
     } catch (error) {
       // If RBAC check fails, conservatively deny creation
@@ -884,9 +884,9 @@ export class OkrOverviewController {
         'create_okr',
         resourceContext,
       );
-      // SUPERUSER cannot create (read-only)
+      // SUPERUSER can create everything
       if (userOrganizationId === null) {
-        canCreate = false;
+        canCreate = true;
       }
     } catch (error) {
       canCreate = false;

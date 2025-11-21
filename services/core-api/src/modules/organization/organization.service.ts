@@ -422,6 +422,22 @@ export class OrganizationService {
     });
     const organizationName = organization?.name || null;
 
+    // Get all users whose primaryOrganizationId matches this tenant
+    // This ensures tenant admins can see all users in their organization, not just those with role assignments
+    const allOrgUsers = await this.prisma.user.findMany({
+      where: {
+        primaryOrganizationId: tenantId,
+      },
+      include: {
+        primaryOrganization: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
     // Get members from RBAC system (Phase 2 - primary source)
     const tenantAssignments = await this.prisma.roleAssignment.findMany({
       where: {
@@ -481,17 +497,35 @@ export class OrganizationService {
     // Aggregate by user
     const userMap = new Map();
     
-    // Add organization members from RBAC
-    tenantAssignments.forEach(assignment => {
-      const legacyRole = this.mapRBACRoleToLegacyRole(assignment.role as Role, 'TENANT');
-      userMap.set(assignment.userId, {
-        ...assignment.user,
-        // Use user's primaryOrganization name, or fallback to current organization name
-        organizationName: assignment.user.primaryOrganization?.name || organizationName,
-        orgRole: legacyRole,
+    // First, add all users from the organization (by primaryOrganizationId)
+    // This ensures tenant admins see all users, not just those with role assignments
+    allOrgUsers.forEach(user => {
+      userMap.set(user.id, {
+        ...user,
+        organizationName: user.primaryOrganization?.name || organizationName,
+        orgRole: null, // Will be set from role assignments if they exist
         teams: [],
         workspaces: new Set(),
       });
+    });
+    
+    // Add organization members from RBAC (this will update existing users and set their roles)
+    tenantAssignments.forEach(assignment => {
+      const legacyRole = this.mapRBACRoleToLegacyRole(assignment.role as Role, 'TENANT');
+      if (userMap.has(assignment.userId)) {
+        // Update existing user with role
+        const user = userMap.get(assignment.userId);
+        user.orgRole = legacyRole;
+      } else {
+        // Add user if not already in map (shouldn't happen, but safety check)
+        userMap.set(assignment.userId, {
+          ...assignment.user,
+          organizationName: assignment.user.primaryOrganization?.name || organizationName,
+          orgRole: legacyRole,
+          teams: [],
+          workspaces: new Set(),
+        });
+      }
     });
 
     // Add team members from RBAC

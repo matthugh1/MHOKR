@@ -400,6 +400,7 @@ export function EditKeyResultDrawer({
   }
 
   return (
+    <>
     <Sheet open={isOpen} onOpenChange={handleClose}>
       <SheetContent ref={sheetContentRef} className="w-full sm:max-w-2xl flex flex-col p-0">
         <div className="flex flex-col h-full overflow-hidden">
@@ -793,7 +794,7 @@ export function EditKeyResultDrawer({
         existingTarget={editingPhasedTarget}
       />
     )}
-  </>
+    </>
   )
 }
 

@@ -70,6 +70,32 @@ export async function buildResourceContextFromOKR(
       })
     : null;
 
+  // Load workspace with owner if workspaceId exists
+  const workspace = objective.workspaceId
+    ? await prisma.workspace.findUnique({
+        where: { id: objective.workspaceId },
+        select: {
+          id: true,
+          name: true,
+          tenantId: true,
+          ownerId: true,
+        },
+      })
+    : null;
+
+  // Load team with owner if teamId exists
+  const team = objective.teamId
+    ? await prisma.team.findUnique({
+        where: { id: objective.teamId },
+        select: {
+          id: true,
+          name: true,
+          workspaceId: true,
+          ownerId: true,
+        },
+      })
+    : null;
+
   return {
     tenantId: objective.tenantId || '',
     workspaceId: objective.workspaceId,
@@ -87,6 +113,8 @@ export async function buildResourceContextFromOKR(
           updatedAt: tenant.updatedAt,
         }
       : undefined,
+    workspace: workspace || undefined,
+    team: team || undefined,
   };
 }
 

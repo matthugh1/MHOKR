@@ -645,12 +645,8 @@ export function OKRPageContainer({
     let emptyMessage = 'No OKRs found'
     let showCreateButton = false
     
-    if (isSuperuser) {
-      // SUPERUSER: read-only, no button
-      emptyMessage = 'No OKRs found'
-      showCreateButton = false
-    } else if (canCreateObjective) {
-      // TENANT_ADMIN / TENANT_OWNER: show create button
+    if (isSuperuser || canCreateObjective) {
+      // SUPERUSER or users with create permission: show create button
       emptyMessage = 'No OKRs found. Create your first objective to get started.'
       showCreateButton = true
     } else {

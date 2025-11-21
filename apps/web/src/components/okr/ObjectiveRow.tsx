@@ -603,14 +603,11 @@ export function ObjectiveRow({
     cycleStatus: optimisticObjective.cycleStatus,
   }
   
-  // Check if SUPERUSER (read-only)
-  const isSuperuserReadOnly = permissions.isSuperuser
-  
   // Get lock info for tooltips
   const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
   
-  // Check if can edit (respecting SUPERUSER read-only)
-  const canEditInline = canEdit && !isSuperuserReadOnly
+  // Check if can edit (superusers have full access)
+  const canEditInline = canEdit
   
   // Check if user can publish/unpublish
   const canPublish = useMemo(() => {
@@ -1158,10 +1155,10 @@ export function ObjectiveRow({
     }
   }
 
-  const progressBarColor = getProgressBarColor(objective.status)
+  const progressBarColor = getProgressBarColor(optimisticObjective.status)
   const cyclePill = getCyclePill(
-    objective.cycleLabel || objective.cycleName || 'Unassigned',
-    objective.cycleStatus || 'ACTIVE'
+    optimisticObjective.cycleLabel || optimisticObjective.cycleName || 'Unassigned',
+    optimisticObjective.cycleStatus || 'ACTIVE'
   )
 
   return (
@@ -1196,7 +1193,7 @@ export function ObjectiveRow({
                   lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
                   ariaLabel="Edit objective title"
                   resource={objectiveForHook}
-                  disabled={isSuperuserReadOnly}
+                  disabled={false}
                 />
               </div>
             </div>
@@ -1212,7 +1209,7 @@ export function ObjectiveRow({
                     lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
                     ariaLabel="Edit objective status"
                     resource={objectiveForHook}
-                    disabled={isSuperuserReadOnly}
+                    disabled={false}
                     renderBadge={(status, label, tone) => (
                       <OkrBadge tone={tone === 'success' ? 'good' : tone === 'warning' ? 'warn' : 'bad'}>
                         {label}
@@ -1245,7 +1242,7 @@ export function ObjectiveRow({
                     lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
                     ariaLabel="Edit objective publish status"
                     resource={objectiveForHook}
-                    disabled={isSuperuserReadOnly}
+                    disabled={false}
                   />
                 </div>
                 
@@ -1259,7 +1256,7 @@ export function ObjectiveRow({
                     lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
                     ariaLabel="Edit objective owner"
                     resource={objectiveForHook}
-                    disabled={isSuperuserReadOnly}
+                    disabled={false}
                     size="sm"
                   />
                 </div>
@@ -1322,7 +1319,7 @@ export function ObjectiveRow({
                 <motion.div
                   className={cn("h-full rounded-full", progressBarColor)}
                   initial={false}
-                  animate={{ width: `${Math.min(100, Math.max(0, objective.progress))}%` }}
+                  animate={{ width: `${Math.min(100, Math.max(0, optimisticObjective.progress ?? objective.progress ?? 0))}%` }}
                   transition={{ type: 'spring', damping: 20, stiffness: 300 }}
                 />
               </div>
@@ -1331,7 +1328,7 @@ export function ObjectiveRow({
                 <div className="flex items-center gap-1">
                   <ProgressBreakdownTooltip
                     objectiveId={objective.id}
-                    objectiveProgress={objective.progress}
+                    objectiveProgress={optimisticObjective.progress ?? objective.progress ?? 0}
                     keyResults={keyResults.map(kr => ({
                       id: kr.id,
                       title: kr.title,
@@ -1649,7 +1646,7 @@ export function ObjectiveRow({
                                       lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
                                       ariaLabel="Edit key result title"
                                       resource={objectiveForHook}
-                                      disabled={isSuperuserReadOnly}
+                                      disabled={false}
                                       className="text-[13px] font-medium text-neutral-900"
                                     />
                                   </div>
@@ -1707,6 +1704,23 @@ export function ObjectiveRow({
                                 <div className="text-[12px] text-neutral-600">
                                   {progressLabel}
                                 </div>
+                                
+                                {/* Weight Editor */}
+                                {canEdit && (
+                                  <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                                    <AlignmentWeightEditor
+                                      objectiveId={objective.id}
+                                      keyResultId={kr.id}
+                                      currentWeight={kr.weight ?? 1.0}
+                                      canEdit={canEdit}
+                                      size="sm"
+                                      onUpdate={() => {
+                                        // Weight update triggers backend progress recalculation
+                                        // The page will refresh on next data fetch
+                                      }}
+                                    />
+                                  </div>
+                                )}
                               </div>
                               
                               {/* Right side: Actions and Chevron */}
@@ -1840,10 +1854,10 @@ export function ObjectiveRow({
                                             }
                                           }}
                                           canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
-                                          disabled={isSuperuserReadOnly}
+                                          disabled={false}
                                           label="Progress"
                                         />
-                                        {canEditKeyResult && canEditKeyResult(kr.id) && !isSuperuserReadOnly && (
+                                        {canEditKeyResult && canEditKeyResult(kr.id) && (
                                           <p className="text-[10px] text-neutral-500 mt-1 ml-[60px]">
                                             Drag to adjust progress. Values update automatically.
                                           </p>
@@ -1865,7 +1879,7 @@ export function ObjectiveRow({
                                               lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
                                               ariaLabel="Edit key result current value"
                                               resource={objectiveForHook}
-                                              disabled={isSuperuserReadOnly}
+                                              disabled={false}
                                               unit={kr.unit || ''}
                                               allowEmpty={false}
                                             />
@@ -1881,7 +1895,7 @@ export function ObjectiveRow({
                                               lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
                                               ariaLabel="Edit key result target value"
                                               resource={objectiveForHook}
-                                              disabled={isSuperuserReadOnly}
+                                              disabled={false}
                                               unit={kr.unit || ''}
                                               allowEmpty={false}
                                             />
@@ -1924,7 +1938,7 @@ export function ObjectiveRow({
                                           lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
                                           ariaLabel="Edit key result owner"
                                           resource={objectiveForHook}
-                                          disabled={isSuperuserReadOnly}
+                                          disabled={false}
                                           size="sm"
                                         />
                                       </div>

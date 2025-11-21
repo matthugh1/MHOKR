@@ -93,4 +93,15 @@ export class WorkspaceController {
   async getHierarchy(@Param('tenantId') tenantId: string) {
     return this.workspaceService.getHierarchy(tenantId);
   }
+
+  @Post(':id/owner')
+  @RequireAction('manage_workspaces')
+  @ApiOperation({ summary: 'Set workspace owner (tenant admin or current owner only)' })
+  async setOwner(
+    @Param('id') workspaceId: string,
+    @Body() data: { ownerId: string },
+    @Req() req: any,
+  ) {
+    return this.workspaceService.setOwner(workspaceId, data.ownerId, req.user.tenantId, req.user.id);
+  }
 }

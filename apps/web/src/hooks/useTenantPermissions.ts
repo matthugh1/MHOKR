@@ -34,6 +34,14 @@ interface Objective {
     status: string // 'LOCKED' | 'ACTIVE' | 'DRAFT' | 'ARCHIVED'
   } | null
   cycleStatus?: string | null // Alternative: direct cycleStatus field if cycle relation not loaded
+  workspace?: {
+    id: string
+    ownerId?: string | null
+  } | null
+  team?: {
+    id: string
+    ownerId?: string | null
+  } | null
 }
 
 interface KeyResult {
@@ -353,10 +361,26 @@ export function useTenantPermissions(): PermissionChecks {
 
   const canExportData = useMemo(() => {
     return (): boolean => {
-      // Match backend RBAC canExportData() logic
-      // TENANT_OWNER, TENANT_ADMIN, and TENANT_VIEWER can export
-      // This matches useTenantAdmin logic but uses the hook for consistency
-      return permissions.isTenantAdminOrOwner(currentOrganization?.id)
+      if (permissions.isSuperuser) {
+        return true
+      }
+      
+      if (!currentOrganization?.id) {
+        return false
+      }
+      
+      const tenantRoles = permissions.rolesByScope.tenant.find(
+        (t) => t.tenantId === currentOrganization.id
+      )
+      
+      if (!tenantRoles) {
+        return false
+      }
+      
+      // TENANT_OWNER, TENANT_ADMIN, and TENANT_VIEWER can export (matching backend)
+      return tenantRoles.roles.includes('TENANT_OWNER') ||
+             tenantRoles.roles.includes('TENANT_ADMIN') ||
+             tenantRoles.roles.includes('TENANT_VIEWER')
     }
   }, [permissions, currentOrganization?.id])
 
@@ -367,14 +391,7 @@ export function useTenantPermissions(): PermissionChecks {
       // Backend is source of truth for publish lock and cycle lock.
       // Frontend mirrors that logic only for UX messaging, not for enforcement.
 
-      // SUPERUSER read-only check
-      if (permissions.isSuperuser) {
-        return {
-          isLocked: true,
-          reason: null,
-          message: 'Platform administrator (read-only). You can view, but not change OKR content.',
-        }
-      }
+      // Superusers have full access - no lock
 
       const isPublished = objective.isPublished === true
       const canOverride = canOverrideLocks(objective.tenantId)
@@ -414,14 +431,7 @@ export function useTenantPermissions(): PermissionChecks {
       // Backend is source of truth for publish lock and cycle lock.
       // Frontend mirrors that logic only for UX messaging, not for enforcement.
 
-      // SUPERUSER read-only check
-      if (permissions.isSuperuser) {
-        return {
-          isLocked: true,
-          reason: null,
-          message: 'Platform administrator (read-only). You can view, but not change OKR content.',
-        }
-      }
+      // Superusers have full access - no lock
 
       const parentObjective = keyResult.parentObjective
       if (!parentObjective) {

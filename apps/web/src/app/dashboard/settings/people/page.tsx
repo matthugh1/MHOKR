@@ -698,10 +698,8 @@ function PeopleSettings() {
   const getGovernanceStatus = useMemo(() => {
     return (user: any, perms?: typeof effectivePermissions): { label: string; variant: 'default' | 'secondary' | 'destructive' } => {
       if (user?.isSuperuser || perms?.isSuperuser) {
-        return { label: 'Read-only (Superuser)', variant: 'secondary' }
+        return { label: 'Superuser (Full Access)', variant: 'default' }
       }
-      // Check for locked cycles (if we had that data, we'd show count here)
-      // For now, just show "Normal" vs "Read-only (Superuser)"
       return { label: 'Normal', variant: 'default' }
     }
   }, [])
@@ -1541,10 +1539,10 @@ function PeopleSettings() {
                         <h4 className="text-xs font-medium text-slate-600 mb-2">Governance Status</h4>
                         <div className="space-y-2">
                           {effectivePermissions.isSuperuser && (
-                            <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs">
+                            <div className="p-2 bg-green-50 border border-green-200 rounded text-xs">
                               <div className="flex items-center gap-2">
-                                <Lock className="h-3 w-3 text-amber-600" />
-                                <span className="font-medium">Platform Superuser is read-only for OKR content.</span>
+                                <Info className="h-3 w-3 text-green-600" />
+                                <span className="font-medium">Platform Superuser has full access to all OKR content.</span>
                               </div>
                             </div>
                           )}

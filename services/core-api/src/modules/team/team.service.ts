@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { MemberRole } from '@prisma/client';
 import { OkrTenantGuard } from '../okr/tenant-guard';
@@ -353,6 +353,106 @@ export class TeamService {
     });
 
     return { success: true };
+  }
+
+  /**
+   * Set team owner
+   * Only tenant admin, workspace owner, or current team owner can change ownership
+   */
+  async setOwner(teamId: string, ownerId: string, userOrganizationId: string | null | undefined, actorUserId: string) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      include: {
+        workspace: {
+          select: {
+            id: true,
+            name: true,
+            tenantId: true,
+            ownerId: true,
+          },
+        },
+      },
+    });
+
+    if (!team) {
+      throw new NotFoundException(`Team with ID ${teamId} not found`);
+    }
+
+    // Tenant isolation: verify team belongs to caller's tenant
+    OkrTenantGuard.assertSameTenant(team.workspace.tenantId, userOrganizationId);
+
+    // Verify new owner exists and belongs to same tenant
+    const newOwner = await this.prisma.user.findUnique({
+      where: { id: ownerId },
+      select: { id: true, primaryOrganizationId: true },
+    });
+
+    if (!newOwner) {
+      throw new NotFoundException(`User with ID ${ownerId} not found`);
+    }
+
+    // Check permission: tenant admin, workspace owner, or current team owner can change ownership
+    const resourceContext = {
+      tenantId: team.workspace.tenantId,
+      workspaceId: team.workspaceId,
+      teamId: team.id,
+      workspace: {
+        id: team.workspace.id,
+        name: team.workspace.name,
+        tenantId: team.workspace.tenantId,
+        ownerId: team.workspace.ownerId,
+      },
+      team: {
+        id: team.id,
+        name: team.name,
+        workspaceId: team.workspaceId,
+        ownerId: team.ownerId,
+      },
+    };
+
+    const canManage = await this.rbacService.canPerformAction(actorUserId, 'manage_teams', resourceContext);
+    const isCurrentOwner = team.ownerId === actorUserId;
+    const isWorkspaceOwner = team.workspace.ownerId === actorUserId;
+
+    if (!canManage && !isCurrentOwner && !isWorkspaceOwner) {
+      throw new ForbiddenException('Only tenant admin, workspace owner, or current team owner can change team ownership');
+    }
+
+    const previousOwnerId = team.ownerId;
+
+    // Update owner
+    const updated = await this.prisma.team.update({
+      where: { id: teamId },
+      data: { ownerId },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        workspace: true,
+      },
+    });
+
+    // Audit log
+    await this.auditLogService.record({
+      action: 'CHANGE_TEAM_OWNER',
+      actorUserId,
+      targetId: teamId,
+      targetType: AuditTargetType.TEAM,
+      tenantId: team.workspace.tenantId,
+      metadata: {
+        previousOwnerId,
+        newOwnerId: ownerId,
+      },
+    });
+
+    return updated;
   }
 }
 

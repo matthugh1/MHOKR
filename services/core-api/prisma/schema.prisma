@@ -48,6 +48,8 @@ model Workspace {
   name              String
   tenantId          String
   tenant            Organization     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ownerId           String?          // Workspace owner (replaces WORKSPACE_LEAD role)
+  owner              User?            @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   parentWorkspaceId String?
   parentWorkspace   Workspace?       @relation("WorkspaceHierarchy", fields: [parentWorkspaceId], references: [id], onDelete: SetNull)
   childWorkspaces   Workspace[]      @relation("WorkspaceHierarchy")
@@ -59,6 +61,7 @@ model Workspace {
 
   @@index([tenantId])
   @@index([parentWorkspaceId])
+  @@index([ownerId])
   @@map("workspaces")
 }
 
@@ -67,6 +70,8 @@ model Team {
   name        String
   workspaceId String
   workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ownerId     String?      // Team owner (replaces TEAM_LEAD role)
+  owner       User?        @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   objectives  Objective[]
   keyResults  KeyResult[]
   initiatives Initiative[]
@@ -74,6 +79,7 @@ model Team {
   updatedAt   DateTime     @updatedAt
 
   @@index([workspaceId])
+  @@index([ownerId])
   @@map("teams")
 }
 
@@ -96,6 +102,7 @@ model User {
   sponsoredObjectives        Objective[]             @relation("ObjectiveSponsor")
   createdObjectives          Objective[]             @relation("ObjectiveCreator")
   importedObjectives         Objective[]             @relation("ObjectiveImporter")
+  ownedKeyResults            KeyResult[]             @relation("KeyResultPrimaryOwner")
   createdKeyResults          KeyResult[]             @relation("KeyResultCreator")
   importedKeyResults         KeyResult[]             @relation("KeyResultImporter")
   createdInitiatives         Initiative[]            @relation("InitiativeCreator")
@@ -116,6 +123,8 @@ model User {
   checkInResponses           CheckInResponse[]       @relation("CheckInResponseUser")
   okrAccessWhitelistCreated  OkrAccessWhitelist[]    @relation("OkrAccessWhitelistCreator")
   shareLinksCreated          ShareLink[]             @relation("ShareLinkCreator")
+  ownedWorkspaces            Workspace[]             @relation("WorkspaceOwner")
+  ownedTeams                 Team[]                  @relation("TeamOwner")
   createdAt                  DateTime                @default(now())
   updatedAt                  DateTime                @updatedAt
 
@@ -299,6 +308,7 @@ model KeyResult {
   title           String
   description     String?                   @db.Text
   ownerId         String
+  owner           User                     @relation("KeyResultPrimaryOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   tenantId        String // Tenant scoping: KR belongs to one organization
   tenant          Organization              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   teamId          String? // Optional team assignment (inherited from parent Objective if not set)

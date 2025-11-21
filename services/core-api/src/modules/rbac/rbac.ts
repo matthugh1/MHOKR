@@ -155,50 +155,17 @@ export function can(
  * SUPERUSER capabilities
  * - Can view and administer ANY tenant, workspace, and user
  * - Can read ALL OKR data
- * - CANNOT create, edit, or delete OKR content (read-only access)
- * - CANNOT modify tenant strategy content
+ * - Can create, edit, delete, and publish OKR content (full access)
+ * - Can modify tenant strategy content
+ * - Full administrative access to everything
  */
 function canSuperuser(
   _userContext: UserContext,
-  action: Action,
+  _action: Action,
   _resourceContext: ResourceContext,
 ): boolean {
-  // SUPERUSER can view everything
-  if (action === 'view_okr' || action === 'view_all_okrs') {
-    return true;
-  }
-
-  // SUPERUSER can impersonate users
-  if (action === 'impersonate_user') {
-    return true;
-  }
-
-  // SUPERUSER can export data
-  if (action === 'export_data') {
-    return true;
-  }
-
-  // SUPERUSER CANNOT edit/delete/create OKRs or request check-ins
-  if (action === 'edit_okr' || action === 'delete_okr' || action === 'create_okr' || action === 'publish_okr' || action === 'request_checkin') {
-    return false;
-  }
-
-  // SUPERUSER can manage users/workspaces/teams for administration
-  if (
-    action === 'manage_users' ||
-    action === 'manage_workspaces' ||
-    action === 'manage_teams' ||
-    action === 'manage_tenant_settings'
-  ) {
-    return true;
-  }
-
-  // SUPERUSER cannot manage billing (not in their scope)
-  if (action === 'manage_billing') {
-    return false;
-  }
-
-  return false;
+  // SUPERUSER can do everything - full access to all actions
+  return true;
 }
 
 /**
@@ -235,33 +202,8 @@ function hasTenantAdminRole(userContext: UserContext, tenantId: string): boolean
   return tenantRoles.includes('TENANT_ADMIN');
 }
 
-/**
- * WORKSPACE_LEAD capabilities
- * - Department head / functional leader
- * - Create and edit workspace-level OKRs
- * - Approve/publish OKRs for that workspace
- * - Create/manage teams within that workspace
- * - Add/remove EXISTING tenant users into that workspace
- * - View ALL OKRs in that workspace, including TEAM_ONLY and MANAGER_CHAIN
- * - Control visibility of "draft vs published" for that workspace
- */
-function hasWorkspaceLeadRole(userContext: UserContext, workspaceId: string): boolean {
-  const workspaceRoles = userContext.workspaceRoles.get(workspaceId) || [];
-  return workspaceRoles.includes('WORKSPACE_LEAD');
-}
-
-/**
- * TEAM_LEAD capabilities
- * - Create/edit team OKRs
- * - Approve/publish team OKRs for visibility to the whole workspace
- * - See all personal OKRs of members of that team, including MANAGER_CHAIN
- * - Add/remove EXISTING workspace members to/from the team
- * - Update status / confidence / RAG on team KRs
- */
-function hasTeamLeadRole(userContext: UserContext, teamId: string): boolean {
-  const teamRoles = userContext.teamRoles.get(teamId) || [];
-  return teamRoles.includes('TEAM_LEAD');
-}
+// Removed deprecated functions _hasWorkspaceLeadRole and _hasTeamLeadRole
+// Use workspace.ownerId and team.ownerId instead
 
 /**
  * Check if user can view an OKR (combines RBAC + visibility rules)
@@ -379,15 +321,15 @@ function canEditOKRAction(
     return true;
   }
 
-  // WORKSPACE_LEAD can edit workspace-level OKRs
-  if (okr.workspaceId && hasWorkspaceLeadRole(userContext, okr.workspaceId)) {
-    console.log('[RBAC] canEditOKRAction: Allowed - user has WORKSPACE_LEAD role', { workspaceId: okr.workspaceId });
+  // Workspace owner can edit workspace-level OKRs
+  if (okr.workspaceId && resourceContext.workspace?.ownerId === userContext.userId) {
+    console.log('[RBAC] canEditOKRAction: Allowed - user is workspace owner', { workspaceId: okr.workspaceId });
     return true;
   }
 
-  // TEAM_LEAD can edit team-level OKRs
-  if (okr.teamId && hasTeamLeadRole(userContext, okr.teamId)) {
-    console.log('[RBAC] canEditOKRAction: Allowed - user has TEAM_LEAD role', { teamId: okr.teamId });
+  // Team owner can edit team-level OKRs
+  if (okr.teamId && resourceContext.team?.ownerId === userContext.userId) {
+    console.log('[RBAC] canEditOKRAction: Allowed - user is team owner', { teamId: okr.teamId });
     return true;
   }
 
@@ -459,17 +401,14 @@ function canDeleteOKRAction(
     return true;
   }
 
-  // WORKSPACE_LEAD can delete workspace-level OKRs
-  if (okr.workspaceId && hasWorkspaceLeadRole(userContext, okr.workspaceId)) {
+  // Workspace owner can delete workspace-level OKRs
+  if (okr.workspaceId && resourceContext.workspace?.ownerId === userContext.userId) {
     return true;
   }
 
-  // TEAM_LEAD can delete team-level OKRs (not personal OKRs of members)
-  if (okr.teamId && hasTeamLeadRole(userContext, okr.teamId)) {
-    // Only if it's a team-level OKR, not a personal OKR
-    if (okr.teamId) {
-      return true;
-    }
+  // Team owner can delete team-level OKRs
+  if (okr.teamId && resourceContext.team?.ownerId === userContext.userId) {
+    return true;
   }
 
   return false;
@@ -598,13 +537,13 @@ function canPublishOKRAction(
     return true;
   }
 
-  // WORKSPACE_LEAD can publish workspace-level OKRs
-  if (okr.workspaceId && hasWorkspaceLeadRole(userContext, okr.workspaceId)) {
+  // Workspace owner can publish workspace-level OKRs
+  if (okr.workspaceId && resourceContext.workspace?.ownerId === userContext.userId) {
     return true;
   }
 
-  // TEAM_LEAD can publish team-level OKRs
-  if (okr.teamId && hasTeamLeadRole(userContext, okr.teamId)) {
+  // Team owner can publish team-level OKRs
+  if (okr.teamId && resourceContext.team?.ownerId === userContext.userId) {
     return true;
   }
 
@@ -650,16 +589,16 @@ function canManageUsers(
     return true;
   }
   
-  // WORKSPACE_LEAD can add/remove EXISTING tenant users to/from workspace
-  if (resourceContext.workspaceId && hasWorkspaceLeadRole(userContext, resourceContext.workspaceId)) {
-    console.log('[RBAC] canManageUsers: ALLOWED - user has WORKSPACE_LEAD role');
+  // Workspace owner can add/remove EXISTING tenant users to/from workspace
+  if (resourceContext.workspaceId && resourceContext.workspace?.ownerId === userContext.userId) {
+    console.log('[RBAC] canManageUsers: ALLOWED - user is workspace owner');
     // Can only add existing users, not create new ones
     return true;
   }
 
-  // TEAM_LEAD can add/remove EXISTING workspace members to/from team
-  if (resourceContext.teamId && hasTeamLeadRole(userContext, resourceContext.teamId)) {
-    console.log('[RBAC] canManageUsers: ALLOWED - user has TEAM_LEAD role');
+  // Team owner can add/remove EXISTING workspace members to/from team
+  if (resourceContext.teamId && resourceContext.team?.ownerId === userContext.userId) {
+    console.log('[RBAC] canManageUsers: ALLOWED - user is team owner');
     return true;
   }
 
@@ -734,8 +673,8 @@ function canManageTeams(
     return true;
   }
 
-  // WORKSPACE_LEAD can create/manage teams within their workspace
-  if (resourceContext.workspaceId && hasWorkspaceLeadRole(userContext, resourceContext.workspaceId)) {
+  // Workspace owner can create/manage teams within their workspace
+  if (resourceContext.workspaceId && resourceContext.workspace?.ownerId === userContext.userId) {
     return true;
   }
 

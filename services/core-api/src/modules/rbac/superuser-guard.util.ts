@@ -1,24 +1,20 @@
 /**
  * Superuser Guard Utility
  * 
- * Helper functions for enforcing SUPERUSER read-only rules.
- * SUPERUSER accounts are platform-level auditors and cannot mutate tenant data.
+ * Helper functions for SUPERUSER access.
+ * SUPERUSER accounts have full access to all operations.
  */
-
-import { ForbiddenException } from '@nestjs/common';
 
 /**
- * Assert that the requester is not a SUPERUSER attempting to mutate tenant data.
+ * Assert that the requester is a SUPERUSER (no-op, superusers can do everything).
  * 
- * SUPERUSER accounts are read-only and cannot modify any tenant resources.
+ * This function is kept for compatibility but no longer blocks superuser actions.
  * 
- * @param isSuperuser - Whether the requester is a SUPERUSER
- * @throws ForbiddenException if the requester is a SUPERUSER
+ * @param _isSuperuser - Whether the requester is a SUPERUSER (unused, kept for API compatibility)
  */
-export function assertNotSuperuserWrite(isSuperuser: boolean): void {
-  if (isSuperuser) {
-    throw new ForbiddenException('SUPERUSER is read-only and cannot mutate tenant data');
-  }
+export function assertNotSuperuserWrite(_isSuperuser: boolean): void {
+  // Superusers can do everything - no restriction
+  // This function is kept for compatibility but does nothing
 }
 
 

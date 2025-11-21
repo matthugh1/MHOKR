@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Req, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Req, ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { PhasedTargetService, CreatePhasedTargetDto, UpdatePhasedTargetDto } from './phased-target.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -21,8 +21,9 @@ export class PhasedTargetController {
     private readonly phasedTargetService: PhasedTargetService,
     private readonly objectiveService: ObjectiveService,
     private readonly keyResultService: KeyResultService,
-    private readonly prisma: PrismaService,
+    prisma: PrismaService,
   ) {
+    // Store prisma in static property for use in decorators
     PhasedTargetController.prismaInstance = prisma;
   }
 
@@ -112,14 +113,14 @@ export class PhasedTargetController {
       where: { id: req.params.id },
     });
     if (!phasedTarget) {
-      return null;
+      throw new NotFoundException('Phased target not found');
     }
     if (phasedTarget.objectiveId) {
       return buildResourceContextFromOKR(prisma, phasedTarget.objectiveId);
     } else if (phasedTarget.keyResultId) {
       return buildResourceContextFromKeyResult(prisma, phasedTarget.keyResultId);
     }
-    return null;
+    throw new BadRequestException('Phased target must be associated with either an objective or key result');
   })
   @ApiOperation({ summary: 'Update phased target', description: 'Updates a phased target. Validates target date and value against parent OKR constraints.' })
   @ApiResponse({ status: 200, description: 'Phased target updated successfully' })
@@ -168,14 +169,14 @@ export class PhasedTargetController {
       where: { id: req.params.id },
     });
     if (!phasedTarget) {
-      return null;
+      throw new NotFoundException('Phased target not found');
     }
     if (phasedTarget.objectiveId) {
       return buildResourceContextFromOKR(prisma, phasedTarget.objectiveId);
     } else if (phasedTarget.keyResultId) {
       return buildResourceContextFromKeyResult(prisma, phasedTarget.keyResultId);
     }
-    return null;
+    throw new BadRequestException('Phased target must be associated with either an objective or key result');
   })
   @ApiOperation({ summary: 'Delete phased target', description: 'Deletes a phased target.' })
   @ApiResponse({ status: 200, description: 'Phased target deleted successfully' })

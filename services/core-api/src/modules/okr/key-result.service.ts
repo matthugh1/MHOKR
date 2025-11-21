@@ -130,9 +130,9 @@ export class KeyResultService {
    * The write methods (create/update/delete/createCheckIn) enforce the same tenant isolation rules.
    */
   async canEdit(userId: string, keyResultId: string, userOrganizationId: string | null | undefined): Promise<boolean> {
-    // Tenant isolation: superuser is read-only
+    // Superuser can edit everything
     if (userOrganizationId === null) {
-      return false;
+      return true;
     }
 
     // Tenant isolation: users without an organisation cannot mutate
@@ -200,9 +200,9 @@ export class KeyResultService {
    * The write methods (create/update/delete/createCheckIn) enforce the same tenant isolation rules.
    */
   async canDelete(userId: string, keyResultId: string, userOrganizationId: string | null | undefined): Promise<boolean> {
-    // Tenant isolation: superuser is read-only
+    // Superuser can delete everything
     if (userOrganizationId === null) {
-      return false;
+      return true;
     }
 
     // Tenant isolation: users without an organisation cannot mutate

@@ -153,20 +153,12 @@ export default function OKRsPage() {
   const { user } = useAuth()
   const permissions = usePermissions()
   
-  // Memoize the tenant admin check for the current organization to avoid repeated calls
+  // Check if user is tenant admin for current organization (simplified)
   const isTenantAdminForCurrentOrg = useMemo(() => {
     if (!currentOrganization?.id) return false
     if (isSuperuser || permissions.isSuperuser) return true
-    
-    // Check if user has TENANT_OWNER or TENANT_ADMIN role for this organization
-    const tenantRoles = permissions.rolesByScope?.tenant?.find(
-      (t) => t.tenantId === currentOrganization.id
-    )
-    return tenantRoles !== undefined && (
-      tenantRoles.roles.includes('TENANT_OWNER') || 
-      tenantRoles.roles.includes('TENANT_ADMIN')
-    )
-  }, [permissions.rolesByScope, permissions.isSuperuser, currentOrganization?.id, isSuperuser])
+    return permissions.isTenantAdminOrOwner(currentOrganization.id)
+  }, [permissions.isTenantAdminOrOwner, currentOrganization?.id, isSuperuser, permissions.isSuperuser])
   
   // Scope toggle: My | Team/Workspace | Tenant
   const availableScopes = useMemo(() => {
@@ -186,34 +178,15 @@ export default function OKRsPage() {
       scopes.push('team-workspace')
     }
     
-    // "Tenant" if user has any tenant-level role (TENANT_VIEWER, TENANT_ADMIN, TENANT_OWNER) or SUPERUSER
-    // TENANT_VIEWER should be able to see all tenant OKRs (read-only)
+    // "Company OKRs" - Show to EVERYONE who has an organization
+    // OKRs are meant to be transparent and visible to all employees
+    // Backend still enforces edit/delete permissions, but viewing is open
     if (currentOrganization?.id) {
-      const tenantRoles = permissions.rolesByScope?.tenant?.find(
-        (t) => t.tenantId === currentOrganization.id
-      )
-      const hasTenantRole = tenantRoles !== undefined && tenantRoles.roles.length > 0
-      
-      // Debug logging
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[OKR Page] Tenant scope check:', {
-          currentOrgId: currentOrganization.id,
-          tenantRoles: tenantRoles,
-          hasTenantRole,
-          isSuperuser,
-          permissionsIsSuperuser: permissions.isSuperuser,
-          isTenantAdminForCurrentOrg,
-          allTenantRoles: permissions.rolesByScope?.tenant,
-        })
-      }
-      
-      if (hasTenantRole || isSuperuser || permissions.isSuperuser || isTenantAdminForCurrentOrg) {
-        scopes.push('tenant')
-      }
+      scopes.push('tenant')
     }
     
     return scopes
-  }, [permissions.rolesByScope, isTenantAdminForCurrentOrg, currentOrganization?.id, isSuperuser, permissions.isSuperuser])
+  }, [permissions.rolesByScope, currentOrganization?.id])
   
   // Read scope from URL or determine default
   const scopeFromUrl = searchParams.get('scope') as 'my' | 'team-workspace' | 'tenant' | null

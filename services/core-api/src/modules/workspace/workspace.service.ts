@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OkrTenantGuard } from '../okr/tenant-guard';
 import { AuditLogService } from '../audit/audit-log.service';
@@ -776,5 +776,92 @@ export class WorkspaceService {
     });
 
     return { success: true };
+  }
+
+  /**
+   * Set workspace owner
+   * Only tenant admin or current owner can change ownership
+   */
+  async setOwner(workspaceId: string, ownerId: string, userOrganizationId: string | null | undefined, actorUserId: string) {
+    // Tenant isolation: enforce mutation rules
+    OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
+
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: {
+        id: true,
+        name: true,
+        tenantId: true,
+        ownerId: true,
+      },
+    });
+
+    if (!workspace) {
+      throw new NotFoundException(`Workspace with ID ${workspaceId} not found`);
+    }
+
+    // Tenant isolation: verify workspace belongs to caller's tenant
+    OkrTenantGuard.assertSameTenant(workspace.tenantId, userOrganizationId);
+
+    // Verify new owner exists and belongs to same tenant
+    const newOwner = await this.prisma.user.findUnique({
+      where: { id: ownerId },
+      select: { id: true, primaryOrganizationId: true },
+    });
+
+    if (!newOwner) {
+      throw new NotFoundException(`User with ID ${ownerId} not found`);
+    }
+
+    // Check permission: tenant admin or current owner can change ownership
+    const resourceContext = {
+      tenantId: workspace.tenantId,
+      workspaceId: workspace.id,
+      workspace: {
+        id: workspace.id,
+        name: workspace.name,
+        tenantId: workspace.tenantId,
+        ownerId: workspace.ownerId,
+      },
+    };
+
+    const canManage = await this.rbacService.canPerformAction(actorUserId, 'manage_workspaces', resourceContext);
+    const isCurrentOwner = workspace.ownerId === actorUserId;
+
+    if (!canManage && !isCurrentOwner) {
+      throw new ForbiddenException('Only tenant admin or current owner can change workspace ownership');
+    }
+
+    const previousOwnerId = workspace.ownerId;
+
+    // Update owner
+    const updated = await this.prisma.workspace.update({
+      where: { id: workspaceId },
+      data: { ownerId },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    // Audit log
+    await this.auditLogService.record({
+      action: 'CHANGE_WORKSPACE_OWNER',
+      actorUserId,
+      targetId: workspaceId,
+      targetType: AuditTargetType.WORKSPACE,
+      tenantId: workspace.tenantId,
+      metadata: {
+        previousOwnerId,
+        newOwnerId: ownerId,
+      },
+    });
+
+    return updated;
   }
 }

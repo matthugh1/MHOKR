@@ -108,7 +108,7 @@ export class SuperuserController {
   @RequireAction('impersonate_user')
   @ApiOperation({ summary: 'Create a new organization' })
   async createOrganization(
-    @Body() _data: { name: string; slug: string },
+    @Body() data: { name: string; slug: string },
     @Req() req: any,
   ) {
     const isSuper = await this.superuserService.isSuperuser(req.user.id);
@@ -116,8 +116,8 @@ export class SuperuserController {
       throw new ForbiddenException('Only superusers can create organizations');
     }
 
-    // SUPERUSER is read-only - block mutations per RBAC_MATRIX.md
-    throw new ForbiddenException('SUPERUSER is read-only; cannot modify tenant data.');
+    // Superusers can create organizations
+    return this.superuserService.createOrganization({ name: data.name, slug: data.slug });
   }
 
   /**
@@ -128,9 +128,9 @@ export class SuperuserController {
   @RequireAction('impersonate_user')
   @ApiOperation({ summary: 'Add user to organization' })
   async addUserToOrganization(
-    @Param('tenantId') _tenantId: string,
-    @Param('userId') _userId: string,
-    @Body() _data: { role?: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER' },
+    @Param('tenantId') tenantId: string,
+    @Param('userId') userId: string,
+    @Body() data: { role?: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER' },
     @Req() req: any,
   ) {
     const isSuper = await this.superuserService.isSuperuser(req.user.id);
@@ -138,8 +138,8 @@ export class SuperuserController {
       throw new ForbiddenException('Only superusers can assign users to organizations');
     }
 
-    // SUPERUSER is read-only - block mutations per RBAC_MATRIX.md
-    throw new ForbiddenException('SUPERUSER is read-only; cannot modify tenant data.');
+    // Superusers can add users to organizations
+    return this.superuserService.addUserToOrganization(userId, tenantId, data.role || 'MEMBER');
   }
 
   /**
@@ -150,8 +150,8 @@ export class SuperuserController {
   @RequireAction('impersonate_user')
   @ApiOperation({ summary: 'Remove user from organization' })
   async removeUserFromOrganization(
-    @Param('tenantId') _tenantId: string,
-    @Param('userId') _userId: string,
+    @Param('tenantId') tenantId: string,
+    @Param('userId') userId: string,
     @Req() req: any,
   ) {
     const isSuper = await this.superuserService.isSuperuser(req.user.id);
@@ -159,8 +159,8 @@ export class SuperuserController {
       throw new ForbiddenException('Only superusers can remove users from organizations');
     }
 
-    // SUPERUSER is read-only - block mutations per RBAC_MATRIX.md
-    throw new ForbiddenException('SUPERUSER is read-only; cannot modify tenant data.');
+    // Superusers can remove users from organizations
+    return this.superuserService.removeUserFromOrganization(userId, tenantId);
   }
 
   /**

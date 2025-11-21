@@ -10,7 +10,7 @@
  * - Log tenant isolation violations for monitoring
  * 
  * Tenant Isolation Rules:
- * - userTenantId === null       → superuser (can READ all tenants; cannot write)
+ * - userTenantId === null       → superuser (can READ and WRITE all tenants; unrestricted access)
  * - userTenantId === string     → normal user (can read/write only within that tenant)
  * - userTenantId === undefined  → user with no tenant (cannot read or write tenant data)
  */
@@ -52,23 +52,19 @@ export class OkrTenantGuard {
   }
 
   /**
-   * Ensure user can MUTATE a resource (not superuser read-only, has tenant).
+   * Ensure user can MUTATE a resource (has tenant or is superuser).
    * 
    * Enforces:
-   * - Superuser is read-only (cannot mutate)
-   * - User must have a tenant
+   * - Superuser can mutate everything
+   * - Normal user must have a tenant
    * 
    * @param userTenantId - User's tenant ID (null for superuser, string for normal user, undefined for no tenant)
    * @throws ForbiddenException if user cannot mutate
    */
   static assertCanMutateTenant(userTenantId: string | null | undefined, actorUserId?: string): void {
-    // Superuser is read-only auditor (cannot mutate)
+    // Superuser can mutate everything
     if (userTenantId === null) {
-      this.logTenantIsolationViolation('SUPERUSER_MUTATION', {
-        userTenantId: null,
-        actorUserId,
-      });
-      throw new ForbiddenException('Superusers are read-only; cannot modify resources.');
+      return;
     }
 
     // Users without a tenant cannot mutate
@@ -101,6 +97,11 @@ export class OkrTenantGuard {
     // This is intentional. Changing this requires an explicit product decision.
     if (!resourceTenantId) {
       throw new ForbiddenException('System/global resources are immutable.');
+    }
+
+    // Superuser can access any tenant (bypass tenant match check)
+    if (userTenantId === null) {
+      return;
     }
 
     // Verify tenant match: user's tenant must match resource's tenant

@@ -52,10 +52,26 @@ function WorkspacesSettings() {
   const [deletingWorkspace, setDeletingWorkspace] = useState<any>(null)
 
   useEffect(() => {
-    if (contextWorkspaces) {
+    if (contextWorkspaces && contextWorkspaces.length > 0) {
       setWorkspaces(contextWorkspaces)
+    } else if (organization) {
+      // Fallback: fetch workspaces directly from API if not in context
+      loadWorkspaces()
     }
-  }, [contextWorkspaces])
+  }, [contextWorkspaces, organization])
+
+  const loadWorkspaces = async () => {
+    if (!organization) return
+    
+    try {
+      const res = await api.get(`/workspaces?tenantId=${organization.id}`)
+      if (res.data && Array.isArray(res.data)) {
+        setWorkspaces(res.data)
+      }
+    } catch (error) {
+      console.error('Failed to load workspaces:', error)
+    }
+  }
 
   const handleCreateWorkspace = async () => {
     if (!newWorkspaceName.trim() || !organization) return

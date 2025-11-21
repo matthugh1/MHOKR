@@ -42,61 +42,62 @@ async function main() {
       continue;
     }
 
-    // Check if user has any role assignments
-    const existingRoles = await prisma.roleAssignment.findMany({
-      where: { userId: user.id },
-    });
-
-    if (existingRoles.length > 0) {
-      console.log(`⏭️  User ${user.email} already has ${existingRoles.length} role(s), skipping`);
-      usersSkipped++;
-      continue;
-    }
-
-    // Find user's organization memberships
-    const orgMemberships = await prisma.organizationMember.findMany({
-      where: { userId: user.id },
-      include: {
-        organization: true,
+    // Get full user record to check primaryOrganizationId
+    const userRecord = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        primaryOrganizationId: true,
+        isSuperuser: true,
       },
     });
 
-    if (orgMemberships.length === 0) {
-      console.log(`⚠️  User ${user.email} has no organization membership, skipping`);
+    if (!userRecord) {
+      continue;
+    }
+
+    // Skip if user has no primary organization
+    if (!userRecord.primaryOrganizationId) {
+      console.log(`⚠️  User ${user.email} has no primaryOrganizationId, skipping`);
       usersSkipped++;
       continue;
     }
 
-    // Grant TENANT_VIEWER role in each organization they belong to
-    for (const membership of orgMemberships) {
-      // Check if role already exists
-      const existing = await prisma.roleAssignment.findFirst({
-        where: {
-          userId: user.id,
-          role: 'TENANT_VIEWER',
-          scopeType: 'TENANT',
-          scopeId: membership.organizationId,
-        },
-      });
+    // Check if user already has TENANT role assignment for their primary organization
+    const existingTenantRole = await prisma.roleAssignment.findFirst({
+      where: {
+        userId: user.id,
+        scopeType: 'TENANT',
+        scopeId: userRecord.primaryOrganizationId,
+      },
+    });
 
-      if (existing) {
-        console.log(`⏭️  User ${user.email} already has TENANT_VIEWER in ${membership.organization.name}`);
-        continue;
-      }
-
-      // Create role assignment
-      await prisma.roleAssignment.create({
-        data: {
-          userId: user.id,
-          role: 'TENANT_VIEWER',
-          scopeType: 'TENANT',
-          scopeId: membership.organizationId,
-        },
-      });
-
-      console.log(`✅ Granted TENANT_VIEWER role to ${user.email} in ${membership.organization.name}`);
-      usersUpdated++;
+    if (existingTenantRole) {
+      console.log(`⏭️  User ${user.email} already has ${existingTenantRole.role} role in their organization, skipping`);
+      usersSkipped++;
+      continue;
     }
+
+    // Get organization name for logging
+    const organization = await prisma.organization.findUnique({
+      where: { id: userRecord.primaryOrganizationId },
+      select: { name: true },
+    });
+
+    // Grant TENANT_VIEWER role in their primary organization
+    await prisma.roleAssignment.create({
+      data: {
+        userId: user.id,
+        role: 'TENANT_VIEWER',
+        scopeType: 'TENANT',
+        scopeId: userRecord.primaryOrganizationId,
+      },
+    });
+
+    console.log(`✅ Granted TENANT_VIEWER role to ${user.email} in ${organization?.name || userRecord.primaryOrganizationId}`);
+    usersUpdated++;
 
     // Also grant WORKSPACE_MEMBER role if they're in a workspace
     const workspaceMemberships = await prisma.workspaceMember.findMany({

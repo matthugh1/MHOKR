@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useWorkspace } from '@/contexts/workspace.context'
+import { usePermissions } from '@/hooks/usePermissions'
 import { Users, Plus, Edit2, Trash2, UserPlus, X, Building2, Briefcase } from 'lucide-react'
 import api from '@/lib/api'
 
@@ -50,6 +51,7 @@ export default function TeamsPage() {
 
 function TeamsSettings() {
   const { currentWorkspace: workspace, teams: contextTeams, refreshContext, currentOrganization: organization } = useWorkspace()
+  const { isTenantAdminOrOwner } = usePermissions()
   const [teams, setTeams] = useState<any[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [newTeamName, setNewTeamName] = useState('')
@@ -63,24 +65,37 @@ function TeamsSettings() {
   const [selectedRole, setSelectedRole] = useState('MEMBER')
 
   useEffect(() => {
-    if (workspace) {
-      loadTeams()
-    }
-  }, [workspace])
+    loadTeams()
+  }, [workspace, organization])
 
   const loadTeams = async () => {
-    if (!workspace) {
+    // For tenant admins, load all teams in the organization if no workspace is selected
+    const isAdmin = organization ? isTenantAdminOrOwner(organization.id) : false
+    
+    if (workspace) {
+      try {
+        console.log('Loading teams for workspace:', workspace.id)
+        const res = await api.get(`/teams?workspaceId=${workspace.id}`)
+        console.log('Teams loaded:', res.data)
+        setTeams(res.data)
+      } catch (error) {
+        console.error('Failed to load teams:', error)
+      }
+    } else if (isAdmin && organization) {
+      // Tenant admin: load all teams in the organization
+      try {
+        console.log('Loading all teams for organization:', organization.id)
+        const res = await api.get(`/teams`)
+        console.log('Teams loaded:', res.data)
+        // Filter to only teams in this organization (backend should already do this, but double-check)
+        const orgTeams = res.data.filter((team: any) => team.workspace?.tenantId === organization.id)
+        setTeams(orgTeams)
+      } catch (error) {
+        console.error('Failed to load teams:', error)
+      }
+    } else {
       console.log('No workspace available for loading teams')
-      return
-    }
-
-    try {
-      console.log('Loading teams for workspace:', workspace.id)
-      const res = await api.get(`/teams?workspaceId=${workspace.id}`)
-      console.log('Teams loaded:', res.data)
-      setTeams(res.data)
-    } catch (error) {
-      console.error('Failed to load teams:', error)
+      setTeams([])
     }
   }
 

@@ -197,10 +197,9 @@ export class ObjectiveService {
    * Check if user can edit a specific OKR
    */
   async canEdit(userId: string, objectiveId: string, userTenantId: string | null): Promise<boolean> {
-    // Tenant isolation: superuser is read-only
+    // Superuser can edit everything
     if (userTenantId === null) {
-      console.log('[OBJECTIVE SERVICE] canEdit: Superuser is read-only', { userId, objectiveId });
-      return false;
+      return true;
     }
 
     try {
@@ -260,9 +259,9 @@ export class ObjectiveService {
    * Check if user can delete a specific OKR
    */
   async canDelete(userId: string, objectiveId: string, userTenantId: string | null): Promise<boolean> {
-    // Tenant isolation: superuser is read-only
+    // Superuser can delete everything
     if (userTenantId === null) {
-      return false;
+      return true;
     }
 
     try {

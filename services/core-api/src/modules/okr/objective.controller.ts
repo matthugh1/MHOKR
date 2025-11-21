@@ -1,8 +1,8 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { ObjectiveService } from './objective.service';
-import { OkrProgressService } from './okr-progress.service';
 import { ObjectiveOwnerService } from './objective-owner.service';
+import { OkrProgressService } from './okr-progress.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction, RequireActionWithContext } from '../rbac';
 import { RBACService } from '../rbac/rbac.service';
@@ -22,8 +22,8 @@ export class ObjectiveController {
 
   constructor(
     private readonly objectiveService: ObjectiveService,
-    private readonly okrProgressService: OkrProgressService,
     private readonly objectiveOwnerService: ObjectiveOwnerService,
+    private readonly okrProgressService: OkrProgressService,
     private readonly prisma: PrismaService,
     private readonly rbacService: RBACService,
   ) {
@@ -118,10 +118,7 @@ export class ObjectiveController {
   })
   @ApiOperation({ summary: 'Update objective', description: 'Emits activity events (UPDATED, STATE_CHANGE if state transitions) and audit logs.' })
   async update(@Param('id') id: string, @Body() data: any, @Req() req: any) {
-    // Check if user is superuser (read-only)
-    if (req.user.tenantId === null) {
-      throw new ForbiddenException('Superusers are read-only and cannot edit OKRs');
-    }
+    // Superuser can edit everything - no restriction
     
     // Additional permission check is handled by the guard via RequireActionWithContext
     // But we still do a defensive check here for better error messages
@@ -517,6 +514,62 @@ export class ObjectiveController {
     @Req() req: any,
   ) {
     return this.objectiveService.getProgressTrend(id, req.user.tenantId);
+  }
+
+  /**
+   * Get progress contribution breakdown for an Objective.
+   * 
+   * Returns detailed information about how each Key Result or child Objective
+   * contributes to the parent's progress, including weights and percentages.
+   * Tenant isolation: Verifies Objective belongs to user's tenant.
+   * RBAC: User must have view_okr permission.
+   * 
+   * @param id - Objective ID
+   * @param req - Request object with user info
+   * @returns Progress contribution breakdown with weights and percentages
+   */
+  @Get(':id/progress-contribution')
+  @RequireAction('view_okr')
+  @ApiOperation({ summary: 'Get progress contribution breakdown for an Objective' })
+  @ApiResponse({
+    status: 200,
+    description: 'Progress contribution breakdown',
+    schema: {
+      type: 'object',
+      properties: {
+        totalProgress: { type: 'number', example: 75.5 },
+        contributions: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', example: 'kr-123' },
+              title: { type: 'string', example: 'Increase revenue by 20%' },
+              type: { type: 'string', enum: ['KEY_RESULT', 'CHILD_OBJECTIVE'] },
+              progress: { type: 'number', example: 80.0 },
+              weight: { type: 'number', example: 1.5 },
+              contribution: { type: 'number', example: 30.0 },
+              percentage: { type: 'number', example: 40.0 },
+            },
+          },
+        },
+        calculationMethod: { type: 'string', enum: ['WEIGHTED_AVERAGE', 'SIMPLE_AVERAGE', 'MANUAL', 'NONE'] },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden - user lacks view_okr permission or cannot access this objective' })
+  @ApiResponse({ status: 404, description: 'Objective not found' })
+  async getProgressContribution(
+    @Param('id') id: string,
+    @Req() req: any,
+  ) {
+    // Verify user can view this objective (tenant isolation check)
+    const objective = await this.objectiveService.findById(id, req.user.tenantId);
+    if (!objective) {
+      throw new ForbiddenException('Objective not found or access denied');
+    }
+
+    return this.okrProgressService.getProgressContributionBreakdown(id);
   }
 
   // NOTE: Activity timeline endpoints moved to ActivityController under /activity/* in Phase 4.

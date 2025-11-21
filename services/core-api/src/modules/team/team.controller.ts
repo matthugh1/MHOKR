@@ -59,5 +59,16 @@ export class TeamController {
   async removeMember(@Param('id') teamId: string, @Param('userId') userId: string, @Req() req: any) {
     return this.teamService.removeMember(teamId, userId, req.user.tenantId, req.user.id);
   }
+
+  @Post(':id/owner')
+  @RequireAction('manage_teams')
+  @ApiOperation({ summary: 'Set team owner (tenant admin, workspace owner, or current team owner only)' })
+  async setOwner(
+    @Param('id') teamId: string,
+    @Body() data: { ownerId: string },
+    @Req() req: any,
+  ) {
+    return this.teamService.setOwner(teamId, data.ownerId, req.user.tenantId, req.user.id);
+  }
 }
 
