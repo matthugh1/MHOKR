@@ -23,6 +23,9 @@ import { VivaGoalsCSVParserService } from '../services/core-api/src/modules/okr/
 import { OkrImportService } from '../services/core-api/src/modules/okr/okr-import.service';
 import { OkrCycleService } from '../services/core-api/src/modules/okr/okr-cycle.service';
 import { CycleGeneratorService } from '../services/core-api/src/modules/okr/cycle-generator.service';
+import { ObjectiveOwnerService } from '../services/core-api/src/modules/okr/objective-owner.service';
+import { KeyResultOwnerService } from '../services/core-api/src/modules/okr/key-result-owner.service';
+import { PhasedTargetService } from '../services/core-api/src/modules/okr/phased-target.service';
 
 const prisma = new PrismaClient();
 const jsonParser = new VivaGoalsJSONParserService();
@@ -343,7 +346,7 @@ async function importTeams(dir: string, tenantId: string, stats: any, dryRun: bo
   }
 }
 
-async function importCycles(dir: string, tenantId: string, stats: any, dryRun: boolean) {
+async function importCycles(dir: string, tenantId: string, stats: any, dryRun: boolean, yearFilter?: number) {
   const file = findFile(dir, 'timeperiods');
   if (!file) {
     stats.warnings.push('Time Periods file not found');
@@ -351,7 +354,20 @@ async function importCycles(dir: string, tenantId: string, stats: any, dryRun: b
   }
 
   const jsonContent = fs.readFileSync(file, 'utf-8');
-  const periods = jsonParser.parseTimePeriods(jsonContent);
+  let periods = jsonParser.parseTimePeriods(jsonContent);
+
+  // Filter by year if specified
+  if (yearFilter) {
+    periods = periods.filter(period => {
+      const startDate = new Date(period['Start Date']);
+      const endDate = new Date(period['End Date']);
+      const startYear = startDate.getFullYear();
+      const endYear = endDate.getFullYear();
+      return startYear === yearFilter || endYear === yearFilter ||
+             (startDate <= new Date(`${yearFilter}-12-31`) && endDate >= new Date(`${yearFilter}-01-01`));
+    });
+    console.log(`   🔍 Filtered to ${periods.length} cycles for ${yearFilter} (from ${jsonParser.parseTimePeriods(jsonContent).length} total)`);
+  }
 
   for (const period of periods) {
     try {
@@ -416,7 +432,7 @@ async function importTags(dir: string, _tenantId: string, stats: any, _dryRun: b
   }
 }
 
-async function importComments(dir: string, tenantId: string, stats: any, dryRun: boolean) {
+async function importComments(dir: string, tenantId: string, stats: any, dryRun: boolean, yearFilter?: number) {
   const file = findFile(dir, 'comments');
   if (!file) {
     stats.warnings.push('Comments file not found');
@@ -452,6 +468,25 @@ async function importComments(dir: string, tenantId: string, stats: any, dryRun:
         continue; // Skip if OKR not found
       }
 
+      // Filter by year: only import comments for OKRs from the target year
+      if (yearFilter) {
+        const okr = objective || keyResult;
+        if (okr) {
+          const startDate = okr.startDate ? new Date(okr.startDate) : null;
+          const endDate = okr.endDate ? new Date(okr.endDate) : null;
+          if (startDate && endDate) {
+            const startYear = startDate.getFullYear();
+            const endYear = endDate.getFullYear();
+            if (startYear !== yearFilter && endYear !== yearFilter &&
+                !(startDate <= new Date(`${yearFilter}-12-31`) && endDate >= new Date(`${yearFilter}-01-01`))) {
+              continue; // Skip comments for OKRs not in target year
+            }
+          } else {
+            continue; // Skip if no dates
+          }
+        }
+      }
+
       // Find or create user
       const user = await prisma.user.findFirst({
         where: {
@@ -477,7 +512,7 @@ async function importComments(dir: string, tenantId: string, stats: any, dryRun:
   }
 }
 
-async function importCheckIns(dir: string, tenantId: string, stats: any, dryRun: boolean) {
+async function importCheckIns(dir: string, tenantId: string, stats: any, dryRun: boolean, yearFilter?: number) {
   const file = findFile(dir, 'checkins');
   if (!file) {
     stats.warnings.push('Check-ins file not found');
@@ -485,7 +520,17 @@ async function importCheckIns(dir: string, tenantId: string, stats: any, dryRun:
   }
 
   const jsonContent = fs.readFileSync(file, 'utf-8');
-  const checkIns = jsonParser.parseCheckIns(jsonContent);
+  let checkIns = jsonParser.parseCheckIns(jsonContent);
+
+  // Filter by year if specified
+  if (yearFilter) {
+    checkIns = checkIns.filter(checkIn => {
+      const checkInDate = new Date(checkIn['CheckIn Date']);
+      if (isNaN(checkInDate.getTime())) return false;
+      return checkInDate.getFullYear() === yearFilter;
+    });
+    console.log(`   🔍 Filtered to ${checkIns.length} check-ins for ${yearFilter} (from ${jsonParser.parseCheckIns(jsonContent).length} total)`);
+  }
 
   for (const checkIn of checkIns) {
     try {
@@ -553,8 +598,9 @@ async function importCheckIns(dir: string, tenantId: string, stats: any, dryRun:
   }
 }
 
-async function runImport(organizationId: string, userId: string, importDir: string) {
-  console.log('📥 Starting Viva Goals JSON import...\n');
+async function runImport(organizationId: string, userId: string, importDir: string, yearFilter?: number) {
+  const filterYear = yearFilter ? ` (filtering for ${yearFilter})` : '';
+  console.log(`📥 Starting Viva Goals JSON import${filterYear}...\n`);
 
   const stats = {
     usersCreated: 0,
@@ -586,7 +632,7 @@ async function runImport(organizationId: string, userId: string, importDir: stri
 
   // Step 3: Import Time Periods (Cycles)
   console.log('📥 Step 3: Importing Time Periods (Cycles)...');
-  await importCycles(importDir, organizationId, stats, false);
+  await importCycles(importDir, organizationId, stats, false, yearFilter);
   console.log(`   ✅ Cycles: ${stats.cyclesCreated} created, ${stats.cyclesUpdated} updated\n`);
 
   // Step 4: Import Tags
@@ -601,11 +647,17 @@ async function runImport(organizationId: string, userId: string, importDir: stri
   const cycleGenerator = new CycleGeneratorService(prismaService as any);
   const cycleService = new OkrCycleService(prismaService as any, cycleGenerator);
   const csvParser = new VivaGoalsCSVParserService();
+  const objectiveOwnerService = new ObjectiveOwnerService(prismaService as any);
+  const keyResultOwnerService = new KeyResultOwnerService(prismaService as any);
+  const phasedTargetService = new PhasedTargetService(prismaService as any);
   const importService = new OkrImportService(
     prismaService as any,
     csvParser,
     jsonParser,
     cycleService,
+    objectiveOwnerService,
+    keyResultOwnerService,
+    phasedTargetService,
   );
 
   const objectivesFile = findFile(importDir, 'objectives');
@@ -613,7 +665,26 @@ async function runImport(organizationId: string, userId: string, importDir: stri
     console.log('   ⚠️  Objectives file not found, skipping OKR import');
   } else {
     console.log(`   📄 Reading objectives from: ${path.basename(objectivesFile)}`);
-    const jsonContent = fs.readFileSync(objectivesFile, 'utf-8');
+    let jsonContent = fs.readFileSync(objectivesFile, 'utf-8');
+    
+    // Filter for 2025 if yearFilter is set
+    if (yearFilter) {
+      const objectives = JSON.parse(jsonContent);
+      const filtered = objectives.filter((obj: any) => {
+        const startDate = obj['Start Date'] ? new Date(obj['Start Date']) : null;
+        const endDate = obj['End Date'] ? new Date(obj['End Date']) : null;
+        if (!startDate && !endDate) return false;
+        
+        const startYear = startDate ? startDate.getFullYear() : null;
+        const endYear = endDate ? endDate.getFullYear() : null;
+        
+        // Include if start or end date is in the target year
+        return (startYear === yearFilter || endYear === yearFilter) ||
+               (startDate && endDate && startDate <= new Date(`${yearFilter}-12-31`) && endDate >= new Date(`${yearFilter}-01-01`));
+      });
+      jsonContent = JSON.stringify(filtered);
+      console.log(`   🔍 Filtered to ${filtered.length} objectives/key results for ${yearFilter} (from ${objectives.length} total)`);
+    }
     
     const result = await importService.importFromJSON(
       jsonContent,
@@ -642,12 +713,12 @@ async function runImport(organizationId: string, userId: string, importDir: stri
 
   // Step 6: Import Comments
   console.log('📥 Step 6: Importing Comments...');
-  await importComments(importDir, organizationId, stats, false);
+  await importComments(importDir, organizationId, stats, false, yearFilter);
   console.log(`   ✅ Comments: ${stats.commentsCreated} created\n`);
 
   // Step 7: Import Check-ins
   console.log('📥 Step 7: Importing Check-ins...');
-  await importCheckIns(importDir, organizationId, stats, false);
+  await importCheckIns(importDir, organizationId, stats, false, yearFilter);
   console.log(`   ✅ Check-ins: ${stats.checkInsCreated} created\n`);
 
   await prismaService.onModuleDestroy();
@@ -727,9 +798,9 @@ async function main() {
       options.adminPassword!,
     );
 
-    // Step 5: Run import
+    // Step 5: Run import (filter for 2025)
     if (options.importDir && fs.existsSync(options.importDir)) {
-      await runImport(organization.id, adminUser.id, options.importDir);
+      await runImport(organization.id, adminUser.id, options.importDir, 2025);
     } else {
       console.log(`⚠️  Import directory "${options.importDir}" not found, skipping import`);
     }

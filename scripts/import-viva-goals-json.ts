@@ -19,10 +19,15 @@
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as bcrypt from 'bcrypt';
 import { VivaGoalsJSONParserService } from '../services/core-api/src/modules/okr/viva-goals-json-parser.service';
 import { VivaGoalsCSVParserService } from '../services/core-api/src/modules/okr/viva-goals-csv-parser.service';
 import { OkrImportService } from '../services/core-api/src/modules/okr/okr-import.service';
 import { OkrCycleService } from '../services/core-api/src/modules/okr/okr-cycle.service';
+import { CycleGeneratorService } from '../services/core-api/src/modules/okr/cycle-generator.service';
+import { ObjectiveOwnerService } from '../services/core-api/src/modules/okr/objective-owner.service';
+import { KeyResultOwnerService } from '../services/core-api/src/modules/okr/key-result-owner.service';
+import { PhasedTargetService } from '../services/core-api/src/modules/okr/phased-target.service';
 
 // Create a simple PrismaService wrapper for use outside NestJS
 class SimplePrismaService extends PrismaClient {
@@ -42,6 +47,10 @@ interface ImportOptions {
   importDir: string;
   userId?: string; // User ID to use as importer (will create if not provided)
   dryRun?: boolean;
+  truncate?: boolean; // Truncate all tables before import
+  superuserEmail?: string; // Email for superuser to create after truncation
+  superuserName?: string; // Name for superuser
+  superuserPassword?: string; // Password for superuser
 }
 
 interface ImportStats {
@@ -80,6 +89,14 @@ async function main() {
       options.userId = arg.split('=')[1];
     } else if (arg === '--dry-run') {
       options.dryRun = true;
+    } else if (arg === '--truncate') {
+      options.truncate = true;
+    } else if (arg.startsWith('--superuser-email=')) {
+      options.superuserEmail = arg.split('=')[1];
+    } else if (arg.startsWith('--superuser-name=')) {
+      options.superuserName = arg.split('=')[1];
+    } else if (arg.startsWith('--superuser-password=')) {
+      options.superuserPassword = arg.split('=')[1];
     }
   }
 
@@ -96,7 +113,29 @@ async function main() {
   console.log(`\n🚀 Starting Viva Goals JSON Import`);
   console.log(`   Tenant: ${options.tenantSlug}`);
   console.log(`   Import Directory: ${options.importDir}`);
-  console.log(`   Dry Run: ${options.dryRun ? 'YES' : 'NO'}\n`);
+  console.log(`   Dry Run: ${options.dryRun ? 'YES' : 'NO'}`);
+  console.log(`   Truncate: ${options.truncate ? 'YES' : 'NO'}\n`);
+
+  // Step 0: Truncate database if requested
+  if (options.truncate) {
+    console.log('🗑️  Step 0: Truncating database...');
+    await truncateAllTables();
+    console.log('   ✅ Database truncated\n');
+
+    // Create superuser after truncation
+    if (options.superuserEmail && options.superuserName && options.superuserPassword) {
+      console.log('🔐 Creating superuser...');
+      await createSuperuser(
+        options.superuserEmail,
+        options.superuserName,
+        options.superuserPassword,
+      );
+      console.log('   ✅ Superuser created\n');
+    } else {
+      console.log('⚠️  Warning: Truncate was requested but superuser credentials not provided.');
+      console.log('   Use --superuser-email, --superuser-name, and --superuser-password flags.\n');
+    }
+  }
 
   const stats: ImportStats = {
     usersCreated: 0,
@@ -128,33 +167,40 @@ async function main() {
     // Initialize services
     const prismaService = new SimplePrismaService();
     await prismaService.onModuleInit();
-    const cycleService = new OkrCycleService(prismaService as any);
+    const cycleGenerator = new CycleGeneratorService(prismaService as any);
+    const cycleService = new OkrCycleService(prismaService as any, cycleGenerator);
     const csvParser = new VivaGoalsCSVParserService();
+    const objectiveOwnerService = new ObjectiveOwnerService(prismaService as any);
+    const keyResultOwnerService = new KeyResultOwnerService(prismaService as any);
+    const phasedTargetService = new PhasedTargetService(prismaService as any);
     const importService = new OkrImportService(
       prismaService as any,
       csvParser,
       jsonParser,
       cycleService,
+      objectiveOwnerService,
+      keyResultOwnerService,
+      phasedTargetService,
     );
 
     // Step 1: Import Users
     console.log('📥 Step 1: Importing Users...');
-    await importUsers(options.importDir, tenant.id, stats, options.dryRun);
+    await importUsers(options.importDir, tenant.id, stats, options.dryRun ?? false);
     console.log(`   ✅ Users: ${stats.usersCreated} created, ${stats.usersUpdated} updated\n`);
 
     // Step 2: Import Teams
     console.log('📥 Step 2: Importing Teams...');
-    await importTeams(options.importDir, tenant.id, stats, options.dryRun);
+    await importTeams(options.importDir, tenant.id, stats, options.dryRun ?? false);
     console.log(`   ✅ Teams: ${stats.teamsCreated} created, ${stats.teamsUpdated} updated\n`);
 
     // Step 3: Import Time Periods (Cycles)
     console.log('📥 Step 3: Importing Time Periods (Cycles)...');
-    await importCycles(options.importDir, tenant.id, stats, options.dryRun);
+    await importCycles(options.importDir, tenant.id, stats, options.dryRun ?? false);
     console.log(`   ✅ Cycles: ${stats.cyclesCreated} created, ${stats.cyclesUpdated} updated\n`);
 
     // Step 4: Import Tags
     console.log('📥 Step 4: Importing Tags...');
-    await importTags(options.importDir, tenant.id, stats, options.dryRun);
+    await importTags(options.importDir, tenant.id, stats, options.dryRun ?? false);
     console.log(`   ✅ Tags: ${stats.tagsCreated} created\n`);
 
     // Step 5: Import Objectives & Key Results
@@ -188,12 +234,12 @@ async function main() {
 
     // Step 6: Import Comments
     console.log('📥 Step 6: Importing Comments...');
-    await importComments(options.importDir, tenant.id, stats, options.dryRun);
+    await importComments(options.importDir, tenant.id, stats, options.dryRun ?? false);
     console.log(`   ✅ Comments: ${stats.commentsCreated} created\n`);
 
     // Step 7: Import Check-ins
     console.log('📥 Step 7: Importing Check-ins...');
-    await importCheckIns(options.importDir, tenant.id, stats, options.dryRun);
+    await importCheckIns(options.importDir, tenant.id, stats, options.dryRun ?? false);
     console.log(`   ✅ Check-ins: ${stats.checkInsCreated} created\n`);
 
     // Summary
@@ -312,16 +358,49 @@ async function importUsers(dir: string, tenantId: string, stats: ImportStats, dr
               name: vgUser.Name,
             },
           });
+          
+          // Ensure user has TENANT_VIEWER role assignment (for visibility and OKR assignment)
+          const existingRole = await prisma.roleAssignment.findFirst({
+            where: {
+              userId: existing.id,
+              scopeType: 'TENANT',
+              scopeId: tenantId,
+            },
+          });
+          
+          if (!existingRole) {
+            await prisma.roleAssignment.create({
+              data: {
+                userId: existing.id,
+                role: 'TENANT_VIEWER',
+                scopeType: 'TENANT',
+                scopeId: tenantId,
+              },
+            });
+          }
         }
         stats.usersUpdated++;
       } else {
         if (!dryRun) {
-          await prisma.user.create({
-            data: {
-              email: vgUser.Email,
-              name: vgUser.Name,
-              primaryOrganizationId: tenantId,
-            },
+          // Create user and assign default TENANT_VIEWER role in a transaction
+          await prisma.$transaction(async (tx) => {
+            const user = await tx.user.create({
+              data: {
+                email: vgUser.Email,
+                name: vgUser.Name,
+                primaryOrganizationId: tenantId,
+              },
+            });
+            
+            // Assign default TENANT_VIEWER role so user is visible and can be assigned to OKRs
+            await tx.roleAssignment.create({
+              data: {
+                userId: user.id,
+                role: 'TENANT_VIEWER',
+                scopeType: 'TENANT',
+                scopeId: tenantId,
+              },
+            });
           });
         }
         stats.usersCreated++;
@@ -345,7 +424,7 @@ async function importTeams(dir: string, tenantId: string, stats: ImportStats, dr
   // First, get or create a default workspace
   let workspace = await prisma.workspace.findFirst({
     where: {
-      organizationId: tenantId,
+      tenantId: tenantId,
       name: 'Default Workspace',
     },
   });
@@ -354,7 +433,7 @@ async function importTeams(dir: string, tenantId: string, stats: ImportStats, dr
     workspace = await prisma.workspace.create({
       data: {
         name: 'Default Workspace',
-        organizationId: tenantId,
+        tenantId: tenantId,
       },
     });
   }
@@ -406,7 +485,7 @@ async function importCycles(dir: string, tenantId: string, stats: ImportStats, d
     try {
       const existing = await prisma.cycle.findFirst({
         where: {
-          organizationId: tenantId,
+          tenantId: tenantId,
           name: period['Time Period Name'],
         },
       });
@@ -426,7 +505,7 @@ async function importCycles(dir: string, tenantId: string, stats: ImportStats, d
         if (!dryRun) {
           await prisma.cycle.create({
             data: {
-              organizationId: tenantId,
+              tenantId: tenantId,
               name: period['Time Period Name'],
               startDate: new Date(period['Start Date']),
               endDate: new Date(period['End Date']),
@@ -442,7 +521,7 @@ async function importCycles(dir: string, tenantId: string, stats: ImportStats, d
   }
 }
 
-async function importTags(dir: string, tenantId: string, stats: ImportStats, dryRun: boolean) {
+async function importTags(dir: string, _tenantId: string, stats: ImportStats, _dryRun: boolean) {
   const file = findFile(dir, 'tags');
   if (!file) {
     stats.warnings.push('Tags file not found');
@@ -598,6 +677,92 @@ async function importCheckIns(dir: string, tenantId: string, stats: ImportStats,
       stats.checkInsCreated++;
     } catch (error) {
       stats.errors.push(`Check-in ${checkIn.ID}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+
+async function truncateAllTables() {
+  console.log('🔄 Starting database truncation...\n');
+
+  try {
+    // Get all table names (excluding Prisma internal tables)
+    const tables = await prisma.$queryRaw<Array<{ tablename: string }>>`
+      SELECT tablename 
+      FROM pg_tables 
+      WHERE schemaname = 'public' 
+      AND tablename NOT LIKE '_prisma%'
+      ORDER BY tablename;
+    `;
+
+    if (tables.length === 0) {
+      console.log('✅ Database is already empty.\n');
+      return;
+    }
+
+    console.log(`📋 Found ${tables.length} tables to truncate:`);
+    tables.forEach((t) => console.log(`   - ${t.tablename}`));
+
+    // Build TRUNCATE command with CASCADE to handle foreign keys
+    const tableNames = tables.map((t) => `"${t.tablename}"`).join(', ');
+    
+    console.log('\n🗑️  Truncating all tables...');
+    await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${tableNames} RESTART IDENTITY CASCADE;`);
+
+    console.log('\n✅ All tables truncated successfully!');
+    console.log('   Schema preserved - migrations intact.\n');
+  } catch (error) {
+    console.error('\n❌ Error truncating database:', error);
+    throw error;
+  }
+}
+
+async function createSuperuser(email: string, name: string, password: string) {
+  if (!email || !name || !password) {
+    throw new Error('Superuser email, name, and password are required');
+  }
+
+  if (password.length < 8) {
+    throw new Error('Password must be at least 8 characters long');
+  }
+
+  try {
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create superuser
+    const superuser = await prisma.user.create({
+      data: {
+        email,
+        name,
+        passwordHash: hashedPassword,
+        isSuperuser: true,
+      },
+    });
+
+    console.log(`   ✅ Superuser created:`);
+    console.log(`      Email: ${superuser.email}`);
+    console.log(`      Name: ${superuser.name}`);
+    console.log(`      ID: ${superuser.id}`);
+  } catch (error: any) {
+    if (error.code === 'P2002') {
+      // User already exists, update to superuser
+      const existingUser = await prisma.user.findUnique({
+        where: { email },
+      });
+      
+      if (existingUser) {
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            name,
+            passwordHash: await bcrypt.hash(password, 10),
+            isSuperuser: true,
+          },
+        });
+        console.log(`   ✅ Updated existing user ${email} to superuser`);
+      }
+    } else {
+      throw error;
     }
   }
 }

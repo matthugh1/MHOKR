@@ -37,27 +37,12 @@ export class UserService {
       });
     }
 
-    // Normal user: only return users in their tenant
-    // Get all users who have a tenant role assignment for this organisation
-    const tenantAssignments = await this.prisma.roleAssignment.findMany({
-      where: {
-        scopeType: 'TENANT',
-        scopeId: userOrganizationId,
-      },
-      select: {
-        userId: true,
-      },
-    });
-
-    const userIds = tenantAssignments.map(ta => ta.userId);
-
-    if (userIds.length === 0) {
-      return [];
-    }
-
+    // Normal user: return all users in their tenant
+    // For tenant admins, they should see all users whose primaryOrganizationId matches
+    // For regular users, they also see all users in their organization (tenant isolation)
     return this.prisma.user.findMany({
       where: {
-        id: { in: userIds },
+        primaryOrganizationId: userOrganizationId,
       },
       select: {
         id: true,
@@ -196,7 +181,8 @@ export class UserService {
 
     // Check if user is TENANT_ADMIN or TENANT_OWNER - they should see all workspaces in their tenant
     const tenantRoles = rbacContext.tenantRoles.get(user.primaryOrganizationId || '') || new Set();
-    const isTenantAdmin = tenantRoles.has('TENANT_ADMIN') || tenantRoles.has('TENANT_OWNER');
+    const tenantRolesSet = tenantRoles instanceof Set ? tenantRoles : new Set(tenantRoles);
+    const isTenantAdmin = tenantRolesSet.has('TENANT_ADMIN') || tenantRolesSet.has('TENANT_OWNER');
 
     let directWorkspaces: any[] = [];
 
