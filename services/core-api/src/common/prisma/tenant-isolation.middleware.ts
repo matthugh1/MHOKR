@@ -9,6 +9,9 @@
 
 import { Prisma } from '@prisma/client';
 import { AsyncLocalStorage } from 'async_hooks';
+import { Logger } from '@nestjs/common';
+
+const logger = new Logger('TenantIsolationMiddleware');
 
 // Tenant context stored in AsyncLocalStorage
 export const tenantContext = new AsyncLocalStorage<{
@@ -23,7 +26,7 @@ export function getTenantContext(): string | null | undefined {
   const tenantId = store?.tenantId;
   // Log for debugging (can be removed later)
   if (tenantId === undefined) {
-    console.warn('[getTenantContext] No tenant context found in AsyncLocalStorage');
+    logger.warn('No tenant context found in AsyncLocalStorage');
   }
   return tenantId;
 }

@@ -4,8 +4,10 @@
  * Decorators for specifying RBAC requirements on routes.
  */
 
-import { SetMetadata } from '@nestjs/common';
+import { SetMetadata, Logger } from '@nestjs/common';
 import { Action, ResourceContext } from './types';
+
+const logger = new Logger('RBACDecorator');
 
 export const RBAC_ACTION_KEY = 'rbac:action';
 export const RBAC_RESOURCE_CONTEXT_KEY = 'rbac:resourceContext';
@@ -40,7 +42,7 @@ export const RequireActionWithContext = (
 ) => {
   return (target: any, propertyKey?: string | symbol, descriptor?: PropertyDescriptor) => {
     if (propertyKey !== undefined && descriptor !== undefined) {
-      console.log('[RBAC DECORATOR] RequireActionWithContext applied', {
+      logger.debug('RequireActionWithContext applied', {
         className: target.constructor?.name,
         methodName: String(propertyKey),
         action,
@@ -58,9 +60,9 @@ export const RequireActionWithContext = (
         descriptor,
       );
       
-      console.log('[RBAC DECORATOR] Metadata set successfully');
+      logger.debug('Metadata set successfully');
     } else {
-      console.warn('[RBAC DECORATOR] RequireActionWithContext: propertyKey or descriptor is undefined', {
+      logger.warn('RequireActionWithContext: propertyKey or descriptor is undefined', {
         hasPropertyKey: propertyKey !== undefined,
         hasDescriptor: descriptor !== undefined,
       });

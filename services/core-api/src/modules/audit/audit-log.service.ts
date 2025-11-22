@@ -6,7 +6,7 @@
  * must be logged via this service.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditTargetType, RBACRole } from '@prisma/client';
 
@@ -24,6 +24,8 @@ export interface AuditLogRecordParams {
 
 @Injectable()
 export class AuditLogService {
+  private readonly logger = new Logger(AuditLogService.name);
+
   constructor(private prisma: PrismaService) {}
 
   /**
@@ -47,7 +49,7 @@ export class AuditLogService {
     } catch (error) {
       // Log error but don't fail the operation
       // In production, consider sending to external logging service
-      console.error('[AuditLogService] Failed to record audit log:', error);
+      this.logger.error('Failed to record audit log', { error });
     }
   }
 }

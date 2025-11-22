@@ -5,7 +5,10 @@
  * All permission changes, impersonation events, and critical operations must be logged.
  */
 
+import { Logger } from '@nestjs/common';
 import { AuditLog, Action, Role } from './types';
+
+const logger = new Logger('RBACAudit');
 
 /**
  * Actions that MUST be audited
@@ -59,8 +62,8 @@ export async function recordAuditEvent(event: AuditLog): Promise<void> {
   // TODO [phase7-hardening]: Implement actual audit logging for RBAC changes for audit/compliance visibility
   // This should write to the database and/or external logging service
   
-  // For now, log to console (in production, this should be removed or sent to logging service)
-  console.log('[AUDIT]', {
+  // For now, log using Logger (in production, this should be sent to external logging service)
+  logger.log('Audit event', {
     id: event.id,
     actorUserId: event.actorUserId,
     action: event.action,
