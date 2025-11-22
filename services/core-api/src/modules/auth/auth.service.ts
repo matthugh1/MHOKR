@@ -96,10 +96,10 @@ export class AuthService {
     } catch (error) {
       // If RBAC assignment fails, rollback user creation
       // User cannot authenticate without role assignments
-      console.error(`Failed to assign RBAC roles for new user ${user.id} during registration:`, error);
+      // Don't log user ID - security best practice
       await this.prisma.user.delete({ where: { id: user.id } }).catch(() => {
-        // If deletion fails, log but don't throw - user is in inconsistent state
-        console.error(`Failed to rollback user creation for ${user.id} after RBAC assignment failure`);
+        // If deletion fails, silently continue - user is in inconsistent state
+        // Logging removed for security
       });
       throw new ConflictException('Failed to create user: role assignment failed. Please try again.');
     }
@@ -138,12 +138,12 @@ export class AuthService {
     });
 
     if (!user) {
-      console.warn(`[AUTH] Login failed: User not found for email: ${normalizedEmail}`);
+      // Don't log email address - security best practice
       throw new UnauthorizedException('Invalid credentials');
     }
 
     if (!user.passwordHash) {
-      console.warn(`[AUTH] Login failed: User ${user.id} (${normalizedEmail}) has no password hash`);
+      // Don't log user ID or email - security best practice
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -151,7 +151,7 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
 
     if (!isPasswordValid) {
-      console.warn(`[AUTH] Login failed: Invalid password for user ${user.id} (${normalizedEmail})`);
+      // Don't log user ID or email - security best practice
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -169,7 +169,7 @@ export class AuthService {
       });
 
       if (!tenantAssignment) {
-        console.warn(`[AUTH] Login failed: User ${user.id} (${normalizedEmail}) has no tenant role assignments`);
+        // Don't log user ID or email - security best practice
         throw new UnauthorizedException('User account is not properly configured. Please contact support.');
       }
     }

@@ -11,6 +11,7 @@ import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 import { UpdateWeightDto } from './dto/update-weight.dto';
 import { ReviewObjectiveDto } from './dto/review-objective.dto';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AuthenticatedRequest } from '../../common/types/request.types';
 
 @ApiTags('Objectives')
 @Controller('objectives')
@@ -33,17 +34,24 @@ export class ObjectiveController {
 
   @Get()
   @RequireAction('view_okr')
-  @ApiOperation({ summary: 'Get all objectives' })
+  @ApiOperation({ summary: 'Get all objectives (paginated)' })
   async getAll(
     @Query('workspaceId') workspaceId: string | undefined,
     @Query('pillarId') pillarId: string | undefined,
-    @Req() req: any
+    @Query('page') page: string | undefined,
+    @Query('pageSize') pageSize: string | undefined,
+    @Req() req: AuthenticatedRequest
   ) {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const pageSizeNum = pageSize ? parseInt(pageSize, 10) : 50;
+    
     return this.objectiveService.findAll(
       req.user.id,
       workspaceId,
       req.user.tenantId, // null = superuser
-      pillarId
+      pillarId,
+      pageNum,
+      pageSizeNum
     );
   }
 
@@ -52,7 +60,7 @@ export class ObjectiveController {
   @Get(':id')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get objective by ID (tenant-isolated)' })
-  async getById(@Param('id') id: string, @Req() req: any) {
+  async getById(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     // Check if user can view this OKR (RBAC permission check)
     const canView = await this.objectiveService.canView(req.user.id, id);
     if (!canView) {
@@ -66,7 +74,7 @@ export class ObjectiveController {
   @UseGuards(RateLimitGuard)
   @RequireAction('create_okr')
   @ApiOperation({ summary: 'Create objective' })
-  async create(@Body() data: any, @Req() req: any) {
+  async create(@Body() data: any, @Req() req: AuthenticatedRequest) {
     // Ensure ownerId matches the authenticated user (or check permission)
     if (!data.ownerId) {
       data.ownerId = req.user.id;
@@ -117,7 +125,7 @@ export class ObjectiveController {
     return resourceContext;
   })
   @ApiOperation({ summary: 'Update objective', description: 'Emits activity events (UPDATED, STATE_CHANGE if state transitions) and audit logs.' })
-  async update(@Param('id') id: string, @Body() data: any, @Req() req: any) {
+  async update(@Param('id') id: string, @Body() data: any, @Req() req: AuthenticatedRequest) {
     // Superuser can edit everything - no restriction
     
     // Additional permission check is handled by the guard via RequireActionWithContext
@@ -145,7 +153,7 @@ export class ObjectiveController {
   @UseGuards(RateLimitGuard)
   @RequireAction('delete_okr')
   @ApiOperation({ summary: 'Delete objective', description: 'Emits activity event (DELETED) and audit log entry.' })
-  async delete(@Param('id') id: string, @Req() req: any) {
+  async delete(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     const canDelete = await this.objectiveService.canDelete(
       req.user.id,
       id,
@@ -204,7 +212,7 @@ export class ObjectiveController {
     @Param('id') objectiveId: string,
     @Param('keyResultId') keyResultId: string,
     @Body() dto: UpdateWeightDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.objectiveService.updateKeyResultWeight(
       objectiveId,
@@ -230,7 +238,7 @@ export class ObjectiveController {
   async addTag(
     @Param('id') objectiveId: string,
     @Body() body: { tagId: string },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.objectiveService.addTag(
       objectiveId,
@@ -250,7 +258,7 @@ export class ObjectiveController {
   async removeTag(
     @Param('id') objectiveId: string,
     @Param('tagId') tagId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.objectiveService.removeTag(
       objectiveId,
@@ -267,7 +275,7 @@ export class ObjectiveController {
   @ApiResponse({ status: 404, description: 'Objective not found' })
   async listTags(
     @Param('id') objectiveId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.objectiveService.listTags(objectiveId, req.user.tenantId);
   }
@@ -287,7 +295,7 @@ export class ObjectiveController {
   async addContributor(
     @Param('id') objectiveId: string,
     @Body() body: { userId: string },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.objectiveService.addContributor(
       objectiveId,
@@ -307,7 +315,7 @@ export class ObjectiveController {
   async removeContributor(
     @Param('id') objectiveId: string,
     @Param('userId') userId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.objectiveService.removeContributor(
       objectiveId,
@@ -324,7 +332,7 @@ export class ObjectiveController {
   @ApiResponse({ status: 404, description: 'Objective not found' })
   async listContributors(
     @Param('id') objectiveId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.objectiveService.listContributors(objectiveId, req.user.tenantId);
   }
@@ -350,7 +358,7 @@ export class ObjectiveController {
   async addOwner(
     @Param('id') objectiveId: string,
     @Body() body: { userId: string },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     // Check if user can edit this OKR
     const canEdit = await this.objectiveService.canEdit(
@@ -387,7 +395,7 @@ export class ObjectiveController {
   async removeOwner(
     @Param('id') objectiveId: string,
     @Param('userId') userId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     // Check if user can edit this OKR
     const canEdit = await this.objectiveService.canEdit(
@@ -415,7 +423,7 @@ export class ObjectiveController {
   @ApiResponse({ status: 404, description: 'Objective not found' })
   async listOwners(
     @Param('id') objectiveId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.objectiveOwnerService.getOwners(objectiveId, req.user.tenantId!);
   }
@@ -434,7 +442,7 @@ export class ObjectiveController {
   async updateSponsor(
     @Param('id') objectiveId: string,
     @Body() body: { sponsorId: string | null },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.objectiveService.updateSponsor(
       objectiveId,
@@ -458,7 +466,7 @@ export class ObjectiveController {
   async reviewObjective(
     @Param('id') id: string,
     @Body() dto: ReviewObjectiveDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     const canEdit = await this.objectiveService.canEdit(
       req.user.id,
@@ -511,7 +519,7 @@ export class ObjectiveController {
   @ApiResponse({ status: 404, description: 'Objective not found' })
   async getProgressTrend(
     @Param('id') id: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.objectiveService.getProgressTrend(id, req.user.tenantId);
   }
@@ -561,7 +569,7 @@ export class ObjectiveController {
   @ApiResponse({ status: 404, description: 'Objective not found' })
   async getProgressContribution(
     @Param('id') id: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     // Verify user can view this objective (tenant isolation check)
     const objective = await this.objectiveService.findById(id, req.user.tenantId);

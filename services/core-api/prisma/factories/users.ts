@@ -19,14 +19,29 @@ export interface UserSeedData {
   rbacInspector?: boolean;
 }
 
-const DEFAULT_PASSWORD = 'changeme';
+/**
+ * Get default password from environment variable or throw error
+ * This ensures passwords are not hardcoded in the codebase
+ */
+function getDefaultPassword(): string {
+  const password = process.env.DEFAULT_PASSWORD;
+  if (!password || password.trim() === '') {
+    throw new Error(
+      'DEFAULT_PASSWORD environment variable is not set. ' +
+      'Please set DEFAULT_PASSWORD in your environment variables or .env file. ' +
+      'This is used for seeding test users only.',
+    );
+  }
+  return password;
+}
 
 export async function createUser(
   prisma: PrismaClient,
   data: UserSeedData,
 ): Promise<string> {
   const userId = generateUserId(data.email);
-  const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
+  const defaultPassword = getDefaultPassword();
+  const passwordHash = await bcrypt.hash(defaultPassword, 10);
   
   const settings = data.rbacInspector
     ? { debug: { rbacInspectorEnabled: true } }

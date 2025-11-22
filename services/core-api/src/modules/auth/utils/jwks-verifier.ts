@@ -40,7 +40,15 @@ export class JwksVerifier {
     this.keycloakUrl = this.configService.get<string>('KEYCLOAK_URL') || null;
     this.keycloakRealm = this.configService.get<string>('KEYCLOAK_REALM') || null;
     this.keycloakClientId = this.configService.get<string>('KEYCLOAK_CLIENT_ID') || null;
-    this.jwtSecret = this.configService.get<string>('JWT_SECRET') || 'default-secret';
+    
+    const jwtSecret = this.configService.get<string>('JWT_SECRET');
+    if (!jwtSecret || jwtSecret === 'default-secret') {
+      throw new Error(
+        'JWT_SECRET must be set and cannot be "default-secret". ' +
+        'Please set a secure value in your environment variables.',
+      );
+    }
+    this.jwtSecret = jwtSecret;
     
     // DEV_BYPASS_AUTH: Only allowed in development mode - NOT FOR PROD
     const nodeEnv = this.configService.get<string>('NODE_ENV') || 'development';

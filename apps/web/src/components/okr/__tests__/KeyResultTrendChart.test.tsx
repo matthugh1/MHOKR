@@ -27,7 +27,7 @@ describe('KeyResultTrendChart', () => {
   })
 
   it('renders loading state initially', () => {
-    ;(api.get as jest.Mock).mockImplementation(() => new Promise(() => {})) // Never resolves
+    (api.get as jest.Mock).mockImplementation(() => new Promise(() => {})) // Never resolves
 
     render(<KeyResultTrendChart keyResultId="kr-1" />)
     
@@ -68,7 +68,7 @@ describe('KeyResultTrendChart', () => {
   })
 
   it('displays empty state when no data', async () => {
-    ;(api.get as jest.Mock).mockResolvedValue({ data: [] })
+    (api.get as jest.Mock).mockResolvedValue({ data: [] })
 
     render(<KeyResultTrendChart keyResultId="kr-1" />)
     
@@ -78,7 +78,7 @@ describe('KeyResultTrendChart', () => {
   })
 
   it('handles 403 error gracefully', async () => {
-    ;(api.get as jest.Mock).mockRejectedValue({
+    (api.get as jest.Mock).mockRejectedValue({
       response: { status: 403, data: { message: 'Forbidden' } },
     })
 
@@ -90,7 +90,7 @@ describe('KeyResultTrendChart', () => {
   })
 
   it('handles 404 error gracefully', async () => {
-    ;(api.get as jest.Mock).mockRejectedValue({
+    (api.get as jest.Mock).mockRejectedValue({
       response: { status: 404, data: { message: 'Not found' } },
     })
 
@@ -102,7 +102,7 @@ describe('KeyResultTrendChart', () => {
   })
 
   it('handles network errors gracefully', async () => {
-    ;(api.get as jest.Mock).mockRejectedValue(new Error('Network error'))
+    (api.get as jest.Mock).mockRejectedValue(new Error('Network error'))
 
     render(<KeyResultTrendChart keyResultId="kr-1" />)
     

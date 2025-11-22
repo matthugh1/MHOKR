@@ -28,7 +28,12 @@ export class KeyResultService {
     private stateTransitionService: OkrStateTransitionService,
   ) {}
 
-  async findAll(_userId: string, objectiveId?: string) {
+  async findAll(
+    _userId: string,
+    objectiveId?: string,
+    page: number = 1,
+    pageSize: number = 50,
+  ) {
     // Return all key results globally - filtering happens in UI, not backend
     // Only PRIVATE OKRs are restricted (handled by canView() check on individual access)
     const where: any = {};
@@ -46,8 +51,19 @@ export class KeyResultService {
     // All KRs are globally visible by default.
     // VisibilityLevel = PRIVATE is the only exception (checked per-KR via canView())
 
-    return this.prisma.keyResult.findMany({
+    // Validate and clamp pagination parameters
+    const validatedPage = Math.max(1, Math.floor(page));
+    const validatedPageSize = Math.min(200, Math.max(1, Math.floor(pageSize)));
+    const skip = (validatedPage - 1) * validatedPageSize;
+
+    // Get total count for pagination metadata
+    const total = await this.prisma.keyResult.count({ where });
+
+    // Fetch paginated results
+    const data = await this.prisma.keyResult.findMany({
       where,
+      skip,
+      take: validatedPageSize,
       include: {
         objectives: {
           include: {
@@ -55,7 +71,20 @@ export class KeyResultService {
           },
         },
       },
+      orderBy: {
+        createdAt: 'desc', // Most recent first
+      },
     });
+
+    return {
+      data,
+      pagination: {
+        page: validatedPage,
+        pageSize: validatedPageSize,
+        total,
+        totalPages: Math.ceil(total / validatedPageSize),
+      },
+    };
   }
 
   async findById(id: string) {

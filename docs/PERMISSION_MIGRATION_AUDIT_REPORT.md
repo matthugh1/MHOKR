@@ -115,7 +115,7 @@
 
 ## Migration Script Status
 
-**File:** `services/core-api/scripts/migrate-rbac.ts` ✅
+**File:** `scripts/migrate/migrate-rbac.ts` ✅
 - ✅ Script exists and uses raw SQL queries for legacy tables
 - ✅ Correctly handles legacy tables that are no longer in Prisma schema
 - ✅ Uses `RBACMigrationService` correctly

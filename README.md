@@ -47,9 +47,9 @@ Dashboard-grade components with permission-aware UI:
 
 ## Development
 
-- **[Contributing Guide](CONTRIBUTING.md)** - Branch naming, TODO tags, backend/frontend rules
-- **[Coding Standards](CODING_STANDARDS.md)** - Service responsibilities, component usage, styling tokens
-- **[Release Checklist](RELEASE_CHECKLIST.md)** - Pre-merge verification and testing requirements
+- **[Contributing Guide](docs/developer/CONTRIBUTING.md)** - Branch naming, TODO tags, backend/frontend rules
+- **[Coding Standards](docs/developer/CODING_STANDARDS.md)** - Service responsibilities, component usage, styling tokens
+- **[Release Checklist](docs/developer/RELEASE_CHECKLIST.md)** - Pre-merge verification and testing requirements
 
 ## Quick Start
 

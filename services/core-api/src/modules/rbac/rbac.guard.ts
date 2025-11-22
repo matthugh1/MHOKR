@@ -45,7 +45,7 @@ export class RBACGuard implements CanActivate {
 
     // Try to get resourceContextFn from handler first, then class
     // Use getAllAndOverride to check both handler and class, but prefer handler
-    let resourceContextFn = this.reflector.getAllAndOverride<
+    const resourceContextFn = this.reflector.getAllAndOverride<
       (request: any) => ResourceContext | Promise<ResourceContext>
     >(RBAC_RESOURCE_CONTEXT_KEY, [context.getHandler(), context.getClass()]);
     

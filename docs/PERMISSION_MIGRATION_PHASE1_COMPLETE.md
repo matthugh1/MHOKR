@@ -98,7 +98,7 @@ curl -X POST http://localhost:3001/rbac/migration/all \
 
 # Or via script
 cd services/core-api
-npx ts-node scripts/migrate-rbac.ts
+npx ts-node scripts/migrate/migrate-rbac.ts
 ```
 
 ### Phase 3 (Future): Remove Legacy Writes

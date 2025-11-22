@@ -25,15 +25,22 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     private authService: AuthService,
     private featureFlagService: FeatureFlagService,
   ) {
+    const jwtSecret = configService.get<string>('JWT_SECRET');
+    if (!jwtSecret || jwtSecret === 'default-secret') {
+      throw new Error(
+        'JWT_SECRET must be set and cannot be "default-secret". ' +
+        'Please set a secure value in your environment variables.',
+      );
+    }
+    
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       // Use JWT_SECRET for HS256 tokens - RS256 tokens are handled in authenticate override
-      secretOrKey: configService.get<string>('JWT_SECRET') || 'default-secret',
+      secretOrKey: jwtSecret,
       // IMPORTANT: Pass jwtFromRequest to authenticate override
       passReqToCallback: false,
     });
-    console.log('[JWT STRATEGY] Constructor called, JWT_SECRET length:', (configService.get<string>('JWT_SECRET') || 'default-secret').length);
   }
 
   // NOTE: We removed the authenticate override to use Passport's default flow.
@@ -54,30 +61,19 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     // If verification fails, authenticate() will throw UnauthorizedException.
     // NOTE: If authenticate() is not called (Passport default flow), payload comes from default JWT verification
     
-    console.log('[JWT STRATEGY] validate called with payload:', { 
-      sub: payload?.sub, 
-      email: payload?.email,
-      hasSub: !!payload?.sub,
-      payloadKeys: payload ? Object.keys(payload) : []
-    });
-    
     // Extract user ID from verified payload
     const userId = payload?.sub;
     if (!userId) {
-      console.error('[JWT STRATEGY] Token missing subject (sub), payload:', payload);
       throw new UnauthorizedException('Token missing subject (sub)');
     }
 
     // Validate user exists in database
     // auth.service.validateUser() MUST NOT trust unverified data.
     // We only call it after token is cryptographically verified.
-    console.log('[JWT STRATEGY] Validating user:', userId);
     const user = await this.authService.validateUser(userId);
     if (!user) {
-      console.error('[JWT STRATEGY] User not found in database:', userId);
       throw new UnauthorizedException('User not found');
     }
-    console.log('[JWT STRATEGY] User validated:', { id: user.id, email: user.email, isSuperuser: user.isSuperuser });
     
     // Superuser => tenantId: null (global read-only; can view all organisations)
     if (user.isSuperuser) {
@@ -91,7 +87,6 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     // Users can only access their primary organization. Multi-tenant access is disabled.
     // Roles determine permissions within the primary organization.
     if (!user.primaryOrganizationId) {
-      console.error(`[JWT STRATEGY] User ${user.id} (${user.email}) has no primaryOrganizationId - user account is not properly configured`);
       throw new UnauthorizedException('User account is not properly configured. Please contact support.');
     }
     

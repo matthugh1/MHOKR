@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { OkrRowSkeleton } from '@/components/ui/skeletons'
 import { mapErrorToMessage } from '@/lib/error-mapping'
+import { mapObjectiveData } from '@/lib/utils/mapObjectiveData'
 
 interface OKRPageContainerProps {
   availableUsers: any[]
@@ -96,164 +97,7 @@ function mapObjectiveToViewModel(rawObjective: any): any {
   }
 }
 
-function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[], overdueCheckIns: Array<{ krId: string; objectiveId: string }>) {
-  const cycle = rawObj.cycle || (rawObj.cycleId ? activeCycles.find(c => c.id === rawObj.cycleId) : null)
-  const cycleName = cycle?.name ?? rawObj.cycleName ?? undefined
-  const cycleStatus = rawObj.cycleStatus || (cycle?.status ?? 'ACTIVE')
-  
-  let cycleLabel = cycleName || 'Unassigned'
-  if (cycleStatus === 'DRAFT' && cycleName) {
-    cycleLabel = `${cycleName} (draft)`
-  }
-  
-  const keyResults = (rawObj.keyResults || []).map((kr: any): any => {
-    const krId = kr.keyResultId || kr.id
-    const isOverdue = overdueCheckIns.some(item => item.krId === krId)
-    
-    // Extract KR data - handle both junction table format and direct format
-    const krData = kr.keyResult || kr
-    const weight = kr.weight ?? 1.0 // Extract weight from junction table, default to 1.0
-    
-    // Calculate last check-in date and next check-in due from check-ins if available
-    let lastCheckInDate: string | null = null
-    let nextCheckInDue: string | null = null
-    
-    const checkIns = krData.checkIns || kr.checkIns
-    if (checkIns && Array.isArray(checkIns) && checkIns.length > 0) {
-      // Get the most recent check-in
-      const latestCheckIn = checkIns[0]
-      lastCheckInDate = latestCheckIn.createdAt || null
-      
-      // Calculate next check-in due based on cadence
-      const cadence = krData.checkInCadence || kr.cadence
-      if (cadence && cadence !== 'NONE' && lastCheckInDate) {
-        const lastCheckIn = new Date(lastCheckInDate)
-        let daysBetween = 7
-        switch (cadence) {
-          case 'WEEKLY':
-            daysBetween = 7
-            break
-          case 'BIWEEKLY':
-            daysBetween = 14
-            break
-          case 'MONTHLY':
-            daysBetween = 30 // Match backend: check-in-due-calculator.ts uses 30 days
-            break
-        }
-        const nextDue = new Date(lastCheckIn.getTime() + daysBetween * 24 * 60 * 60 * 1000)
-        nextCheckInDue = nextDue.toISOString()
-      }
-    }
-    
-    return {
-      id: krId,
-      title: krData.title || kr.title,
-      status: krData.status || kr.status,
-      progress: krData.progress ?? kr.progress ?? 0,
-      currentValue: krData.currentValue ?? kr.currentValue,
-      targetValue: krData.targetValue ?? kr.targetValue,
-      startValue: krData.startValue ?? kr.startValue,
-      unit: krData.unit || kr.unit,
-      checkInCadence: krData.checkInCadence || kr.cadence,
-      isOverdue,
-      ownerId: krData.ownerId || kr.ownerId,
-      lastCheckInDate,
-      nextCheckInDue,
-      canCheckIn: kr.canCheckIn !== undefined ? kr.canCheckIn : false,
-      weight, // Include weight from junction table
-    }
-  })
-  
-  const overdueCountForObjective = rawObj.overdueCheckInsCount !== undefined 
-    ? rawObj.overdueCheckInsCount 
-    : keyResults.filter((kr: any) => kr.isOverdue).length
-  
-  const lowestConfidence = rawObj.latestConfidencePct !== undefined 
-    ? rawObj.latestConfidencePct 
-    : null
-  
-  // Collect initiatives from both sources and deduplicate by ID
-  // An initiative can be linked to both an Objective AND a Key Result, so it appears in both arrays
-  const seenInitIds = new Set<string>()
-  const allInitiatives: any[] = []
-  
-  // First, add initiatives from Key Results (they have KR context which is more useful)
-  ;(rawObj.keyResults || []).forEach((kr: any) => {
-    (kr.initiatives || []).forEach((init: any) => {
-      if (!seenInitIds.has(init.id)) {
-        seenInitIds.add(init.id)
-        allInitiatives.push({
-          ...init,
-          keyResultId: kr.keyResultId || kr.id,
-          keyResultTitle: kr.title,
-        })
-      }
-    })
-  })
-  
-  // Then, add objective-only initiatives (skip if already seen from KR)
-  ;(rawObj.initiatives || []).forEach((init: any) => {
-    if (!seenInitIds.has(init.id)) {
-      seenInitIds.add(init.id)
-      allInitiatives.push({
-        ...init,
-        keyResultId: init.keyResultId,
-        keyResultTitle: init.keyResultTitle,
-      })
-    }
-  })
-  
-  const initiatives = allInitiatives.map((init: any) => ({
-    id: init.id,
-    title: init.title,
-    description: init.description || undefined,
-    status: init.status,
-    dueDate: init.dueDate,
-    keyResultId: init.keyResultId,
-    keyResultTitle: init.keyResultTitle,
-    ownerId: init.ownerId || undefined,
-    createdAt: init.createdAt || undefined,
-    updatedAt: init.updatedAt || undefined,
-  }))
-  
-    const owner = rawObj.owner || availableUsers.find(u => u.id === rawObj.ownerId)
-  
-    // W4.M1: Map publishState from backend response (new field)
-    // Falls back to isPublished boolean for backward compatibility
-    const publishState = rawObj.publishState || (rawObj.isPublished ? 'PUBLISHED' : 'DRAFT')
-    
-    return {
-      id: rawObj.objectiveId || rawObj.id,
-      title: rawObj.title,
-      status: rawObj.status || 'ON_TRACK',
-      publishState, // W4.M1: New field
-      isPublished: rawObj.isPublished ?? false, // Kept for backward compatibility
-      visibilityLevel: rawObj.visibilityLevel,
-    cycleName,
-    cycleLabel,
-    cycleStatus,
-    owner: {
-      id: rawObj.ownerId || owner?.id,
-      name: owner?.name || owner?.email || 'Unassigned',
-      email: owner?.email || null,
-    },
-    progress: rawObj.progress ?? 0,
-    keyResults,
-    initiatives,
-    overdueCountForObjective,
-    lowestConfidence,
-    parentId: rawObj.parentId || null, // Add parentId for hierarchy
-    ownerId: rawObj.ownerId,
-    tenantId: rawObj.tenantId || rawObj.organizationId, // Use tenantId from backend, fallback to organizationId
-    organizationId: rawObj.organizationId, // Keep for backward compatibility
-    workspaceId: rawObj.workspaceId,
-    teamId: rawObj.teamId,
-    cycleId: rawObj.cycle?.id || rawObj.cycleId,
-    pillarId: rawObj.pillarId || null,
-    canEdit: rawObj.canEdit !== undefined ? rawObj.canEdit : false,
-    canDelete: rawObj.canDelete !== undefined ? rawObj.canDelete : false,
-  }
-}
+// mapObjectiveData is now imported from shared utility
 
 export function OKRPageContainer({
   availableUsers,
@@ -397,7 +241,10 @@ export function OKRPageContainer({
       
       const mapped = Array.isArray(objectives) ? objectives.map((obj: any) => {
         try {
-          return mapObjectiveData(obj, availableUsers, activeCycles, overdueCheckIns)
+          return mapObjectiveData(obj, availableUsers, activeCycles, overdueCheckIns, {
+            includeCheckInDates: true,
+            useParentObjectiveId: false,
+          })
         } catch (error) {
           console.error('[OKR PAGE CONTAINER] Error mapping objective:', obj.id, error)
           // Return a minimal valid objective structure to prevent crashes
@@ -549,7 +396,10 @@ export function OKRPageContainer({
       const canEdit = okr.canEdit !== undefined ? okr.canEdit : false
       const canDelete = okr.canDelete !== undefined ? okr.canDelete : false
       
-      const normalised = mapObjectiveData(okr, availableUsers, activeCycles, overdueCheckIns)
+      const normalised = mapObjectiveData(okr, availableUsers, activeCycles, overdueCheckIns, {
+        includeCheckInDates: true,
+        useParentObjectiveId: false,
+      })
       
       // Backend already filtered visible key results and provides canCheckIn flags
       const visibleKeyResults = normalised.keyResults

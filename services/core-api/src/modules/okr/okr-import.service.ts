@@ -949,7 +949,7 @@ export class OkrImportService {
     const trimmedName = name.trim();
 
     // Try exact match first
-    let user = await this.prisma.user.findFirst({
+    const user = await this.prisma.user.findFirst({
       where: {
         name: {
           equals: trimmedName,
@@ -1010,7 +1010,15 @@ export class OkrImportService {
       }
 
       // Create new user with role assignment
-      const defaultPassword = 'changeme'; // Default password for imported users
+      // Use environment variable for default password - ensures no hardcoded passwords
+      const defaultPassword = process.env.DEFAULT_PASSWORD || process.env.IMPORT_DEFAULT_PASSWORD;
+      if (!defaultPassword || defaultPassword.trim() === '') {
+        throw new Error(
+          'DEFAULT_PASSWORD or IMPORT_DEFAULT_PASSWORD environment variable is not set. ' +
+          'Please set one of these in your environment variables or .env file. ' +
+          'This is used for creating users during import.',
+        );
+      }
       const passwordHash = await bcrypt.hash(defaultPassword, 10);
 
       const newUser = await this.prisma.$transaction(async (tx) => {

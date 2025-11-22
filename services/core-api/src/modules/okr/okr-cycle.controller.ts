@@ -18,12 +18,16 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
 import { RBACService } from '../rbac/rbac.service';
 import { OkrTenantGuard } from './tenant-guard';
+import { AuthenticatedRequest } from '../../common/types/request.types';
+import { Logger } from '@nestjs/common';
 
 @ApiTags('OKR Cycles')
 @Controller('okr/cycles')
 @UseGuards(JwtAuthGuard, RBACGuard)
 @ApiBearerAuth()
 export class OkrCycleController {
+  private readonly logger = new Logger(OkrCycleController.name);
+
   constructor(
     private readonly cycleService: OkrCycleService,
     private readonly rbacService: RBACService,
@@ -52,9 +56,9 @@ export class OkrCycleController {
   async getOrCreateStandard(
     @Query('type') type: 'MONTH' | 'QUARTER' | 'YEAR',
     @Query('date') date: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
-    console.log('[CYCLE CONTROLLER] get-or-create-standard endpoint hit', { type, date });
+    this.logger.debug('get-or-create-standard endpoint hit', { type, date });
     
     await this.checkCycleManagementPermission(req);
     
@@ -106,8 +110,8 @@ export class OkrCycleController {
   // This route must come last to avoid matching conflicts with specific routes
   @Get(':id')
   @ApiOperation({ summary: 'Get cycle by ID' })
-  async getById(@Param('id') id: string, @Req() req: any) {
-    console.log('[CYCLE CONTROLLER] getById endpoint hit', { id });
+  async getById(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    this.logger.debug('getById endpoint hit', { id });
     
     // Guard: Don't allow 'get-or-create-standard' as an ID
     if (id === 'get-or-create-standard') {
@@ -147,7 +151,7 @@ export class OkrCycleController {
   async update(
     @Param('id') id: string,
     @Body() data: UpdateCycleDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     await this.checkCycleManagementPermission(req);
     
@@ -166,7 +170,7 @@ export class OkrCycleController {
   async updateStatus(
     @Param('id') id: string,
     @Body() body: { status: 'DRAFT' | 'ACTIVE' | 'LOCKED' | 'ARCHIVED' },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     await this.checkCycleManagementPermission(req);
     
@@ -203,7 +207,7 @@ export class OkrCycleController {
    * Check if user has either manage_workspaces OR manage_tenant_settings permission
    * Allows both TENANT_OWNER and TENANT_ADMIN to manage cycles
    */
-  private async checkCycleManagementPermission(req: any): Promise<void> {
+  private async checkCycleManagementPermission(req: AuthenticatedRequest): Promise<void> {
     const userId = req.user.id;
     const tenantId = req.user.tenantId;
     

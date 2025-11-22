@@ -28,14 +28,29 @@ export class ObjectiveService {
     private stateTransitionService: OkrStateTransitionService,
   ) {}
 
-  async findAll(_userId: string, workspaceId: string | undefined, userTenantId: string | null, pillarId?: string) {
+  async findAll(
+    _userId: string,
+    workspaceId: string | undefined,
+    userTenantId: string | null,
+    pillarId?: string,
+    page: number = 1,
+    pageSize: number = 50,
+  ) {
     const where: any = {};
 
     // Tenant isolation: use OkrTenantGuard to build where clause
     const orgFilter = OkrTenantGuard.buildTenantWhereClause(userTenantId);
     if (orgFilter === null && userTenantId !== null) {
       // User has no org or invalid org → return empty array
-      return [];
+      return {
+        data: [],
+        pagination: {
+          page: 1,
+          pageSize: pageSize,
+          total: 0,
+          totalPages: 0,
+        },
+      };
     }
     if (orgFilter) {
       where.tenantId = orgFilter.tenantId;
@@ -52,8 +67,19 @@ export class ObjectiveService {
       where.pillarId = pillarId;
     }
 
-    return this.prisma.objective.findMany({
+    // Validate and clamp pagination parameters
+    const validatedPage = Math.max(1, Math.floor(page));
+    const validatedPageSize = Math.min(200, Math.max(1, Math.floor(pageSize)));
+    const skip = (validatedPage - 1) * validatedPageSize;
+
+    // Get total count for pagination metadata
+    const total = await this.prisma.objective.count({ where });
+
+    // Fetch paginated results
+    const data = await this.prisma.objective.findMany({
       where,
+      skip,
+      take: validatedPageSize,
       include: {
         keyResults: {
           select: {
@@ -109,7 +135,20 @@ export class ObjectiveService {
         },
         children: true,
       },
+      orderBy: {
+        createdAt: 'desc', // Most recent first
+      },
     });
+
+    return {
+      data,
+      pagination: {
+        page: validatedPage,
+        pageSize: validatedPageSize,
+        total,
+        totalPages: Math.ceil(total / validatedPageSize),
+      },
+    };
   }
 
   async findById(id: string, userTenantId?: string | null | undefined) {

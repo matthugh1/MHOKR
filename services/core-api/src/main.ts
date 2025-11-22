@@ -2,6 +2,16 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { validateCoreApiEnv } from './common/config/env-validation';
+
+// Validate required environment variables before starting the application
+try {
+  validateCoreApiEnv();
+} catch (error) {
+  console.error('❌ Environment validation failed:');
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

@@ -245,8 +245,15 @@ async function main() {
   console.log(`✓ Ensured cycle: ${CYCLE_Q1_2026_ID} (Q1 2026 - DRAFT)`);
 
   // Upsert Users
-  // Default password for all seeded users: 'test123'
-  const defaultPassword = 'test123';
+  // Default password for all seeded users from environment variable
+  const defaultPassword = process.env.DEFAULT_PASSWORD;
+  if (!defaultPassword || defaultPassword.trim() === '') {
+    throw new Error(
+      'DEFAULT_PASSWORD environment variable is not set. ' +
+      'Please set DEFAULT_PASSWORD in your environment variables or .env file. ' +
+      'This is used for seeding test users only.',
+    );
+  }
   const hashedPassword = await bcrypt.hash(defaultPassword, 10);
   
   for (const user of USERS) {

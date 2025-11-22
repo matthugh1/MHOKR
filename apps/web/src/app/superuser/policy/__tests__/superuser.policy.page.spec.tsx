@@ -41,7 +41,7 @@ describe('PolicyExplorerPage', () => {
   })
 
   it('should redirect if user is not superuser', async () => {
-    ;(useAuth as jest.Mock).mockReturnValue({
+    (useAuth as jest.Mock).mockReturnValue({
       user: { id: 'user-123', isSuperuser: false },
     })
     ;(useWorkspace as jest.Mock).mockReturnValue({
@@ -56,7 +56,7 @@ describe('PolicyExplorerPage', () => {
   })
 
   it('should redirect if RBAC_INSPECTOR flag is false', async () => {
-    ;(useAuth as jest.Mock).mockReturnValue({
+    (useAuth as jest.Mock).mockReturnValue({
       user: { id: 'user-123', isSuperuser: true },
     })
     ;(useWorkspace as jest.Mock).mockReturnValue({
@@ -74,7 +74,7 @@ describe('PolicyExplorerPage', () => {
   })
 
   it('should render page if user is superuser and flag is enabled', async () => {
-    ;(useAuth as jest.Mock).mockReturnValue({
+    (useAuth as jest.Mock).mockReturnValue({
       user: { id: 'user-123', isSuperuser: true },
     })
     ;(useWorkspace as jest.Mock).mockReturnValue({
@@ -92,7 +92,7 @@ describe('PolicyExplorerPage', () => {
   })
 
   it('should submit decision request and display result', async () => {
-    ;(useAuth as jest.Mock).mockReturnValue({
+    (useAuth as jest.Mock).mockReturnValue({
       user: { id: 'user-123', isSuperuser: true },
     })
     ;(useWorkspace as jest.Mock).mockReturnValue({

@@ -249,7 +249,7 @@ describe('Tenant Isolation', () => {
 **Implementation**:
 
 ```typescript
-// scripts/audit-tenant-isolation.ts
+// scripts/audit/audit-tenant-isolation.ts
 // Scans for:
 // - findMany() calls without organizationId filter
 // - findUnique() calls without tenant validation
@@ -418,7 +418,7 @@ export class TenantIsolationService {
    - Created test suites for: Organization, Workspace, Team, User, Objective services
    - Tests cover: no org, SUPERUSER, normal user, cross-tenant blocking
 3. ✅ **COMPLETED**: Tenant isolation audit script
-   - Created `scripts/audit-tenant-isolation.ts`
+   - Created `scripts/audit/audit-tenant-isolation.ts`
    - Scans for findMany/findUnique without tenant filtering
    - Available via: `npm run audit:tenant-isolation`
 

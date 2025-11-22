@@ -8,6 +8,7 @@ import path from 'path';
 import { authMiddleware } from './middleware/auth.middleware';
 import { errorHandler } from './middleware/error.middleware';
 import { logger } from './utils/logger';
+import { validateApiGatewayEnv } from './utils/env-validation';
 
 // Load .env - try multiple locations
 const envPaths = [
@@ -23,6 +24,15 @@ for (const envPath of envPaths) {
     logger.info(`Loaded .env from: ${envPath}`);
     break;
   }
+}
+
+// Validate required environment variables before starting the application
+try {
+  validateApiGatewayEnv();
+} catch (error) {
+  logger.error('❌ Environment validation failed:');
+  logger.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
 }
 
 const app = express();

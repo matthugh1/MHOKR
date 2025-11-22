@@ -4,6 +4,7 @@ import { InitiativeService } from './initiative.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AuthenticatedRequest } from '../../common/types/request.types';
 
 @ApiTags('Initiatives')
 @Controller('initiatives')
@@ -21,7 +22,7 @@ export class InitiativeController {
   async getAll(
     @Query('objectiveId') objectiveId: string | undefined,
     @Query('keyResultId') keyResultId: string | undefined,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     // Filter initiatives based on user's access to their parent objectives
     return this.initiativeService.findAll(req.user.id, objectiveId, keyResultId);
@@ -139,7 +140,7 @@ export class InitiativeController {
   async addTag(
     @Param('id') initiativeId: string,
     @Body() body: { tagId: string },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.initiativeService.addTag(
       initiativeId,
@@ -158,7 +159,7 @@ export class InitiativeController {
   async removeTag(
     @Param('id') initiativeId: string,
     @Param('tagId') tagId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.initiativeService.removeTag(
       initiativeId,
@@ -175,7 +176,7 @@ export class InitiativeController {
   @ApiResponse({ status: 404, description: 'Initiative not found' })
   async listTags(
     @Param('id') initiativeId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.initiativeService.listTags(initiativeId, req.user.tenantId);
   }
@@ -194,7 +195,7 @@ export class InitiativeController {
   async addContributor(
     @Param('id') initiativeId: string,
     @Body() body: { userId: string },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.initiativeService.addContributor(
       initiativeId,
@@ -213,7 +214,7 @@ export class InitiativeController {
   async removeContributor(
     @Param('id') initiativeId: string,
     @Param('userId') userId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.initiativeService.removeContributor(
       initiativeId,
@@ -230,7 +231,7 @@ export class InitiativeController {
   @ApiResponse({ status: 404, description: 'Initiative not found' })
   async listContributors(
     @Param('id') initiativeId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.initiativeService.listContributors(initiativeId, req.user.tenantId);
   }
@@ -269,7 +270,7 @@ export class InitiativeController {
   @ApiResponse({ status: 404, description: 'Initiative not found' })
   async getStatusTrend(
     @Param('id') id: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.initiativeService.getStatusTrend(id, req.user.tenantId);
   }

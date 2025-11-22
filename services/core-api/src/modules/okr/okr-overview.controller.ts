@@ -13,6 +13,7 @@ import { ObjectiveService } from './objective.service';
 import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 import { Logger } from '@nestjs/common';
 import { OkrImportService } from './okr-import.service';
+import { AuthenticatedRequest } from '../../common/types/request.types';
 
 // Simple telemetry helper for list filtering
 const listTelemetry = {
@@ -48,6 +49,8 @@ const listTelemetry = {
 @UseGuards(JwtAuthGuard, RBACGuard)
 @ApiBearerAuth()
 export class OkrOverviewController {
+  private readonly logger = new Logger(OkrOverviewController.name);
+
   constructor(
     private prisma: PrismaService,
     private visibilityService: OkrVisibilityService,
@@ -98,7 +101,7 @@ export class OkrOverviewController {
     @Query('page') page: string | undefined,
     @Query('pageSize') pageSize: string | undefined,
     @Query('hierarchyView') hierarchyView: string | undefined,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     try {
       // Require tenantId query parameter
@@ -249,7 +252,7 @@ export class OkrOverviewController {
         } catch (error: any) {
           // If RLS blocks the query, log but don't fail - just filter by ownerId
           // The objective query will return empty if owner is not in the same org
-          console.warn(`[OKR Overview] Could not validate owner ${ownerId}:`, error.message);
+          this.logger.warn(`Could not validate owner ${ownerId}: ${error.message}`);
           where.ownerId = ownerId;
         }
       }
@@ -263,7 +266,7 @@ export class OkrOverviewController {
         // This ensures RLS session variables are set correctly before the query executes
         let allObjectives;
         try {
-          console.log(`[OKR Overview] Fetching objectives with tenantId=${tenantId}, userTenantId=${userOrganizationId}, hierarchyView=${isHierarchyView}`);
+          this.logger.debug(`Fetching objectives with tenantId=${tenantId}, userTenantId=${userOrganizationId}, hierarchyView=${isHierarchyView}`);
           
           if (isHierarchyView) {
             // Hierarchy view: Fetch all root objectives + all their descendants
@@ -464,7 +467,7 @@ export class OkrOverviewController {
           }
       } catch (queryError: any) {
         // Error logging kept for debugging
-        console.error('[OKR OVERVIEW] Database query error:', queryError?.message, queryError?.stack);
+        this.logger.error('Database query error', { message: queryError?.message, stack: queryError?.stack });
         throw queryError;
       }
       // Removed debug logging - use structured logging service in production
@@ -493,7 +496,7 @@ export class OkrOverviewController {
           visibleObjectives.push(objective);
         }
       } catch (visibilityError: any) {
-        console.warn('[OKR OVERVIEW] Error checking visibility for objective:', objective.id, visibilityError?.message);
+        this.logger.warn(`Error checking visibility for objective ${objective.id}: ${visibilityError?.message}`);
         // If visibility check fails, exclude the objective (fail closed for security)
         continue;
       }
@@ -555,7 +558,7 @@ export class OkrOverviewController {
     // Build resource context for governance checks
     // Ensure tenantId is never undefined - if it is, we shouldn't have gotten this far
     if (userOrganizationId === undefined) {
-      console.error('[OKR OVERVIEW] CRITICAL: userOrganizationId is undefined after validation check');
+      this.logger.error('CRITICAL: userOrganizationId is undefined after validation check');
       throw new BadRequestException('User organization not properly set');
     }
 
@@ -595,7 +598,7 @@ export class OkrOverviewController {
           }
         } catch (error) {
           // If RBAC check fails, canEdit/canDelete remain false
-          console.warn('[OKR OVERVIEW] Error checking permissions for objective:', o.id, (error as any)?.message);
+          this.logger.warn(`Error checking permissions for objective ${o.id}: ${(error as any)?.message}`);
         }
 
         // Filter key results by visibility and add canCheckIn flag
@@ -646,7 +649,7 @@ export class OkrOverviewController {
             }
           } catch (error) {
             // If RBAC check fails, canCheckIn remains false
-            console.warn('[OKR OVERVIEW] Error checking canCheckIn for KR:', kr.id, (error as any)?.message);
+            this.logger.warn(`Error checking canCheckIn for KR ${kr.id}: ${(error as any)?.message}`);
           }
 
           const krInitiatives = initiativesByKrId.get(kr.id) || [];
@@ -763,7 +766,7 @@ export class OkrOverviewController {
           resourceContext,
         );
       } catch (rbacError) {
-        console.error('[OKR OVERVIEW] RBAC check failed:', rbacError);
+        this.logger.error('RBAC check failed', { error: rbacError });
         canCreateObjective = false;
       }
 
@@ -803,7 +806,7 @@ export class OkrOverviewController {
       }
     } catch (error) {
       // If RBAC check fails, conservatively deny creation
-      console.error('[OKR OVERVIEW] Error checking canCreateObjective:', error);
+      this.logger.error('Error checking canCreateObjective', { error });
       canCreateObjective = false;
     }
 
@@ -822,23 +825,16 @@ export class OkrOverviewController {
     return responsePayload;
       });
     } catch (error: any) {
-      console.error('[OKR OVERVIEW] ========== ERROR START ==========');
-      console.error('[OKR OVERVIEW] Error in getOverview:');
-      console.error('[OKR OVERVIEW] Message:', error?.message || 'Unknown error');
-      console.error('[OKR OVERVIEW] Name:', error?.name || 'Unknown');
-      console.error('[OKR OVERVIEW] Code:', error?.code || 'N/A');
-      console.error('[OKR OVERVIEW] Stack:', error?.stack || 'No stack trace');
-      if (error?.meta) {
-        console.error('[OKR OVERVIEW] Prisma Meta:', JSON.stringify(error.meta, null, 2));
-      }
-      try {
-        console.error('[OKR OVERVIEW] Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
-      } catch (e) {
-        console.error('[OKR OVERVIEW] Error object (non-serializable):', error);
-      }
-      console.error('[OKR OVERVIEW] Request params:', { tenantId, cycleId, status, page, pageSize });
-      console.error('[OKR OVERVIEW] User:', { id: req?.user?.id, email: req?.user?.email, tenantId: req?.user?.tenantId });
-      console.error('[OKR OVERVIEW] ========== ERROR END ==========');
+      this.logger.error('Error in getOverview', {
+        message: error?.message || 'Unknown error',
+        name: error?.name,
+        code: error?.code,
+        stack: error?.stack,
+        prismaMeta: error?.meta,
+        requestParams: { tenantId, cycleId, status, page, pageSize },
+        userId: req?.user?.id,
+        userTenantId: req?.user?.tenantId,
+      });
       throw error;
     }
   }
@@ -849,7 +845,7 @@ export class OkrOverviewController {
   @ApiQuery({ name: 'tenantId', required: true, description: 'Organization ID for tenant filtering' })
   async getCreationContext(
     @Query('tenantId') tenantId: string | undefined,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     // Require tenantId query parameter
     if (!tenantId) {
@@ -1036,7 +1032,7 @@ export class OkrOverviewController {
       }>;
       draft?: boolean;
     },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     const userOrganizationId = req.user.tenantId;
     const userId = req.user.id;
@@ -1100,7 +1096,7 @@ export class OkrOverviewController {
   @ApiResponse({ status: 403, description: 'Forbidden - user lacks create_okr permission' })
   async importFromCSV(
     @Body() body: { csvContent: string; tenantId: string },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     const userOrganizationId = req.user.tenantId || body.tenantId;
     const userId = req.user.id;

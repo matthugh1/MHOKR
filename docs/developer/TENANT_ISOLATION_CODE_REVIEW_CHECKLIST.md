@@ -256,7 +256,7 @@ Does the method query tenant-scoped data?
 ## Related Files
 
 - `docs/developer/TENANT_ISOLATION_GUIDELINES.md` - Detailed implementation guide
-- `scripts/audit-tenant-isolation.ts` - Automated audit script
+- `scripts/audit/audit-tenant-isolation.ts` - Automated audit script
 - `services/core-api/src/modules/okr/tenant-guard.ts` - Tenant guard utility
 
 ---

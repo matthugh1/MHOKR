@@ -300,6 +300,10 @@ model Objective {
   @@index([isPublished])
   @@index([state])
   @@index([source, externalId])
+  // Composite indexes for common filter combinations
+  @@index([tenantId, status])
+  @@index([tenantId, cycleId, status])
+  @@index([tenantId, ownerId])
   @@map("objectives")
 }
 
@@ -364,6 +368,9 @@ model KeyResult {
   @@index([state])
   @@index([cycleId])
   @@index([source, externalId])
+  // Composite indexes for common filter combinations
+  @@index([tenantId, status])
+  @@index([tenantId, cycleId])
   @@map("key_results")
 }
 

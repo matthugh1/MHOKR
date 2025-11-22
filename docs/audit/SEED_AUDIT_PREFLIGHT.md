@@ -29,7 +29,7 @@
 - **Location:** `services/core-api/prisma/seed.ts`
 - **Execution:** `npm run db:seed` (root) or `npm run prisma:seed` (core-api)
 - **Additional Scripts:**
-  - `services/core-api/scripts/seed-activity.ts` - Activity seeding helper
+  - `scripts/seed/seed-activity.ts` - Activity seeding helper
   - `services/core-api/prisma/bootstrapOrg.ts` - Bootstrap script (referenced in package.json)
 
 ### Seed Configuration

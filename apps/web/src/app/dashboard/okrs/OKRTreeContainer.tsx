@@ -55,119 +55,15 @@ interface OKRTreeContainerProps {
   onNodeClick: (nodeId: string, nodeType: 'objective' | 'keyResult' | 'initiative') => void
 }
 
-// Reuse mapping functions from OKRPageContainer
-function mapObjectiveData(rawObj: any, availableUsers: any[], activeCycles: any[], overdueCheckIns: Array<{ krId: string; objectiveId: string }>) {
-  const cycle = rawObj.cycle || (rawObj.cycleId ? activeCycles.find(c => c.id === rawObj.cycleId) : null)
-  const cycleName = cycle?.name ?? rawObj.cycleName ?? undefined
-  const cycleStatus = rawObj.cycleStatus || (cycle?.status ?? 'ACTIVE')
-  
-  let cycleLabel = cycleName || 'Unassigned'
-  if (cycleStatus === 'DRAFT' && cycleName) {
-    cycleLabel = `${cycleName} (draft)`
-  }
-  
-  const keyResults = (rawObj.keyResults || []).map((kr: any): any => {
-    const krId = kr.keyResultId || kr.id
-    const isOverdue = overdueCheckIns.some(item => item.krId === krId)
-    
-    // Extract KR data - handle both junction table format and direct format
-    const krData = kr.keyResult || kr
-    const weight = kr.weight ?? 1.0 // Extract weight from junction table, default to 1.0
-    
-    return {
-      id: krId,
-      title: krData.title || kr.title,
-      status: krData.status || kr.status,
-      progress: krData.progress ?? kr.progress ?? 0,
-      currentValue: krData.currentValue ?? kr.currentValue,
-      targetValue: krData.targetValue ?? kr.targetValue,
-      startValue: krData.startValue ?? kr.startValue,
-      unit: krData.unit || kr.unit,
-      checkInCadence: krData.checkInCadence || kr.cadence,
-      isOverdue,
-      ownerId: krData.ownerId || kr.ownerId,
-      canCheckIn: kr.canCheckIn !== undefined ? kr.canCheckIn : false,
-      weight, // Include weight from junction table
-    }
+import { mapObjectiveData } from '@/lib/utils/mapObjectiveData'
+
+// Use shared utility for mapping objective data
+// Wrapper function for tree view with specific options
+function mapObjectiveDataForTree(rawObj: any, availableUsers: any[], activeCycles: any[], overdueCheckIns: Array<{ krId: string; objectiveId: string }>) {
+  return mapObjectiveData(rawObj, availableUsers, activeCycles, overdueCheckIns, {
+    includeCheckInDates: false, // Tree view doesn't need check-in dates
+    useParentObjectiveId: true, // Tree view uses parentObjectiveId
   })
-  
-  const overdueCountForObjective = rawObj.overdueCheckInsCount !== undefined 
-    ? rawObj.overdueCheckInsCount 
-    : keyResults.filter((kr: any) => kr.isOverdue).length
-  
-  const lowestConfidence = rawObj.latestConfidencePct !== undefined 
-    ? rawObj.latestConfidencePct 
-    : null
-  
-  const seenInitIds = new Set<string>()
-  const allInitiatives: any[] = []
-  
-  ;(rawObj.keyResults || []).forEach((kr: any) => {
-    (kr.initiatives || []).forEach((init: any) => {
-      if (!seenInitIds.has(init.id)) {
-        seenInitIds.add(init.id)
-        allInitiatives.push({
-          ...init,
-          keyResultId: kr.keyResultId || kr.id,
-          keyResultTitle: kr.title,
-        })
-      }
-    })
-  })
-  
-  ;(rawObj.initiatives || []).forEach((init: any) => {
-    if (!seenInitIds.has(init.id)) {
-      seenInitIds.add(init.id)
-      allInitiatives.push({
-        ...init,
-        keyResultId: init.keyResultId,
-        keyResultTitle: init.keyResultTitle,
-      })
-    }
-  })
-  
-  const initiatives = allInitiatives.map((init: any) => ({
-    id: init.id,
-    title: init.title,
-    status: init.status,
-    dueDate: init.dueDate,
-    keyResultId: init.keyResultId,
-    keyResultTitle: init.keyResultTitle,
-  }))
-  
-  const owner = rawObj.owner || availableUsers.find(u => u.id === rawObj.ownerId)
-  
-  const publishState = rawObj.publishState || (rawObj.isPublished ? 'PUBLISHED' : 'DRAFT')
-  
-  return {
-    id: rawObj.objectiveId || rawObj.id,
-    title: rawObj.title,
-    status: rawObj.status || 'ON_TRACK',
-    publishState,
-    isPublished: rawObj.isPublished ?? false,
-    visibilityLevel: rawObj.visibilityLevel,
-    cycleName,
-    cycleLabel,
-    cycleStatus,
-    owner: {
-      id: rawObj.ownerId || owner?.id,
-      name: owner?.name || owner?.email || 'Unassigned',
-      email: owner?.email || null,
-    },
-    progress: rawObj.progress ?? 0,
-    keyResults,
-    initiatives,
-    overdueCountForObjective,
-    lowestConfidence,
-    ownerId: rawObj.ownerId,
-    organizationId: rawObj.organizationId,
-    workspaceId: rawObj.workspaceId,
-    teamId: rawObj.teamId,
-    cycleId: rawObj.cycle?.id || rawObj.cycleId,
-    canEdit: rawObj.canEdit !== undefined ? rawObj.canEdit : false,
-    canDelete: rawObj.canDelete !== undefined ? rawObj.canDelete : false,
-    parentObjectiveId: rawObj.parentObjectiveId || rawObj.parentId || null, // Map parentId to parentObjectiveId for tree view
-  }
 }
 
 export function OKRTreeContainer({
@@ -253,7 +149,7 @@ export function OKRTreeContainer({
       }
       
       const mapped = Array.isArray(allObjectives) ? allObjectives.map((obj: any) => 
-        mapObjectiveData(obj, availableUsers, activeCycles, overdueCheckIns)
+        mapObjectiveDataForTree(obj, availableUsers, activeCycles, overdueCheckIns)
       ) : []
       
       setObjectivesPage(mapped)
@@ -333,7 +229,7 @@ export function OKRTreeContainer({
       const canEdit = okr.canEdit !== undefined ? okr.canEdit : false
       const canDelete = okr.canDelete !== undefined ? okr.canDelete : false
       
-      const normalised = mapObjectiveData(okr, availableUsers, activeCycles, overdueCheckIns)
+      const normalised = mapObjectiveDataForTree(okr, availableUsers, activeCycles, overdueCheckIns)
       
       const visibleKeyResults = normalised.keyResults
       

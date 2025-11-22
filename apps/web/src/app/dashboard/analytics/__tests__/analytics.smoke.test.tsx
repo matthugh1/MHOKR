@@ -160,7 +160,7 @@ describe('Analytics Page Smoke Test', () => {
 
   it('renders real data from API responses', async () => {
     // Mock API with realistic data
-    ;(api.get as jest.Mock).mockImplementation((url: string) => {
+    (api.get as jest.Mock).mockImplementation((url: string) => {
       if (url === '/reports/analytics/summary') {
         return Promise.resolve({
           data: {
@@ -252,7 +252,7 @@ describe('Analytics Page Smoke Test', () => {
   })
 
   it('handles 403 Forbidden error from RBAC', async () => {
-    ;(api.get as jest.Mock).mockImplementation((url: string) => {
+    (api.get as jest.Mock).mockImplementation((url: string) => {
       if (url === '/reports/analytics/summary') {
         return Promise.reject({
           response: { status: 403, data: { message: 'Forbidden' } },
@@ -271,7 +271,7 @@ describe('Analytics Page Smoke Test', () => {
   })
 
   it('handles 401 Unauthorized error gracefully', async () => {
-    ;(api.get as jest.Mock).mockImplementation(() => {
+    (api.get as jest.Mock).mockImplementation(() => {
       return Promise.reject({
         response: { status: 401, data: { message: 'Unauthorized' } },
       })
@@ -288,7 +288,7 @@ describe('Analytics Page Smoke Test', () => {
   })
 
   it('handles network errors gracefully', async () => {
-    ;(api.get as jest.Mock).mockImplementation(() => {
+    (api.get as jest.Mock).mockImplementation(() => {
       return Promise.reject(new Error('Network error'))
     })
 
@@ -301,7 +301,7 @@ describe('Analytics Page Smoke Test', () => {
 
   it('renders health heatmap table with data', async () => {
     // Mock API with heatmap data
-    ;(api.get as jest.Mock).mockImplementation((url: string) => {
+    (api.get as jest.Mock).mockImplementation((url: string) => {
       if (url === '/reports/analytics/summary') {
         return Promise.resolve({
           data: {
@@ -354,7 +354,7 @@ describe('Analytics Page Smoke Test', () => {
   })
 
   it('displays empty state when heatmap has no data', async () => {
-    ;(api.get as jest.Mock).mockImplementation((url: string) => {
+    (api.get as jest.Mock).mockImplementation((url: string) => {
       if (url.startsWith('/reports/health-heatmap')) {
         return Promise.resolve({
           data: {
@@ -375,7 +375,7 @@ describe('Analytics Page Smoke Test', () => {
   })
 
   it('renders at-risk items card with count and list', async () => {
-    ;(api.get as jest.Mock).mockImplementation((url: string) => {
+    (api.get as jest.Mock).mockImplementation((url: string) => {
       if (url === '/reports/analytics/summary') {
         return Promise.resolve({
           data: {
@@ -452,7 +452,7 @@ describe('Analytics Page Smoke Test', () => {
   })
 
   it('displays empty state when no at-risk items', async () => {
-    ;(api.get as jest.Mock).mockImplementation((url: string) => {
+    (api.get as jest.Mock).mockImplementation((url: string) => {
       if (url.startsWith('/reports/at-risk')) {
         return Promise.resolve({
           data: [],
@@ -470,7 +470,7 @@ describe('Analytics Page Smoke Test', () => {
   })
 
   it('renders cycle health card with KPIs', async () => {
-    ;(api.get as jest.Mock).mockImplementation((url: string) => {
+    (api.get as jest.Mock).mockImplementation((url: string) => {
       if (url === '/reports/analytics/summary') {
         return Promise.resolve({
           data: {
@@ -541,7 +541,7 @@ describe('Analytics Page Smoke Test', () => {
   })
 
   it('handles empty cycle gracefully', async () => {
-    ;(api.get as jest.Mock).mockImplementation((url: string) => {
+    (api.get as jest.Mock).mockImplementation((url: string) => {
       if (url === '/reports/cycles/active') {
         return Promise.resolve({ data: [] })
       }

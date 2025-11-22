@@ -146,7 +146,7 @@ module.exports = {
 
 - `docs/developer/TENANT_ISOLATION_GUIDELINES.md` - Implementation patterns
 - `docs/developer/TENANT_ISOLATION_CODE_REVIEW_CHECKLIST.md` - Review checklist
-- `scripts/audit-tenant-isolation.ts` - Audit script
+- `scripts/audit/audit-tenant-isolation.ts` - Audit script
 
 
 

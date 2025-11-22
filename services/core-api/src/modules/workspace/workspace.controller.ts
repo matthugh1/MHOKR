@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { WorkspaceService } from './workspace.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
+import { AuthenticatedRequest } from '../../common/types/request.types';
 
 @ApiTags('Workspaces')
 @Controller('workspaces')
@@ -14,7 +15,7 @@ export class WorkspaceController {
   @Get()
   @RequireAction('manage_workspaces')
   @ApiOperation({ summary: 'Get all workspaces for user or organization (tenant-isolated)' })
-  async getAll(@Query('tenantId') tenantId?: string, @Req() req?: any) {
+  async getAll(@Query('tenantId') tenantId?: string, @Req() req?: AuthenticatedRequest) {
     if (tenantId) {
       return this.workspaceService.findAll(req.user.tenantId, tenantId);
     }
@@ -71,7 +72,7 @@ export class WorkspaceController {
   async addMember(
     @Param('id') workspaceId: string,
     @Body() data: { userId: string; role?: 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER' },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.workspaceService.addMember(workspaceId, data.userId, data.role || 'MEMBER', req.user.tenantId, req.user.id);
   }
@@ -82,7 +83,7 @@ export class WorkspaceController {
   async removeMember(
     @Param('id') workspaceId: string,
     @Param('userId') userId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.workspaceService.removeMember(workspaceId, userId, req.user.tenantId, req.user.id);
   }
@@ -100,7 +101,7 @@ export class WorkspaceController {
   async setOwner(
     @Param('id') workspaceId: string,
     @Body() data: { ownerId: string },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.workspaceService.setOwner(workspaceId, data.ownerId, req.user.tenantId, req.user.id);
   }

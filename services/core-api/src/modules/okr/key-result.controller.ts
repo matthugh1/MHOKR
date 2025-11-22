@@ -8,6 +8,7 @@ import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 import { recordCheckInHistoryFetch, checkInTelemetry } from './check-in-telemetry';
 import { buildResourceContextFromKeyResult } from '../rbac/helpers';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AuthenticatedRequest } from '../../common/types/request.types';
 
 @ApiTags('Key Results')
 @Controller('key-results')
@@ -28,10 +29,18 @@ export class KeyResultController {
 
   @Get()
   @RequireAction('view_okr')
-  @ApiOperation({ summary: 'Get all key results' })
-  async getAll(@Query('objectiveId') objectiveId: string | undefined, @Req() req: any) {
+  @ApiOperation({ summary: 'Get all key results (paginated)' })
+  async getAll(
+    @Query('objectiveId') objectiveId: string | undefined,
+    @Query('page') page: string | undefined,
+    @Query('pageSize') pageSize: string | undefined,
+    @Req() req: AuthenticatedRequest
+  ) {
     // Filter key results based on user's access to their parent objectives
-    return this.keyResultService.findAll(req.user.id, objectiveId);
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const pageSizeNum = pageSize ? parseInt(pageSize, 10) : 50;
+    
+    return this.keyResultService.findAll(req.user.id, objectiveId, pageNum, pageSizeNum);
   }
 
   // NOTE: Reporting/analytics endpoints were moved to OkrReportingController under /reports/* in Phase 4.
@@ -39,7 +48,7 @@ export class KeyResultController {
   @Get(':id')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get key result by ID' })
-  async getById(@Param('id') id: string, @Req() req: any) {
+  async getById(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     // Check if user can view this key result (via parent objective)
     const canView = await this.keyResultService.canView(req.user.id, id);
     if (!canView) {
@@ -52,7 +61,7 @@ export class KeyResultController {
   @UseGuards(RateLimitGuard)
   @RequireAction('create_okr')
   @ApiOperation({ summary: 'Create key result', description: 'Emits activity event (CREATED) and audit log entry.' })
-  async create(@Body() data: any, @Req() req: any) {
+  async create(@Body() data: any, @Req() req: AuthenticatedRequest) {
     // Ensure ownerId matches the authenticated user
     if (!data.ownerId) {
       data.ownerId = req.user.id;
@@ -82,7 +91,7 @@ export class KeyResultController {
     return await buildResourceContextFromKeyResult(KeyResultController.prismaInstance, keyResultId);
   })
   @ApiOperation({ summary: 'Update key result', description: 'Emits activity events (UPDATED, STATE_CHANGE if state transitions) and audit logs.' })
-  async update(@Param('id') id: string, @Body() data: any, @Req() req: any) {
+  async update(@Param('id') id: string, @Body() data: any, @Req() req: AuthenticatedRequest) {
     // Check if user can edit this key result (via parent objective)
     const canEdit = await this.keyResultService.canEdit(req.user.id, id, req.user.tenantId);
     if (!canEdit) {
@@ -95,7 +104,7 @@ export class KeyResultController {
   @UseGuards(RateLimitGuard)
   @RequireAction('delete_okr')
   @ApiOperation({ summary: 'Delete key result', description: 'Emits activity event (DELETED) and audit log entry.' })
-  async delete(@Param('id') id: string, @Req() req: any) {
+  async delete(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     // Check if user can delete this key result (via parent objective)
     const canDelete = await this.keyResultService.canDelete(req.user.id, id, req.user.tenantId);
     if (!canDelete) {
@@ -123,7 +132,7 @@ export class KeyResultController {
     return await buildResourceContextFromKeyResult(KeyResultController.prismaInstance, keyResultId);
   })
   @ApiOperation({ summary: 'Create check-in' })
-  async checkIn(@Param('id') id: string, @Body() data: any, @Req() req: any) {
+  async checkIn(@Param('id') id: string, @Body() data: any, @Req() req: AuthenticatedRequest) {
     // Check if user can edit this key result
     const canEdit = await this.keyResultService.canEdit(req.user.id, id, req.user.tenantId);
     if (!canEdit) {
@@ -195,7 +204,7 @@ export class KeyResultController {
     @Param('id') id: string,
     @Query('page') page: string | undefined,
     @Query('limit') limit: string | undefined,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     // Check if user can view this key result (via parent objective)
     const canView = await this.keyResultService.canView(req.user.id, id);
@@ -252,7 +261,7 @@ export class KeyResultController {
   async addTag(
     @Param('id') keyResultId: string,
     @Body() body: { tagId: string },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.keyResultService.addTag(
       keyResultId,
@@ -272,7 +281,7 @@ export class KeyResultController {
   async removeTag(
     @Param('id') keyResultId: string,
     @Param('tagId') tagId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.keyResultService.removeTag(
       keyResultId,
@@ -289,7 +298,7 @@ export class KeyResultController {
   @ApiResponse({ status: 404, description: 'Key Result not found' })
   async listTags(
     @Param('id') keyResultId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.keyResultService.listTags(keyResultId, req.user.tenantId);
   }
@@ -309,7 +318,7 @@ export class KeyResultController {
   async addContributor(
     @Param('id') keyResultId: string,
     @Body() body: { userId: string },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.keyResultService.addContributor(
       keyResultId,
@@ -329,7 +338,7 @@ export class KeyResultController {
   async removeContributor(
     @Param('id') keyResultId: string,
     @Param('userId') userId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.keyResultService.removeContributor(
       keyResultId,
@@ -346,7 +355,7 @@ export class KeyResultController {
   @ApiResponse({ status: 404, description: 'Key Result not found' })
   async listContributors(
     @Param('id') keyResultId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.keyResultService.listContributors(keyResultId, req.user.tenantId);
   }
@@ -371,7 +380,7 @@ export class KeyResultController {
   async addOwner(
     @Param('id') keyResultId: string,
     @Body() body: { userId: string },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     // Check if user can edit this key result
     const canEdit = await this.keyResultService.canEdit(req.user.id, keyResultId, req.user.tenantId);
@@ -403,7 +412,7 @@ export class KeyResultController {
   async removeOwner(
     @Param('id') keyResultId: string,
     @Param('userId') userId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     // Check if user can edit this key result
     const canEdit = await this.keyResultService.canEdit(req.user.id, keyResultId, req.user.tenantId);
@@ -427,7 +436,7 @@ export class KeyResultController {
   @ApiResponse({ status: 404, description: 'Key Result not found' })
   async listOwners(
     @Param('id') keyResultId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.keyResultOwnerService.getOwners(keyResultId, req.user.tenantId!);
   }
@@ -467,7 +476,7 @@ export class KeyResultController {
   @ApiResponse({ status: 404, description: 'Key Result not found' })
   async getStatusTrend(
     @Param('id') id: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.keyResultService.getStatusTrend(id, req.user.tenantId);
   }

@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TeamService } from './team.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
+import { AuthenticatedRequest } from '../../common/types/request.types';
 
 @ApiTags('Teams')
 @Controller('teams')
@@ -14,7 +15,7 @@ export class TeamController {
   @Get()
   @RequireAction('manage_teams')
   @ApiOperation({ summary: 'Get all teams, optionally filtered by workspace (tenant-isolated)' })
-  async getAll(@Query('workspaceId') workspaceId?: string, @Req() req?: any) {
+  async getAll(@Query('workspaceId') workspaceId?: string, @Req() req?: AuthenticatedRequest) {
     return this.teamService.findAll(req.user.tenantId, workspaceId);
   }
 
@@ -66,7 +67,7 @@ export class TeamController {
   async setOwner(
     @Param('id') teamId: string,
     @Body() data: { ownerId: string },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.teamService.setOwner(teamId, data.ownerId, req.user.tenantId, req.user.id);
   }

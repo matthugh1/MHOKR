@@ -12,8 +12,12 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
 
   const token = authHeader.substring(7);
 
-  // Read JWT_SECRET at runtime, not at module load time
-  const JWT_SECRET = process.env.JWT_SECRET || 'default-secret';
+  // Read JWT_SECRET at runtime - validated at startup, so this should never be undefined
+  const JWT_SECRET = process.env.JWT_SECRET;
+  if (!JWT_SECRET) {
+    logger.error('JWT_SECRET is not set - this should have been caught at startup');
+    return res.status(500).json({ error: 'Server configuration error' });
+  }
 
   try {
     // Verify JWT token with the same secret as Core API

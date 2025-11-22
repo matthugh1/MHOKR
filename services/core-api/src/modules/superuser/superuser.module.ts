@@ -12,12 +12,21 @@ import { RBACModule } from '../rbac/rbac.module';
     forwardRef(() => RBACModule),
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'default-secret',
-        signOptions: {
-          expiresIn: '24h',
-        },
-      }),
+      useFactory: async (configService: ConfigService) => {
+        const jwtSecret = configService.get<string>('JWT_SECRET');
+        if (!jwtSecret || jwtSecret === 'default-secret') {
+          throw new Error(
+            'JWT_SECRET must be set and cannot be "default-secret". ' +
+            'Please set a secure value in your environment variables.',
+          );
+        }
+        return {
+          secret: jwtSecret,
+          signOptions: {
+            expiresIn: '24h',
+          },
+        };
+      },
       inject: [ConfigService],
     }),
   ],
