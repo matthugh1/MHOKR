@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiParam, ApiResponse } from '@nestjs/swagger';
 import { KeyResultService } from './key-result.service';
 import { KeyResultOwnerService } from './key-result-owner.service';
@@ -15,6 +15,7 @@ import { AuthenticatedRequest } from '../../common/types/request.types';
 @UseGuards(JwtAuthGuard, RBACGuard)
 @ApiBearerAuth()
 export class KeyResultController {
+  private readonly logger = new Logger(KeyResultController.name);
   // Store prisma reference for use in decorator (workaround for decorator context limitation)
   private static prismaInstance: PrismaService | null = null;
 
@@ -111,13 +112,13 @@ export class KeyResultController {
       throw new ForbiddenException('You do not have permission to delete this key result');
     }
     
-    console.log(`[KeyResultController] DELETE /key-results/${id} - Request received`);
+    this.logger.debug(`DELETE /key-results/${id} - Request received`);
     try {
       const result = await this.keyResultService.delete(id, req.user.id, req.user.tenantId);
-      console.log(`[KeyResultController] DELETE /key-results/${id} - Success`);
+      this.logger.debug(`DELETE /key-results/${id} - Success`);
       return result;
     } catch (error: any) {
-      console.error(`[KeyResultController] DELETE /key-results/${id} - Error:`, error.message);
+      this.logger.error(`DELETE /key-results/${id} - Error`, { error: error.message, stack: error.stack });
       throw error;
     }
   }

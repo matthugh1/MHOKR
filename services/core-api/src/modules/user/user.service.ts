@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { OkrTenantGuard } from '../okr/tenant-guard';
@@ -9,6 +9,8 @@ import { Role } from '../rbac/types';
 
 @Injectable()
 export class UserService {
+  private readonly logger = new Logger(UserService.name);
+
   constructor(
     private prisma: PrismaService,
     private auditLogService: AuditLogService,
@@ -540,7 +542,7 @@ export class UserService {
       });
     } catch (error) {
       // If audit logging fails, log but don't fail user creation
-      console.warn(`Failed to record audit log for tenant role assignment:`, error);
+      this.logger.warn('Failed to record audit log for tenant role assignment', { error });
     }
 
     // Record workspace role assignment audit log if applicable
@@ -556,7 +558,7 @@ export class UserService {
           metadata: { scopeType: 'WORKSPACE', scopeId: data.workspaceId },
         });
       } catch (error) {
-        console.warn(`Failed to record audit log for workspace role assignment:`, error);
+        this.logger.warn('Failed to record audit log for workspace role assignment', { error });
       }
     }
 

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { ObjectiveService } from './objective.service';
 import { ObjectiveOwnerService } from './objective-owner.service';
@@ -18,6 +18,7 @@ import { AuthenticatedRequest } from '../../common/types/request.types';
 @UseGuards(JwtAuthGuard, RBACGuard) // Using RBACGuard instead of PermissionGuard
 @ApiBearerAuth()
 export class ObjectiveController {
+  private readonly logger = new Logger(ObjectiveController.name);
   // Store prisma reference for use in decorator (workaround for decorator context limitation)
   private static prismaInstance: PrismaService | null = null;
 
@@ -100,7 +101,8 @@ export class ObjectiveController {
   @RequireActionWithContext('edit_okr', async (req) => {
     // Build resource context with OKR object for proper permission checking
     // Access prisma through static reference (workaround for decorator context limitation)
-    console.log('[OBJECTIVE CONTROLLER] RequireActionWithContext function called', {
+    const logger = new Logger(ObjectiveController.name);
+    logger.debug('RequireActionWithContext function called', {
       objectiveId: req.params.id,
       hasPrismaInstance: !!ObjectiveController.prismaInstance,
     });
@@ -108,14 +110,14 @@ export class ObjectiveController {
     const prisma = ObjectiveController.prismaInstance;
     
     if (!prisma) {
-      console.error('[OBJECTIVE CONTROLLER] PrismaService not available!', {
+      logger.error('PrismaService not available!', {
         objectiveId: req.params.id,
       });
       throw new Error('PrismaService not available in ObjectiveController. This should not happen.');
     }
     
     const resourceContext = await buildResourceContextFromOKR(prisma, req.params.id);
-    console.log('[OBJECTIVE CONTROLLER] Built resourceContext', {
+    logger.debug('Built resourceContext', {
       objectiveId: req.params.id,
       tenantId: resourceContext.tenantId,
       hasOkr: !!resourceContext.okr,

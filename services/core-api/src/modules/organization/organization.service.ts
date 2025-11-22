@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OkrTenantGuard } from '../okr/tenant-guard';
 import { AuditLogService } from '../audit/audit-log.service';
@@ -8,6 +8,8 @@ import { Role } from '../rbac/types';
 
 @Injectable()
 export class OrganizationService {
+  private readonly logger = new Logger(OrganizationService.name);
+
   constructor(
     private prisma: PrismaService,
     private auditLogService: AuditLogService,
@@ -297,16 +299,22 @@ export class OrganizationService {
     const isSuperuser = Boolean(user.isSuperuser === true);
     
     // Log for debugging
-    console.log(`[OrganizationService.delete] User ${actorUserId}: isSuperuser=${user.isSuperuser} (type: ${typeof user.isSuperuser}), userOrganizationId=${userOrganizationId}, isSuperuser flag=${isSuperuser}`);
+    this.logger.debug('delete: Checking superuser status', {
+      actorUserId,
+      isSuperuser: user.isSuperuser,
+      isSuperuserType: typeof user.isSuperuser,
+      userOrganizationId,
+      isSuperuserFlag: isSuperuser,
+    });
 
     // Tenant isolation: enforce mutation rules (unless superuser)
     // Superusers can delete any organization (they have manage_tenant_settings permission)
     // IMPORTANT: We skip the tenant guard check for superusers because they have manage_tenant_settings permission
     if (isSuperuser) {
-      console.log(`[OrganizationService.delete] Superuser detected - bypassing all tenant guard checks`);
+      this.logger.debug('delete: Superuser detected - bypassing all tenant guard checks');
       // Skip all tenant isolation checks for superusers
     } else {
-      console.log(`[OrganizationService.delete] Non-superuser - enforcing tenant isolation`);
+      this.logger.debug('delete: Non-superuser - enforcing tenant isolation');
       OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
     }
 
