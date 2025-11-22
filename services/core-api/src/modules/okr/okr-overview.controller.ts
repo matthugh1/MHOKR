@@ -324,40 +324,59 @@ export class OkrOverviewController {
               orderBy: { createdAt: 'desc' }, // Sort root objectives by creation date
             });
 
-            // Step 2: Recursively fetch all descendants of root objectives
+            // Step 2: Phase 2.2 Optimization - Use PostgreSQL recursive CTE to fetch all descendants in a single query
+            // This replaces the recursive JavaScript function that made multiple database round trips
             const rootIds = rootObjectives.map(o => o.id);
-            const allDescendantIds = new Set<string>();
             
-            // Recursive function to collect all descendant IDs
-            const collectDescendants = async (parentIds: string[]) => {
-              if (parentIds.length === 0) return;
+            if (rootIds.length === 0) {
+              allObjectives = rootObjectives;
+            } else {
+              // Build WHERE conditions for the CTE
+              const tenantCondition = orgFilter?.tenantId ? `AND "tenantId" = '${orgFilter.tenantId}'` : '';
+              const cycleCondition = filters?.cycleId ? `AND "cycleId" = '${filters.cycleId}'` : '';
+              const statusCondition = filters?.status ? `AND status = '${filters.status}'` : '';
+              const pillarCondition = filters?.pillarId ? `AND "pillarId" = '${filters.pillarId}'` : '';
+              const teamCondition = filters?.teamId ? `AND "teamId" = '${filters.teamId}'` : '';
+              const rootIdsList = rootIds.map(id => `'${id}'`).join(', ');
               
-              const children = await this.prisma.objective.findMany({
-                where: {
-                  ...where,
-                  parentId: { in: parentIds },
-                },
-                select: { id: true },
-              });
+              // Use recursive CTE to get all descendant IDs in a single query
+              const descendantIdsResult = await this.prisma.$queryRawUnsafe<Array<{ id: string }>>(`
+                WITH RECURSIVE descendants AS (
+                  -- Base case: direct children of root objectives
+                  SELECT id, "parentId"
+                  FROM objectives
+                  WHERE "parentId" IN (${rootIdsList})
+                    ${tenantCondition}
+                    ${cycleCondition}
+                    ${statusCondition}
+                    ${pillarCondition}
+                    ${teamCondition}
+                  
+                  UNION
+                  
+                  -- Recursive case: children of descendants
+                  SELECT o.id, o."parentId"
+                  FROM objectives o
+                  INNER JOIN descendants d ON o."parentId" = d.id
+                  WHERE o."parentId" IS NOT NULL
+                    ${tenantCondition}
+                    ${cycleCondition}
+                    ${statusCondition}
+                    ${pillarCondition}
+                    ${teamCondition}
+                )
+                SELECT id FROM descendants
+              `);
               
-              const childIds = children.map(c => c.id);
-              childIds.forEach(id => allDescendantIds.add(id));
+              const allDescendantIds = descendantIdsResult.map(r => r.id);
               
-              // Recursively fetch grandchildren
-              if (childIds.length > 0) {
-                await collectDescendants(childIds);
-              }
-            };
-            
-            await collectDescendants(rootIds);
-            
-            // Step 3: Fetch all descendants with full data
-            const descendants = allDescendantIds.size > 0
-              ? await this.prisma.objective.findMany({
-                  where: {
-                    ...where,
-                    id: { in: Array.from(allDescendantIds) },
-                  },
+              // Step 3: Fetch all descendants with full data
+              const descendants = allDescendantIds.length > 0
+                ? await this.prisma.objective.findMany({
+                    where: {
+                      ...where,
+                      id: { in: allDescendantIds },
+                    },
                   include: {
                     keyResults: {
                       select: {
