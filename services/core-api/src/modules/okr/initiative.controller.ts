@@ -31,7 +31,7 @@ export class InitiativeController {
   @Get(':id')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get initiative by ID' })
-  async getById(@Param('id') id: string, @Req() req: any) {
+  async getById(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     // Check if user can view this initiative (via parent objective)
     const canView = await this.initiativeService.canView(req.user.id, id);
     if (!canView) {
@@ -43,7 +43,7 @@ export class InitiativeController {
   @Post()
   @RequireAction('create_okr')
   @ApiOperation({ summary: 'Create initiative', description: 'Emits activity event (CREATED) and audit log entry.' })
-  async create(@Body() data: any, @Req() req: any) {
+  async create(@Body() data: any, @Req() req: AuthenticatedRequest) {
     try {
       // Ensure ownerId matches the authenticated user
       if (!data.ownerId) {
@@ -105,7 +105,7 @@ export class InitiativeController {
   @Patch(':id')
   @RequireAction('edit_okr')
   @ApiOperation({ summary: 'Update initiative', description: 'Emits activity events (UPDATED, STATE_CHANGE if status transitions) and audit logs.' })
-  async update(@Param('id') id: string, @Body() data: any, @Req() req: any) {
+  async update(@Param('id') id: string, @Body() data: any, @Req() req: AuthenticatedRequest) {
     // Check if user can edit this initiative (via parent objective)
     const canEdit = await this.initiativeService.canEdit(req.user.id, id);
     if (!canEdit) {
@@ -117,7 +117,7 @@ export class InitiativeController {
   @Delete(':id')
   @RequireAction('delete_okr')
   @ApiOperation({ summary: 'Delete initiative', description: 'Emits activity event (DELETED) and audit log entry.' })
-  async delete(@Param('id') id: string, @Req() req: any) {
+  async delete(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     // Check if user can delete this initiative (via parent objective)
     const canDelete = await this.initiativeService.canDelete(req.user.id, id);
     if (!canDelete) {
