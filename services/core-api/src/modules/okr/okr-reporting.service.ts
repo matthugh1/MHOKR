@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OkrTenantGuard } from './tenant-guard';
@@ -23,6 +23,8 @@ import { isAtRisk } from './risk-calculator';
  */
 @Injectable()
 export class OkrReportingService {
+  private readonly logger = new Logger(OkrReportingService.name);
+
   constructor(
     private prisma: PrismaService,
     private visibilityService: OkrVisibilityService,
@@ -1243,19 +1245,13 @@ export class OkrReportingService {
       const limit = filters?.limit || 50;
       return overdueResults.slice(0, limit);
     } catch (error: any) {
-      console.error('[OKR REPORTING] Error in getOverdueCheckIns:');
-      console.error('[OKR REPORTING] Message:', error?.message || 'Unknown error');
-      console.error('[OKR REPORTING] Name:', error?.name || 'Unknown');
-      console.error('[OKR REPORTING] Code:', error?.code || 'N/A');
-      console.error('[OKR REPORTING] Stack:', error?.stack || 'No stack trace');
-      if (error?.meta) {
-        console.error('[OKR REPORTING] Prisma Meta:', JSON.stringify(error.meta, null, 2));
-      }
-      try {
-        console.error('[OKR REPORTING] Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
-      } catch (e) {
-        console.error('[OKR REPORTING] Error object (non-serializable):', error);
-      }
+      this.logger.error('Error in getOverdueCheckIns', {
+        message: error?.message || 'Unknown error',
+        name: error?.name || 'Unknown',
+        code: error?.code || 'N/A',
+        stack: error?.stack || 'No stack trace',
+        prismaMeta: error?.meta ? JSON.stringify(error.meta, null, 2) : undefined,
+      });
       throw error;
     }
   }

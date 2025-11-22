@@ -83,7 +83,7 @@ export class OkrCycleController {
 
     // Access cycleGenerator through the service
     const result = await this.cycleService.cycleGenerator.getOrCreateStandardCycle(tenantId, type, dateObj);
-    console.log('[CYCLE CONTROLLER] get-or-create-standard result', { cycleId: result?.id, cycleName: result?.name });
+    this.logger.debug('get-or-create-standard result', { cycleId: result?.id, cycleName: result?.name });
     return result;
   }
 
@@ -115,7 +115,7 @@ export class OkrCycleController {
     
     // Guard: Don't allow 'get-or-create-standard' as an ID
     if (id === 'get-or-create-standard') {
-      console.error('[CYCLE CONTROLLER] Route matching error: get-or-create-standard matched :id route instead of specific route');
+      this.logger.error('Route matching error: get-or-create-standard matched :id route instead of specific route');
       throw new BadRequestException('Invalid cycle ID. Use the get-or-create-standard endpoint instead.');
     }
     
@@ -215,7 +215,7 @@ export class OkrCycleController {
     const userContext = await this.rbacService.buildUserContext(userId, false);
 
     // Debug logging
-    console.log('[CYCLE CONTROLLER] Permission check', {
+    this.logger.debug('Permission check', {
       userId,
       userEmail: req.user.email,
       tenantId,
@@ -238,7 +238,7 @@ export class OkrCycleController {
       if (roles.includes('TENANT_OWNER') || roles.includes('TENANT_ADMIN')) {
         hasTenantAdminRole = true;
         matchingTenantId = tenantId;
-        console.log('[CYCLE CONTROLLER] Found admin role in JWT tenantId', { tenantId, roles });
+        this.logger.debug('Found admin role in JWT tenantId', { tenantId, roles });
       }
     }
 
@@ -248,7 +248,7 @@ export class OkrCycleController {
         if (roles.includes('TENANT_OWNER') || roles.includes('TENANT_ADMIN')) {
           hasTenantAdminRole = true;
           matchingTenantId = tenantId;
-          console.log('[CYCLE CONTROLLER] Found admin role in tenant (not matching JWT orgId)', { 
+          this.logger.debug('Found admin role in tenant (not matching JWT orgId)', { 
             tenantId, 
             roles,
             jwtOrganizationId: tenantId 
@@ -273,7 +273,7 @@ export class OkrCycleController {
       { tenantId: checkTenantId, workspaceId: null, teamId: null },
     );
 
-    console.log('[CYCLE CONTROLLER] Permission results', {
+    this.logger.debug('Permission results', {
       userId,
       userEmail: req.user.email,
       jwtOrganizationId: tenantId,
