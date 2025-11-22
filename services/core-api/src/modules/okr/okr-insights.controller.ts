@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger'
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
 import { OkrInsightsService } from './okr-insights.service';
+import { AuthenticatedRequest } from '../../common/types/request.types';
 
 /**
  * OKR Insights Controller
@@ -32,7 +33,7 @@ export class OkrInsightsController {
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get cycle health summary' })
   @ApiQuery({ name: 'cycleId', required: true, type: String, description: 'Cycle ID' })
-  async getCycleSummary(@Query('cycleId') cycleId: string | undefined, @Req() req: any) {
+  async getCycleSummary(@Query('cycleId') cycleId: string | undefined, @Req() req: AuthenticatedRequest) {
     if (!cycleId) {
       throw new BadRequestException('cycleId query parameter is required');
     }
@@ -52,7 +53,7 @@ export class OkrInsightsController {
   @Get('objective/:id')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get objective-level insights' })
-  async getObjectiveInsights(@Param('id') objectiveId: string, @Req() req: any) {
+  async getObjectiveInsights(@Param('id') objectiveId: string, @Req() req: AuthenticatedRequest) {
     const userOrganizationId = req.user?.tenantId ?? null;
     const requesterUserId = req.user?.id;
 
@@ -87,7 +88,7 @@ export class OkrInsightsController {
     @Query('cycleId') cycleId: string | undefined,
     @Query('page') page: string | undefined,
     @Query('pageSize') pageSize: string | undefined,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     const userOrganizationId = req.user?.tenantId ?? null;
     const requesterUserId = req.user?.id;

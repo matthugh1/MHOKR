@@ -35,7 +35,7 @@ export class OkrCycleController {
 
   @Get()
   @ApiOperation({ summary: 'Get all cycles for current tenant' })
-  async getAll(@Req() req: any) {
+  async getAll(@Req() req: AuthenticatedRequest) {
     await this.checkCycleManagementPermission(req);
     
     const tenantId = req.user.tenantId;
@@ -90,7 +90,7 @@ export class OkrCycleController {
   // This route must come after get-or-create-standard to avoid matching conflicts
   @Get(':id/summary')
   @ApiOperation({ summary: 'Get cycle summary (objectives count, published count, etc.)' })
-  async getSummary(@Param('id') id: string, @Req() req: any) {
+  async getSummary(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     // Guard: Don't allow 'get-or-create-standard' as an ID
     if (id === 'get-or-create-standard') {
       throw new BadRequestException('Invalid cycle ID');
@@ -133,7 +133,7 @@ export class OkrCycleController {
   @Post()
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Create new cycle' })
-  async create(@Body() data: CreateCycleDto, @Req() req: any) {
+  async create(@Body() data: CreateCycleDto, @Req() req: AuthenticatedRequest) {
     await this.checkCycleManagementPermission(req);
     
     const tenantId = req.user.tenantId;
@@ -190,7 +190,7 @@ export class OkrCycleController {
   @Delete(':id')
   @RequireAction('manage_tenant_settings')
   @ApiOperation({ summary: 'Delete cycle (only if no linked OKRs)' })
-  async delete(@Param('id') id: string, @Req() req: any) {
+  async delete(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     await this.checkCycleManagementPermission(req);
     
     const tenantId = req.user.tenantId;
