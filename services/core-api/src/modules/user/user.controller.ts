@@ -4,6 +4,7 @@ import { UserService } from './user.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
 import { TenantMutationGuard } from '../../common/tenant/tenant-mutation.guard';
+import { AuthenticatedRequest } from '../../common/types/request.types';
 
 @ApiTags('Users')
 @Controller('users')
@@ -18,7 +19,7 @@ export class UserController {
   @ApiOperation({ summary: 'Get current user' })
   // Override class-level guards - only require JWT auth, not RBAC (user can always see themselves)
   @UseGuards(JwtAuthGuard)
-  async getCurrentUser(@Req() req: any) {
+  async getCurrentUser(@Req() req: AuthenticatedRequest) {
     return req.user;
   }
 
@@ -26,21 +27,21 @@ export class UserController {
   @ApiOperation({ summary: 'Get current user context with organization, workspace, and team info' })
   // Override class-level guards - only require JWT auth, not RBAC (user can always see their own context)
   @UseGuards(JwtAuthGuard)
-  async getUserContext(@Req() req: any) {
+  async getUserContext(@Req() req: AuthenticatedRequest) {
     return this.userService.getUserContext(req.user.id);
   }
 
   @Get()
   @RequireAction('manage_users')
   @ApiOperation({ summary: 'Get all users (tenant-isolated)' })
-  async getAllUsers(@Req() req: any) {
+  async getAllUsers(@Req() req: AuthenticatedRequest) {
     return this.userService.findAll(req.user.tenantId);
   }
 
   @Get(':id')
   @RequireAction('manage_users')
   @ApiOperation({ summary: 'Get user by ID (tenant-isolated)' })
-  async getUserById(@Param('id') id: string, @Req() req: any) {
+  async getUserById(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     const user = await this.userService.findById(id, req.user.tenantId);
     if (!user) {
       throw new NotFoundException('User not found');
@@ -61,7 +62,7 @@ export class UserController {
       role?: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER';
       workspaceRole?: 'WORKSPACE_OWNER' | 'MEMBER' | 'VIEWER';
     },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     // Auto-inject tenant from context if not provided
     let resolvedTenantId = data.tenantId;
@@ -107,14 +108,14 @@ export class UserController {
   @Patch(':id')
   @RequireAction('manage_users')
   @ApiOperation({ summary: 'Update user information' })
-  async updateUser(@Param('id') id: string, @Body() data: { name?: string; email?: string }, @Req() req: any) {
+  async updateUser(@Param('id') id: string, @Body() data: { name?: string; email?: string }, @Req() req: AuthenticatedRequest) {
     return this.userService.updateUser(id, data, req.user.tenantId, req.user.id);
   }
 
   @Post(':id/reset-password')
   @RequireAction('manage_users')
   @ApiOperation({ summary: 'Reset user password' })
-  async resetPassword(@Param('id') id: string, @Body() data: { password: string }, @Req() req: any) {
+  async resetPassword(@Param('id') id: string, @Body() data: { password: string }, @Req() req: AuthenticatedRequest) {
     return this.userService.resetPassword(id, data.password, req.user.tenantId, req.user.id);
   }
 }

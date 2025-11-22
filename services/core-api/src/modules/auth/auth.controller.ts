@@ -2,6 +2,7 @@ import { Controller, Post, Body, Get, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { AuthenticatedRequest } from '../../common/types/request.types';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -39,7 +40,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user' })
-  async getCurrentUser(@Req() req: any) {
+  async getCurrentUser(@Req() req: AuthenticatedRequest) {
     return req.user;
   }
 }

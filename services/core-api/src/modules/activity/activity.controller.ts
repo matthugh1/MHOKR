@@ -5,6 +5,7 @@ import { ObjectiveService } from '../okr/objective.service';
 import { KeyResultService } from '../okr/key-result.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
+import { AuthenticatedRequest } from '../../common/types/request.types';
 
 /**
  * Activity Controller
@@ -40,7 +41,7 @@ export class ActivityController {
   @ApiOperation({ summary: 'Get recent activity for an objective' })
   async getObjectiveActivity(
     @Param('id') id: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
     @Query('action') actionFilter?: string,
@@ -76,7 +77,7 @@ export class ActivityController {
   @ApiOperation({ summary: 'Get recent activity for a key result' })
   async getKeyResultActivity(
     @Param('id') id: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
     @Query('action') actionFilter?: string,
@@ -112,7 +113,7 @@ export class ActivityController {
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get global activity feed (future)' })
   async getGlobalFeed(
-    @Req() _req: any,
+    @Req() _req: AuthenticatedRequest,
     @Query('limit') _limit?: string,
     @Query('offset') _offset?: string,
   ) {
