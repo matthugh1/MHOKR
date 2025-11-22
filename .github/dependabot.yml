@@ -1,0 +1,119 @@
+version: 2
+updates:
+  # Enable version updates for npm (root package.json)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    # Group production dependencies together
+    groups:
+      production-dependencies:
+        patterns:
+          - "@nestjs/*"
+          - "@prisma/*"
+          - "next"
+          - "react"
+          - "react-dom"
+          - "@tanstack/react-query"
+          - "axios"
+          - "zustand"
+          - "class-validator"
+          - "class-transformer"
+          - "bcrypt"
+          - "jsonwebtoken"
+          - "passport-jwt"
+          - "jwks-rsa"
+          - "ioredis"
+          - "socket.io"
+          - "uuid"
+        update-types:
+          - "minor"
+          - "patch"
+      dev-dependencies:
+        patterns:
+          - "@types/*"
+          - "@typescript-eslint/*"
+          - "typescript"
+          - "eslint"
+          - "prettier"
+          - "jest"
+          - "ts-node"
+          - "concurrently"
+        update-types:
+          - "minor"
+          - "patch"
+    # Ignore major version updates (handle manually)
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+    # Security updates are always allowed (even major versions)
+    allow:
+      - dependency-type: "direct"
+        update-type: "security"
+
+  # Enable version updates for npm (core-api)
+  - package-ecosystem: "npm"
+    directory: "/services/core-api"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    groups:
+      production-dependencies:
+        patterns:
+          - "@nestjs/*"
+          - "@prisma/*"
+          - "class-validator"
+          - "class-transformer"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+    allow:
+      - dependency-type: "direct"
+        update-type: "security"
+
+  # Enable version updates for npm (web app)
+  - package-ecosystem: "npm"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    groups:
+      production-dependencies:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+          - "@tanstack/react-query"
+          - "@radix-ui/*"
+          - "tailwindcss"
+          - "framer-motion"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+    allow:
+      - dependency-type: "direct"
+        update-type: "security"
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+
