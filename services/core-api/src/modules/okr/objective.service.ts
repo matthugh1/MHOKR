@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RBACService } from '../rbac/rbac.service';
 import { buildResourceContextFromOKR } from '../rbac/helpers';
@@ -18,6 +18,8 @@ import { calculateProgress } from '@okr-nexus/utils';
  */
 @Injectable()
 export class ObjectiveService {
+  private readonly logger = new Logger(ObjectiveService.name);
+
   constructor(
     private prisma: PrismaService,
     private rbacService: RBACService,
@@ -247,7 +249,7 @@ export class ObjectiveService {
       // Extract OKR's tenantId from resource context
       const okrOrganizationId = resourceContext.okr?.tenantId;
       
-      console.log('[OBJECTIVE SERVICE] canEdit: Checking permissions', {
+      this.logger.debug('canEdit: Checking permissions', {
         userId,
         objectiveId,
         userTenantId,
@@ -260,7 +262,7 @@ export class ObjectiveService {
       try {
         OkrTenantGuard.assertSameTenant(okrOrganizationId, userTenantId);
       } catch (error) {
-        console.log('[OBJECTIVE SERVICE] canEdit: Tenant mismatch', {
+        this.logger.debug('canEdit: Tenant mismatch', {
           okrTenantId: okrOrganizationId,
           userTenantId,
           error: (error as Error).message,
@@ -270,7 +272,7 @@ export class ObjectiveService {
       
       // Build user context to check roles
       const userContext = await this.rbacService.buildUserContext(userId, false);
-      console.log('[OBJECTIVE SERVICE] canEdit: User context', {
+      this.logger.debug('canEdit: User context', {
         userId,
         isSuperuser: userContext.isSuperuser,
         tenantRoles: Array.from(userContext.tenantRoles.entries()),
@@ -278,11 +280,11 @@ export class ObjectiveService {
       });
       
       const canEdit = this.rbacService.canPerformAction(userId, 'edit_okr', resourceContext);
-      console.log('[OBJECTIVE SERVICE] canEdit: RBAC result', { canEdit, userId, objectiveId });
+      this.logger.debug('canEdit: RBAC result', { canEdit, userId, objectiveId });
       
       return canEdit;
     } catch (error) {
-      console.error('[OBJECTIVE SERVICE] canEdit: Error', {
+      this.logger.error('canEdit: Error', {
         userId,
         objectiveId,
         error: (error as Error).message,
@@ -574,7 +576,7 @@ export class ObjectiveService {
       },
     }).catch(err => {
       // Log error but don't fail the request
-      console.error('Failed to log activity for objective creation:', err);
+      this.logger.error('Failed to log activity for objective creation', { error: err });
     });
 
     // Log audit entry for objective creation
@@ -593,7 +595,7 @@ export class ObjectiveService {
       },
     }).catch(err => {
       // Log error but don't fail the request
-      console.error('Failed to log audit entry for objective creation:', err);
+      this.logger.error('Failed to log audit entry for objective creation', { error: err });
     });
 
     // If Objective has a parent, trigger progress and status roll-up for parent

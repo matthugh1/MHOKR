@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RBACService } from '../rbac/rbac.service';
 import { buildResourceContextFromOKR } from '../rbac/helpers';
@@ -18,6 +18,8 @@ import { OkrStateTransitionService } from './okr-state-transition.service';
  */
 @Injectable()
 export class KeyResultService {
+  private readonly logger = new Logger(KeyResultService.name);
+
   constructor(
     private prisma: PrismaService,
     private rbacService: RBACService,
@@ -476,7 +478,7 @@ export class KeyResultService {
     const createdKr = await this.prisma.keyResult.create({
       data,
     }).catch((error) => {
-      console.error('[KeyResultService] Error creating key result:', {
+      this.logger.error('Error creating key result', {
         error: error.message,
         errorCode: error.code,
         data: {
@@ -528,7 +530,7 @@ export class KeyResultService {
       },
     }).catch(err => {
       // Log error but don't fail the request
-      console.error('Failed to log activity for key result creation:', err);
+      this.logger.error('Failed to log activity for key result creation', { error: err });
     });
 
     // Log audit entry for key result creation
@@ -559,7 +561,7 @@ export class KeyResultService {
       },
     }).catch(err => {
       // Log error but don't fail the request
-      console.error('Failed to log audit entry for key result creation:', err);
+      this.logger.error('Failed to log audit entry for key result creation', { error: err });
     });
 
     // If KR was linked to an Objective, create the junction table entry
@@ -774,7 +776,7 @@ export class KeyResultService {
           publishStateChanged: publishStateChanged,
         },
       }).catch(err => {
-        console.error('Failed to log activity for state transition:', err);
+        this.logger.error('Failed to log activity for state transition', { error: err });
       });
 
       // Emit separate STATE_CHANGE activity alongside the transition-specific action
@@ -789,7 +791,7 @@ export class KeyResultService {
           to: finalState,
         },
       }).catch(err => {
-        console.error('Failed to log STATE_CHANGE activity:', err);
+        this.logger.error('Failed to log STATE_CHANGE activity', { error: err });
       });
     }
 
