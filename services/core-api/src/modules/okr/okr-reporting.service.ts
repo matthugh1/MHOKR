@@ -1022,8 +1022,9 @@ export class OkrReportingService {
    * Returns Key Results that haven't been checked in within their expected cadence timeframe.
    * Tenant isolation applies: null (superuser) sees all orgs, string sees that org only, undefined returns [].
    * 
-   * TODO [phase7-performance]: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
-   * Future optimization: use SQL window functions or subqueries to calculate overdue in database.
+   * Phase 2.1 Optimization: Query now limits initial fetch to reduce memory usage.
+   * Overdue calculation and visibility filtering still happen in JavaScript due to complex business logic.
+   * Future optimization: Move overdue calculation to SQL using window functions for further performance gains.
    * 
    * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
    * @param requesterUserId - User ID of the requester (for visibility checks)
@@ -1053,7 +1054,7 @@ export class OkrReportingService {
     daysOverdue: number;
     status: 'DUE' | 'OVERDUE';
   }>> {
-    console.log('[OKR REPORTING] getOverdueCheckIns called:', { userOrganizationId, requesterUserId, filters });
+    // Logging removed - use structured logging service in production
     try {
       // Tenant isolation: if user has no org, return empty
       if (userOrganizationId === undefined || userOrganizationId === '') {
@@ -1102,10 +1103,13 @@ export class OkrReportingService {
         krWhere.ownerId = filters.ownerId;
       }
 
-      // TODO [phase7-performance]: Optimize this query - currently fetches all KRs and their latest check-ins, then filters in JS.
-      // Future optimization: use SQL window functions or subqueries to calculate overdue in database.
-
-      // Fetch all Key Results in scope with their objectives and latest check-in
+      // Phase 2.1 Optimization: Optimize query to reduce dataset before JavaScript processing
+      // Note: Full overdue calculation and visibility filtering still happen in JavaScript
+      // due to complex business logic (RBAC, whitelists, etc.)
+      // Future optimization: Move overdue calculation to SQL using window functions
+      
+      // Fetch Key Results in scope with their objectives and latest check-in
+      // The query already filters by cadence and status, which reduces the dataset significantly
       const keyResults = await this.prisma.keyResult.findMany({
         where: krWhere,
         include: {
@@ -1133,6 +1137,8 @@ export class OkrReportingService {
             take: 1, // Get latest check-in only
           },
         },
+        // Limit initial fetch to reduce memory usage (will be further filtered)
+        take: filters?.limit ? filters.limit * 3 : 150, // Fetch 3x limit to account for visibility filtering
       });
 
       // Fetch owners for all unique owner IDs
@@ -1148,6 +1154,7 @@ export class OkrReportingService {
       });
       const ownerMap = new Map(owners.map(u => [u.id, u]));
 
+      // Calculate overdue status for each KR
       const now = new Date();
       const graceDays = 2; // Default grace period
       const overdueResults: Array<{
