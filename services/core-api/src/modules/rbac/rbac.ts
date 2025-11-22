@@ -5,6 +5,7 @@
  * Provides functions to check user permissions based on roles and visibility rules.
  */
 
+import { Logger } from '@nestjs/common';
 import {
   UserContext,
   ResourceContext,
@@ -13,6 +14,8 @@ import {
   getRolePriority,
 } from './types';
 import { canViewOKR } from './visibilityPolicy';
+
+const logger = new Logger('RBAC');
 
 /**
  * Get effective roles for a user at a specific scope
@@ -249,7 +252,7 @@ function canEditOKRAction(
   const tenantId = resourceContext.tenantId || okr.tenantId || (okr as any).tenantId || '';
   
   // Debug logging
-  console.log('[RBAC] canEditOKRAction: Checking edit permission', {
+  logger.debug('canEditOKRAction: Checking edit permission', {
     userId: userContext.userId,
     okrId: okr.id,
     tenantId,
@@ -266,7 +269,7 @@ function canEditOKRAction(
   if (okr.isPublished === true) {
     const hasOwner = hasTenantOwnerRole(userContext, tenantId);
     const hasAdmin = hasTenantAdminRole(userContext, tenantId);
-    console.log('[RBAC] canEditOKRAction: Published OKR check', {
+    logger.debug('canEditOKRAction: Published OKR check', {
       tenantId,
       hasOwner,
       hasAdmin,
@@ -284,7 +287,7 @@ function canEditOKRAction(
       return true;
     }
     // All other roles (including owner) cannot edit published OKRs
-    console.log('[RBAC] canEditOKRAction: Published OKR denied - user lacks TENANT_OWNER or TENANT_ADMIN role', {
+    logger.debug('canEditOKRAction: Published OKR denied - user lacks TENANT_OWNER or TENANT_ADMIN role', {
       tenantId,
       userRoles: userContext.tenantRoles.get(tenantId) || [],
     });
@@ -296,7 +299,7 @@ function canEditOKRAction(
   const isOwner = okr.ownerId === userContext.userId || 
     (okr as any).allOwnerIds?.includes(userContext.userId);
   if (isOwner) {
-    console.log('[RBAC] canEditOKRAction: Allowed - user is owner', {
+    logger.debug('canEditOKRAction: Allowed - user is owner', {
       isPrimaryOwner: okr.ownerId === userContext.userId,
       isAdditionalOwner: (okr as any).allOwnerIds?.includes(userContext.userId),
     });
@@ -306,7 +309,7 @@ function canEditOKRAction(
   // TENANT_OWNER can edit any OKR in their tenant
   const hasOwner = hasTenantOwnerRole(userContext, tenantId);
   if (hasOwner) {
-    console.log('[RBAC] canEditOKRAction: Allowed - user has TENANT_OWNER role', { tenantId });
+    logger.debug('canEditOKRAction: Allowed - user has TENANT_OWNER role', { tenantId });
     return true;
   }
 

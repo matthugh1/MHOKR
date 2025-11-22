@@ -1,15 +1,18 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { validateCoreApiEnv } from './common/config/env-validation';
+
+const logger = new Logger('Bootstrap');
 
 // Validate required environment variables before starting the application
 try {
   validateCoreApiEnv();
 } catch (error) {
-  console.error('❌ Environment validation failed:');
-  console.error(error instanceof Error ? error.message : String(error));
+  logger.error('Environment validation failed', {
+    error: error instanceof Error ? error.message : String(error),
+  });
   process.exit(1);
 }
 

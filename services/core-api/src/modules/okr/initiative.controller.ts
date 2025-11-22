@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException, BadRequestException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Req, ForbiddenException, BadRequestException, NotFoundException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { InitiativeService } from './initiative.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -11,6 +11,8 @@ import { AuthenticatedRequest } from '../../common/types/request.types';
 @UseGuards(JwtAuthGuard, RBACGuard)
 @ApiBearerAuth()
 export class InitiativeController {
+  private readonly logger = new Logger(InitiativeController.name);
+
   constructor(
     private readonly initiativeService: InitiativeService,
     private readonly prisma: PrismaService,
@@ -95,7 +97,7 @@ export class InitiativeController {
         throw error;
       }
       // Log unexpected errors and return internal server error
-      console.error('Error creating initiative:', error);
+      this.logger.error('Error creating initiative', { error: error.message || error, stack: error.stack });
       throw new InternalServerErrorException(
         error.message || 'An error occurred while creating the initiative'
       );
