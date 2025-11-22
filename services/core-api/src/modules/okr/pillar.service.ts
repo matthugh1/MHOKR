@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OkrTenantGuard } from './tenant-guard';
 import { ActivityService } from '../activity/activity.service';
@@ -8,6 +8,8 @@ import { UpdatePillarDto } from './dto/update-pillar.dto';
 
 @Injectable()
 export class PillarService {
+  private readonly logger = new Logger(PillarService.name);
+
   constructor(
     private prisma: PrismaService,
     private activityService: ActivityService,
@@ -71,7 +73,7 @@ export class PillarService {
         },
       },
     }).catch(err => {
-      console.error('Failed to log activity for pillar creation:', err);
+      this.logger.error('Failed to log activity for pillar creation', { error: err });
     });
 
     // Emit AuditLog
@@ -85,7 +87,7 @@ export class PillarService {
         pillarName: pillar.name,
       },
     }).catch(err => {
-      console.error('Failed to log audit for pillar creation:', err);
+      this.logger.error('Failed to log audit for pillar creation', { error: err });
     });
 
     return pillar;
@@ -241,7 +243,7 @@ export class PillarService {
           changedFields,
         },
       }).catch(err => {
-        console.error('Failed to log activity for pillar update:', err);
+        this.logger.error('Failed to log activity for pillar update', { error: err });
       });
 
       // Emit AuditLog
@@ -256,7 +258,7 @@ export class PillarService {
           pillarName: pillarAfter.name,
         },
       }).catch(err => {
-        console.error('Failed to log audit for pillar update:', err);
+        this.logger.error('Failed to log audit for pillar update', { error: err });
       });
     }
 
@@ -301,7 +303,7 @@ export class PillarService {
         },
       },
     }).catch(err => {
-      console.error('Failed to log activity for pillar deletion:', err);
+      this.logger.error('Failed to log activity for pillar deletion', { error: err });
     });
 
     // Emit AuditLog
@@ -315,7 +317,7 @@ export class PillarService {
         pillarName: pillarBefore.name,
       },
     }).catch(err => {
-      console.error('Failed to log audit for pillar deletion:', err);
+      this.logger.error('Failed to log audit for pillar deletion', { error: err });
     });
 
     return { success: true };

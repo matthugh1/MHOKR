@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RBACService } from '../rbac/rbac.service';
 import { buildResourceContextFromOKR } from '../rbac/helpers';
@@ -10,6 +10,8 @@ import { OkrStateTransitionService } from './okr-state-transition.service';
 
 @Injectable()
 export class InitiativeService {
+  private readonly logger = new Logger(InitiativeService.name);
+
   constructor(
     private prisma: PrismaService,
     private rbacService: RBACService,
@@ -404,7 +406,7 @@ export class InitiativeService {
       },
     }).catch(err => {
       // Log error but don't fail the request
-      console.error('Failed to log activity for initiative creation:', err);
+      this.logger.error('Failed to log activity for initiative creation', { error: err });
     });
 
     await this.auditLogService.record({
@@ -575,7 +577,7 @@ export class InitiativeService {
           to: updated.status,
         },
       }).catch(err => {
-        console.error('Failed to log STATE_CHANGE activity:', err);
+        this.logger.error('Failed to log STATE_CHANGE activity', { error: err });
       });
     }
 
@@ -635,7 +637,7 @@ export class InitiativeService {
       },
     }).catch(err => {
       // Log error but don't fail the request
-      console.error('Failed to log activity for initiative update:', err);
+      this.logger.error('Failed to log activity for initiative update', { error: err });
     });
 
     await this.auditLogService.record({
@@ -700,7 +702,7 @@ export class InitiativeService {
         },
       }).catch(err => {
         // Log error but don't fail the request
-        console.error('Failed to log activity for initiative deletion:', err);
+        this.logger.error('Failed to log activity for initiative deletion', { error: err });
       });
 
       await this.auditLogService.record({
@@ -825,7 +827,7 @@ export class InitiativeService {
         tagName: tag.name,
       },
     }).catch(err => {
-      console.error('Failed to log activity for tag addition:', err);
+      this.logger.error('Failed to log activity for tag addition', { error: err });
     });
 
     return {
@@ -903,7 +905,7 @@ export class InitiativeService {
         tagName: tag?.name || 'Unknown',
       },
     }).catch(err => {
-      console.error('Failed to log activity for tag removal:', err);
+      this.logger.error('Failed to log activity for tag removal', { error: err });
     });
 
     return { success: true };
@@ -1051,7 +1053,7 @@ export class InitiativeService {
         userName: userToAdd.name,
       },
     }).catch(err => {
-      console.error('Failed to log activity for contributor addition:', err);
+      this.logger.error('Failed to log activity for contributor addition', { error: err });
     });
 
     return {
@@ -1131,7 +1133,7 @@ export class InitiativeService {
         userName: userToRemove?.name || 'Unknown',
       },
     }).catch(err => {
-      console.error('Failed to log activity for contributor removal:', err);
+      this.logger.error('Failed to log activity for contributor removal', { error: err });
     });
 
     return { success: true };
@@ -1211,7 +1213,7 @@ export class InitiativeService {
       });
     } catch (error) {
       // Log error but don't fail the operation if snapshot storage fails
-      console.error(`Failed to store status snapshot for initiative ${initiativeId}:`, error);
+      this.logger.error(`Failed to store status snapshot for initiative ${initiativeId}`, { error });
     }
   }
 

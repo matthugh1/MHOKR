@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OKRStatus } from '@prisma/client';
 
@@ -13,6 +13,8 @@ import { OKRStatus } from '@prisma/client';
  */
 @Injectable()
 export class OkrProgressService {
+  private readonly logger = new Logger(OkrProgressService.name);
+
   constructor(private prisma: PrismaService) {}
 
   /**
