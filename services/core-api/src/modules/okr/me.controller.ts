@@ -4,6 +4,7 @@ import { OkrReportingService } from './okr-reporting.service';
 import { ActivityService } from '../activity/activity.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
+import { AuthenticatedRequest } from '../../common/types/request.types';
 
 @ApiTags('My Dashboard')
 @Controller('me')
@@ -18,7 +19,7 @@ export class MeController {
   @Get('summary')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get user dashboard summary' })
-  async getSummary(@Req() req: any) {
+  async getSummary(@Req() req: AuthenticatedRequest) {
     // TODO [phase7-hardening]: Expose this data in a dedicated 'My dashboard' view in frontend
     const userId = req.user.id;
     const userOrganizationId = req.user.tenantId;

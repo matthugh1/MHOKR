@@ -6,6 +6,7 @@ import { RBACGuard, RequireAction } from '../rbac';
 import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
 import { CreatePillarDto } from './dto/create-pillar.dto';
 import { UpdatePillarDto } from './dto/update-pillar.dto';
+import { AuthenticatedRequest } from '../../common/types/request.types';
 
 @ApiTags('Pillars')
 @Controller('pillars')
@@ -26,7 +27,7 @@ export class PillarController {
   @ApiResponse({ status: 201, description: 'Pillar created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid input (name too long, invalid color, owner not in tenant)' })
   @ApiResponse({ status: 403, description: 'Permission denied' })
-  async create(@Body() dto: CreatePillarDto, @Req() req: any) {
+  async create(@Body() dto: CreatePillarDto, @Req() req: AuthenticatedRequest) {
     return this.pillarService.create(dto, req.user.id, req.user.tenantId);
   }
 
@@ -34,7 +35,7 @@ export class PillarController {
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'List strategic pillars', description: 'Returns all pillars for the user\'s tenant (tenant-isolated).' })
   @ApiResponse({ status: 200, description: 'List of pillars' })
-  async findAll(@Req() req: any) {
+  async findAll(@Req() req: AuthenticatedRequest) {
     return this.pillarService.findAll(req.user.tenantId);
   }
 
@@ -44,7 +45,7 @@ export class PillarController {
   @ApiResponse({ status: 200, description: 'Pillar details' })
   @ApiResponse({ status: 404, description: 'Pillar not found' })
   @ApiResponse({ status: 403, description: 'Permission denied (cross-tenant access)' })
-  async findOne(@Param('id') id: string, @Req() req: any) {
+  async findOne(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.pillarService.findOne(id, req.user.tenantId);
   }
 
@@ -59,7 +60,7 @@ export class PillarController {
   @ApiResponse({ status: 400, description: 'Invalid input (name too long, invalid color, owner not in tenant)' })
   @ApiResponse({ status: 403, description: 'Permission denied' })
   @ApiResponse({ status: 404, description: 'Pillar not found' })
-  async update(@Param('id') id: string, @Body() dto: UpdatePillarDto, @Req() req: any) {
+  async update(@Param('id') id: string, @Body() dto: UpdatePillarDto, @Req() req: AuthenticatedRequest) {
     return this.pillarService.update(id, dto, req.user.id, req.user.tenantId);
   }
 
@@ -73,7 +74,7 @@ export class PillarController {
   @ApiResponse({ status: 200, description: 'Pillar deleted successfully' })
   @ApiResponse({ status: 403, description: 'Permission denied' })
   @ApiResponse({ status: 404, description: 'Pillar not found' })
-  async remove(@Param('id') id: string, @Req() req: any) {
+  async remove(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.pillarService.remove(id, req.user.id, req.user.tenantId);
   }
 }

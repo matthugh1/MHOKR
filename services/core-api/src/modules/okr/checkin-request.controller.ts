@@ -4,6 +4,7 @@ import { CheckInRequestService } from './checkin-request.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
 import { RateLimitGuard } from '../../common/guards/rate-limit.guard';
+import { AuthenticatedRequest } from '../../common/types/request.types';
 
 /**
  * CheckInRequest Controller
@@ -41,7 +42,7 @@ export class CheckInRequestController {
       required: ['targetUserIds', 'dueAt'],
     },
   })
-  async createRequests(@Body() body: { targetUserIds: string[]; dueAt: string }, @Req() req: any) {
+  async createRequests(@Body() body: { targetUserIds: string[]; dueAt: string }, @Req() req: AuthenticatedRequest) {
     const { targetUserIds, dueAt } = body;
 
     if (!targetUserIds || !Array.isArray(targetUserIds) || targetUserIds.length === 0) {
@@ -68,7 +69,7 @@ export class CheckInRequestController {
   @Get('checkin-requests/mine')
   @RequireAction('view_okr')
   @ApiOperation({ summary: 'Get all OPEN or LATE check-in requests for the current user' })
-  async getMyRequests(@Req() req: any) {
+  async getMyRequests(@Req() req: AuthenticatedRequest) {
     return this.checkInRequestService.getMyRequests(req.user.id, req.user.tenantId);
   }
 
@@ -106,7 +107,7 @@ export class CheckInRequestController {
       summaryBlocked?: string;
       summaryNeedHelp?: string;
     },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     const { requestId, summaryWhatMoved, summaryBlocked, summaryNeedHelp } = body;
 
@@ -136,7 +137,7 @@ export class CheckInRequestController {
     @Query('cycleId') cycleId: string | undefined,
     @Query('teamId') teamId: string | undefined,
     @Query('daysBack') daysBack: string | undefined,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     const daysBackNum = daysBack ? parseInt(daysBack, 10) : 14;
     
