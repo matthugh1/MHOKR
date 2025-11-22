@@ -7,7 +7,7 @@
  * This service wraps existing rbac.ts logic without changing business outcomes.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { UserContext, ResourceContext, Action } from '../modules/rbac/types';
 import { can } from '../modules/rbac/rbac';
 import { canViewOKR } from '../modules/rbac/visibilityPolicy';
@@ -18,6 +18,8 @@ import { RBACService } from '../modules/rbac/rbac.service';
 
 @Injectable()
 export class AuthorisationService {
+  private readonly logger = new Logger(AuthorisationService.name);
+
   constructor(
     private prisma: PrismaService,
     private governanceService: OkrGovernanceService,
@@ -69,7 +71,7 @@ export class AuthorisationService {
       } else if (userOrgId) {
         // Fallback: use userOrgId if no role assignments found (shouldn't happen for authenticated users)
         effectiveUserTenantId = userOrgId;
-        console.warn('[AUTHORISATION] create_okr: Using userOrgId as fallback (no role assignments found)', {
+        this.logger.warn('create_okr: Using userOrgId as fallback (no role assignments found)', {
           userId: userContext.userId,
           userOrgId,
         });
@@ -78,7 +80,7 @@ export class AuthorisationService {
       // CRITICAL: If we still don't have a tenantId, deny access
       // This should never happen for authenticated users (login should have failed)
       if (!effectiveUserTenantId) {
-        console.error('[AUTHORISATION] create_okr: No tenantId found for user', {
+        this.logger.error('create_okr: No tenantId found for user', {
           userId: userContext.userId,
           userOrgId,
           tenantRolesSize: userContext.tenantRoles?.size || 0,
@@ -94,7 +96,7 @@ export class AuthorisationService {
       // Always override resourceContext.tenantId to ensure it matches where user has roles
       // This prevents tenant leaks and ensures RBAC checks use the correct tenant
       if (!resourceContext.tenantId || resourceContext.tenantId === '' || resourceContext.tenantId !== effectiveUserTenantId) {
-        console.log('[AUTHORISATION] create_okr: Overriding resourceContext.tenantId', {
+        this.logger.debug('create_okr: Overriding resourceContext.tenantId', {
           originalTenantId: resourceContext.tenantId,
           effectiveUserTenantId,
           userOrgId,
@@ -128,7 +130,7 @@ export class AuthorisationService {
     // (Visibility checks don't enforce tenant boundaries, so we must do it here)
     if (!isMutation && resourceContext.tenantId && userOrgId !== undefined) {
       // Log tenant boundary check for debugging
-      console.log('[AUTHORISATION] Tenant boundary check', {
+      this.logger.debug('Tenant boundary check', {
         action,
         isMutation,
         resourceTenantId: resourceContext.tenantId,
@@ -149,10 +151,10 @@ export class AuthorisationService {
         // User has no organisation - check if they have roles for the resource tenant
         if (resourceContext.tenantId && userContext.tenantRoles.has(resourceContext.tenantId)) {
           // User has roles for this tenant, allow access
-          console.log('[AUTHORISATION] Allowing access: user has roles for tenant despite no JWT tenantId');
+          this.logger.debug('Allowing access: user has roles for tenant despite no JWT tenantId');
         } else {
           // User has no organisation and no roles for this tenant - deny access
-          console.log('[AUTHORISATION] Denying access: user has no org and no roles for tenant');
+          this.logger.debug('Denying access: user has no org and no roles for tenant');
           return {
             allow: false,
             reason: 'TENANT_BOUNDARY',
@@ -165,10 +167,10 @@ export class AuthorisationService {
         if (userContext.tenantRoles.has(resourceContext.tenantId)) {
           // User has roles for this tenant, allow access even if JWT tenantId differs
           // This handles the case where a user has multiple organizations
-          console.log('[AUTHORISATION] Allowing access: user has roles for tenant despite JWT tenantId mismatch');
+          this.logger.debug('Allowing access: user has roles for tenant despite JWT tenantId mismatch');
         } else {
           // Cross-tenant access attempt - user has no roles for this tenant
-          console.log('[AUTHORISATION] Denying access: tenant mismatch and no roles for resource tenant');
+          this.logger.debug('Denying access: tenant mismatch and no roles for resource tenant');
           return {
             allow: false,
             reason: 'TENANT_BOUNDARY',
@@ -180,12 +182,12 @@ export class AuthorisationService {
           };
         }
       } else {
-        console.log('[AUTHORISATION] Tenant IDs match, proceeding to RBAC check');
+        this.logger.debug('Tenant IDs match, proceeding to RBAC check');
       }
     }
 
     // Check RBAC role permissions
-    console.log('[AUTHORISATION] Checking RBAC permissions', {
+    this.logger.debug('Checking RBAC permissions', {
       action,
       resourceTenantId: resourceContext.tenantId,
       userTenantRoles: resourceContext.tenantId 
@@ -193,14 +195,14 @@ export class AuthorisationService {
         : [],
     });
     const rbacAllowed = can(userContext, action, resourceContext);
-    console.log('[AUTHORISATION] RBAC check result', { action, rbacAllowed });
+    this.logger.debug('RBAC check result', { action, rbacAllowed });
     if (!rbacAllowed) {
       // Enhanced error details for debugging
       const tenantRoles = resourceContext.tenantId 
         ? userContext.tenantRoles.get(resourceContext.tenantId) || []
         : [];
       
-      console.error('[AUTHORISATION] RBAC check failed', {
+      this.logger.error('RBAC check failed', {
         userId: userContext.userId,
         action,
         resourceContext,
