@@ -551,7 +551,7 @@ export class OkrProgressService {
       });
     } catch (error) {
       // Log error but don't fail the operation if snapshot storage fails
-      console.error(`Failed to store progress snapshot for objective ${objectiveId}:`, error);
+      this.logger.error(`Failed to store progress snapshot for objective ${objectiveId}`, { error });
     }
   }
 }
