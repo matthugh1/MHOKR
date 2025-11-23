@@ -18,7 +18,8 @@ import { AuthenticatedRequest } from '../../common/types/request.types';
 @UseGuards(JwtAuthGuard, RBACGuard) // Using RBACGuard instead of PermissionGuard
 @ApiBearerAuth()
 export class ObjectiveController {
-  private readonly logger = new Logger(ObjectiveController.name);
+  // Logger available for future use
+  // private readonly logger = new Logger(ObjectiveController.name);
   // Store prisma reference for use in decorator (workaround for decorator context limitation)
   private static prismaInstance: PrismaService | null = null;
 

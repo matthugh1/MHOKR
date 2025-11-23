@@ -46,6 +46,39 @@ export function clampProgress(progress: number | undefined | null): number {
   return Math.max(0, Math.min(100, progress))
 }
 
+/**
+ * Decodes HTML entities in text (e.g., &amp; -> &, &lt; -> <, &gt; -> >, &#38; -> &)
+ * React typically handles this automatically, but this is useful for cases where
+ * HTML entities might be double-encoded or come from external sources
+ * Works in both client and server contexts
+ */
+export function decodeHtmlEntities(text: string | null | undefined): string {
+  if (!text) return ''
+  
+  // Common HTML entities mapping
+  const entityMap: Record<string, string> = {
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+    '&apos;': "'",
+    '&nbsp;': ' ',
+  }
+  
+  // First, decode numeric entities (e.g., &#38; -> &, &#60; -> <)
+  let decoded = text.replace(/&#(\d+);/g, (match, code) => {
+    return String.fromCharCode(parseInt(code, 10))
+  })
+  
+  // Then decode named entities
+  decoded = decoded.replace(/&[a-z]+;/gi, (entity) => {
+    return entityMap[entity.toLowerCase()] || entity
+  })
+  
+  return decoded
+}
+
 
 
 

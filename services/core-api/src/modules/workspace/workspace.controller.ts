@@ -15,7 +15,7 @@ export class WorkspaceController {
   @Get()
   @RequireAction('manage_workspaces')
   @ApiOperation({ summary: 'Get all workspaces for user or organization (tenant-isolated)' })
-  async getAll(@Query('tenantId') tenantId?: string, @Req() req?: AuthenticatedRequest) {
+  async getAll(@Query('tenantId') tenantId: string | undefined, @Req() req: AuthenticatedRequest) {
     if (tenantId) {
       return this.workspaceService.findAll(req.user.tenantId, tenantId);
     }

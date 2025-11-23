@@ -15,7 +15,7 @@ export class TeamController {
   @Get()
   @RequireAction('manage_teams')
   @ApiOperation({ summary: 'Get all teams, optionally filtered by workspace (tenant-isolated)' })
-  async getAll(@Query('workspaceId') workspaceId?: string, @Req() req?: AuthenticatedRequest) {
+  async getAll(@Query('workspaceId') workspaceId: string | undefined, @Req() req: AuthenticatedRequest) {
     return this.teamService.findAll(req.user.tenantId, workspaceId);
   }
 

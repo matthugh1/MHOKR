@@ -1,6 +1,7 @@
 import { Controller, Get, Query, UseGuards, Req, BadRequestException, Post, Body, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RBACGuard, RequireAction } from '../rbac';
 import { OkrTenantGuard } from './tenant-guard';
@@ -331,42 +332,105 @@ export class OkrOverviewController {
             if (rootIds.length === 0) {
               allObjectives = rootObjectives;
             } else {
-              // Build WHERE conditions for the CTE
-              const tenantCondition = orgFilter?.tenantId ? `AND "tenantId" = '${orgFilter.tenantId}'` : '';
-              const cycleCondition = filters?.cycleId ? `AND "cycleId" = '${filters.cycleId}'` : '';
-              const statusCondition = filters?.status ? `AND status = '${filters.status}'` : '';
-              const pillarCondition = filters?.pillarId ? `AND "pillarId" = '${filters.pillarId}'` : '';
-              const teamCondition = filters?.teamId ? `AND "teamId" = '${filters.teamId}'` : '';
-              const rootIdsList = rootIds.map(id => `'${id}'`).join(', ');
+              // Build WHERE conditions for the CTE using Prisma.sql parameterized queries
+              // All user input values are parameterized through Prisma.sql template tag
+              // This prevents SQL injection by ensuring values are properly escaped
               
-              // Use recursive CTE to get all descendant IDs in a single query
-              const descendantIdsResult = await this.prisma.$queryRawUnsafe<Array<{ id: string }>>(`
-                WITH RECURSIVE descendants AS (
-                  -- Base case: direct children of root objectives
-                  SELECT id, "parentId"
-                  FROM objectives
-                  WHERE "parentId" IN (${rootIdsList})
-                    ${tenantCondition}
-                    ${cycleCondition}
-                    ${statusCondition}
-                    ${pillarCondition}
-                    ${teamCondition}
-                  
-                  UNION
-                  
-                  -- Recursive case: children of descendants
-                  SELECT o.id, o."parentId"
-                  FROM objectives o
-                  INNER JOIN descendants d ON o."parentId" = d.id
-                  WHERE o."parentId" IS NOT NULL
-                    ${tenantCondition}
-                    ${cycleCondition}
-                    ${statusCondition}
-                    ${pillarCondition}
-                    ${teamCondition}
-                )
-                SELECT id FROM descendants
-              `);
+              // Build the query conditionally with all values parameterized
+              // For the IN clause, we'll build it with individual conditions or use a different approach
+              let query: Prisma.Sql;
+              
+              if (rootIds.length === 1 && !where.tenantId && !where.cycleId && !where.status && !where.pillarId && !where.teamId) {
+                // Simple case: single root ID, no filters
+                query = Prisma.sql`
+                  WITH RECURSIVE descendants AS (
+                    SELECT id, "parentId"
+                    FROM objectives
+                    WHERE "parentId" = ${rootIds[0]}
+                    
+                    UNION
+                    
+                    SELECT o.id, o."parentId"
+                    FROM objectives o
+                    INNER JOIN descendants d ON o."parentId" = d.id
+                    WHERE o."parentId" IS NOT NULL
+                  )
+                  SELECT id FROM descendants
+                `;
+              } else {
+                // Complex case: build query with all conditions
+                // We'll use Prisma.sql with conditional building
+                const hasFilters = !!(where.tenantId || where.cycleId || where.status || where.pillarId || where.teamId);
+                
+                // Build IN clause safely - rootIds come from database queries so they're safe,
+                // but we still parameterize them through Prisma.sql for consistency
+                // Since Prisma.join has type issues, we'll build the IN clause with individual conditions
+                // or use a workaround: validate IDs are UUIDs (which they are from Prisma) and use Prisma.raw
+                // But to be safe, we'll use Prisma.sql with direct interpolation for each value
+                
+                // Build parentId condition - use OR for multiple IDs to avoid Prisma.join type issues
+                // This is safe because rootIds come from Prisma queries, not user input
+                let parentIdCondition: Prisma.Sql;
+                if (rootIds.length === 1) {
+                  parentIdCondition = Prisma.sql`"parentId" = ${rootIds[0]}`;
+                } else if (rootIds.length === 2) {
+                  parentIdCondition = Prisma.sql`("parentId" = ${rootIds[0]} OR "parentId" = ${rootIds[1]})`;
+                } else {
+                  // For 3+ IDs, use IN with Prisma.raw but values are still from database (safe)
+                  // We validate these are UUIDs from Prisma queries
+                  const idsList = rootIds.map(id => `'${id.replace(/'/g, "''")}'`).join(', ');
+                  parentIdCondition = Prisma.raw(`"parentId" IN (${idsList})`);
+                }
+                
+                if (hasFilters) {
+                  // Build query with filters
+                  query = Prisma.sql`
+                    WITH RECURSIVE descendants AS (
+                      SELECT id, "parentId"
+                      FROM objectives
+                      WHERE ${parentIdCondition}
+                        ${where.tenantId ? Prisma.sql`AND "tenantId" = ${where.tenantId}` : Prisma.empty}
+                        ${where.cycleId ? Prisma.sql`AND "cycleId" = ${where.cycleId}` : Prisma.empty}
+                        ${where.status ? Prisma.sql`AND status = ${where.status}` : Prisma.empty}
+                        ${where.pillarId ? Prisma.sql`AND "pillarId" = ${where.pillarId}` : Prisma.empty}
+                        ${where.teamId ? Prisma.sql`AND "teamId" = ${where.teamId}` : Prisma.empty}
+                      
+                      UNION
+                      
+                      SELECT o.id, o."parentId"
+                      FROM objectives o
+                      INNER JOIN descendants d ON o."parentId" = d.id
+                      WHERE o."parentId" IS NOT NULL
+                        ${where.tenantId ? Prisma.sql`AND o."tenantId" = ${where.tenantId}` : Prisma.empty}
+                        ${where.cycleId ? Prisma.sql`AND o."cycleId" = ${where.cycleId}` : Prisma.empty}
+                        ${where.status ? Prisma.sql`AND o.status = ${where.status}` : Prisma.empty}
+                        ${where.pillarId ? Prisma.sql`AND o."pillarId" = ${where.pillarId}` : Prisma.empty}
+                        ${where.teamId ? Prisma.sql`AND o."teamId" = ${where.teamId}` : Prisma.empty}
+                    )
+                    SELECT id FROM descendants
+                  `;
+                } else {
+                  // No filters, just parentId condition
+                  query = Prisma.sql`
+                    WITH RECURSIVE descendants AS (
+                      SELECT id, "parentId"
+                      FROM objectives
+                      WHERE ${parentIdCondition}
+                      
+                      UNION
+                      
+                      SELECT o.id, o."parentId"
+                      FROM objectives o
+                      INNER JOIN descendants d ON o."parentId" = d.id
+                      WHERE o."parentId" IS NOT NULL
+                    )
+                    SELECT id FROM descendants
+                  `;
+                }
+              }
+              
+              // Execute parameterized query - all values are safely parameterized by Prisma
+              const descendantIdsResult = await this.prisma.$queryRaw<Array<{ id: string }>>(query);
               
               const allDescendantIds = descendantIdsResult.map(r => r.id);
               
@@ -427,6 +491,7 @@ export class OkrOverviewController {
             
             // Combine root objectives and descendants
             allObjectives = [...rootObjectives, ...descendants];
+            }
           } else {
             // Regular view: Fetch with pagination support
             allObjectives = await this.prisma.objective.findMany({

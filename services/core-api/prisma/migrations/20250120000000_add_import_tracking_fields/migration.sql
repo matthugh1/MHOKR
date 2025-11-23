@@ -41,3 +41,4 @@ CREATE UNIQUE INDEX "key_results_tenantId_source_externalId_key"
   ON "key_results"("tenantId", "source", "externalId") 
   WHERE "source" IS NOT NULL AND "externalId" IS NOT NULL;
 
+

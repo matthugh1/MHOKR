@@ -40,7 +40,7 @@ export class OkrCycleController {
     
     const tenantId = req.user.tenantId;
     
-    if (tenantId === undefined) {
+    if (tenantId === undefined || tenantId === null) {
       throw new BadRequestException('User must belong to an organization');
     }
 
@@ -64,7 +64,7 @@ export class OkrCycleController {
     
     const tenantId = req.user.tenantId;
     
-    if (tenantId === undefined) {
+    if (tenantId === undefined || tenantId === null) {
       throw new BadRequestException('User must belong to an organization');
     }
 
@@ -100,7 +100,7 @@ export class OkrCycleController {
     
     const tenantId = req.user.tenantId;
     
-    if (tenantId === undefined) {
+    if (tenantId === undefined || tenantId === null) {
       throw new BadRequestException('User must belong to an organization');
     }
 
@@ -123,7 +123,7 @@ export class OkrCycleController {
     
     const tenantId = req.user.tenantId;
     
-    if (tenantId === undefined) {
+    if (tenantId === undefined || tenantId === null) {
       throw new BadRequestException('User must belong to an organization');
     }
 
@@ -138,7 +138,7 @@ export class OkrCycleController {
     
     const tenantId = req.user.tenantId;
     
-    if (tenantId === undefined) {
+    if (tenantId === undefined || tenantId === null) {
       throw new BadRequestException('User must belong to an organization');
     }
 
@@ -157,7 +157,7 @@ export class OkrCycleController {
     
     const tenantId = req.user.tenantId;
     
-    if (tenantId === undefined) {
+    if (tenantId === undefined || tenantId === null) {
       throw new BadRequestException('User must belong to an organization');
     }
 
@@ -176,7 +176,7 @@ export class OkrCycleController {
     
     const tenantId = req.user.tenantId;
     
-    if (tenantId === undefined) {
+    if (tenantId === undefined || tenantId === null) {
       throw new BadRequestException('User must belong to an organization');
     }
 
@@ -195,7 +195,7 @@ export class OkrCycleController {
     
     const tenantId = req.user.tenantId;
     
-    if (tenantId === undefined) {
+    if (tenantId === undefined || tenantId === null) {
       throw new BadRequestException('User must belong to an organization');
     }
 

@@ -137,3 +137,4 @@ CREATE POLICY users_tenant_write ON users
 -- 5. Application code should maintain primaryOrganizationId when creating/updating users
 --
 
+

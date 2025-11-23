@@ -312,3 +312,4 @@ CREATE POLICY organizations_tenant_write ON organizations
 
 COMMIT;
 
+
