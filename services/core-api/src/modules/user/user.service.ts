@@ -609,6 +609,10 @@ export class UserService {
 
     // Tenant isolation: verify user belongs to caller's org via RBAC (unless superuser)
     if (!isSuperuser) {
+      // Check if user's primaryOrganizationId matches the actor's tenant
+      const belongsToTenant = user.primaryOrganizationId === userOrganizationId;
+      
+      // Also check for TENANT role assignment
       const tenantAssignment = await this.prisma.roleAssignment.findFirst({
         where: {
           userId,
@@ -617,7 +621,8 @@ export class UserService {
         },
       });
 
-      if (!tenantAssignment) {
+      // User must belong to tenant via primaryOrganizationId OR have a role assignment
+      if (!belongsToTenant && !tenantAssignment) {
         throw new NotFoundException('User not found in your organization');
       }
     }
@@ -671,6 +676,10 @@ export class UserService {
     }
 
     // Tenant isolation: verify user belongs to caller's org via RBAC
+    // Check if user's primaryOrganizationId matches the actor's tenant
+    const belongsToTenant = user.primaryOrganizationId === userOrganizationId;
+    
+    // Also check for TENANT role assignment
     const tenantAssignment = await this.prisma.roleAssignment.findFirst({
       where: {
         userId,
@@ -679,7 +688,8 @@ export class UserService {
       },
     });
 
-    if (!tenantAssignment) {
+    // User must belong to tenant via primaryOrganizationId OR have a role assignment
+    if (!belongsToTenant && !tenantAssignment) {
       throw new NotFoundException('User not found in your organization');
     }
 

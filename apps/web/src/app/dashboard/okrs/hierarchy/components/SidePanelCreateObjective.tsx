@@ -172,12 +172,12 @@ export function SidePanelCreateObjective({
                     Cycle <span className="text-red-500">*</span>
                   </Label>
                   <Select value={cycleId} onValueChange={setCycleId} required>
-                    <SelectTrigger id="create-cycle" className="bg-slate-800 border-slate-700 text-white h-9">
+                    <SelectTrigger id="create-cycle" className="bg-slate-800/50 border-slate-700 text-white h-10 hover:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500">
                       <SelectValue placeholder="Select cycle" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-slate-800 border-slate-700 text-white">
                       {availableCycles.map((cycle) => (
-                        <SelectItem key={cycle.id} value={cycle.id}>
+                        <SelectItem key={cycle.id} value={cycle.id} className="text-white focus:bg-slate-700">
                           {cycle.name}
                         </SelectItem>
                       ))}
@@ -191,16 +191,16 @@ export function SidePanelCreateObjective({
                   Status <span className="text-red-500">*</span>
                 </Label>
                 <Select value={status} onValueChange={(value) => setStatus(value as OKRStatus)} required>
-                  <SelectTrigger id="create-status" className="bg-slate-800 border-slate-700 text-white h-9">
+                  <SelectTrigger id="create-status" className="bg-slate-800/50 border-slate-700 text-white h-10 hover:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500">
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NOT_STARTED">Not Started</SelectItem>
-                    <SelectItem value="ON_TRACK">On Track</SelectItem>
-                    <SelectItem value="AT_RISK">At Risk</SelectItem>
-                    <SelectItem value="OFF_TRACK">Off Track</SelectItem>
-                    <SelectItem value="COMPLETED">Completed</SelectItem>
-                    <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                  <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                    <SelectItem value="NOT_STARTED" className="text-white focus:bg-slate-700">Not Started</SelectItem>
+                    <SelectItem value="ON_TRACK" className="text-white focus:bg-slate-700">On Track</SelectItem>
+                    <SelectItem value="AT_RISK" className="text-white focus:bg-slate-700">At Risk</SelectItem>
+                    <SelectItem value="OFF_TRACK" className="text-white focus:bg-slate-700">Off Track</SelectItem>
+                    <SelectItem value="COMPLETED" className="text-white focus:bg-slate-700">Completed</SelectItem>
+                    <SelectItem value="CANCELLED" className="text-white focus:bg-slate-700">Cancelled</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -221,13 +221,13 @@ export function SidePanelCreateObjective({
                 <div className="space-y-2">
                   <Label htmlFor="create-workspace" className="text-sm text-slate-300">Workspace</Label>
                   <Select value={workspaceId} onValueChange={setWorkspaceId}>
-                    <SelectTrigger id="create-workspace" className="bg-slate-800 border-slate-700 text-white h-9">
+                    <SelectTrigger id="create-workspace" className="bg-slate-800/50 border-slate-700 text-white h-10 hover:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500">
                       <SelectValue placeholder="Select workspace (optional)" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                    <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                      <SelectItem value="" className="text-white focus:bg-slate-700">None</SelectItem>
                       {availableWorkspaces.map((workspace) => (
-                        <SelectItem key={workspace.id} value={workspace.id}>
+                        <SelectItem key={workspace.id} value={workspace.id} className="text-white focus:bg-slate-700">
                           {workspace.name}
                         </SelectItem>
                       ))}
@@ -245,12 +245,12 @@ export function SidePanelCreateObjective({
                   onValueChange={(value) => setVisibilityLevel(value as VisibilityLevel)}
                   required
                 >
-                  <SelectTrigger id="create-visibility" className="bg-slate-800 border-slate-700 text-white h-9">
+                  <SelectTrigger id="create-visibility" className="bg-slate-800/50 border-slate-700 text-white h-10 hover:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500">
                     <SelectValue placeholder="Select visibility" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="PUBLIC_TENANT">Public (Tenant)</SelectItem>
-                    <SelectItem value="PRIVATE">Private</SelectItem>
+                  <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                    <SelectItem value="PUBLIC_TENANT" className="text-white focus:bg-slate-700">Public (Tenant)</SelectItem>
+                    <SelectItem value="PRIVATE" className="text-white focus:bg-slate-700">Private</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

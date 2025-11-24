@@ -78,24 +78,32 @@ export function SearchableUserSelect({
           role="combobox"
           aria-expanded={open && !disabled}
           className={cn(
-            'w-full justify-between',
-            !selectedUser && 'text-muted-foreground'
+            'w-full justify-between h-10 bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700 hover:text-white',
+            !selectedUser && 'text-slate-400'
           )}
           disabled={disabled}
           id={id}
           type="button"
         >
-          {selectedUser
-            ? selectedUser.name || selectedUser.email || selectedUser.id
-            : placeholder}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <span className={cn(
+            'truncate',
+            selectedUser ? 'text-white' : 'text-slate-400'
+          )}>
+            {selectedUser
+              ? selectedUser.name || selectedUser.email || selectedUser.id
+              : placeholder}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-70" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Search users..." />
+      <PopoverContent className="w-[300px] p-0 bg-slate-800 border-slate-700" align="start">
+        <Command className="bg-slate-800">
+          <CommandInput 
+            placeholder="Search users..." 
+            className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+          />
           <CommandList>
-            <CommandEmpty>No users found.</CommandEmpty>
+            <CommandEmpty className="text-slate-400">No users found.</CommandEmpty>
             <CommandGroup>
               {uniqueUsers.map((user) => (
                 <CommandItem
@@ -106,19 +114,19 @@ export function SearchableUserSelect({
                     onValueChange(user.id)
                     setOpen(false)
                   }}
-                  className="cursor-pointer !opacity-100 !pointer-events-auto"
+                  className="cursor-pointer !opacity-100 !pointer-events-auto text-white hover:bg-slate-700 focus:bg-slate-700"
                   style={{ opacity: 1, pointerEvents: 'auto' }}
                 >
                   <Check
                     className={cn(
                       'mr-2 h-4 w-4',
-                      value === user.id ? 'opacity-100' : 'opacity-0'
+                      value === user.id ? 'opacity-100 text-indigo-400' : 'opacity-0'
                     )}
                   />
                   <div className="flex flex-col">
-                    <span>{user.name || user.email || user.id}</span>
+                    <span className="text-white">{user.name || user.email || user.id}</span>
                     {user.email && user.name && (
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-slate-400">
                         {user.email}
                       </span>
                     )}

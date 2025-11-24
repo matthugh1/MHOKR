@@ -206,12 +206,12 @@ export function SidePanelCreateKeyResult({
                       onValueChange={setObjectiveId}
                       required
                     >
-                      <SelectTrigger id="kr-objective" className="bg-slate-800 border-slate-700 text-white h-9">
+                      <SelectTrigger id="kr-objective" className="bg-slate-800/50 border-slate-700 text-white h-10 hover:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500">
                         <SelectValue placeholder="Select objective" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-slate-800 border-slate-700 text-white">
                         {availableObjectives.map((obj) => (
-                          <SelectItem key={obj.id} value={obj.id}>
+                          <SelectItem key={obj.id} value={obj.id} className="text-white focus:bg-slate-700">
                             {obj.title}
                           </SelectItem>
                         ))}
@@ -336,13 +336,13 @@ export function SidePanelCreateKeyResult({
                     value={teamId || 'none'}
                     onValueChange={(value) => setTeamId(value === 'none' ? null : value)}
                   >
-                    <SelectTrigger id="kr-team" className="bg-slate-800 border-slate-700 text-white h-9">
+                    <SelectTrigger id="kr-team" className="bg-slate-800/50 border-slate-700 text-white h-10 hover:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500">
                       <SelectValue placeholder="Select team (optional)" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
+                    <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                      <SelectItem value="none" className="text-white focus:bg-slate-700">None</SelectItem>
                       {availableTeams.map((team) => (
-                        <SelectItem key={team.id} value={team.id}>
+                        <SelectItem key={team.id} value={team.id} className="text-white focus:bg-slate-700">
                           {team.name}
                         </SelectItem>
                       ))}

@@ -27,6 +27,7 @@ import {
 } from '@/lib/okr-owners-api'
 import { HierarchyOKRNode } from './types'
 import { AlertCircle } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 type OKRStatus = "NOT_STARTED" | "ON_TRACK" | "AT_RISK" | "OFF_TRACK" | "COMPLETED" | "CANCELLED"
 type VisibilityLevel = "PUBLIC_TENANT" | "PRIVATE"
@@ -70,6 +71,20 @@ export function SidePanelEditObjective({
   const [isLoadingOwners, setIsLoadingOwners] = useState(false)
   const [activeTab, setActiveTab] = useState('basic')
 
+  // Build complete cycles list including current cycleId if not in availableCycles
+  const allCycles = useMemo(() => {
+    const cycles = [...availableCycles]
+    // If selectedNode has a cycleId that isn't in availableCycles, add it as an option
+    const nodeCycleId = selectedNode?.cycleId
+    if (nodeCycleId && nodeCycleId !== "none" && nodeCycleId !== "" && !availableCycles.some(c => c.id === nodeCycleId)) {
+      cycles.push({
+        id: nodeCycleId,
+        name: selectedNode?.cycleName || `Cycle ${nodeCycleId.substring(0, 8)}...`
+      })
+    }
+    return cycles
+  }, [availableCycles, selectedNode?.cycleId, selectedNode?.cycleName])
+
   const { isTenantAdmin } = useTenantAdmin()
   const tenantPermissions = useTenantPermissions()
   const { toast } = useToast()
@@ -80,13 +95,24 @@ export function SidePanelEditObjective({
       setTitle(selectedNode.title || "")
       setOwnerId(selectedNode.ownerId || "")
       setWorkspaceId(selectedNode.workspaceId || "")
-      setCycleId(selectedNode.cycleId || "")
+      // Use cycleId directly from selectedNode - ensure it's set correctly
+      if (selectedNode.cycleId) {
+        setCycleId(selectedNode.cycleId)
+      } else {
+        setCycleId("")
+      }
       setStatus((selectedNode.status as OKRStatus) || "ON_TRACK")
       setGoalType(selectedNode.goalType || "ASPIRATIONAL")
       setVisibilityLevel((selectedNode.visibilityLevel as VisibilityLevel) || "PUBLIC_TENANT")
       setIsPublished(selectedNode.isPublished || false)
+    } else {
+      // Reset form when no node is selected
+      setTitle("")
+      setOwnerId("")
+      setWorkspaceId("")
+      setCycleId("")
     }
-  }, [selectedNode])
+  }, [selectedNode?.id, selectedNode?.cycleId])
 
   // Load owners
   useEffect(() => {
@@ -277,13 +303,13 @@ export function SidePanelEditObjective({
             <div className="space-y-2">
               <Label htmlFor="edit-workspace" className="text-sm font-medium text-slate-200">Workspace</Label>
               <Select value={workspaceId || "none"} onValueChange={(value) => setWorkspaceId(value === "none" ? "" : value)}>
-                <SelectTrigger id="edit-workspace" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500">
+                <SelectTrigger id="edit-workspace" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 hover:bg-slate-700">
                   <SelectValue placeholder="Select workspace" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
+                <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                  <SelectItem value="none" className="text-white focus:bg-slate-700">None</SelectItem>
                   {availableWorkspaces.map((workspace) => (
-                    <SelectItem key={workspace.id} value={workspace.id}>
+                    <SelectItem key={workspace.id} value={workspace.id} className="text-white focus:bg-slate-700">
                       {workspace.name}
                     </SelectItem>
                   ))}
@@ -295,14 +321,17 @@ export function SidePanelEditObjective({
           {availableCycles.length > 0 && (
             <div className="space-y-2">
               <Label htmlFor="edit-cycle" className="text-sm font-medium text-slate-200">Cycle / Period</Label>
-              <Select value={cycleId || "none"} onValueChange={(value) => setCycleId(value === "none" ? "" : value)}>
-                <SelectTrigger id="edit-cycle" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500">
+              <Select 
+                value={cycleId || selectedNode?.cycleId || "none"} 
+                onValueChange={(value) => setCycleId(value === "none" ? "" : value)}
+              >
+                <SelectTrigger id="edit-cycle" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 hover:bg-slate-700">
                   <SelectValue placeholder="Select cycle" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {availableCycles.map((cycle) => (
-                    <SelectItem key={cycle.id} value={cycle.id}>
+                <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                  <SelectItem value="none" className="text-white focus:bg-slate-700">None</SelectItem>
+                  {allCycles.map((cycle) => (
+                    <SelectItem key={cycle.id} value={cycle.id} className="text-white focus:bg-slate-700">
                       {cycle.name}
                     </SelectItem>
                   ))}
@@ -316,16 +345,16 @@ export function SidePanelEditObjective({
               Status <span className="text-red-400">*</span>
             </Label>
             <Select value={status} onValueChange={(value) => setStatus(value as OKRStatus)} required>
-              <SelectTrigger id="edit-status" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500">
+              <SelectTrigger id="edit-status" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 hover:bg-slate-700">
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="NOT_STARTED">Not Started</SelectItem>
-                <SelectItem value="ON_TRACK">On Track</SelectItem>
-                <SelectItem value="AT_RISK">At Risk</SelectItem>
-                <SelectItem value="OFF_TRACK">Off Track</SelectItem>
-                <SelectItem value="COMPLETED">Completed</SelectItem>
-                <SelectItem value="CANCELLED">Cancelled</SelectItem>
+              <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                <SelectItem value="NOT_STARTED" className="text-white focus:bg-slate-700">Not Started</SelectItem>
+                <SelectItem value="ON_TRACK" className="text-white focus:bg-slate-700">On Track</SelectItem>
+                <SelectItem value="AT_RISK" className="text-white focus:bg-slate-700">At Risk</SelectItem>
+                <SelectItem value="OFF_TRACK" className="text-white focus:bg-slate-700">Off Track</SelectItem>
+                <SelectItem value="COMPLETED" className="text-white focus:bg-slate-700">Completed</SelectItem>
+                <SelectItem value="CANCELLED" className="text-white focus:bg-slate-700">Cancelled</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -349,12 +378,12 @@ export function SidePanelEditObjective({
               onValueChange={(value) => setVisibilityLevel(value as VisibilityLevel)}
               required
             >
-              <SelectTrigger id="edit-visibility" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500">
+              <SelectTrigger id="edit-visibility" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 hover:bg-slate-700">
                 <SelectValue placeholder="Select visibility" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="PUBLIC_TENANT">Public (Tenant)</SelectItem>
-                <SelectItem value="PRIVATE">Private</SelectItem>
+              <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                <SelectItem value="PUBLIC_TENANT" className="text-white focus:bg-slate-700">Public (Tenant)</SelectItem>
+                <SelectItem value="PRIVATE" className="text-white focus:bg-slate-700">Private</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -426,14 +455,13 @@ export function SidePanelEditObjective({
                       }
                     }}
                     disabled={isTogglingPublish || (isPublished ? !canUnpublish : !canPublish)}
-                    className={`
-                      px-4 py-2 rounded-md text-sm font-medium transition-colors
-                      ${isPublished
-                        ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                        : 'bg-indigo-600 text-white hover:bg-indigo-500'
-                      }
-                      disabled:opacity-50 disabled:cursor-not-allowed
-                    `}
+                    className={cn(
+                      'px-4 py-2 rounded-md text-sm font-medium transition-colors h-10',
+                      isPublished
+                        ? 'bg-slate-800/50 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-500',
+                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                    )}
                   >
                     {isTogglingPublish ? 'Updating...' : (isPublished ? 'Unpublish' : 'Publish')}
                   </button>
@@ -452,10 +480,20 @@ export function SidePanelEditObjective({
       </Tabs>
 
       <div className="flex-shrink-0 p-6 border-t border-slate-800 bg-slate-900 flex gap-3">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting} className="flex-1 bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white h-10">
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={onCancel} 
+          disabled={isSubmitting} 
+          className="flex-1 bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white h-10 font-medium"
+        >
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting || !title.trim() || !ownerId} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white h-10 font-medium">
+        <Button 
+          type="submit" 
+          disabled={isSubmitting || !title.trim() || !ownerId} 
+          className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white h-10 font-medium"
+        >
           {isSubmitting ? "Saving..." : "Save"}
         </Button>
       </div>

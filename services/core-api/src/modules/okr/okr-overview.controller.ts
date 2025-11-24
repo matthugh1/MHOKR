@@ -781,6 +781,7 @@ export class OkrOverviewController {
           progress: o.progress,
           ownerId: o.ownerId,
           parentId: o.parentId || null, // Include parentId for hierarchical tree view
+          cycleId: o.cycleId || o.cycle?.id || null, // Include cycleId directly for easier access
           owner: o.owner
             ? {
                 id: o.owner.id,

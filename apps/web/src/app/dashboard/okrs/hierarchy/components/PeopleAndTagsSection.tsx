@@ -5,14 +5,17 @@
 
 'use client'
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Tag, Users, Award, User } from 'lucide-react'
 import { AvatarCircle } from '@/components/dashboard/AvatarCircle'
 import { cn } from '@/lib/utils'
+import { getObjectiveOwners, getKeyResultOwners, type Owner } from '@/lib/okr-owners-api'
 
 interface PeopleAndTagsSectionProps {
   hideTitle?: boolean
   detail: {
+    id?: string
+    type?: 'objective' | 'keyResult'
     tags?: Array<{
       id: string
       name: string
@@ -44,14 +47,58 @@ interface PeopleAndTagsSectionProps {
 }
 
 export function PeopleAndTagsSection({ detail, hideTitle = false }: PeopleAndTagsSectionProps) {
+  const [owners, setOwners] = useState<Owner[]>([])
+  const [isLoadingOwners, setIsLoadingOwners] = useState(false)
+
+  // Fetch all owners when detail changes
+  useEffect(() => {
+    const fetchOwners = async () => {
+      if (!detail?.id) {
+        setOwners([])
+        return
+      }
+
+      setIsLoadingOwners(true)
+      try {
+        if (detail.type === 'objective') {
+          const ownersData = await getObjectiveOwners(detail.id)
+          setOwners(ownersData)
+        } else if (detail.type === 'keyResult') {
+          const ownersData = await getKeyResultOwners(detail.id)
+          setOwners(ownersData)
+        } else {
+          // Fallback: try objective first, then key result
+          try {
+            const ownersData = await getObjectiveOwners(detail.id)
+            setOwners(ownersData)
+          } catch {
+            try {
+              const ownersData = await getKeyResultOwners(detail.id)
+              setOwners(ownersData)
+            } catch {
+              setOwners([])
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load owners:', error)
+        setOwners([])
+      } finally {
+        setIsLoadingOwners(false)
+      }
+    }
+
+    fetchOwners()
+  }, [detail?.id, detail?.type])
+
   if (!detail) return null
 
   const hasTags = detail.tags && detail.tags.length > 0
   const hasContributors = detail.contributors && detail.contributors.length > 0
   const hasSponsors = detail.sponsors && detail.sponsors.length > 0
-  const hasOwner = detail.owner
+  const hasOwners = owners.length > 0
 
-  if (!hasTags && !hasContributors && !hasSponsors && !hasOwner) {
+  if (!hasTags && !hasContributors && !hasSponsors && !hasOwners) {
     return null
   }
 
@@ -91,16 +138,27 @@ export function PeopleAndTagsSection({ detail, hideTitle = false }: PeopleAndTag
           </div>
         )}
 
-        {/* Owner */}
-        {hasOwner && (
+        {/* Owners */}
+        {hasOwners && (
           <div className="space-y-2 pt-2 border-t border-slate-700/50">
             <div className="flex items-center gap-2 text-xs text-slate-500 uppercase tracking-wide font-semibold">
-              <User size={12} />
-              Owner
+              <Users size={12} />
+              Owners ({owners.length})
             </div>
-            <div className="flex items-center gap-2">
-              <AvatarCircle name={detail.owner!.name} size="sm" />
-              <span className="text-sm text-slate-200">{detail.owner!.name}</span>
+            <div className="flex flex-wrap gap-3">
+              {owners.map((owner) => (
+                <div key={owner.id} className="flex items-center gap-2">
+                  <AvatarCircle name={owner.userName} size="sm" />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm text-slate-300">{owner.userName}</span>
+                    {owner.isPrimary && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-600 text-white">
+                        Primary
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

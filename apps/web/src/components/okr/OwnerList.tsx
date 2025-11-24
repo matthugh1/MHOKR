@@ -126,7 +126,7 @@ export function OwnerList({
     <div className={cn('flex flex-col gap-2', className)}>
       <div className="flex items-center justify-between">
         <label className={cn(
-          'text-sm font-medium text-neutral-700',
+          'text-sm font-medium text-slate-200',
           size === 'sm' && 'text-xs'
         )}>
           Owners {owners.length > 0 && `(${owners.length})`}
@@ -143,7 +143,7 @@ export function OwnerList({
 
       {owners.length === 0 ? (
         <p className={cn(
-          'text-sm text-neutral-500 italic',
+          'text-sm text-slate-500 italic',
           size === 'sm' && 'text-xs'
         )}>
           No additional owners
@@ -154,7 +154,7 @@ export function OwnerList({
             <div
               key={owner.id}
               className={cn(
-                'flex items-center gap-1.5 px-2 py-1 rounded-md border bg-white',
+                'flex items-center gap-1.5 px-2 py-1 rounded-md border border-slate-700 bg-slate-800/50',
                 size === 'sm' && 'px-1.5 py-0.5'
               )}
             >
@@ -163,14 +163,14 @@ export function OwnerList({
                 size={size === 'sm' ? 'sm' : 'md'}
               />
               <span className={cn(
-                'text-neutral-700',
+                'text-white',
                 size === 'sm' ? 'text-[11px]' : 'text-sm'
               )}>
                 {owner.userName}
               </span>
               {owner.isPrimary && (
                 <span className={cn(
-                  'px-1 py-0.5 rounded text-[10px] font-medium bg-violet-100 text-violet-700',
+                  'px-1 py-0.5 rounded text-[10px] font-medium bg-indigo-600 text-white',
                   size === 'sm' && 'text-[9px]'
                 )}>
                   Primary
@@ -180,7 +180,7 @@ export function OwnerList({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-5 w-5 p-0 hover:bg-red-50 hover:text-red-600"
+                  className="h-5 w-5 p-0 hover:bg-slate-700 hover:text-white text-slate-400"
                   onClick={() => handleRemove(owner.userId, owner.isPrimary)}
                   disabled={isRemoving === owner.userId}
                   aria-label={`Remove ${owner.userName} as owner`}
@@ -239,17 +239,20 @@ function OwnerSelector({
           variant="outline"
           size={size === 'sm' ? 'sm' : 'default'}
           disabled={disabled || isAdding}
-          className="h-7 text-xs"
+          className="h-7 text-xs bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white"
         >
           <Plus className="h-3 w-3 mr-1" />
           Add Owner
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[240px] p-0" align="end">
-        <Command>
-          <CommandInput placeholder="Search users..." />
+      <PopoverContent className="w-[240px] p-0 bg-slate-800 border-slate-700" align="end">
+        <Command className="bg-slate-800">
+          <CommandInput 
+            placeholder="Search users..." 
+            className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+          />
           <CommandList>
-            <CommandEmpty>No users found.</CommandEmpty>
+            <CommandEmpty className="text-slate-400">No users found.</CommandEmpty>
             <CommandGroup>
               {availableUsers.map((user) => (
                 <CommandItem
@@ -257,13 +260,15 @@ function OwnerSelector({
                   value={`${user.name} ${user.email || ''}`}
                   onSelect={() => handleSelect(user.id)}
                   disabled={isAdding}
+                  className="cursor-pointer !opacity-100 !pointer-events-auto text-white hover:bg-slate-700 focus:bg-slate-700"
+                  style={{ opacity: 1, pointerEvents: 'auto' }}
                 >
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <AvatarCircle name={user.name} size="sm" />
                     <div className="flex-1 min-w-0">
-                      <div className="truncate text-sm">{user.name}</div>
+                      <div className="truncate text-sm text-white">{user.name}</div>
                       {user.email && (
-                        <div className="truncate text-xs text-neutral-500">
+                        <div className="truncate text-xs text-slate-400">
                           {user.email}
                         </div>
                       )}

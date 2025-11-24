@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
 
 export type GoalType = 'ASPIRATIONAL' | 'COMMITTED'
 
@@ -43,10 +44,10 @@ export function GoalTypeSelector({
   }
 
   return (
-    <div className={className}>
+    <div className={cn('space-y-2', className)}>
       {label && (
-        <Label htmlFor={id}>
-          {label} {required && <span className="text-red-500">*</span>}
+        <Label htmlFor={id} className="text-sm font-medium text-slate-200">
+          {label} {required && <span className="text-red-400">*</span>}
         </Label>
       )}
       <Select
@@ -55,16 +56,22 @@ export function GoalTypeSelector({
         disabled={disabled}
         required={required}
       >
-        <SelectTrigger id={id} className={label ? 'mt-1.5' : ''}>
+        <SelectTrigger 
+          id={id} 
+          className={cn(
+            'bg-slate-800/50 border-slate-700 text-white h-10 hover:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500',
+            label && 'mt-1.5'
+          )}
+        >
           <SelectValue placeholder="Select goal type" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="bg-slate-800 border-slate-700 text-white">
           {GOAL_TYPE_OPTIONS.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
+            <SelectItem key={option.value} value={option.value} className="text-white focus:bg-slate-700">
               <div className="flex flex-col">
-                <span>{option.label}</span>
+                <span className="text-white">{option.label}</span>
                 {option.description && (
-                  <span className="text-xs text-muted-foreground">{option.description}</span>
+                  <span className="text-xs text-slate-400">{option.description}</span>
                 )}
               </div>
             </SelectItem>

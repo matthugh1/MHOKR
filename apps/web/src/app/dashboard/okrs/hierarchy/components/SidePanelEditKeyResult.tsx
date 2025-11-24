@@ -458,16 +458,16 @@ export function SidePanelEditKeyResult({
                 disabled={lockInfo.isLocked || !canEdit}
                 required
               >
-                <SelectTrigger id="kr-status" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50">
+                <SelectTrigger id="kr-status" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 hover:bg-slate-700 disabled:opacity-50">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NOT_STARTED">Not Started</SelectItem>
-                  <SelectItem value="ON_TRACK">On Track</SelectItem>
-                  <SelectItem value="AT_RISK">At Risk</SelectItem>
-                  <SelectItem value="OFF_TRACK">Off Track</SelectItem>
-                  <SelectItem value="COMPLETED">Completed</SelectItem>
-                  <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                  <SelectItem value="NOT_STARTED" className="text-white focus:bg-slate-700">Not Started</SelectItem>
+                  <SelectItem value="ON_TRACK" className="text-white focus:bg-slate-700">On Track</SelectItem>
+                  <SelectItem value="AT_RISK" className="text-white focus:bg-slate-700">At Risk</SelectItem>
+                  <SelectItem value="OFF_TRACK" className="text-white focus:bg-slate-700">Off Track</SelectItem>
+                  <SelectItem value="COMPLETED" className="text-white focus:bg-slate-700">Completed</SelectItem>
+                  <SelectItem value="CANCELLED" className="text-white focus:bg-slate-700">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -488,13 +488,13 @@ export function SidePanelEditKeyResult({
                   onValueChange={(value) => setTeamId(value === 'none' ? null : value)}
                   disabled={lockInfo.isLocked || !canEdit}
                 >
-                  <SelectTrigger id="kr-team" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50">
+                  <SelectTrigger id="kr-team" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 hover:bg-slate-700 disabled:opacity-50">
                     <SelectValue placeholder="Select team (optional)" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
+                  <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                    <SelectItem value="none" className="text-white focus:bg-slate-700">None</SelectItem>
                     {availableTeams.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
+                      <SelectItem key={team.id} value={team.id} className="text-white focus:bg-slate-700">
                         {team.name}
                       </SelectItem>
                     ))}
@@ -573,14 +573,14 @@ export function SidePanelEditKeyResult({
                 onValueChange={(value) => setCheckInCadence(value as CheckInCadence)}
                 disabled={lockInfo.isLocked || !canEdit}
               >
-                <SelectTrigger id="kr-cadence" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50">
+                <SelectTrigger id="kr-cadence" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 hover:bg-slate-700 disabled:opacity-50">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NONE">None</SelectItem>
-                  <SelectItem value="WEEKLY">Weekly</SelectItem>
-                  <SelectItem value="BIWEEKLY">Bi-weekly</SelectItem>
-                  <SelectItem value="MONTHLY">Monthly</SelectItem>
+                <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                  <SelectItem value="NONE" className="text-white focus:bg-slate-700">None</SelectItem>
+                  <SelectItem value="WEEKLY" className="text-white focus:bg-slate-700">Weekly</SelectItem>
+                  <SelectItem value="BIWEEKLY" className="text-white focus:bg-slate-700">Bi-weekly</SelectItem>
+                  <SelectItem value="MONTHLY" className="text-white focus:bg-slate-700">Monthly</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -632,12 +632,12 @@ export function SidePanelEditKeyResult({
                 disabled={lockInfo.isLocked || !canEdit}
                 required
               >
-                <SelectTrigger id="kr-visibility" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50">
+                <SelectTrigger id="kr-visibility" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 hover:bg-slate-700 disabled:opacity-50">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PUBLIC_TENANT">Public (Tenant)</SelectItem>
-                  <SelectItem value="PRIVATE">Private</SelectItem>
+                <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                  <SelectItem value="PUBLIC_TENANT" className="text-white focus:bg-slate-700">Public (Tenant)</SelectItem>
+                  <SelectItem value="PRIVATE" className="text-white focus:bg-slate-700">Private</SelectItem>
                 </SelectContent>
               </Select>
             </div>

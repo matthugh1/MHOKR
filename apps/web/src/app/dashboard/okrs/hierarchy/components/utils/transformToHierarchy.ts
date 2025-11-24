@@ -88,7 +88,8 @@ export function transformToHierarchy(objectives: APIObjective[]): HierarchyTreeD
       parentId: obj.parentId || obj.parentObjectiveId || null,
       expanded: false,
       children: [],
-      cycleId: obj.cycleId || null,
+      // Use cycleId directly, or fall back to cycle.id if cycleId is missing
+      cycleId: obj.cycleId || obj.cycle?.id || null,
       cycleName: obj.cycle?.name || obj.cycleName || null,
       visibilityLevel: obj.visibilityLevel,
       isPublished: obj.isPublished,
