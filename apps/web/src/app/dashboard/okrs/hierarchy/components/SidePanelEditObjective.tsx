@@ -201,9 +201,9 @@ export function SidePanelEditObjective({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col h-full bg-slate-900 m-0 p-0">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 min-h-0 m-0 w-full">
-        <TabsList className="grid w-full grid-cols-3 flex-shrink-0 bg-slate-800/50 border-t-0 border-b border-slate-800 p-0 h-9 m-0">
+    <form onSubmit={handleSubmit} className="flex flex-col w-full bg-slate-900 m-0 p-0">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col w-full">
+        <TabsList className="grid w-full grid-cols-3 bg-slate-800/50 border-b border-slate-800 p-0 h-9">
           <TabsTrigger 
             value="basic" 
             className="text-xs font-medium data-[state=active]:bg-slate-800 data-[state=active]:text-white data-[state=active]:border-b-2 data-[state=active]:border-indigo-500 text-slate-400 hover:text-slate-300 rounded-none h-full"
@@ -225,7 +225,7 @@ export function SidePanelEditObjective({
         </TabsList>
 
         {/* Basic Tab */}
-        <TabsContent value="basic" className="flex-1 overflow-y-auto p-6 space-y-5 min-h-0 mt-0">
+        <TabsContent value="basic" className="p-4 space-y-4 mt-0">
           <div className="space-y-2">
             <Label htmlFor="edit-title" className="text-sm font-medium text-slate-200">
               Title <span className="text-red-400">*</span>
@@ -339,7 +339,7 @@ export function SidePanelEditObjective({
         </TabsContent>
 
         {/* Settings Tab */}
-        <TabsContent value="settings" className="flex-1 overflow-y-auto p-6 space-y-5 min-h-0 mt-0">
+        <TabsContent value="settings" className="p-4 space-y-4 mt-0">
           <div className="space-y-2">
             <Label htmlFor="edit-visibility" className="text-sm font-medium text-slate-200">
               Visibility <span className="text-red-400">*</span>
@@ -444,7 +444,7 @@ export function SidePanelEditObjective({
         </TabsContent>
 
         {/* Metadata Tab */}
-        <TabsContent value="metadata" className="flex-1 overflow-y-auto p-6 space-y-5 min-h-0 mt-0">
+        <TabsContent value="metadata" className="p-4 space-y-4 mt-0">
           <div className="text-sm text-slate-400 py-4">
             Additional metadata features coming soon.
           </div>

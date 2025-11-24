@@ -9,7 +9,7 @@ import { Target, TrendingUp } from 'lucide-react'
 interface SidePanelCreateFormProps {
   mode: 'objective' | 'kr' | null
   onModeChange: (mode: 'objective' | 'kr' | null) => void
-  onSuccess: () => void
+  onSuccess: (data: any) => void | Promise<void>
   onCancel: () => void
   availableUsers?: Array<{ id: string; name: string; email?: string }>
   availableWorkspaces?: Array<{ id: string; name: string }>

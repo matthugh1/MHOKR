@@ -96,6 +96,8 @@ export function SidePanelCreateObjective({
       setVisibilityLevel("PUBLIC_TENANT")
     } catch (error) {
       console.error("Failed to create objective:", error)
+      // Re-throw error to propagate to parent handler
+      throw error
     } finally {
       setIsSubmitting(false)
     }

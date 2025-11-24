@@ -134,6 +134,8 @@ export function SidePanelCreateKeyResult({
       setWeight(1.0)
     } catch (error) {
       console.error("Failed to create key result:", error)
+      // Re-throw error to propagate to parent handler
+      throw error
     } finally {
       setIsSubmitting(false)
     }

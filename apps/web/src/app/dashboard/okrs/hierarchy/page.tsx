@@ -26,7 +26,8 @@ import {
   MessageSquare,
   BarChart3,
   Search,
-  X
+  X,
+  Eye
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn, formatNumber, decodeHtmlEntities, clampProgress } from '@/lib/utils'
@@ -34,14 +35,20 @@ import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
 import { useToast } from '@/hooks/use-toast'
 import { useHierarchyOKRs } from './hooks/useHierarchyOKRs'
+import { useOKRDetail } from './hooks/useOKRDetail'
 import { HierarchyOKRNode } from './components/types'
 import { getNodePath } from './components/utils/transformToHierarchy'
 import { NewCheckInModal } from '@/components/okr/NewCheckInModal'
 import { EditObjectiveModal } from '@/components/okr/EditObjectiveModal'
 import { NewObjectiveModal } from '@/components/okr/NewObjectiveModal'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { KeyResultTrendChart } from '@/components/okr/KeyResultTrendChart'
 import { SidePanelEditForm } from './components/SidePanelEditForm'
 import { SidePanelCreateForm } from './components/SidePanelCreateForm'
+import { MetadataSection } from './components/MetadataSection'
+import { PeopleAndTagsSection } from './components/PeopleAndTagsSection'
+import { CheckInHistorySection } from './components/CheckInHistorySection'
+import { InitiativesSection } from './components/InitiativesSection'
+import { ProgressBreakdownSection } from './components/ProgressBreakdownSection'
 import api from '@/lib/api'
 
 // Map backend status to UI status
@@ -146,6 +153,121 @@ interface OKRItem {
   _originalNode?: HierarchyOKRNode
 }
 
+// Shared Header Component
+function SidePanelHeader({
+  selectedItem,
+  okrDetail,
+  sidePanelTab,
+  onTabChange,
+}: {
+  selectedItem: OKRItem
+  okrDetail: any | null
+  sidePanelTab: string
+  onTabChange: (tab: string) => void
+}) {
+  if (!selectedItem) return null
+
+  return (
+    <div className="px-6 pt-4 pb-4 border-b border-slate-800 bg-slate-900/50">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <span className="uppercase tracking-wider font-semibold">
+            {selectedItem.type === 'objective' ? 'Objective' : 'Key Result'}
+          </span>
+          {selectedItem.level && (
+            <>
+              <ChevronRight size={12} className="text-slate-600" />
+              <span className="capitalize text-slate-500">{selectedItem.level}</span>
+            </>
+          )}
+          {okrDetail?.goalType && (
+            <>
+              <ChevronRight size={12} className="text-slate-600" />
+              <span className={cn(
+                'text-xs px-2 py-0.5 rounded-full border',
+                okrDetail.goalType === 'COMMITTED'
+                  ? 'bg-blue-500/10 text-blue-300 border-blue-500/20'
+                  : 'bg-purple-500/10 text-purple-300 border-purple-500/20'
+              )}>
+                {okrDetail.goalType === 'COMMITTED' ? 'Committed' : 'Aspirational'}
+              </span>
+            </>
+          )}
+          {okrDetail && (okrDetail.isPublished || okrDetail.state === 'PUBLISHED') && (
+            <>
+              <ChevronRight size={12} className="text-slate-600" />
+              <span className="text-xs px-2 py-0.5 rounded-full border bg-emerald-500/10 text-emerald-300 border-emerald-500/20">
+                Published
+              </span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {selectedItem.type === 'kr' && sidePanelTab === 'details' && (
+            <button
+              onClick={() => {
+                // Scroll to check-in form or focus it
+                const checkInSection = document.querySelector('[data-check-in-section]')
+                if (checkInSection) {
+                  checkInSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                  // Focus the input field
+                  setTimeout(() => {
+                    const input = checkInSection.querySelector('input[type="number"]') as HTMLInputElement
+                    input?.focus()
+                  }, 300)
+                }
+              }}
+              className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md font-medium transition-colors"
+            >
+              Check-in
+            </button>
+          )}
+          {sidePanelTab === 'details' && (
+            <button
+              onClick={() => onTabChange('edit')}
+              className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
+            >
+              Edit
+            </button>
+          )}
+          {sidePanelTab === 'edit' && (
+            <button
+              onClick={() => onTabChange('details')}
+              className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
+            >
+              View Details
+            </button>
+          )}
+        </div>
+      </div>
+      <h3 className="text-xl font-semibold text-white leading-tight mb-2 break-words">
+        {decodeHtmlEntities(selectedItem.title)}
+      </h3>
+      <div className="flex items-center gap-3 flex-wrap pt-2 border-t border-slate-800/50">
+        <div className="flex items-center gap-2 text-sm text-slate-400">
+          <Users size={14} className="text-slate-500" />
+          <span>{selectedItem.owner}</span>
+        </div>
+        <StatusBadge status={selectedItem.status} />
+        {okrDetail?.updatedAt && (
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <Calendar size={12} />
+            <span>
+              {new Date(okrDetail.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
+          </div>
+        )}
+        {okrDetail?.visibilityLevel && (
+          <div className="flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 border border-slate-700">
+            <Eye size={12} />
+            {okrDetail.visibilityLevel === 'PUBLIC_TENANT' ? 'Public' : 'Private'}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function OKRHierarchyPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -166,6 +288,21 @@ export default function OKRHierarchyPage() {
   const [checkInConfidence, setCheckInConfidence] = useState<string>('50')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [checkInModalOpen, setCheckInModalOpen] = useState(false)
+  
+  // State for collapsible sections (all collapsed by default except Overview)
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['overview']))
+  
+  const toggleSection = useCallback((sectionId: string) => {
+    setExpandedSections(prev => {
+      const next = new Set(prev)
+      if (next.has(sectionId)) {
+        next.delete(sectionId)
+      } else {
+        next.add(sectionId)
+      }
+      return next
+    })
+  }, [])
   const [checkInKrId, setCheckInKrId] = useState<string | null>(null)
   const [editObjectiveModalOpen, setEditObjectiveModalOpen] = useState(false)
   const [editObjectiveId, setEditObjectiveId] = useState<string | null>(null)
@@ -269,6 +406,16 @@ export default function OKRHierarchyPage() {
     return findItem(data)
   }, [data, selectedId])
 
+  // Fetch comprehensive detail for selected item
+  const selectedNode = useMemo(() => {
+    return selectedItem?._originalNode || null
+  }, [selectedItem])
+
+  const { detail: okrDetail, loading: detailLoading, refetch: refetchDetail } = useOKRDetail(
+    selectedNode,
+    !!selectedNode
+  )
+
   // Update check-in form when selection changes
   useEffect(() => {
     if (selectedItem?.type === 'kr' && selectedItem.current !== undefined) {
@@ -320,6 +467,7 @@ export default function OKRHierarchyPage() {
       })
       
       await refetch()
+      refetchDetail()
       setCheckInValue('')
     } catch (error: any) {
       console.error('Failed to create check-in:', error)
@@ -331,7 +479,7 @@ export default function OKRHierarchyPage() {
     } finally {
       setIsSubmitting(false)
     }
-  }, [selectedItem, checkInValue, checkInConfidence, refetch, toast])
+  }, [selectedItem, checkInValue, checkInConfidence, refetch, refetchDetail, toast])
 
   // Handle edit save
   const handleEditSave = useCallback(async (data: any) => {
@@ -353,6 +501,7 @@ export default function OKRHierarchyPage() {
         })
       }
       await refetch()
+      refetchDetail()
       setSidePanelTab('details')
     } catch (error: any) {
       console.error('Failed to update:', error)
@@ -364,7 +513,7 @@ export default function OKRHierarchyPage() {
       })
       throw error
     }
-  }, [selectedItem, refetch, toast])
+  }, [selectedItem, refetch, refetchDetail, toast])
 
   // Handle create success
   const handleCreateSuccess = useCallback(async (data: any) => {
@@ -387,6 +536,7 @@ export default function OKRHierarchyPage() {
         })
       }
       await refetch()
+      refetchDetail()
       setSidePanelTab('details')
       setCreateMode(null)
     } catch (error: any) {
@@ -399,7 +549,7 @@ export default function OKRHierarchyPage() {
       })
       throw error
     }
-  }, [createMode, selectedItem, currentOrganization, refetch, toast])
+  }, [createMode, selectedItem, currentOrganization, refetch, refetchDetail, toast])
 
   // Handle cycle change
   const handleCycleChange = useCallback((opt: { key: string; label: string }) => {
@@ -862,7 +1012,7 @@ export default function OKRHierarchyPage() {
           </header>
           
           {/* Two-Panel Workspace */}
-          <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 flex overflow-hidden h-full min-h-0">
             {/* LEFT PANEL: The Cascade Tree */}
             <div className="flex-1 overflow-y-auto bg-slate-900/30">
               {/* Toolbar */}
@@ -900,242 +1050,343 @@ export default function OKRHierarchyPage() {
             </div>
 
             {/* RIGHT PANEL: The Action & Management Rail (Contextual) */}
-            <div className="w-[420px] bg-slate-900 border-l border-slate-800 flex flex-col overflow-hidden shadow-xl z-20 transition-all duration-300">
-              <Tabs value={sidePanelTab} onValueChange={(v) => {
-                setSidePanelTab(v as any)
-                // Reset create mode when switching away from create tab
-                if (v !== 'create') {
-                  setCreateMode(null)
-                }
-              }} className="flex flex-col h-full">
-                <TabsList className="grid w-full grid-cols-3 flex-shrink-0 bg-slate-900 rounded-none border-b border-slate-800 p-0 h-10">
-                  <TabsTrigger 
-                    value="details" 
-                    className="text-xs font-medium data-[state=active]:bg-slate-800 data-[state=active]:text-white data-[state=active]:border-b-2 data-[state=active]:border-indigo-500 text-slate-400 hover:text-slate-300 rounded-none h-full"
-                  >
-                    Details
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="edit" 
-                    disabled={!selectedItem}
-                    className="text-xs font-medium data-[state=active]:bg-slate-800 data-[state=active]:text-white data-[state=active]:border-b-2 data-[state=active]:border-indigo-500 text-slate-400 hover:text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed rounded-none h-full"
-                  >
-                    Edit
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="create" 
-                    className="text-xs font-medium data-[state=active]:bg-slate-800 data-[state=active]:text-white data-[state=active]:border-b-2 data-[state=active]:border-indigo-500 text-slate-400 hover:text-slate-300 rounded-none h-full"
-                  >
-                    Create
-                  </TabsTrigger>
-                </TabsList>
-                
-                {/* Details Tab */}
-                <TabsContent value="details" className="flex-1 overflow-hidden flex flex-col items-start justify-start mt-0">
-                  {selectedItem ? (
-                    <>
-                      {/* Action Panel Header */}
-                      <div className="p-6 border-b border-slate-800 bg-slate-900/50 flex-shrink-0">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2 text-xs text-slate-400">
-                            <span className="uppercase tracking-wider font-semibold">
-                              {selectedItem.type === 'objective' ? 'Objective' : 'Key Result'}
-                            </span>
-                            {selectedItem.level && (
-                              <>
-                                <ChevronRight size={12} className="text-slate-600" />
-                                <span className="capitalize text-slate-500">{selectedItem.level}</span>
-                              </>
-                            )}
+            <div className="w-[420px] bg-slate-900 border-l border-slate-800 flex flex-col overflow-hidden shadow-xl z-20 transition-all duration-300 h-full min-h-0">
+              {/* TOP-LEVEL TABS STRIP */}
+              <div className="grid w-full grid-cols-3 flex-shrink-0 bg-slate-900 rounded-none border-b border-slate-800 p-0 h-10">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSidePanelTab('details')
+                    setCreateMode(null)
+                  }}
+                  className={cn(
+                    "text-xs font-medium text-slate-400 hover:text-slate-300 rounded-none h-full flex items-center justify-center transition-colors",
+                    sidePanelTab === 'details' && "bg-slate-800 text-white border-b-2 border-indigo-500"
+                  )}
+                >
+                  Details
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedItem) setSidePanelTab('edit')
+                  }}
+                  disabled={!selectedItem}
+                  className={cn(
+                    "text-xs font-medium text-slate-400 hover:text-slate-300 rounded-none h-full flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+                    sidePanelTab === 'edit' && "bg-slate-800 text-white border-b-2 border-indigo-500"
+                  )}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSidePanelTab('create')
+                  }}
+                  className={cn(
+                    "text-xs font-medium text-slate-400 hover:text-slate-300 rounded-none h-full flex items-center justify-center transition-colors",
+                    sidePanelTab === 'create' && "bg-slate-800 text-white border-b-2 border-indigo-500"
+                  )}
+                >
+                  Create
+                </button>
+              </div>
+              
+              {/* SHARED HEADER UNDER TABS */}
+              {selectedItem && (
+                <SidePanelHeader 
+                  selectedItem={selectedItem} 
+                  okrDetail={okrDetail || null}
+                  sidePanelTab={sidePanelTab}
+                  onTabChange={setSidePanelTab}
+                />
+              )}
+              
+              {/* BODY AREA – ONE ACTIVE VIEW AT A TIME */}
+              <div className="flex-1 min-h-0 flex flex-col">
+                {sidePanelTab === 'details' && (
+                  <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 pt-4 pb-8 space-y-6">
+                    {selectedItem ? (
+                      <>
+                        {/* Loading state for detail */}
+                        {detailLoading && (
+                          <div className="flex items-center justify-center py-8">
+                            <div className="text-slate-500 text-sm">Loading details...</div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            {selectedItem.type === 'kr' && (
-                              <button
-                                onClick={() => {
-                                  // Scroll to check-in form or focus it
-                                  const checkInSection = document.querySelector('[data-check-in-section]')
-                                  if (checkInSection) {
-                                    checkInSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-                                    // Focus the input field
-                                    setTimeout(() => {
-                                      const input = checkInSection.querySelector('input[type="number"]') as HTMLInputElement
-                                      input?.focus()
-                                    }, 300)
-                                  }
-                                }}
-                                className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md font-medium transition-colors"
-                              >
-                                Check-in
-                              </button>
-                            )}
-                            <button
-                              onClick={() => setSidePanelTab('edit')}
-                              className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
-                            >
-                              Edit
-                            </button>
-                          </div>
-                        </div>
-                        <h3 className="text-xl font-semibold text-white leading-tight mb-3 break-words">
-                          {decodeHtmlEntities(selectedItem.title)}
-                        </h3>
-                        {selectedItem.description && (
-                          <p className="text-sm text-slate-400 mb-4 line-clamp-3 leading-relaxed">
-                            {decodeHtmlEntities(selectedItem.description)}
-                          </p>
                         )}
-                        <div className="flex items-center gap-3 flex-wrap pt-2 border-t border-slate-800/50">
-                          <div className="flex items-center gap-2 text-sm text-slate-400">
-                            <Users size={14} className="text-slate-500" />
-                            <span>{selectedItem.owner}</span>
-                          </div>
-                          <StatusBadge status={selectedItem.status} />
-                          {selectedItem.lastUpdated && (
-                            <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                              <Calendar size={12} />
-                              <span>{selectedItem.lastUpdated}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {/* SECTION 1: AI ACTIONABLE INSIGHTS */}
-                    {selectedItem.aiInsight && (
-                      <div className="bg-gradient-to-br from-indigo-900/20 to-purple-900/20 border border-indigo-500/30 rounded-xl p-5 relative overflow-hidden">
-                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5" />
-                        <div className="relative space-y-3">
-                          <div className="flex items-center gap-2 text-indigo-300 text-sm font-semibold">
-                            <Zap size={16} className="fill-indigo-500 text-indigo-500" />
-                            Nexus AI Insight
-                          </div>
-                          <p className="text-sm text-slate-300 leading-relaxed">
-                            {selectedItem.aiInsight}
-                          </p>
-                          <div className="flex gap-2 pt-1">
-                            <button className="text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg shadow-sm transition-colors">
-                              View Pipeline Gaps
-                            </button>
-                            <button className="text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-lg border border-slate-700 transition-colors">
-                              Ask Owner
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
 
-                    {/* SECTION 2: MANAGEMENT (CHECK-IN) - Only for Key Results */}
-                    {selectedItem && selectedItem.type === 'kr' && (
-                      <div className="space-y-5" data-check-in-section>
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-sm font-semibold text-white flex items-center gap-2">
-                            <BarChart3 size={16} className="text-indigo-400" />
-                            Current Progress
-                          </h4>
-                          {selectedItem.lastUpdated && (
-                            <span className="text-xs text-slate-500">
-                              Updated {selectedItem.lastUpdated}
-                            </span>
-                          )}
-                        </div>
-                        
-                        <div className="bg-slate-800/50 p-5 rounded-xl border border-slate-800 space-y-5">
-                          {/* Progress Display */}
-                          <div className="space-y-3">
-                            {selectedItem.current !== undefined ? (
-                              <div className="flex items-end justify-between gap-4">
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-4xl font-light text-white leading-none tracking-tight">
-                                    {formatNumber(selectedItem.current)}
-                                    {selectedItem.unit && selectedItem.unit.toLowerCase() !== 'number' && (
-                                      <span className="text-2xl text-slate-400 ml-2 font-normal">{selectedItem.unit}</span>
-                                    )}
-                                  </div>
-                                  {selectedItem.target && (
-                                    <div className="text-sm text-slate-400 mt-2">
-                                      Target: <span className="font-medium text-slate-300">{formatNumber(selectedItem.target)}</span>
-                                      {selectedItem.unit && selectedItem.unit.toLowerCase() !== 'number' && (
-                                        <span> {selectedItem.unit}</span>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="text-right flex-shrink-0">
-                                  <div className="text-3xl font-semibold text-slate-200">{Math.round(clampProgress(selectedItem.progress))}%</div>
-                                  <div className="text-xs text-slate-500 mt-0.5">complete</div>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-center py-4">
-                                <div className="text-sm text-slate-400 mb-2">No check-ins yet</div>
-                                {selectedItem.target && (
-                                  <div className="text-xs text-slate-500">
-                                    Target: <span className="font-medium text-slate-300">{formatNumber(selectedItem.target)}</span>
-                                    {selectedItem.unit && selectedItem.unit.toLowerCase() !== 'number' && (
-                                      <span> {selectedItem.unit}</span>
-                                    )}
+                        {/* Collapsible Section Helper Component */}
+                        {(() => {
+                          const CollapsibleSection = ({ 
+                            sectionId, 
+                            title, 
+                            icon: Icon, 
+                            children 
+                          }: { 
+                            sectionId: string
+                            title: string
+                            icon?: React.ComponentType<{ size?: number; className?: string }>
+                            children: React.ReactNode
+                          }) => {
+                            const isExpanded = expandedSections.has(sectionId)
+                            return (
+                              <div className="space-y-3">
+                                <button
+                                  onClick={() => toggleSection(sectionId)}
+                                  className="flex items-center gap-2 w-full text-left hover:text-indigo-300 transition-colors group"
+                                >
+                                  {Icon && <Icon size={16} className="text-slate-500" />}
+                                  <h4 className="text-sm font-semibold text-white">{title}</h4>
+                                </button>
+                                {isExpanded && (
+                                  <div className="pl-6">
+                                    {children}
                                   </div>
                                 )}
                               </div>
-                            )}
-                            {selectedItem.current !== undefined && (
-                              <ProgressBar value={clampProgress(selectedItem.progress)} status={selectedItem.status} />
-                            )}
-                          </div>
-                          
-                          {/* Check-in Form */}
-                          <div className="pt-4 border-t border-slate-700/50 space-y-4">
-                            <div className="grid grid-cols-2 gap-3">
-                              <div>
-                                <label className="text-xs font-semibold text-slate-400 mb-2 block uppercase tracking-wide">New Value</label>
-                                <input 
-                                  type="number" 
-                                  step="any"
-                                  value={checkInValue}
-                                  onChange={(e) => setCheckInValue(e.target.value)}
-                                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors" 
-                                  placeholder={selectedItem.current ? formatNumber(selectedItem.current) : '0'} 
-                                />
-                              </div>
-                              <div>
-                                <label className="text-xs font-semibold text-slate-400 mb-2 block uppercase tracking-wide">Confidence</label>
-                                <select 
-                                  value={checkInConfidence}
-                                  onChange={(e) => setCheckInConfidence(e.target.value)}
-                                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors"
-                                >
-                                  <option value="0">Low (0%)</option>
-                                  <option value="25">Low-Medium (25%)</option>
-                                  <option value="50">Medium (50%)</option>
-                                  <option value="75">Medium-High (75%)</option>
-                                  <option value="100">High (100%)</option>
-                                </select>
-                              </div>
-                            </div>
-                            <button 
-                              onClick={handleCheckIn}
-                              disabled={isSubmitting || !checkInValue}
-                              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white text-sm font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm shadow-indigo-900/20"
-                            >
-                              {isSubmitting ? (
-                                <>
-                                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                  Submitting...
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle2 size={16} />
-                                  Check-in
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                            )
+                          }
 
-                    {/* SECTION 3: CASCADING ALIGNMENT */}
-                    {selectedItem.type === 'kr' && (() => {
+                          return (
+                            <>
+                              {/* SECTION 1: CHECK-IN FORM - Always visible for Key Results */}
+                              {selectedItem.type === 'kr' && (
+                                <div className="space-y-4" data-check-in-section>
+                                  <div className="flex items-center gap-2">
+                                    <BarChart3 size={18} className="text-indigo-400" />
+                                    <h4 className="text-base font-semibold text-white">Check-in</h4>
+                                  </div>
+                                  
+                                  <div className="bg-gradient-to-br from-indigo-950/30 to-purple-950/30 p-5 rounded-xl border-2 border-indigo-500/30 shadow-lg shadow-indigo-900/10 space-y-5">
+                                    {/* Progress Display */}
+                                    <div className="space-y-3">
+                                      {selectedItem.current !== undefined ? (
+                                        <div className="flex items-end justify-between gap-4">
+                                          <div className="flex-1 min-w-0">
+                                            <div className="text-4xl font-light text-white leading-none tracking-tight">
+                                              {formatNumber(selectedItem.current)}
+                                              {selectedItem.unit && selectedItem.unit.toLowerCase() !== 'number' && (
+                                                <span className="text-2xl text-slate-400 ml-2 font-normal">{selectedItem.unit}</span>
+                                              )}
+                                            </div>
+                                            {selectedItem.target && (
+                                              <div className="text-sm text-slate-400 mt-2">
+                                                Target: <span className="font-medium text-slate-300">{formatNumber(selectedItem.target)}</span>
+                                                {selectedItem.unit && selectedItem.unit.toLowerCase() !== 'number' && (
+                                                  <span> {selectedItem.unit}</span>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                          <div className="text-right flex-shrink-0">
+                                            <div className="text-3xl font-semibold text-slate-200">{Math.round(clampProgress(selectedItem.progress))}%</div>
+                                            <div className="text-xs text-slate-500 mt-0.5">complete</div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="text-center py-4">
+                                          <div className="text-sm text-slate-400 mb-2">No check-ins yet</div>
+                                          {selectedItem.target && (
+                                            <div className="text-xs text-slate-500">
+                                              Target: <span className="font-medium text-slate-300">{formatNumber(selectedItem.target)}</span>
+                                              {selectedItem.unit && selectedItem.unit.toLowerCase() !== 'number' && (
+                                                <span> {selectedItem.unit}</span>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                      {selectedItem.current !== undefined && (
+                                        <ProgressBar value={clampProgress(selectedItem.progress)} status={selectedItem.status} />
+                                      )}
+                                    </div>
+                                    
+                                    {/* Check-in Form */}
+                                    <div className="pt-4 border-t border-slate-700/50 space-y-4">
+                                      <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                          <label className="text-xs font-semibold text-slate-400 mb-2 block uppercase tracking-wide">New Value</label>
+                                          <input 
+                                            type="number" 
+                                            step="any"
+                                            value={checkInValue}
+                                            onChange={(e) => setCheckInValue(e.target.value)}
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors" 
+                                            placeholder={selectedItem.current ? formatNumber(selectedItem.current) : '0'} 
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="text-xs font-semibold text-slate-400 mb-2 block uppercase tracking-wide">Confidence</label>
+                                          <select 
+                                            value={checkInConfidence}
+                                            onChange={(e) => setCheckInConfidence(e.target.value)}
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors"
+                                          >
+                                            <option value="0">Low (0%)</option>
+                                            <option value="25">Low-Medium (25%)</option>
+                                            <option value="50">Medium (50%)</option>
+                                            <option value="75">Medium-High (75%)</option>
+                                            <option value="100">High (100%)</option>
+                                          </select>
+                                        </div>
+                                      </div>
+                                      <button 
+                                        onClick={handleCheckIn}
+                                        disabled={isSubmitting || !checkInValue}
+                                        className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white text-sm font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm shadow-indigo-900/20"
+                                      >
+                                        {isSubmitting ? (
+                                          <>
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            Submitting...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <CheckCircle2 size={16} />
+                                            Check-in
+                                          </>
+                                        )}
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* SECTION 2: Description (if available) */}
+                              {!detailLoading && (okrDetail?.description || selectedItem?.description) && (
+                                <CollapsibleSection sectionId="description" title="Description">
+                                  <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">
+                                    {decodeHtmlEntities(okrDetail?.description || selectedItem?.description || '')}
+                                  </p>
+                                </CollapsibleSection>
+                              )}
+
+                              {/* SECTION 3: Overview (formerly Metadata) */}
+                              {!detailLoading && okrDetail && (
+                                <CollapsibleSection sectionId="overview" title="Overview" icon={Calendar}>
+                                  <MetadataSection detail={okrDetail} type={selectedItem.type} hideTitle />
+                                </CollapsibleSection>
+                              )}
+
+                              {/* SECTION 4: Progress Breakdown */}
+                              {!detailLoading && okrDetail && (
+                                <CollapsibleSection sectionId="progress" title="Progress Breakdown" icon={BarChart3}>
+                                  <ProgressBreakdownSection
+                                    detail={{
+                                      type: selectedItem.type,
+                                      progress: okrDetail.progress,
+                                      keyResults: selectedItem.type === 'objective' && selectedItem.children
+                                        ? selectedItem.children
+                                            .filter((child) => child.type === 'kr')
+                                            .map((child) => ({
+                                              id: child.id,
+                                              title: child.title,
+                                              progress: child.progress,
+                                            }))
+                                        : undefined,
+                                      startValue: okrDetail.startValue,
+                                      currentValue: okrDetail.currentValue,
+                                      targetValue: okrDetail.targetValue,
+                                      unit: okrDetail.unit,
+                                    }}
+                                    hideTitle
+                                  />
+                                </CollapsibleSection>
+                              )}
+
+                              {/* SECTION 5: People & Tags */}
+                              {!detailLoading && okrDetail && (
+                                <CollapsibleSection sectionId="people" title="People & Tags" icon={Users}>
+                                  <PeopleAndTagsSection detail={okrDetail} hideTitle />
+                                </CollapsibleSection>
+                              )}
+
+                              {/* SECTION 6: AI ACTIONABLE INSIGHTS */}
+                              {selectedItem.aiInsight && (
+                                <CollapsibleSection sectionId="ai-insight" title="AI Insights" icon={Zap}>
+                                  <div className="bg-gradient-to-br from-indigo-900/20 to-purple-900/20 border border-indigo-500/30 rounded-xl p-5 relative overflow-hidden">
+                                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5" />
+                                    <div className="relative space-y-3">
+                                      <div className="flex items-center gap-2 text-indigo-300 text-sm font-semibold">
+                                        <Zap size={16} className="fill-indigo-500 text-indigo-500" />
+                                        Nexus AI Insight
+                                      </div>
+                                      <p className="text-sm text-slate-300 leading-relaxed">
+                                        {selectedItem.aiInsight}
+                                      </p>
+                                      <div className="flex gap-2 pt-1">
+                                        <button className="text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg shadow-sm transition-colors">
+                                          View Pipeline Gaps
+                                        </button>
+                                        <button className="text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-lg border border-slate-700 transition-colors">
+                                          Ask Owner
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </CollapsibleSection>
+                              )}
+
+                              {/* SECTION 6: CHECK-IN HISTORY (Key Results) */}
+                              {!detailLoading && selectedItem && selectedItem.type === 'kr' && okrDetail && (
+                                <CollapsibleSection sectionId="checkin-history" title="Check-in History" icon={MessageSquare}>
+                                  <CheckInHistorySection detail={okrDetail} hideTitle />
+                                </CollapsibleSection>
+                              )}
+
+                              {/* SECTION 7: TREND CHARTS (Key Results) */}
+                              {!detailLoading && selectedItem && selectedItem.type === 'kr' && selectedNode?.keyResultId && (
+                                <CollapsibleSection sectionId="trend-charts" title="Progress Trend" icon={BarChart3}>
+                                  <div className="bg-slate-800/50 rounded-lg border border-slate-800 p-4">
+                                    <KeyResultTrendChart keyResultId={selectedNode.keyResultId} />
+                                  </div>
+                                </CollapsibleSection>
+                              )}
+
+
+                              {/* SECTION 9: INITIATIVES (Objectives) */}
+                              {!detailLoading && selectedItem && selectedItem.type === 'objective' && okrDetail && (
+                                <CollapsibleSection sectionId="initiatives" title="Initiatives" icon={Target}>
+                                  <InitiativesSection detail={okrDetail} hideTitle />
+                                </CollapsibleSection>
+                              )}
+
+                              {/* SECTION 10: KEY RESULTS LIST (Objectives) */}
+                              {selectedItem.type === 'objective' && selectedItem.children && selectedItem.children.length > 0 && (() => {
+                                // Filter to only Key Results (exclude sub-objectives)
+                                // Note: convertNodeToItem converts type to 'kr' not 'keyResult'
+                                const keyResults = selectedItem.children.filter(child => child.type === 'kr')
+                                return keyResults.length > 0 ? (
+                                  <CollapsibleSection sectionId="key-results" title={`Key Results (${keyResults.length})`} icon={Layers}>
+                                    <div className="space-y-2">
+                                      {keyResults.map((child, index) => (
+                                        <div
+                                          key={`${selectedItem.id}-kr-${child.id || index}`}
+                                          onClick={() => setSelectedId(child.id)}
+                                          className="p-4 rounded-lg border border-slate-800 bg-slate-800/30 hover:bg-slate-800/50 hover:border-slate-700 cursor-pointer transition-all group"
+                                        >
+                                          <div className="text-sm text-slate-200 font-medium mb-3 group-hover:text-indigo-300 transition-colors break-words">{decodeHtmlEntities(child.title)}</div>
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <StatusBadge status={child.status} />
+                                            <span className="text-xs text-slate-500 font-medium">{Math.round(clampProgress(child.progress))}%</span>
+                                            {child.current !== undefined && child.target !== undefined && (
+                                              <span className="text-xs text-slate-500 ml-auto">
+                                                {formatNumber(child.current)}
+                                                {child.unit && child.unit.toLowerCase() !== 'number' && ` ${child.unit}`} / {formatNumber(child.target)}
+                                                {child.unit && child.unit.toLowerCase() !== 'number' && ` ${child.unit}`}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </CollapsibleSection>
+                                ) : null
+                              })()}
+
+                        {/* SECTION 11: ALIGNMENT CONTEXT */}
+                        {selectedItem.type === 'kr' && (() => {
                       const findParent = (items: OKRItem[], targetId: string, parent: OKRItem | null = null): OKRItem | null => {
                         for (const item of items) {
                           if (item.id === targetId) return parent
@@ -1146,76 +1397,37 @@ export default function OKRHierarchyPage() {
                         }
                         return null
                       }
-                      const parentObjective = findParent(data, selectedItem.id)
-                      
-                      return parentObjective ? (
-                        <div className="space-y-3">
-                          <h4 className="text-sm font-semibold text-white flex items-center gap-2">
-                            <ArrowUpRight size={16} className="text-slate-500" />
-                            Alignment Context
-                          </h4>
-                          <div 
-                            className="p-4 rounded-lg border border-slate-800 bg-slate-800/30 hover:bg-slate-800/50 hover:border-slate-700 cursor-pointer transition-all group"
-                            onClick={() => setSelectedId(parentObjective.id)}
-                          >
-                            <div className="text-xs text-slate-500 mb-2 font-semibold uppercase tracking-wide">Contributes to Objective</div>
-                            <div className="text-sm text-slate-200 font-medium mb-3 group-hover:text-indigo-300 transition-colors break-words">{decodeHtmlEntities(parentObjective.title)}</div>
-                            <StatusBadge status={parentObjective.status} />
-                          </div>
-                        </div>
-                      ) : null
-                    })()}
-
-                    {/* Show children if this is an objective */}
-                    {selectedItem.type === 'objective' && selectedItem.children && selectedItem.children.length > 0 && (() => {
-                      // Filter to only Key Results (exclude sub-objectives)
-                      // Note: convertNodeToItem converts type to 'kr' not 'keyResult'
-                      const keyResults = selectedItem.children.filter(child => child.type === 'kr')
-                      return keyResults.length > 0 ? (
-                        <div className="space-y-3">
-                        <h4 className="text-sm font-semibold text-white flex items-center gap-2">
-                          <Layers size={16} className="text-slate-500" />
-                          Key Results ({keyResults.length})
-                        </h4>
-                        <div className="space-y-2">
-                          {keyResults.map((child, index) => (
-                            <div
-                              key={`${selectedItem.id}-kr-${child.id || index}`}
-                              onClick={() => setSelectedId(child.id)}
-                              className="p-4 rounded-lg border border-slate-800 bg-slate-800/30 hover:bg-slate-800/50 hover:border-slate-700 cursor-pointer transition-all group"
-                            >
-                              <div className="text-sm text-slate-200 font-medium mb-3 group-hover:text-indigo-300 transition-colors break-words">{decodeHtmlEntities(child.title)}</div>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <StatusBadge status={child.status} />
-                                <span className="text-xs text-slate-500 font-medium">{Math.round(clampProgress(child.progress))}%</span>
-                                {child.current !== undefined && child.target !== undefined && (
-                                  <span className="text-xs text-slate-500 ml-auto">
-                                    {formatNumber(child.current)}
-                                    {child.unit && child.unit.toLowerCase() !== 'number' && ` ${child.unit}`} / {formatNumber(child.target)}
-                                    {child.unit && child.unit.toLowerCase() !== 'number' && ` ${child.unit}`}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null
-                    })()}
+                                const parentObjective = findParent(data, selectedItem.id)
+                              
+                                return parentObjective ? (
+                                  <CollapsibleSection sectionId="alignment" title="Alignment Context" icon={ArrowUpRight}>
+                                    <div 
+                                      className="p-4 rounded-lg border border-slate-800 bg-slate-800/30 hover:bg-slate-800/50 hover:border-slate-700 cursor-pointer transition-all group"
+                                      onClick={() => setSelectedId(parentObjective.id)}
+                                    >
+                                      <div className="text-xs text-slate-500 mb-2 font-semibold uppercase tracking-wide">Contributes to Objective</div>
+                                      <div className="text-sm text-slate-200 font-medium mb-3 group-hover:text-indigo-300 transition-colors break-words">{decodeHtmlEntities(parentObjective.title)}</div>
+                                      <StatusBadge status={parentObjective.status} />
+                                    </div>
+                                  </CollapsibleSection>
+                                ) : null
+                              })()}
+                            </>
+                          )
+                        })()}
+                      </>
+                    ) : (
+                      <div className="flex-1 flex flex-col items-start justify-start p-6">
+                        <Target size={48} className="text-slate-700 mb-4" />
+                        <p className="text-slate-500 text-sm">Select an OKR to view details</p>
                       </div>
-                    </>
-                  ) : (
-                    <div className="flex-1 flex flex-col items-start justify-start p-6">
-                      <Target size={48} className="text-slate-700 mb-4" />
-                      <p className="text-slate-500 text-sm">Select an OKR to view details</p>
-                    </div>
-                  )}
-                </TabsContent>
-
-                {/* Edit Tab */}
-                <TabsContent value="edit" className="flex-1 overflow-hidden flex flex-col items-start justify-start mt-0">
-                  {selectedItem ? (
-                    <div className="flex-1 overflow-hidden flex flex-col min-h-0 w-full">
+                    )}
+                  </div>
+                )}
+                
+                {sidePanelTab === 'edit' && (
+                  <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 pt-4 pb-8">
+                    {selectedItem ? (
                       <SidePanelEditForm
                         selectedNode={selectedItem._originalNode || null}
                         onSave={handleEditSave}
@@ -1226,33 +1438,34 @@ export default function OKRHierarchyPage() {
                         availableTeams={teams}
                         currentOrganization={currentOrganization}
                       />
-                    </div>
-                  ) : (
-                    <div className="flex-1 flex flex-col items-start justify-start p-6">
-                      <p className="text-slate-500 text-sm">Select an item to edit</p>
-                    </div>
-                  )}
-                </TabsContent>
-
-                {/* Create Tab */}
-                <TabsContent value="create" className="flex-1 overflow-hidden flex flex-col items-start justify-start mt-0">
-                  <SidePanelCreateForm
-                    mode={createMode}
-                    onModeChange={setCreateMode}
-                    onSuccess={handleCreateSuccess}
-                    onCancel={() => {
-                      setSidePanelTab('details')
-                      setCreateMode(null)
-                    }}
-                    availableUsers={availableUsers}
-                    availableWorkspaces={workspaces}
-                    availableCycles={normalizedCycles}
-                    availableTeams={teams}
-                    parentObjectiveId={selectedItem?.type === 'objective' ? selectedItem.id : undefined}
-                    currentOrganization={currentOrganization}
-                  />
-                </TabsContent>
-              </Tabs>
+                    ) : (
+                      <div className="flex-1 flex flex-col items-start justify-start p-6">
+                        <p className="text-slate-500 text-sm">Select an item to edit</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {sidePanelTab === 'create' && (
+                  <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 pt-4 pb-8">
+                    <SidePanelCreateForm
+                      mode={createMode}
+                      onModeChange={setCreateMode}
+                      onSuccess={handleCreateSuccess}
+                      onCancel={() => {
+                        setSidePanelTab('details')
+                        setCreateMode(null)
+                      }}
+                      availableUsers={availableUsers}
+                      availableWorkspaces={workspaces}
+                      availableCycles={normalizedCycles}
+                      availableTeams={teams}
+                      parentObjectiveId={selectedItem?.type === 'objective' ? selectedItem.id : undefined}
+                      currentOrganization={currentOrganization}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
