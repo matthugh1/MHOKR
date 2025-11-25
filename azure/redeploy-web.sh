@@ -84,11 +84,9 @@ WEB_APP_URL=$(az containerapp update \
     --name "${APP_NAME_PREFIX}-web" \
     --resource-group "$RESOURCE_GROUP" \
     --image "$WEB_IMAGE_NAME" \
-    --env-vars \
-        NODE_ENV=production \
-        NEXT_PUBLIC_API_URL="https://$API_GATEWAY_URL" \
-        NEXTAUTH_URL="${NEXTAUTH_URL:-https://$API_GATEWAY_URL}" \
-        NEXTAUTH_SECRET="$NEXTAUTH_SECRET" \
+    --set-env-vars \
+        "NODE_ENV=production" \
+        "NEXT_PUBLIC_API_URL=https://$API_GATEWAY_URL" \
     --query properties.configuration.ingress.fqdn -o tsv)
 
 echo -e "\n${GREEN}╔══════════════════════════════════════════════════════════╗${NC}"
