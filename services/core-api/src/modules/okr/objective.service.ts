@@ -8,6 +8,7 @@ import { OkrTenantGuard } from './tenant-guard';
 import { OkrGovernanceService } from './okr-governance.service';
 import { AuditLogService } from '../audit/audit-log.service';
 import { OkrStateTransitionService } from './okr-state-transition.service';
+import { ObjectiveOwnerService } from './objective-owner.service';
 import { calculateProgress } from '@okr-nexus/utils';
 
 /**
@@ -28,6 +29,7 @@ export class ObjectiveService {
     private okrGovernanceService: OkrGovernanceService,
     private auditLogService: AuditLogService,
     private stateTransitionService: OkrStateTransitionService,
+    private objectiveOwnerService: ObjectiveOwnerService,
   ) {}
 
   async findAll(
@@ -446,6 +448,38 @@ export class ObjectiveService {
       }
     }
 
+    // Validate pillar if provided
+    if (data.pillarId) {
+      // Reject hardcoded/invalid values
+      if (data.pillarId === 'default' || data.pillarId === 'temp') {
+        throw new BadRequestException('Invalid pillarId: Please select a valid strategic pillar');
+      }
+
+      const pillar = await this.prisma.strategicPillar.findUnique({
+        where: { id: data.pillarId },
+        select: { id: true, tenantId: true },
+      });
+
+      if (!pillar) {
+        throw new NotFoundException(`Strategic pillar with ID ${data.pillarId} not found`);
+      }
+
+      // Verify pillar belongs to same tenant as the objective
+      // Determine the objective's tenantId (from data.tenantId, workspace, or team)
+      const objectiveTenantId = data.tenantId || 
+        (data.workspaceId ? (await this.prisma.workspace.findUnique({ where: { id: data.workspaceId }, select: { tenantId: true } }))?.tenantId : null) ||
+        (data.teamId ? (await this.prisma.team.findUnique({ where: { id: data.teamId }, select: { workspace: { select: { tenantId: true } } } }))?.workspace?.tenantId : null);
+
+      if (objectiveTenantId && pillar.tenantId !== objectiveTenantId) {
+        throw new BadRequestException('Strategic pillar does not belong to the same organization as the objective');
+      }
+
+      // Also enforce tenant isolation using OkrTenantGuard
+      if (pillar.tenantId && userTenantId !== null) {
+        OkrTenantGuard.assertSameTenant(pillar.tenantId, userTenantId);
+      }
+    }
+
     // Validate visibility level: reject legacy deprecated values
     const legacyVisibilityLevels = ['WORKSPACE_ONLY', 'TEAM_ONLY', 'MANAGER_CHAIN', 'EXEC_ONLY'];
     if (data.visibilityLevel && legacyVisibilityLevels.includes(data.visibilityLevel)) {
@@ -534,12 +568,39 @@ export class ObjectiveService {
       data.goalType = 'ASPIRATIONAL';
     }
 
+    // Extract additionalOwnerIds before passing data to Prisma (it's not a database field)
+    const additionalOwnerIds = data.additionalOwnerIds || [];
+    delete data.additionalOwnerIds;
+
     const createdObjective = await this.prisma.objective.create({
       data,
       include: {
         keyResults: true,
       },
     });
+
+    // Add additional owners if provided
+    if (additionalOwnerIds.length > 0 && createdObjective.tenantId) {
+      for (const userId of additionalOwnerIds) {
+        try {
+          // Skip if user is already the primary owner
+          if (userId === createdObjective.ownerId) {
+            continue;
+          }
+          await this.objectiveOwnerService.addOwner(
+            createdObjective.id,
+            userId,
+            createdObjective.tenantId,
+            _userId,
+          );
+        } catch (error) {
+          // Log warning but don't fail the whole creation if owner can't be added
+          this.logger.warn(
+            `Could not add additional owner "${userId}" to objective "${createdObjective.title}": ${(error as Error).message}`,
+          );
+        }
+      }
+    }
 
     // Log activity for creation with full entity snapshot
     await this.activityService.createActivity({
@@ -1031,6 +1092,38 @@ export class ObjectiveService {
         throw new BadRequestException(
           `Legacy visibility level '${data.visibilityLevel}' is no longer supported. Please use 'PUBLIC_TENANT' or 'PRIVATE' instead.`
         );
+      }
+    }
+
+    // Validate pillar if provided
+    if (data.pillarId !== undefined) {
+      // Allow null/empty to unset pillar
+      if (data.pillarId === null || data.pillarId === '') {
+        data.pillarId = null;
+      } else {
+        // Reject hardcoded/invalid values
+        if (data.pillarId === 'default' || data.pillarId === 'temp') {
+          throw new BadRequestException('Invalid pillarId: Please select a valid strategic pillar');
+        }
+
+        const pillar = await this.prisma.strategicPillar.findUnique({
+          where: { id: data.pillarId },
+          select: { id: true, tenantId: true },
+        });
+
+        if (!pillar) {
+          throw new NotFoundException(`Strategic pillar with ID ${data.pillarId} not found`);
+        }
+
+        // Verify pillar belongs to same tenant as the objective
+        if (pillar.tenantId !== objectiveBefore.tenantId) {
+          throw new BadRequestException('Strategic pillar does not belong to the same organization as the objective');
+        }
+
+        // Also enforce tenant isolation using OkrTenantGuard
+        if (pillar.tenantId && userTenantId !== null) {
+          OkrTenantGuard.assertSameTenant(pillar.tenantId, userTenantId);
+        }
       }
     }
 

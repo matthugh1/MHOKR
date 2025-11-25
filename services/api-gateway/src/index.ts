@@ -38,6 +38,9 @@ try {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy for Azure Container Apps (needed for rate limiting and X-Forwarded-For headers)
+app.set('trust proxy', true);
+
 // Middleware
 app.use(helmet());
 app.use(cors({

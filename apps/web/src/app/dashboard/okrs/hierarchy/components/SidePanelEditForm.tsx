@@ -42,6 +42,7 @@ export function SidePanelEditForm({
         onCancel={onCancel}
         availableUsers={availableUsers}
         availableWorkspaces={availableWorkspaces}
+        availableTeams={availableTeams}
         availableCycles={availableCycles}
       />
     )

@@ -187,7 +187,6 @@ export function OKRCreationDrawer({
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const drawerOpenTimeRef = React.useRef<number | null>(null)
-  const sheetContentRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const [showSkeleton, setShowSkeleton] = useState(true)
   const publishTiming = useUxTiming('okr.create.publish')
@@ -244,9 +243,13 @@ export function OKRCreationDrawer({
 
   // Focus trap when drawer opens
   useEffect(() => {
-    if (isOpen && sheetContentRef.current) {
-      const cleanup = trapFocus(sheetContentRef.current)
-      return cleanup
+    if (isOpen) {
+      // Find SheetContent element by aria-labelledby attribute
+      const sheetContent = document.querySelector('[aria-labelledby="okr-creation-drawer-title"]') as HTMLElement
+      if (sheetContent) {
+        const cleanup = trapFocus(sheetContent)
+        return cleanup
+      }
     }
   }, [isOpen])
 
@@ -1746,7 +1749,7 @@ export function OKRCreationDrawer({
         side="right" 
         className="w-full sm:max-w-lg flex flex-col"
       >
-        <div ref={sheetContentRef} className="flex flex-col h-full">
+        <div className="flex flex-col h-full">
         <SheetHeader>
           <SheetTitle>
             {titleText}

@@ -27,6 +27,14 @@ interface APIObjective {
   cycleName?: string
   visibilityLevel?: string
   isPublished?: boolean
+  pillarId?: string | null
+  pillar?: {
+    id: string
+    name: string
+    color?: string | null
+  } | null
+  workspaceId?: string | null
+  teamId?: string | null
   keyResults?: Array<{
     id?: string
     keyResultId?: string
@@ -84,7 +92,7 @@ export function transformToHierarchy(objectives: APIObjective[]): HierarchyTreeD
       status: obj.status as HierarchyOKRNode['status'],
       progress: obj.progress,
       ownerId: obj.ownerId,
-      owner: obj.owner || null,
+      owner: obj.owner || undefined,
       parentId: obj.parentId || obj.parentObjectiveId || null,
       expanded: false,
       children: [],
@@ -93,6 +101,10 @@ export function transformToHierarchy(objectives: APIObjective[]): HierarchyTreeD
       cycleName: obj.cycle?.name || obj.cycleName || null,
       visibilityLevel: obj.visibilityLevel,
       isPublished: obj.isPublished,
+      // Extract pillarId from direct field or pillar relation
+      pillarId: obj.pillarId || obj.pillar?.id || null,
+      workspaceId: obj.workspaceId || null,
+      teamId: obj.teamId || null,
     }
 
     allNodes.set(objectiveId, node)
@@ -116,7 +128,7 @@ export function transformToHierarchy(objectives: APIObjective[]): HierarchyTreeD
           status: krStatus as HierarchyOKRNode['status'],
           progress: krProgress,
           ownerId: krOwnerId,
-          owner: krOwner,
+          owner: krOwner || undefined,
           parentId: objectiveId,
           expanded: false,
           children: [],

@@ -203,7 +203,7 @@ function PeopleSettings() {
           statusText: error.response?.statusText,
           message: error.response?.data?.message,
           data: error.response?.data,
-          organizationId: organization.id,
+          tenantId: organization.id,
         })
       } finally {
         setLoading(false)
@@ -335,7 +335,7 @@ function PeopleSettings() {
     setEditedUserName(user.name || '')
     setEditedUserEmail(user.email || '')
     // Fetch user's inspector setting if caller has manage_users
-    if (permissions.canInviteMembers({ organizationId: organization?.id })) {
+    if (permissions.canInviteMembers({ tenantId: organization?.id })) {
       try {
         const res = await api.get(`/users/${user.id}`)
         const settings = res.data?.settings as any
@@ -684,7 +684,7 @@ function PeopleSettings() {
         return []
       }
     }
-    return workspaces.filter(w => !organization || w.organizationId === organization.id)
+    return workspaces.filter(w => !organization || w.tenantId === organization.id)
   }
 
   const getAvailableOrganizations = () => {
@@ -761,8 +761,6 @@ function PeopleSettings() {
     'MEMBER': 'Can view and contribute to organization content. Full access to assigned workspaces.',
     'VIEWER': 'Read-only access. Can view organization content but cannot make changes.',
     'WORKSPACE_OWNER': 'Full control over workspace settings, members, and all OKRs within this workspace.',
-    'WORKSPACE_ADMIN': 'Can manage workspace members and settings, create and edit OKRs.',
-    'TEAM_LEAD': 'Can manage team members and team-level OKRs.',
     // RBAC roles
     'TENANT_OWNER': 'Full commercial and operational control over organization. Can bypass publish/cycle locks, manage users/workspaces/teams, export data, manage tenant settings.',
     'TENANT_ADMIN': 'Administrative control within organization. Can bypass locks, manage users/workspaces, export data.',
@@ -830,7 +828,7 @@ function PeopleSettings() {
 
         {/* View Mode Toggle */}
         {organization && (
-          <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'workspace' | 'organization')}>
+          <Tabs value={viewMode} onValueChange={(v: string) => setViewMode(v as 'workspace' | 'organization')}>
             <TabsList>
               <TabsTrigger value="workspace" disabled={!workspace}>
                 Workspace View
@@ -843,7 +841,7 @@ function PeopleSettings() {
         )}
 
         {/* Create User Dialog */}
-        <Dialog open={showCreateUser} onOpenChange={(open) => {
+        <Dialog open={showCreateUser} onOpenChange={(open: boolean) => {
           setShowCreateUser(open)
           if (open) {
             // Initialize form with current context when dialog opens
@@ -936,7 +934,7 @@ function PeopleSettings() {
                       <Label htmlFor="organization">Organisation *</Label>
                       <Select 
                         value={newUserData.tenantId || organization?.id || ''} 
-                        onValueChange={async (v) => {
+                        onValueChange={async (v: string) => {
                           setNewUserData({ 
                             ...newUserData, 
                             tenantId: v, 
@@ -1013,8 +1011,8 @@ function PeopleSettings() {
                       <Label htmlFor="workspace">Workspace (optional)</Label>
                       <Select 
                         value={newUserData.workspaceId} 
-                        onValueChange={(v) => setNewUserData({ ...newUserData, workspaceId: v })}
-                        disabled={!organization && !devInspectorMode ? !newUserData.organizationId : false}
+                        onValueChange={(v: string) => setNewUserData({ ...newUserData, workspaceId: v })}
+                        disabled={!organization && !devInspectorMode ? !newUserData.tenantId : false}
                       >
                         <SelectTrigger id="workspace">
                           <SelectValue placeholder="Select workspace (optional)" />
@@ -1139,7 +1137,7 @@ function PeopleSettings() {
                   {filteredPeople.map((person) => {
                     // Get user's roles grouped by scope (from RBAC assignments)
                     const userRoles = person.rbacRoles || {
-                      tenant: person.orgRole ? [{ organizationId: organization?.id || '', roles: [person.orgRole] }] : [],
+                      tenant: person.orgRole ? [{ tenantId: organization?.id || '', roles: [person.orgRole] }] : [],
                       workspace: person.workspaceRole ? [{ workspaceId: workspace?.id || '', roles: [person.workspaceRole] }] : [],
                       team: person.teams?.map((t: any) => ({ teamId: t.id, roles: [t.role || 'MEMBER'] })) || [],
                     }
@@ -1323,7 +1321,7 @@ function PeopleSettings() {
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-sm font-semibold">User Information</h3>
-                      {!editingUserInfo && permissions.canInviteMembers({ organizationId: organization?.id }) && (
+                      {!editingUserInfo && permissions.canInviteMembers({ tenantId: organization?.id }) && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1421,7 +1419,7 @@ function PeopleSettings() {
                       <div className="mb-4">
                         <div className="flex items-center justify-between mb-2">
                           <h4 className="text-xs font-medium text-slate-600">Roles by Scope</h4>
-                          {permissions.canInviteMembers({ organizationId: organization?.id, workspaceId: workspace?.id }) && (
+                          {permissions.canInviteMembers({ tenantId: organization?.id, workspaceId: workspace?.id }) && (
                             <Button
                               variant="outline"
                               size="sm"
@@ -1575,7 +1573,7 @@ function PeopleSettings() {
                   )}
 
                   {/* Troubleshooting Section - RBAC Inspector Toggle */}
-                  {permissions.canInviteMembers({ organizationId: organization?.id }) && (
+                  {permissions.canInviteMembers({ tenantId: organization?.id }) && (
                     <div>
                       <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                         <Info className="h-4 w-4" />
@@ -1641,7 +1639,7 @@ function PeopleSettings() {
                           </Badge>
                         </div>
                         <div className="flex items-center gap-1">
-                          {permissions.canInviteMembers({ organizationId: organization?.id }) && (
+                          {permissions.canInviteMembers({ tenantId: organization?.id }) && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1822,7 +1820,7 @@ function PeopleSettings() {
                 <Label htmlFor="assign-org-select">Select Organization</Label>
                 <Select 
                   value={selectedOrgId} 
-                  onValueChange={async (orgId) => {
+                  onValueChange={async (orgId: string) => {
                     setSelectedOrgId(orgId)
                     // Load workspaces for selected organization
                     if (isSuperuser && orgId) {
@@ -1901,7 +1899,7 @@ function PeopleSettings() {
                   <SelectContent>
                     {(isSuperuser && selectedOrgId 
                       ? availableWorkspacesForOrg 
-                      : workspaces.filter(w => !organization || w.organizationId === organization.id)).map((ws) => (
+                      : workspaces.filter(w => !organization || w.tenantId === organization.id)).map((ws) => (
                       <SelectItem key={ws.id} value={ws.id}>
                         {ws.name}
                       </SelectItem>
@@ -2011,7 +2009,7 @@ function PeopleSettings() {
             scopeId={roleAssignmentDialog.scopeId}
             currentRole={roleAssignmentDialog.currentRole}
             availableOrganizations={getAvailableOrganizations()}
-            availableWorkspaces={isSuperuser ? availableWorkspacesForOrg : workspaces.filter(w => !organization || w.organizationId === organization.id)}
+            availableWorkspaces={isSuperuser ? availableWorkspacesForOrg : workspaces.filter(w => !organization || w.tenantId === organization.id)}
             availableTeams={teams}
             onSuccess={async () => {
               await loadPeople()

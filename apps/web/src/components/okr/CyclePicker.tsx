@@ -230,7 +230,7 @@ export function CyclePicker({ onCycleSelect, selectedCycleId, currentOrganizatio
             <label className="text-xs font-medium text-blue-900">Cycle Type</label>
             <Select
               value={cycleType}
-              onValueChange={(v) => {
+              onValueChange={(v: string) => {
                 setCycleType(v as 'MONTH' | 'QUARTER' | 'YEAR')
                 // Reset to first option of new type
                 const options = v === 'MONTH' 

@@ -437,9 +437,6 @@ export default function DashboardPage() {
                       {cycleHealthSummary ? (
                         <CycleHealthStrip
                           cycleId={activeCycleId}
-                          onFilterClick={(filterType, value) => {
-                            window.location.href = `/dashboard/okrs?filter=${filterType}${value ? `&value=${value}` : ''}`
-                          }}
                         />
                       ) : (
                         <div className="text-sm text-neutral-500 py-4">
@@ -563,7 +560,7 @@ export default function DashboardPage() {
             onNavigateToKeyResult={(krId) => {
               window.location.href = `/dashboard/okrs?krId=${krId}`
             }}
-            canRequestCheckIn={!userRoles.isSuperuser && permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || undefined })}
+            canRequestCheckIn={!userRoles.isSuperuser && permissions.canEditOKR({ ownerId: user?.id || '', tenantId: currentOrganization?.id || undefined })}
           />
         </PageContainer>
       </DashboardLayout>

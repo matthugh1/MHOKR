@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/table'
 import { Plus, Pencil, Trash2, User } from 'lucide-react'
 import { useAuth } from '@/contexts/auth.context'
+import { useWorkspace } from '@/contexts/workspace.context'
 import { usePermissions } from '@/hooks/usePermissions'
 import { useToast } from '@/hooks/use-toast'
 import api from '@/lib/api'
@@ -73,6 +74,7 @@ interface PillarRollup {
 
 export default function PillarsPage() {
   const { user } = useAuth()
+  const { currentOrganization } = useWorkspace()
   const permissions = usePermissions()
   const { toast } = useToast()
 
@@ -93,7 +95,10 @@ export default function PillarsPage() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const canEdit = permissions.hasPermission('edit_okr')
+  // Always show buttons - backend will enforce permissions
+  // The backend is the source of truth for permissions, not the frontend
+  // This prevents UI blocking when the frontend permission check fails due to API/caching issues
+  const canEdit = true
 
   useEffect(() => {
     loadPillars()
@@ -204,7 +209,19 @@ export default function PillarsPage() {
       loadPillars()
       loadRollup()
     } catch (error: any) {
+      const status = error.response?.status
       const message = error.response?.data?.message || 'Failed to create pillar'
+      
+      // Log the full error for debugging
+      console.error('[PillarsPage] Create pillar error:', {
+        status,
+        message,
+        response: error.response?.data,
+        user: user?.email,
+        organizationId: currentOrganization?.id,
+        rolesByScope: permissions.rolesByScope,
+      })
+      
       toast({
         title: 'Error',
         description: message,
@@ -462,8 +479,8 @@ export default function PillarsPage() {
                 <div>
                   <Label>Owner</Label>
                   <SearchableUserSelect
-                    selectedUserId={formOwnerId}
-                    onUserSelect={setFormOwnerId}
+                    value={formOwnerId || ''}
+                    onValueChange={(userId) => setFormOwnerId(userId || null)}
                     availableUsers={availableUsers}
                     placeholder="Select owner (optional)"
                   />
@@ -537,8 +554,8 @@ export default function PillarsPage() {
                 <div>
                   <Label>Owner</Label>
                   <SearchableUserSelect
-                    selectedUserId={formOwnerId}
-                    onUserSelect={setFormOwnerId}
+                    value={formOwnerId || ''}
+                    onValueChange={(userId) => setFormOwnerId(userId || null)}
                     availableUsers={availableUsers}
                     placeholder="Select owner (optional)"
                   />

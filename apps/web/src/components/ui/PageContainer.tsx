@@ -43,9 +43,9 @@ export function PageContainer({
   }
   
   const resolved = {
-    maxWidth: maxWidth || variantDefaults[variant].maxWidth,
-    background: background || variantDefaults[variant].background,
-    padding: padding || variantDefaults[variant].padding,
+    maxWidth: (maxWidth || variantDefaults[variant].maxWidth) as keyof typeof maxWidthClasses,
+    background: (background || variantDefaults[variant].background) as keyof typeof backgroundClasses,
+    padding: (padding || variantDefaults[variant].padding) as keyof typeof paddingClasses,
   }
   
   const maxWidthClasses = {

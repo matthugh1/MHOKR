@@ -94,7 +94,7 @@ export function InlinePublishEditor({
           </OkrBadge>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[160px] p-1" align="start" onClick={(e) => e.stopPropagation()}>
+      <PopoverContent className="w-[160px] p-1" align="start" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
         <div className="space-y-0.5">
           <button
             onClick={() => handleSelect(false)}

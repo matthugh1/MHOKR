@@ -319,6 +319,12 @@ model KeyResult {
   team            Team?                     @relation(fields: [teamId], references: [id], onDelete: SetNull)
   createdBy       String? // User who created this key result
   creator         User?                     @relation("KeyResultCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  // Nested KR support: a Key Result can be a child of another Key Result (Viva Goals pattern)
+  parentKeyResultId String? // Parent KR for nested hierarchy
+  parentKeyResult   KeyResult?              @relation("KeyResultHierarchy", fields: [parentKeyResultId], references: [id], onDelete: SetNull)
+  childKeyResults   KeyResult[]             @relation("KeyResultHierarchy")
+  // Weight for progress aggregation (when this KR is a child of another KR)
+  weight          Float                     @default(1.0)
   metricType      MetricType
   startValue      Float
   targetValue     Float
@@ -362,6 +368,7 @@ model KeyResult {
   @@index([tenantId])
   @@index([teamId])
   @@index([createdBy])
+  @@index([parentKeyResultId])
   @@index([goalType])
   @@index([visibilityLevel])
   @@index([isPublished])

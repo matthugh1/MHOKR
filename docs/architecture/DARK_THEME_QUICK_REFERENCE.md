@@ -143,3 +143,4 @@ hover:text-neutral-900 →  hover:text-white
 - Full Design System: `docs/architecture/DARK_THEME_DESIGN_SYSTEM.md`
 - Migration Plan: `docs/architecture/STYLING_MIGRATION_PLAN.md`
 
+

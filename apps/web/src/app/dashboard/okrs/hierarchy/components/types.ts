@@ -25,6 +25,9 @@ export interface HierarchyOKRNode {
   cycleName?: string | null
   visibilityLevel?: string
   isPublished?: boolean
+  workspaceId?: string | null
+  teamId?: string | null
+  pillarId?: string | null
   // Key Result-specific fields
   currentValue?: number | null
   targetValue?: number | null

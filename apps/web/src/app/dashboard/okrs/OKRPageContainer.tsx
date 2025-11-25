@@ -123,7 +123,8 @@ export function OKRPageContainer({
   onCreateObjective,
 }: OKRPageContainerProps) {
   const { currentOrganization } = useWorkspace()
-  const { user, isSuperuser } = useAuth()
+  const { user } = useAuth()
+  const isSuperuser = user?.isSuperuser || false
   const tenantPermissions = useTenantPermissions()
   const { toast } = useToast()
   
@@ -460,7 +461,12 @@ export function OKRPageContainer({
       
       return {
         ...normalised,
-        keyResults: visibleKeyResults,
+        status: normalised.status as 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED' | 'NOT_STARTED',
+        publishState: normalised.publishState as 'PUBLISHED' | 'DRAFT' | undefined,
+        keyResults: visibleKeyResults.map((kr: any) => ({
+          ...kr,
+          checkInCadence: kr.checkInCadence as 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'NONE' | undefined,
+        })),
         canEdit,
         canDelete,
         canEditKeyResult,

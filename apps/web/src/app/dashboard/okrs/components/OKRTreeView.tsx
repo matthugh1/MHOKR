@@ -57,7 +57,7 @@ export function OKRTreeView({
   // Get breadcrumb path for selected node
   const breadcrumbPath = useMemo(() => {
     if (!selectedNodeId || !selectedNodeType) return []
-    return getNodePath(selectedNodeId, selectedNodeType)
+    return getNodePath(selectedNodeId, selectedNodeType) as BreadcrumbItem[]
   }, [selectedNodeId, selectedNodeType, getNodePath])
 
   // Track analytics events
@@ -200,7 +200,7 @@ export function OKRTreeView({
     const isFocused = focusedNodeId === obj.id
 
     return (
-      <div key={obj.id} ref={el => el && nodeRefs.current.set(obj.id, el)}>
+      <div key={obj.id} ref={el => { if (el) nodeRefs.current.set(obj.id, el) }}>
         <TreeNode
           type="objective"
           data={obj}
@@ -231,7 +231,7 @@ export function OKRTreeView({
               const krIsFocused = focusedNodeId === kr.id
               
               return (
-                <div key={kr.id} ref={el => el && nodeRefs.current.set(kr.id, el)}>
+                <div key={kr.id} ref={el => { if (el) nodeRefs.current.set(kr.id, el) }}>
                   <TreeNode
                     type="keyResult"
                     data={kr}
@@ -255,7 +255,7 @@ export function OKRTreeView({
                     const initIsFocused = focusedNodeId === init.id
                     
                     return (
-                      <div key={init.id} ref={el => el && nodeRefs.current.set(init.id, el)}>
+                      <div key={init.id} ref={el => { if (el) nodeRefs.current.set(init.id, el) }}>
                         <TreeNode
                           type="initiative"
                           data={init}
@@ -281,7 +281,7 @@ export function OKRTreeView({
               const initIsFocused = focusedNodeId === init.id
               
               return (
-                <div key={init.id} ref={el => el && nodeRefs.current.set(init.id, el)}>
+                <div key={init.id} ref={el => { if (el) nodeRefs.current.set(init.id, el) }}>
                   <TreeNode
                     type="initiative"
                     data={init}

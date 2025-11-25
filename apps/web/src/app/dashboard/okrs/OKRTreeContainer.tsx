@@ -255,7 +255,7 @@ export function OKRTreeContainer({
         return tenantPermissions.canEditKeyResult({
           id: kr.id,
           ownerId: kr.ownerId || okr.ownerId,
-          organizationId: okr.organizationId,
+          tenantId: okr.tenantId || okr.organizationId,
           workspaceId: okr.workspaceId,
           teamId: okr.teamId,
           parentObjective: objectiveForHook,
@@ -271,7 +271,7 @@ export function OKRTreeContainer({
         return tenantPermissions.canCheckInOnKeyResult({
           id: kr.id,
           ownerId: kr.ownerId || okr.ownerId,
-          organizationId: okr.organizationId,
+          tenantId: okr.tenantId || okr.organizationId,
           workspaceId: okr.workspaceId,
           teamId: okr.teamId,
           parentObjective: objectiveForHook,
@@ -280,7 +280,10 @@ export function OKRTreeContainer({
       
       return {
         ...normalised,
-        keyResults: visibleKeyResults,
+        keyResults: visibleKeyResults.map((kr: any) => ({
+          ...kr,
+          objectiveId: okr.id,
+        })),
         canEdit,
         canDelete,
         canEditKeyResult,

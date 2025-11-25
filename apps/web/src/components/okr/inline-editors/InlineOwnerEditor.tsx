@@ -130,7 +130,7 @@ export function InlineOwnerEditor({
           <ChevronsUpDown className="h-3 w-3 ml-1 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[240px] p-0" align="start" onClick={(e) => e.stopPropagation()}>
+      <PopoverContent className="w-[240px] p-0" align="start" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
         <Command>
           <CommandInput placeholder="Search users..." />
           <CommandList>

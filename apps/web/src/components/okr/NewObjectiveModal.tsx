@@ -189,7 +189,7 @@ export function NewObjectiveModal({
             <Label htmlFor="status">
               Status <span className="text-red-500">*</span>
             </Label>
-            <Select value={status} onValueChange={(value) => setStatus(value as OKRStatus)} required>
+            <Select value={status} onValueChange={(value: string) => setStatus(value as OKRStatus)} required>
               <SelectTrigger id="status">
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
@@ -210,7 +210,7 @@ export function NewObjectiveModal({
             </Label>
             <Select
               value={visibilityLevel}
-              onValueChange={(value) => setVisibilityLevel(value as VisibilityLevel)}
+              onValueChange={(value: string) => setVisibilityLevel(value as VisibilityLevel)}
               required
             >
               <SelectTrigger id="visibility">

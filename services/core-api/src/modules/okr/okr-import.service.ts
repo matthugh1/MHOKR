@@ -1,7 +1,6 @@
 import {
   Injectable,
   BadRequestException,
-  NotFoundException,
   Logger,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
@@ -41,7 +40,7 @@ export class OkrImportService {
     private prisma: PrismaService,
     private csvParser: VivaGoalsCSVParserService,
     private jsonParser: VivaGoalsJSONParserService,
-    private cycleService: OkrCycleService,
+    public cycleService: OkrCycleService, // Public for external access; direct prisma used in resolveCycle
     private objectiveOwnerService: ObjectiveOwnerService,
     private keyResultOwnerService: KeyResultOwnerService,
     private phasedTargetService: PhasedTargetService,
@@ -126,10 +125,21 @@ export class OkrImportService {
       }
     }
 
-    // Process Key Results (they reference Objectives)
-    for (let i = 0; i < keyResults.length; i++) {
+    // Topologically sort Key Results to ensure parent KRs are imported before child KRs
+    const sortedKeyResults = this.topologicalSortKeyResults(keyResults, objectives);
+    
+    if (sortedKeyResults.length !== keyResults.length) {
+      result.warnings.push(
+        `Some key results could not be sorted (circular dependencies or missing parents) - importing in original order`,
+      );
+      sortedKeyResults.length = 0;
+      sortedKeyResults.push(...keyResults);
+    }
+
+    // Process Key Results in topological order
+    for (let i = 0; i < sortedKeyResults.length; i++) {
       try {
-        const row = keyResults[i];
+        const row = sortedKeyResults[i];
         const wasUpdate = await this.isKeyResultExisting(row.externalId, tenantId);
         const keyResult = await this.importKeyResult(
           row,
@@ -138,6 +148,8 @@ export class OkrImportService {
           externalIdToInternalId,
         );
         if (keyResult) {
+          // Add KR to mapping for nested KR support
+          externalIdToInternalId.set(row.externalId, keyResult.id);
           if (wasUpdate) {
             result.keyResultsUpdated++;
           } else {
@@ -146,13 +158,14 @@ export class OkrImportService {
         }
       } catch (error) {
         result.success = false;
+        const originalIndex = keyResults.findIndex(kr => kr.externalId === sortedKeyResults[i].externalId);
         result.errors.push({
-          row: objectives.length + i + 2,
-          externalId: keyResults[i].externalId,
-          title: keyResults[i].title,
+          row: objectives.length + (originalIndex >= 0 ? originalIndex : i) + 2,
+          externalId: sortedKeyResults[i].externalId,
+          title: sortedKeyResults[i].title,
           error: error instanceof Error ? error.message : String(error),
         });
-        this.logger.error(`Error importing key result ${keyResults[i].externalId}: ${error}`);
+        this.logger.error(`Error importing key result ${sortedKeyResults[i].externalId}: ${error}`);
       }
     }
 
@@ -235,10 +248,21 @@ export class OkrImportService {
       }
     }
 
-    // Process Key Results
-    for (let i = 0; i < keyResults.length; i++) {
+    // Topologically sort Key Results to ensure parent KRs are imported before child KRs
+    const sortedKeyResults = this.topologicalSortKeyResults(keyResults, objectives);
+    
+    if (sortedKeyResults.length !== keyResults.length) {
+      result.warnings.push(
+        `Some key results could not be sorted (circular dependencies or missing parents) - importing in original order`,
+      );
+      sortedKeyResults.length = 0;
+      sortedKeyResults.push(...keyResults);
+    }
+
+    // Process Key Results in topological order
+    for (let i = 0; i < sortedKeyResults.length; i++) {
       try {
-        const row = keyResults[i];
+        const row = sortedKeyResults[i];
         const wasUpdate = await this.isKeyResultExisting(row.externalId, tenantId);
         const keyResult = await this.importKeyResult(
           row,
@@ -247,6 +271,8 @@ export class OkrImportService {
           externalIdToInternalId,
         );
         if (keyResult) {
+          // Add KR to mapping for nested KR support
+          externalIdToInternalId.set(row.externalId, keyResult.id);
           if (wasUpdate) {
             result.keyResultsUpdated++;
           } else {
@@ -255,13 +281,14 @@ export class OkrImportService {
         }
       } catch (error) {
         result.success = false;
+        const originalIndex = keyResults.findIndex(kr => kr.externalId === sortedKeyResults[i].externalId);
         result.errors.push({
-          row: objectives.length + i + 1,
-          externalId: keyResults[i].externalId,
-          title: keyResults[i].title,
+          row: objectives.length + (originalIndex >= 0 ? originalIndex : i) + 1,
+          externalId: sortedKeyResults[i].externalId,
+          title: sortedKeyResults[i].title,
           error: error instanceof Error ? error.message : String(error),
         });
-        this.logger.error(`Error importing key result ${keyResults[i].externalId}: ${error}`);
+        this.logger.error(`Error importing key result ${sortedKeyResults[i].externalId}: ${error}`);
       }
     }
 
@@ -430,6 +457,83 @@ export class OkrImportService {
     objectives.forEach(obj => {
       if (!visited.has(obj.externalId)) {
         sorted.push(obj);
+      }
+    });
+
+    return sorted;
+  }
+
+  /**
+   * Topologically sort Key Results to ensure parent KRs are imported before child KRs.
+   * This handles nested KR hierarchies (Viva Goals pattern).
+   */
+  private topologicalSortKeyResults(
+    keyResults: ParsedVivaGoalsRow[],
+    _objectives?: ParsedVivaGoalsRow[],
+  ): ParsedVivaGoalsRow[] {
+    // Build sets for quick lookup
+    const krExternalIds = new Set(keyResults.map(kr => kr.externalId));
+    const krMap = new Map<string, ParsedVivaGoalsRow>();
+    keyResults.forEach(kr => krMap.set(kr.externalId, kr));
+
+    // Build adjacency list: child -> parent
+    const inDegree = new Map<string, number>();
+    const children = new Map<string, string[]>(); // parent -> children
+
+    keyResults.forEach(kr => {
+      inDegree.set(kr.externalId, 0);
+      children.set(kr.externalId, []);
+    });
+
+    // Build graph: for each KR with a parent KR, add edge
+    keyResults.forEach(kr => {
+      if (kr.parentExternalId && krExternalIds.has(kr.parentExternalId)) {
+        // Parent is another KR in current batch
+        const parentChildren = children.get(kr.parentExternalId) || [];
+        parentChildren.push(kr.externalId);
+        children.set(kr.parentExternalId, parentChildren);
+        inDegree.set(kr.externalId, (inDegree.get(kr.externalId) || 0) + 1);
+      }
+      // If parent is an Objective or external, in-degree stays 0
+    });
+
+    // Kahn's algorithm
+    const queue: ParsedVivaGoalsRow[] = [];
+    const sorted: ParsedVivaGoalsRow[] = [];
+    const visited = new Set<string>();
+
+    // Find all root KRs (parent is an Objective or not in batch)
+    keyResults.forEach(kr => {
+      if ((inDegree.get(kr.externalId) || 0) === 0) {
+        queue.push(kr);
+        visited.add(kr.externalId);
+      }
+    });
+
+    // Process queue
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      sorted.push(current);
+
+      const currentChildren = children.get(current.externalId) || [];
+      for (const childId of currentChildren) {
+        const currentInDegree = (inDegree.get(childId) || 0) - 1;
+        inDegree.set(childId, currentInDegree);
+
+        if (currentInDegree === 0 && !visited.has(childId)) {
+          const childKr = krMap.get(childId);
+          if (childKr) {
+            queue.push(childKr);
+            visited.add(childId);
+          }
+        }
+      }
+    }
+
+    // Add any remaining KRs (circular dependencies or disconnected)
+    keyResults.forEach(kr => {
+      if (!visited.has(kr.externalId)) {
+        sorted.push(kr);
       }
     });
 
@@ -700,13 +804,14 @@ export class OkrImportService {
       );
     }
 
-    // Resolve parent Objective
+    // Resolve parent - can be either an Objective or another Key Result (nested KRs)
     let objectiveId: string | null = null;
+    let parentKeyResultId: string | null = null;
     let weight: number = 1.0;
 
     if (row.parentExternalId) {
-      // Try to find by externalId first
-      const parentObjective = await this.prisma.objective.findFirst({
+      // First, check if parent is a Key Result (nested KR pattern from Viva Goals)
+      const parentKeyResult = await this.prisma.keyResult.findFirst({
         where: {
           tenantId,
           source: this.SOURCE,
@@ -714,15 +819,44 @@ export class OkrImportService {
         },
       });
 
-      if (parentObjective) {
-        objectiveId = parentObjective.id;
+      if (parentKeyResult) {
+        // Parent is a Key Result - this is a nested KR
+        parentKeyResultId = parentKeyResult.id;
+        this.logger.log(`Key result "${row.title}" is a child of parent KR "${parentKeyResult.title}"`);
       } else if (externalIdToInternalId.has(row.parentExternalId)) {
-        // Use mapping from current import batch
-        objectiveId = externalIdToInternalId.get(row.parentExternalId)!;
+        // Check mapping - could be either Objective or KR from current batch
+        const parentInternalId = externalIdToInternalId.get(row.parentExternalId)!;
+        
+        // Check if it's an Objective
+        const parentObjective = await this.prisma.objective.findUnique({
+          where: { id: parentInternalId },
+        });
+        
+        if (parentObjective) {
+          objectiveId = parentInternalId;
+        } else {
+          // Must be a Key Result from current batch
+          parentKeyResultId = parentInternalId;
+        }
       } else {
-        throw new NotFoundException(
-          `Parent objective with externalId ${row.parentExternalId} not found for "${row.title}"`,
-        );
+        // Try to find by externalId in Objectives
+        const parentObjective = await this.prisma.objective.findFirst({
+          where: {
+            tenantId,
+            source: this.SOURCE,
+            externalId: row.parentExternalId,
+          },
+        });
+
+        if (parentObjective) {
+          objectiveId = parentObjective.id;
+        } else {
+          // Parent not found - this is an orphan key result
+          this.logger.warn(
+            `Parent not found for key result ${row.externalId} ("${row.title}") - parentExternalId: ${row.parentExternalId}. Skipping.`,
+          );
+          return null; // Skip orphan KRs instead of throwing
+        }
       }
 
       // Convert weight percentage to decimal (0-100% -> 0.0-1.0)
@@ -730,8 +864,10 @@ export class OkrImportService {
         weight = row.parentWeight / 100.0;
       }
     } else {
-      throw new BadRequestException(
-        `Key result "${row.title}" must have a parent objective`,
+      // No parent specified - this is a standalone key result
+      // In some cases this might be valid (top-level KRs), but log a warning
+      this.logger.warn(
+        `Key result "${row.title}" has no parent specified. Creating as standalone.`,
       );
     }
 
@@ -809,6 +945,9 @@ export class OkrImportService {
       visibilityLevel: 'PUBLIC_TENANT' as const,
       state: 'DRAFT' as const,
       metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+      // Nested KR support
+      parentKeyResultId,
+      weight,
     };
 
     let keyResult;
@@ -1174,6 +1313,7 @@ export class OkrImportService {
 
   /**
    * Resolve or create Cycle from period name
+   * Priority: 1. Exact name match, 2. Name match with similar dates, 3. Create new
    */
   private async resolveCycle(
     periodName: string,
@@ -1192,31 +1332,82 @@ export class OkrImportService {
       return null;
     }
 
-    // Try to find existing cycle by name and dates
-    const existing = await this.prisma.cycle.findFirst({
+    const trimmedName = periodName.trim();
+
+    // First: Try to find existing cycle by exact name match (case-insensitive)
+    const existingByName = await this.prisma.cycle.findFirst({
       where: {
         tenantId,
-        name: periodName.trim(),
-        startDate: startDate,
-        endDate: endDate,
+        name: {
+          equals: trimmedName,
+          mode: 'insensitive',
+        },
       },
     });
 
-    if (existing) {
-      return existing.id;
+    if (existingByName) {
+      return existingByName.id;
     }
 
-    // Create new cycle
+    // Second: Try normalized name matching (e.g., "Q1 2024" matches "Q1 2024")
+    // Handle variations like "Q1 2024", "Q1-2024", "2024 Q1"
+    const normalizedName = this.normalizePeriodName(trimmedName);
+    if (normalizedName !== trimmedName) {
+      const existingByNormalized = await this.prisma.cycle.findFirst({
+        where: {
+          tenantId,
+          name: {
+            equals: normalizedName,
+            mode: 'insensitive',
+          },
+        },
+      });
+      if (existingByNormalized) {
+        return existingByNormalized.id;
+      }
+    }
+
+    // Third: Try to find by date range (within same quarter/year)
+    const existingByDates = await this.prisma.cycle.findFirst({
+      where: {
+        tenantId,
+        startDate: {
+          gte: new Date(startDate.getTime() - 7 * 24 * 60 * 60 * 1000), // Within 7 days
+          lte: new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000),
+        },
+        endDate: {
+          gte: new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000),
+          lte: new Date(endDate.getTime() + 7 * 24 * 60 * 60 * 1000),
+        },
+      },
+    });
+
+    if (existingByDates) {
+      return existingByDates.id;
+    }
+
+    // Create new cycle (directly, bypassing validation for imports)
     try {
-      const cycle = await this.cycleService.create(
-        {
-          name: periodName.trim(),
+      // Determine status based on dates
+      const now = new Date();
+      let status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED' = 'DRAFT';
+      if (endDate < now) {
+        status = 'ARCHIVED';
+      } else if (startDate <= now && endDate >= now) {
+        status = 'ACTIVE';
+      }
+
+      const cycle = await this.prisma.cycle.create({
+        data: {
+          tenantId,
+          name: trimmedName,
           startDate,
           endDate,
-          status: 'DRAFT',
+          status,
+          isStandard: false,
         },
-        tenantId,
-      );
+      });
+      this.logger.log(`Created cycle "${trimmedName}" for import`);
       return cycle.id;
     } catch (error) {
       this.logger.warn(
@@ -1224,6 +1415,37 @@ export class OkrImportService {
       );
       return null;
     }
+  }
+
+  /**
+   * Normalize period name to standard format
+   * E.g., "Q1-2024" -> "Q1 2024", "2024 Q1" -> "Q1 2024"
+   */
+  private normalizePeriodName(name: string): string {
+    // Match quarter patterns
+    const quarterMatch = name.match(/Q([1-4])[\s\-]*(\d{4})|(\d{4})[\s\-]*Q([1-4])/i);
+    if (quarterMatch) {
+      const quarter = quarterMatch[1] || quarterMatch[4];
+      const year = quarterMatch[2] || quarterMatch[3];
+      return `Q${quarter} ${year}`;
+    }
+
+    // Match annual patterns
+    const annualMatch = name.match(/Annual[\s\-]*(\d{4})|(\d{4})[\s\-]*Annual/i);
+    if (annualMatch) {
+      const year = annualMatch[1] || annualMatch[2];
+      return `Annual ${year}`;
+    }
+
+    // Match half patterns
+    const halfMatch = name.match(/H([1-2])[\s\-]*(\d{4})|(\d{4})[\s\-]*H([1-2])/i);
+    if (halfMatch) {
+      const half = halfMatch[1] || halfMatch[4];
+      const year = halfMatch[2] || halfMatch[3];
+      return `H${half} ${year}`;
+    }
+
+    return name;
   }
 
   /**

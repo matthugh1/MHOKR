@@ -1237,8 +1237,8 @@ export function ObjectiveRow({
                     currentIsPublished={optimisticObjective.isPublished}
                     onSave={handleUpdateObjectivePublishStatus}
                     canEdit={canEditInline}
-                    canPublish={canPublish}
-                    canUnpublish={canUnpublish}
+                    canPublish={!!canPublish}
+                    canUnpublish={!!canUnpublish}
                     lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
                     ariaLabel="Edit objective publish status"
                     resource={objectiveForHook}
@@ -1288,7 +1288,7 @@ export function ObjectiveRow({
                         <span className="hidden sm:inline">More</span>
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-56 p-3" onClick={(e) => e.stopPropagation()}>
+                    <PopoverContent className="w-56 p-3" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                       <div className="space-y-2 text-xs">
                         {optimisticObjective.pillarId && (
                           <div className="flex items-center gap-2">
@@ -1518,8 +1518,8 @@ export function ObjectiveRow({
                 </div>
               )}
               {/* Why? inspector for blocked edit */}
-              {onEdit && !canEdit && (
-                <div onClick={(e) => e.stopPropagation()}>
+              {typeof onEdit === 'function' && !canEdit && (
+                <div onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                   <WhyCantIInspector
                     action="edit_okr"
                     resource={objectiveForHook}
@@ -1529,7 +1529,7 @@ export function ObjectiveRow({
               )}
               
               {/* Menu button - only show if at least one action is available (history now has its own button) */}
-              {onDelete && canDelete ? (
+              {typeof onDelete === 'function' && canDelete ? (
                 <div className="relative" ref={menuRef} onClick={(e) => e.stopPropagation()}>
                   <Button
                     variant="ghost"
@@ -1560,7 +1560,7 @@ export function ObjectiveRow({
               </div>
             ) : null}
               {/* Why? inspector for blocked delete */}
-              {onDelete && !canDelete && (
+              {typeof onDelete === 'function' && !canDelete && (
                 <div onClick={(e) => e.stopPropagation()}>
                   <WhyCantIInspector
                     action="delete_okr"
@@ -1927,11 +1927,7 @@ export function ObjectiveRow({
                                       <div className="flex items-center gap-1.5 pl-3">
                                         <span className="text-[11px] text-neutral-500">Owner:</span>
                                         <InlineOwnerEditor
-                                          currentOwner={
-                                            kr.owner 
-                                              ? { id: kr.owner.id, name: kr.owner.name, email: kr.owner.email }
-                                              : availableUsers.find(u => u.id === kr.ownerId) || { id: kr.ownerId, name: 'Unknown' }
-                                          }
+                                          currentOwner={availableUsers.find(u => u.id === kr.ownerId) || { id: kr.ownerId || '', name: 'Unknown' }}
                                           availableUsers={availableUsers}
                                           onSave={(userId) => handleUpdateKeyResultOwner(kr.id, userId)}
                                           canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
@@ -2096,14 +2092,14 @@ export function ObjectiveRow({
                                                             <OkrBadge tone={initStatusBadge.tone}>
                                                               {initStatusBadge.label}
                                                             </OkrBadge>
-                                                            {init.goalType && (
+                                                            {(init as any).goalType && (
                                                               <Badge variant="outline" className="text-xs">
-                                                                {init.goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
+                                                                {(init as any).goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
                                                               </Badge>
                                                             )}
-                                                            {init.progress !== undefined && init.progress !== null && (
+                                                            {(init as any).progress !== undefined && (init as any).progress !== null && (
                                                               <Badge variant="secondary" className="text-xs">
-                                                                {init.progress}%
+                                                                {(init as any).progress}%
                                                               </Badge>
                                                             )}
                                                           </div>
@@ -2225,14 +2221,14 @@ export function ObjectiveRow({
                                                             <OkrBadge tone={initStatusBadge.tone}>
                                                               {initStatusBadge.label}
                                                             </OkrBadge>
-                                                            {init.goalType && (
+                                                            {(init as any).goalType && (
                                                               <Badge variant="outline" className="text-xs">
-                                                                {init.goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
+                                                                {(init as any).goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
                                                               </Badge>
                                                             )}
-                                                            {init.progress !== undefined && init.progress !== null && (
+                                                            {(init as any).progress !== undefined && (init as any).progress !== null && (
                                                               <Badge variant="secondary" className="text-xs">
-                                                                {init.progress}%
+                                                                {(init as any).progress}%
                                                               </Badge>
                                                             )}
                                                           </div>

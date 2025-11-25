@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react'
+import React, { useState, useMemo, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@/components/protected-route'
 import { 
@@ -133,7 +133,7 @@ interface OKRItem {
   _originalNode?: HierarchyOKRNode
 }
 
-export default function OKRTestPage() {
+function OKRTestPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { currentOrganization } = useWorkspace()
@@ -433,12 +433,12 @@ export default function OKRTestPage() {
             ))}
           </nav>
           <div className="p-4 border-t border-slate-800">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-xs font-bold">
-                {user?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
-              </div>
-              <div className="text-sm">
-                <div className="text-white">{user?.name || 'User'}</div>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-xs font-bold">
+                  {user?.firstName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
+                </div>
+                <div className="text-sm">
+                  <div className="text-white">{user?.firstName || 'User'}</div>
                 <div className="text-slate-500 text-xs">{user?.email || ''}</div>
               </div>
             </div>
@@ -750,12 +750,14 @@ export default function OKRTestPage() {
       <EditObjectiveModal
         isOpen={editObjectiveModalOpen}
         objectiveId={editObjectiveId}
-        objectiveData={selectedItem?.type === 'objective' && selectedItem._originalNode ? {
-          title: selectedItem.title,
-          ownerId: selectedItem._originalNode.ownerId,
-          cycleId: selectedItem._originalNode.cycleId || undefined,
-          status: selectedItem._originalNode.status,
-        } : undefined}
+                  objectiveData={selectedItem?.type === 'objective' && selectedItem._originalNode ? {
+                    title: selectedItem.title,
+                    ownerId: selectedItem._originalNode.ownerId,
+                    cycleId: selectedItem._originalNode.cycleId || undefined,
+                    status: selectedItem._originalNode.status,
+                    visibilityLevel: (selectedItem._originalNode.visibilityLevel as any) || 'PUBLIC_TENANT',
+                    tenantId: (selectedItem._originalNode as any).tenantId,
+                  } : undefined}
         onClose={() => {
           setEditObjectiveModalOpen(false)
           setEditObjectiveId(null)
@@ -784,5 +786,13 @@ export default function OKRTestPage() {
         availablePillars={[]}
       />
     </ProtectedRoute>
+  )
+}
+
+export default function OKRTestPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <OKRTestPageContent />
+    </Suspense>
   )
 }

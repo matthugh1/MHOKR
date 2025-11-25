@@ -266,7 +266,6 @@ export function SidePanelCreateKeyResult({
                   <StandardCycleSelector
                     value={cycleId}
                     onValueChange={setCycleId}
-                    availableCycles={availableCycles}
                   />
                 </div>
               )}
@@ -334,7 +333,7 @@ export function SidePanelCreateKeyResult({
                   <Label htmlFor="kr-team" className="text-sm text-slate-300">Team</Label>
                   <Select
                     value={teamId || 'none'}
-                    onValueChange={(value) => setTeamId(value === 'none' ? null : value)}
+                    onValueChange={(value: string) => setTeamId(value === 'none' ? null : value)}
                   >
                     <SelectTrigger id="kr-team" className="bg-slate-800/50 border-slate-700 text-white h-10 hover:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500">
                       <SelectValue placeholder="Select team (optional)" />

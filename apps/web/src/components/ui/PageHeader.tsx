@@ -7,13 +7,15 @@ import { cn } from '@/lib/utils'
 interface PageHeaderProps {
   title: string
   subtitle?: string
+  description?: string
   badges?: Array<{
     label: string
     tone?: 'neutral' | 'success' | 'warning' | 'danger'
   }>
+  children?: React.ReactNode
 }
 
-export function PageHeader({ title, subtitle, badges = [] }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, description, badges = [], children }: PageHeaderProps) {
 
   const getBadgeVariant = (tone?: string) => {
     switch (tone) {
@@ -43,10 +45,15 @@ export function PageHeader({ title, subtitle, badges = [] }: PageHeaderProps) {
       <div className="space-y-3">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">{title}</h1>
-          {subtitle && (
-            <p className="text-slate-600 mt-1 text-sm">{subtitle}</p>
+          {(subtitle || description) && (
+            <p className="text-slate-600 mt-1 text-sm">{subtitle || description}</p>
           )}
         </div>
+        {children && (
+          <div className="mt-4">
+            {children}
+          </div>
+        )}
         {badges.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
             {badges.map((badge, index) => (

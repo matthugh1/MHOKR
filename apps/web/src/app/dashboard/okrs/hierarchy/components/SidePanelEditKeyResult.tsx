@@ -220,18 +220,13 @@ export function SidePanelEditKeyResult({
       id: selectedNode.id,
       ownerId: loadedKrData.ownerId,
       tenantId: loadedKrData.tenantId,
-      organizationId: loadedKrData.tenantId,
       workspaceId: firstObjective?.workspaceId || loadedKrData.workspaceId || null,
       teamId: firstObjective?.teamId || loadedKrData.teamId || null,
       parentObjective: firstObjective ? {
         id: firstObjective.id,
-        ownerId: firstObjective.ownerId,
-        organizationId: firstObjective.tenantId,
-        workspaceId: firstObjective.workspaceId,
-        teamId: firstObjective.teamId,
+        tenantId: firstObjective.tenantId,
         isPublished: firstObjective.isPublished,
-        visibilityLevel: firstObjective.visibilityLevel,
-        cycle: firstObjective.cycleId ? { id: firstObjective.cycleId, status: firstObjective.cycle?.status } : null,
+        cycle: firstObjective.cycleId ? { id: firstObjective.cycleId, status: firstObjective.cycle?.status || 'ACTIVE' } : null,
         cycleStatus: firstObjective.cycle?.status,
       } : null,
     })
@@ -454,7 +449,7 @@ export function SidePanelEditKeyResult({
               </Label>
               <Select
                 value={status}
-                onValueChange={(value) => setStatus(value as OKRStatus)}
+                onValueChange={(value: string) => setStatus(value as OKRStatus)}
                 disabled={lockInfo.isLocked || !canEdit}
                 required
               >
@@ -485,7 +480,7 @@ export function SidePanelEditKeyResult({
                 <Label htmlFor="kr-team" className="text-sm font-medium text-slate-200">Team</Label>
                 <Select
                   value={teamId || 'none'}
-                  onValueChange={(value) => setTeamId(value === 'none' ? null : value)}
+                  onValueChange={(value: string) => setTeamId(value === 'none' ? null : value)}
                   disabled={lockInfo.isLocked || !canEdit}
                 >
                   <SelectTrigger id="kr-team" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 hover:bg-slate-700 disabled:opacity-50">
@@ -570,7 +565,7 @@ export function SidePanelEditKeyResult({
               <Label htmlFor="kr-cadence" className="text-sm font-medium text-slate-200">Check-in Cadence</Label>
               <Select
                 value={checkInCadence}
-                onValueChange={(value) => setCheckInCadence(value as CheckInCadence)}
+                onValueChange={(value: string) => setCheckInCadence(value as CheckInCadence)}
                 disabled={lockInfo.isLocked || !canEdit}
               >
                 <SelectTrigger id="kr-cadence" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 hover:bg-slate-700 disabled:opacity-50">
@@ -591,7 +586,6 @@ export function SidePanelEditKeyResult({
                 <StandardCycleSelector
                   value={cycleId}
                   onValueChange={setCycleId}
-                  availableCycles={activeCycles}
                   disabled={lockInfo.isLocked || !canEdit}
                 />
               </div>
@@ -628,7 +622,7 @@ export function SidePanelEditKeyResult({
               </Label>
               <Select
                 value={visibilityLevel}
-                onValueChange={(value) => setVisibilityLevel(value as VisibilityLevel)}
+                onValueChange={(value: string) => setVisibilityLevel(value as VisibilityLevel)}
                 disabled={lockInfo.isLocked || !canEdit}
                 required
               >

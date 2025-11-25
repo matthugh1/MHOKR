@@ -37,6 +37,7 @@ export interface EditFormState {
   tenantId?: string | null
   workspaceId?: string | null
   teamId?: string | null
+  pillarId?: string | null
 
   isPublished?: boolean
   cycle?: { id: string; status: string } | null
@@ -98,6 +99,8 @@ export function EditFormTabs({
   const { organizations, workspaces, teams, currentOrganization } = useWorkspace()
   const { user } = useAuth()
   const tenantPermissions = useTenantPermissions()
+  const { toast } = useToast()
+  const { isTenantAdmin } = useTenantAdmin()
   
   const period = formData.period
   
@@ -113,6 +116,9 @@ export function EditFormTabs({
   const [selectedTags, setSelectedTags] = useState<Array<{ id: string; name: string; color?: string | null }>>([])
   const [selectedContributors, setSelectedContributors] = useState<Array<{ id: string; user: { id: string; name: string; email?: string; avatar?: string | null }; role: string }>>([])
   const [sponsorId, setSponsorId] = useState<string | null>(null)
+  const [reviewNote, setReviewNote] = useState<string>('')
+  const [isReviewing, setIsReviewing] = useState<boolean>(false)
+  const [reviewError, setReviewError] = useState<string | null>(null)
 
   // Determine if editing is allowed based on node type
   const canEdit = nodeType === 'obj' 

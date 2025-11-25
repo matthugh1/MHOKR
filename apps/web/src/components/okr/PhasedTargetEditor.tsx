@@ -212,7 +212,7 @@ export function PhasedTargetEditor({
             <Label htmlFor="interval">
               Interval <span className="text-red-500">*</span>
             </Label>
-            <Select value={interval} onValueChange={(value) => setInterval(value as PhasedTargetInterval)}>
+            <Select value={interval} onValueChange={(value: string) => setInterval(value as PhasedTargetInterval)}>
               <SelectTrigger id="interval">
                 <SelectValue />
               </SelectTrigger>

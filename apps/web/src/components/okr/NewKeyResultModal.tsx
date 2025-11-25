@@ -216,7 +216,7 @@ export function NewKeyResultModal({
             <Label htmlFor="cadence">
               Check-in Cadence <span className="text-red-500">*</span>
             </Label>
-            <Select value={cadence} onValueChange={(value) => setCadence(value as CheckInCadence)} required>
+            <Select value={cadence} onValueChange={(value: string) => setCadence(value as CheckInCadence)} required>
               <SelectTrigger id="cadence">
                 <SelectValue placeholder="Select cadence" />
               </SelectTrigger>
@@ -233,7 +233,7 @@ export function NewKeyResultModal({
             <Label htmlFor="status">
               Status <span className="text-red-500">*</span>
             </Label>
-            <Select value={status} onValueChange={(value) => setStatus(value as OKRStatus)} required>
+            <Select value={status} onValueChange={(value: string) => setStatus(value as OKRStatus)} required>
               <SelectTrigger id="status">
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
@@ -254,7 +254,7 @@ export function NewKeyResultModal({
             </Label>
             <Select
               value={visibilityLevel}
-              onValueChange={(value) => setVisibilityLevel(value as VisibilityLevel)}
+              onValueChange={(value: string) => setVisibilityLevel(value as VisibilityLevel)}
               required
             >
               <SelectTrigger id="visibility">

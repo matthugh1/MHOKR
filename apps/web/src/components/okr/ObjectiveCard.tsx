@@ -356,7 +356,7 @@ export function ObjectiveCard({
               {keyResults.length > 0 && (
                 <div className="flex items-center gap-1">
                   <ProgressBreakdownTooltip
-                    objectiveId={objectiveId}
+                    objectiveId={objectiveId || ''}
                     objectiveProgress={progressPct}
                     keyResults={keyResults.map(kr => ({
                       id: kr.id,

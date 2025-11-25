@@ -4,7 +4,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import api from '@/lib/api'
-import { transformToHierarchy, HierarchyTreeData } from '../components/utils/transformToHierarchy'
+import { transformToHierarchy } from '../components/utils/transformToHierarchy'
+import { HierarchyTreeData } from '../components/types'
 
 interface UseHierarchyOKRsParams {
   tenantId: string | null

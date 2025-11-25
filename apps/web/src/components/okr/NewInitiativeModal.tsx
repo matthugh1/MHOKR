@@ -171,7 +171,7 @@ export function NewInitiativeModal({
             <Label htmlFor="status">
               Status <span className="text-red-500">*</span>
             </Label>
-            <Select value={status} onValueChange={(value) => setStatus(value as InitiativeStatus)} required>
+            <Select value={status} onValueChange={(value: string) => setStatus(value as InitiativeStatus)} required>
               <SelectTrigger id="status">
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
@@ -196,7 +196,7 @@ export function NewInitiativeModal({
               <Label htmlFor="team">Team</Label>
               <Select
                 value={teamId || 'none'}
-                onValueChange={(value) => setTeamId(value === 'none' ? null : value)}
+                onValueChange={(value: string) => setTeamId(value === 'none' ? null : value)}
               >
                 <SelectTrigger id="team">
                   <SelectValue placeholder="Select team (optional)" />

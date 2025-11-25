@@ -124,7 +124,6 @@ export function EditKeyResultDrawer({
 
   const tenantPermissions = useTenantPermissions()
   const { toast } = useToast()
-  const sheetContentRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
 
   // Focus management: store previous focus and return on close
@@ -142,9 +141,13 @@ export function EditKeyResultDrawer({
 
   // Focus trap when drawer opens
   useEffect(() => {
-    if (isOpen && sheetContentRef.current) {
-      const cleanup = trapFocus(sheetContentRef.current)
-      return cleanup
+    if (isOpen) {
+      // Find SheetContent element by aria-labelledby attribute
+      const sheetContent = document.querySelector('[aria-labelledby="edit-key-result-title"]') as HTMLElement
+      if (sheetContent) {
+        const cleanup = trapFocus(sheetContent)
+        return cleanup
+      }
     }
   }, [isOpen])
 
@@ -174,9 +177,15 @@ export function EditKeyResultDrawer({
       populateForm(keyResultData)
     }
     
+    // Load owners when drawer opens
+    if (isOpen && keyResultId) {
+      loadOwners()
+    }
+    
     // Reset loaded data when drawer closes
     if (!isOpen) {
       setLoadedKrData(null)
+      setOwners([])
     }
   }, [isOpen, keyResultId, keyResultData])
 
@@ -268,18 +277,12 @@ export function EditKeyResultDrawer({
       id: keyResultId,
       ownerId: dataToCheck.ownerId,
       tenantId: dataToCheck.tenantId,
-      organizationId: dataToCheck.tenantId, // tenantId is organizationId
-      workspaceId: firstObjective?.workspaceId || dataToCheck.workspaceId || null,
       teamId: firstObjective?.teamId || dataToCheck.teamId || null,
       parentObjective: firstObjective ? {
         id: firstObjective.id,
-        ownerId: firstObjective.ownerId,
-        organizationId: firstObjective.tenantId,
-        workspaceId: firstObjective.workspaceId,
-        teamId: firstObjective.teamId,
+        tenantId: firstObjective.tenantId,
         isPublished: firstObjective.isPublished,
-        visibilityLevel: firstObjective.visibilityLevel,
-        cycle: firstObjective.cycleId ? { id: firstObjective.cycleId, status: firstObjective.cycle?.status } : null,
+        cycle: firstObjective.cycleId ? { id: firstObjective.cycleId, status: firstObjective.cycle?.status || 'ACTIVE' } : null,
         cycleStatus: firstObjective.cycle?.status,
       } : null,
     })
@@ -381,6 +384,55 @@ export function EditKeyResultDrawer({
     }
   }
 
+  const loadOwners = async () => {
+    if (!keyResultId) return
+    setIsLoadingOwners(true)
+    try {
+      const ownersData = await getKeyResultOwners(keyResultId)
+      setOwners(ownersData)
+    } catch (error: any) {
+      console.error('Failed to load owners:', error)
+    } finally {
+      setIsLoadingOwners(false)
+    }
+  }
+
+  const handleAddOwner = async (userId: string) => {
+    if (!keyResultId) return
+    try {
+      await addKeyResultOwner(keyResultId, userId)
+      await loadOwners()
+      toast({
+        title: 'Owner added',
+        description: 'The owner has been added successfully.',
+      })
+    } catch (error: any) {
+      toast({
+        title: 'Failed to add owner',
+        description: error.response?.data?.message || 'Failed to add owner',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleRemoveOwner = async (userId: string) => {
+    if (!keyResultId) return
+    try {
+      await removeKeyResultOwner(keyResultId, userId)
+      await loadOwners()
+      toast({
+        title: 'Owner removed',
+        description: 'The owner has been removed successfully.',
+      })
+    } catch (error: any) {
+      toast({
+        title: 'Failed to remove owner',
+        description: error.response?.data?.message || 'Failed to remove owner',
+        variant: 'destructive',
+      })
+    }
+  }
+
   if (isLoading) {
     return (
       <Sheet open={isOpen} onOpenChange={handleClose}>
@@ -402,7 +454,7 @@ export function EditKeyResultDrawer({
   return (
     <>
     <Sheet open={isOpen} onOpenChange={handleClose}>
-      <SheetContent ref={sheetContentRef} className="w-full sm:max-w-2xl flex flex-col p-0">
+      <SheetContent className="w-full sm:max-w-2xl flex flex-col p-0" aria-labelledby="edit-key-result-title">
         <div className="flex flex-col h-full overflow-hidden">
           <div className="flex-shrink-0 px-6 pt-6 pb-4">
             <SheetHeader>
@@ -527,7 +579,7 @@ export function EditKeyResultDrawer({
                   </Label>
                   <Select
                     value={status}
-                    onValueChange={(value) => setStatus(value as OKRStatus)}
+                    onValueChange={(value: string) => setStatus(value as OKRStatus)}
                     disabled={lockInfo.isLocked || !canEdit}
                     required
                   >
@@ -560,7 +612,7 @@ export function EditKeyResultDrawer({
                     </Label>
                     <Select
                       value={teamId || 'none'}
-                      onValueChange={(value) => setTeamId(value === 'none' ? null : value)}
+                      onValueChange={(value: string) => setTeamId(value === 'none' ? null : value)}
                       disabled={lockInfo.isLocked || !canEdit}
                     >
                       <SelectTrigger id="kr-team" className="h-9">
@@ -649,7 +701,7 @@ export function EditKeyResultDrawer({
                   <Label htmlFor="kr-cadence">Check-in Cadence</Label>
                   <Select
                     value={checkInCadence}
-                    onValueChange={(value) => setCheckInCadence(value as CheckInCadence)}
+                    onValueChange={(value: string) => setCheckInCadence(value as CheckInCadence)}
                     disabled={lockInfo.isLocked || !canEdit}
                   >
                     <SelectTrigger id="kr-cadence" className="h-9">
@@ -670,7 +722,6 @@ export function EditKeyResultDrawer({
                     <StandardCycleSelector
                       value={cycleId}
                       onValueChange={setCycleId}
-                      availableCycles={activeCycles}
                       disabled={lockInfo.isLocked || !canEdit}
                     />
                   </div>
@@ -707,7 +758,7 @@ export function EditKeyResultDrawer({
                   </Label>
                   <Select
                     value={visibilityLevel}
-                    onValueChange={(value) => setVisibilityLevel(value as VisibilityLevel)}
+                    onValueChange={(value: string) => setVisibilityLevel(value as VisibilityLevel)}
                     disabled={lockInfo.isLocked || !canEdit}
                     required
                   >

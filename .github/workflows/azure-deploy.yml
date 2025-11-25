@@ -1,0 +1,177 @@
+name: Deploy to Azure Container Apps
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'services/**'
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'azure/**'
+      - '.github/workflows/azure-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      deploy_all:
+        description: 'Deploy all services (even if unchanged)'
+        required: false
+        default: 'true'
+        type: boolean
+
+env:
+  AZURE_RESOURCE_GROUP: vibe-code-test
+  AZURE_LOCATION: uksouth
+  ACR_NAME: okrnexusregistry
+  CONTAINER_APPS_ENV_NAME: okr-nexus-env
+  APP_NAME_PREFIX: okr-nexus
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        run: |
+          az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Get API Gateway URL
+        id: get-api-url
+        run: |
+          API_GATEWAY_FQDN=$(az containerapp show \
+            --name ${{ env.APP_NAME_PREFIX }}-api-gateway \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "API_GATEWAY_URL=https://${API_GATEWAY_FQDN}" >> $GITHUB_OUTPUT
+          echo "API Gateway URL: https://${API_GATEWAY_FQDN}"
+
+      - name: Build and push API Gateway
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: services/api-gateway/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-api-gateway:${{ github.sha }}
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-api-gateway:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Core API
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: services/core-api/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-core-api:${{ github.sha }}
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-core-api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push AI Service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: services/ai-service/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-ai-service:${{ github.sha }}
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-ai-service:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Integration Service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: services/integration-service/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-integration-service:${{ github.sha }}
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-integration-service:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Web App
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-web:${{ github.sha }}
+            ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-web:latest
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ steps.get-api-url.outputs.API_GATEWAY_URL }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update API Gateway Container App
+        run: |
+          az containerapp update \
+            --name ${{ env.APP_NAME_PREFIX }}-api-gateway \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-api-gateway:${{ github.sha }}
+
+      - name: Update Core API Container App
+        run: |
+          az containerapp update \
+            --name ${{ env.APP_NAME_PREFIX }}-core-api \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-core-api:${{ github.sha }}
+
+      - name: Update AI Service Container App
+        run: |
+          az containerapp update \
+            --name ${{ env.APP_NAME_PREFIX }}-ai-service \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-ai-service:${{ github.sha }}
+
+      - name: Update Integration Service Container App
+        run: |
+          az containerapp update \
+            --name ${{ env.APP_NAME_PREFIX }}-integration-service \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-integration-service:${{ github.sha }}
+
+      - name: Update Web App Container App
+        run: |
+          az containerapp update \
+            --name ${{ env.APP_NAME_PREFIX }}-web \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.APP_NAME_PREFIX }}-web:${{ github.sha }} \
+            --set-env-vars NEXT_PUBLIC_API_URL=${{ steps.get-api-url.outputs.API_GATEWAY_URL }}
+
+      - name: Get deployment URLs
+        run: |
+          echo "## 🚀 Deployment Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | URL |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| API Gateway | https://$(az containerapp show --name ${{ env.APP_NAME_PREFIX }}-api-gateway --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query properties.configuration.ingress.fqdn -o tsv) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web App | https://$(az containerapp show --name ${{ env.APP_NAME_PREFIX }}-web --resource-group ${{ env.AZURE_RESOURCE_GROUP }} --query properties.configuration.ingress.fqdn -o tsv) |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+
+

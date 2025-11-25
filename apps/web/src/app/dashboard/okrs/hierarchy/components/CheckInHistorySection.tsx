@@ -68,7 +68,7 @@ export function CheckInHistorySection({ detail, hideTitle = false }: CheckInHist
         <div className="bg-slate-800/50 rounded-lg border border-slate-800 p-4">
           <div className="text-sm text-slate-400 text-center py-4">
             No check-ins yet
-            {detail.checkInCadence && (
+            {detail?.checkInCadence && (
               <div className="text-xs text-slate-500 mt-2">{getCadenceLabel(detail.checkInCadence)}</div>
             )}
           </div>

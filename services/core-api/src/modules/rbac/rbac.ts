@@ -241,8 +241,27 @@ function canEditOKRAction(
   userContext: UserContext,
   resourceContext: ResourceContext,
 ): boolean {
+  // If no OKR is provided, check if user has tenant admin/owner role for tenant-level operations
+  // This allows creating resources like pillars, cycles, etc. that don't have an associated OKR
   if (!resourceContext.okr) {
-    return false;
+    const tenantId = resourceContext.tenantId || '';
+    if (!tenantId) {
+      return false;
+    }
+    
+    // Check if user has TENANT_OWNER or TENANT_ADMIN role for this tenant
+    const hasOwner = hasTenantOwnerRole(userContext, tenantId);
+    const hasAdmin = hasTenantAdminRole(userContext, tenantId);
+    
+    logger.debug('canEditOKRAction: No OKR provided, checking tenant-level permissions', {
+      userId: userContext.userId,
+      tenantId,
+      hasOwner,
+      hasAdmin,
+      tenantRoles: userContext.tenantRoles.get(tenantId) || [],
+    });
+    
+    return hasOwner || hasAdmin;
   }
 
   const okr = resourceContext.okr;

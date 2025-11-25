@@ -190,7 +190,7 @@ export function OKRFilterBar({
         {/* Visibility Filter */}
         <Select
           value={selectedVisibility}
-          onValueChange={(value) => {
+          onValueChange={(value: string) => {
             onVisibilityChange(value as 'ALL' | 'PUBLIC_TENANT' | 'PRIVATE')
             track('filter_applied', {
               filter: 'visibility',
@@ -321,7 +321,7 @@ export function OKRFilterBar({
         {/* Cycle Selector */}
         <CycleSelector
           cycles={normalizedCycles}
-          legacyPeriods={legacyPeriods}
+          legacyPeriods={legacyPeriods.map(p => ({ id: p.id, label: p.name, isFuture: false }))}
           selectedId={selectedTimeframeKey}
           onSelect={onCycleSelect}
           onManageCycles={onManageCycles}
@@ -331,7 +331,7 @@ export function OKRFilterBar({
         {selectedScope !== 'my' && (
           <Select
             value={selectedOwnerId === currentUserId ? 'me' : (selectedOwnerId || 'all')}
-            onValueChange={(value) => {
+            onValueChange={(value: string) => {
               onOwnerChange(value === 'all' ? null : value === 'me' ? 'me' : value)
               track('filter_applied', {
                 filter: 'owner',

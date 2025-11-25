@@ -166,7 +166,7 @@ export function ProgressBreakdownTooltip({
 
   return (
     <TooltipProvider>
-      <Tooltip onOpenChange={(open) => {
+      <Tooltip onOpenChange={(open: boolean) => {
         if (open) {
           fetchBreakdown()
         }

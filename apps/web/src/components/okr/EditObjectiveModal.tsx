@@ -110,7 +110,7 @@ export function EditObjectiveModal({
       setWorkspaceId(objectiveData.workspaceId || "")
       setCycleId(objectiveData.cycleId || "")
       setStatus(objectiveData.status || "ON_TRACK")
-      setGoalType(objectiveData.goalType || "ASPIRATIONAL")
+      setGoalType((objectiveData as any).goalType || "ASPIRATIONAL")
       setVisibilityLevel(objectiveData.visibilityLevel || "PUBLIC_TENANT")
       setIsPublished(objectiveData.isPublished || false)
       // W4.M1: pillarId removed
@@ -216,7 +216,6 @@ export function EditObjectiveModal({
         workspaceId: workspaceId || undefined,
         cycleId: cycleId || undefined,
         status,
-        goalType,
         visibilityLevel,
         // W4.M1: pillarId removed
       })
@@ -298,7 +297,7 @@ export function EditObjectiveModal({
           {availableWorkspaces.length > 0 && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="edit-workspace">Workspace</Label>
-              <Select value={workspaceId || "none"} onValueChange={(value) => setWorkspaceId(value === "none" ? "" : value)}>
+              <Select value={workspaceId || "none"} onValueChange={(value: string) => setWorkspaceId(value === "none" ? "" : value)}>
                 <SelectTrigger id="edit-workspace">
                   <SelectValue placeholder="Select workspace" />
                 </SelectTrigger>
@@ -317,7 +316,7 @@ export function EditObjectiveModal({
           {availableCycles.length > 0 && (
             <div className="flex flex-col gap-2">
               <Label htmlFor="edit-cycle">Cycle / Period</Label>
-              <Select value={cycleId || "none"} onValueChange={(value) => setCycleId(value === "none" ? "" : value)}>
+              <Select value={cycleId || "none"} onValueChange={(value: string) => setCycleId(value === "none" ? "" : value)}>
                 <SelectTrigger id="edit-cycle">
                   <SelectValue placeholder="Select cycle" />
                 </SelectTrigger>
@@ -337,7 +336,7 @@ export function EditObjectiveModal({
             <Label htmlFor="edit-status">
               Status <span className="text-red-500">*</span>
             </Label>
-            <Select value={status} onValueChange={(value) => setStatus(value as OKRStatus)} required>
+            <Select value={status} onValueChange={(value: string) => setStatus(value as OKRStatus)} required>
               <SelectTrigger id="edit-status">
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
@@ -365,7 +364,7 @@ export function EditObjectiveModal({
             </Label>
             <Select
               value={visibilityLevel}
-              onValueChange={(value) => setVisibilityLevel(value as VisibilityLevel)}
+              onValueChange={(value: string) => setVisibilityLevel(value as VisibilityLevel)}
               required
             >
               <SelectTrigger id="edit-visibility">
@@ -490,8 +489,8 @@ export function EditObjectiveModal({
                 // Timeline will reload automatically via useEffect
               }}
               objectiveId={objectiveId}
-              startDate={objectiveData.startDate ? new Date(objectiveData.startDate) : undefined}
-              endDate={objectiveData.endDate ? new Date(objectiveData.endDate) : undefined}
+              startDate={(objectiveData as any).startDate ? new Date((objectiveData as any).startDate) : undefined}
+              endDate={(objectiveData as any).endDate ? new Date((objectiveData as any).endDate) : undefined}
               existingTarget={editingPhasedTarget}
             />
           )}

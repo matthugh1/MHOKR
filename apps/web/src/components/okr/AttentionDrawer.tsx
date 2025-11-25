@@ -63,7 +63,6 @@ export function AttentionDrawer({
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 20
-  const sheetContentRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
   const emptyStateTelemetryFiredRef = useRef(false)
 
@@ -98,9 +97,13 @@ export function AttentionDrawer({
 
   // Focus trap when drawer opens
   useEffect(() => {
-    if (isOpen && sheetContentRef.current) {
-      const cleanup = trapFocus(sheetContentRef.current)
-      return cleanup
+    if (isOpen) {
+      // Find SheetContent element by aria-labelledby attribute
+      const sheetContent = document.querySelector('[aria-labelledby="attention-drawer-title"]') as HTMLElement
+      if (sheetContent) {
+        const cleanup = trapFocus(sheetContent)
+        return cleanup
+      }
     }
   }, [isOpen])
 
@@ -251,7 +254,7 @@ export function AttentionDrawer({
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent side="right" className="w-full sm:max-w-lg" ref={sheetContentRef} aria-labelledby="attention-drawer-title" aria-describedby="attention-drawer-description">
+      <SheetContent side="right" className="w-full sm:max-w-lg" aria-labelledby="attention-drawer-title" aria-describedby="attention-drawer-description">
         {/* SheetTitle must be a direct child of SheetContent for Radix UI accessibility */}
         <SheetTitle id="attention-drawer-title">Needs Attention</SheetTitle>
         <SheetHeader>

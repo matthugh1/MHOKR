@@ -78,7 +78,7 @@ export const CascadeTreeNode = memo(function CascadeTreeNode({
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
-            handleClick(e as any)
+            handleClick()
           } else if (e.key === 'ArrowRight' && hasChildren && !isExpanded) {
             e.preventDefault()
             onToggleExpand(node.id)

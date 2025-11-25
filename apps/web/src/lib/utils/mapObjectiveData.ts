@@ -18,7 +18,6 @@ export interface RawObjective {
   progress?: number;
   ownerId?: string;
   owner?: { id: string; name: string; email?: string };
-  cycle?: { id: string; name: string; status?: string };
   cycleId?: string;
   cycleName?: string;
   cycleStatus?: string;

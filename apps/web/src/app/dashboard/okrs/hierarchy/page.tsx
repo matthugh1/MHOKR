@@ -6,7 +6,7 @@
 
 'use client'
 
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useMemo, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@/components/protected-route'
 import { 
@@ -110,7 +110,7 @@ const StatusBadge = ({ status }: StatusBadgeProps) => {
   }
   
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-full border ${styles[status] || styles['on-track']} flex items-center gap-1`}>
+    <span className={`text-xs px-2.5 py-1 rounded-full border ${styles[status] || styles['on-track']} flex items-center gap-1.5 flex-shrink-0`}>
       <div className={`w-1.5 h-1.5 rounded-full ${status === 'on-track' ? 'bg-emerald-400' : status === 'at-risk' ? 'bg-amber-400' : 'bg-rose-400'}`} />
       {labels[status]}
     </span>
@@ -127,9 +127,14 @@ const ProgressBar = ({ value, status }: ProgressBarProps) => {
   if (status === 'at-risk') color = 'bg-amber-500'
   if (status === 'off-track') color = 'bg-rose-500'
   
+  const clampedValue = Math.min(100, Math.max(0, value))
+  
   return (
-    <div className="h-2 w-full bg-slate-700/50 rounded-full overflow-hidden">
-      <div className={`h-full ${color} transition-all duration-500`} style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
+    <div className="h-2.5 w-full bg-slate-700/50 rounded-full overflow-hidden">
+      <div 
+        className={`h-full ${color} transition-all duration-500 rounded-full`} 
+        style={{ width: `${clampedValue}%` }} 
+      />
     </div>
   )
 }
@@ -268,7 +273,7 @@ function SidePanelHeader({
   )
 }
 
-export default function OKRHierarchyPage() {
+function OKRHierarchyPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { currentOrganization } = useWorkspace()
@@ -357,8 +362,9 @@ export default function OKRHierarchyPage() {
     }
 
     const loadWorkspaces = async () => {
+      if (!currentOrganization?.id) return
       try {
-        const response = await api.get('/workspaces')
+        const response = await api.get(`/workspaces?tenantId=${currentOrganization.id}`)
         setWorkspaces(response.data || [])
       } catch (error: any) {
         console.error('Failed to load workspaces:', error)
@@ -368,7 +374,7 @@ export default function OKRHierarchyPage() {
 
     const loadTeams = async () => {
       try {
-        const response = await api.get('/teams')
+        const response = await api.get(`/teams`)
         setTeams(response.data || [])
       } catch (error: any) {
         console.error('Failed to load teams:', error)
@@ -520,13 +526,29 @@ export default function OKRHierarchyPage() {
     try {
       const node = selectedItem?._originalNode
       if (createMode === 'objective') {
-        await api.post('/objectives', data)
+        const response = await api.post('/objectives', data)
+        const objectiveId = response.data?.id || response.data?.objectiveId
+        
+        // Add additional owners if provided
+        if (data.additionalOwnerIds && data.additionalOwnerIds.length > 0 && objectiveId) {
+          try {
+            for (const userId of data.additionalOwnerIds) {
+              await api.post(`/objectives/${objectiveId}/owners`, { userId })
+            }
+          } catch (error) {
+            console.error('Failed to add additional owners:', error)
+            // Don't fail the whole creation
+          }
+        }
+        
         toast({
           title: 'Objective created',
           description: `"${data.title}" has been created.`,
         })
+        
+        return { id: objectiveId }
       } else if (createMode === 'kr') {
-        await api.post('/key-results', {
+        const response = await api.post('/key-results', {
           ...data,
           tenantId: currentOrganization?.id,
         })
@@ -534,11 +556,13 @@ export default function OKRHierarchyPage() {
           title: 'Key Result created',
           description: `"${data.title}" has been created.`,
         })
+        return { id: response.data?.id }
       }
       await refetch()
       refetchDetail()
       setSidePanelTab('details')
       setCreateMode(null)
+      return { id: '' }
     } catch (error: any) {
       console.error('Failed to create:', error)
       const errorMessage = error.response?.data?.message || error.message || 'Failed to create'
@@ -693,11 +717,19 @@ export default function OKRHierarchyPage() {
             </div>
             
             {/* Status & Progress */}
-            <div className="w-48 flex flex-col gap-1 items-end">
+            <div className="min-w-[280px] flex items-center gap-3 justify-end flex-shrink-0">
               <StatusBadge status={item.status} />
-              <div className="w-24 flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-1 max-w-[200px]">
                 <ProgressBar value={item.progress} status={item.status} />
-                <span className="text-xs text-slate-400 w-6 text-right">{item.progress}%</span>
+                <div className="flex flex-col items-end min-w-[60px]">
+                  <span className="text-sm font-medium text-slate-300">{Math.round(clampProgress(item.progress))}%</span>
+                  {item.type === 'kr' && item.current !== undefined && item.target !== undefined && (
+                    <span className="text-xs text-slate-500">
+                      {formatNumber(item.current)}/{formatNumber(item.target)}
+                      {item.unit && item.unit.toLowerCase() !== 'number' && ` ${item.unit}`}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -749,10 +781,10 @@ export default function OKRHierarchyPage() {
           <div className="p-4 border-t border-slate-800">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-xs font-bold">
-                {user?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
+                {(user?.firstName || user?.email?.charAt(0) || 'U').charAt(0).toUpperCase()}
               </div>
               <div className="text-sm">
-                <div className="text-white">{user?.name || 'User'}</div>
+                <div className="text-white">{user?.firstName || user?.email || 'User'}</div>
                 <div className="text-slate-500 text-xs">{user?.email || ''}</div>
               </div>
             </div>
@@ -1099,7 +1131,7 @@ export default function OKRHierarchyPage() {
                   selectedItem={selectedItem} 
                   okrDetail={okrDetail || null}
                   sidePanelTab={sidePanelTab}
-                  onTabChange={setSidePanelTab}
+                  onTabChange={(tab: string) => setSidePanelTab(tab as 'details' | 'create' | 'edit')}
                 />
               )}
               
@@ -1265,7 +1297,7 @@ export default function OKRHierarchyPage() {
                               {/* SECTION 3: Overview (formerly Metadata) */}
                               {!detailLoading && okrDetail && (
                                 <CollapsibleSection sectionId="overview" title="Overview" icon={Calendar}>
-                                  <MetadataSection detail={okrDetail} type={selectedItem.type} hideTitle />
+                                  <MetadataSection detail={okrDetail} type={selectedItem.type === 'kr' ? 'keyResult' : selectedItem.type} hideTitle />
                                 </CollapsibleSection>
                               )}
 
@@ -1274,7 +1306,7 @@ export default function OKRHierarchyPage() {
                                 <CollapsibleSection sectionId="progress" title="Progress Breakdown" icon={BarChart3}>
                                   <ProgressBreakdownSection
                                     detail={{
-                                      type: selectedItem.type,
+                                      type: selectedItem.type === 'kr' ? 'keyResult' : selectedItem.type,
                                       progress: okrDetail.progress,
                                       keyResults: selectedItem.type === 'objective' && selectedItem.children
                                         ? selectedItem.children
@@ -1458,9 +1490,18 @@ export default function OKRHierarchyPage() {
                       }}
                       availableUsers={availableUsers}
                       availableWorkspaces={workspaces}
-                      availableCycles={normalizedCycles}
+                      availableCycles={normalizedCycles.map(c => ({
+                        id: c.id,
+                        name: c.name,
+                        startDate: c.startsAt,
+                        endDate: c.endsAt,
+                      }))}
                       availableTeams={teams}
                       parentObjectiveId={selectedItem?.type === 'objective' ? selectedItem.id : undefined}
+                      parentObjectiveTitle={selectedItem?.type === 'objective' ? selectedItem.title : undefined}
+                      defaultCycleId={selectedItem?.type === 'objective' && selectedItem._originalNode?.cycleId ? selectedItem._originalNode.cycleId : undefined}
+                      defaultWorkspaceId={selectedItem?.type === 'objective' && selectedItem._originalNode?.workspaceId ? selectedItem._originalNode.workspaceId : undefined}
+                      defaultTeamId={selectedItem?.type === 'objective' && selectedItem._originalNode?.teamId ? selectedItem._originalNode.teamId : undefined}
                       currentOrganization={currentOrganization}
                     />
                   </div>
@@ -1509,6 +1550,7 @@ export default function OKRHierarchyPage() {
           ownerId: selectedItem._originalNode.ownerId,
           cycleId: selectedItem._originalNode.cycleId || undefined,
           status: selectedItem._originalNode.status,
+          visibilityLevel: (selectedItem._originalNode.visibilityLevel || 'PUBLIC_TENANT') as 'PUBLIC_TENANT' | 'PRIVATE',
         } : undefined}
         onClose={() => {
           setEditObjectiveModalOpen(false)
@@ -1538,5 +1580,13 @@ export default function OKRHierarchyPage() {
         availablePillars={[]}
       />
     </ProtectedRoute>
+  )
+}
+
+export default function OKRHierarchyPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <OKRHierarchyPageContent />
+    </Suspense>
   )
 }

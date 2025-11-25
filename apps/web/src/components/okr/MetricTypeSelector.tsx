@@ -80,7 +80,7 @@ export function MetricTypeSelector({
       </div>
       <Select
         value={value}
-        onValueChange={(val) => onValueChange(val as MetricType)}
+        onValueChange={(val: string) => onValueChange(val as MetricType)}
         disabled={disabled}
       >
         <SelectTrigger id={id} className="h-9">

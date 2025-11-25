@@ -216,7 +216,7 @@ export function RoleAssignmentDialog({
               <Label htmlFor="scope-type-select">Scope Type</Label>
               <Select 
                 value={selectedScopeType || ''} 
-                onValueChange={(value) => {
+                onValueChange={(value: string) => {
                   setSelectedScopeType(value as 'TENANT' | 'WORKSPACE' | 'TEAM')
                   setSelectedScopeId('')
                   setSelectedRole('')

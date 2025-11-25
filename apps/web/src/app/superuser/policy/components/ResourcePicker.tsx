@@ -36,7 +36,7 @@ export function ResourcePicker({ value, onChange, tenantId }: ResourcePickerProp
         <CardTitle className="text-sm">Resource Context</CardTitle>
       </CardHeader>
       <CardContent>
-        <Tabs value={useAdvanced ? 'advanced' : 'simple'} onValueChange={(v) => setUseAdvanced(v === 'advanced')}>
+        <Tabs value={useAdvanced ? 'advanced' : 'simple'} onValueChange={(v: string) => setUseAdvanced(v === 'advanced')}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="simple">Simple</TabsTrigger>
             <TabsTrigger value="advanced">Advanced (Manual IDs)</TabsTrigger>

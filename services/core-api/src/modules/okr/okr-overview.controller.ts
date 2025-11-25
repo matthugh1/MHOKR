@@ -769,7 +769,6 @@ export class OkrOverviewController {
         // - status: progress state (ON_TRACK, AT_RISK, etc.)
         // - isPublished: governance state (true = Published, false = Draft)
         // - visibilityLevel: canonical enum (PUBLIC_TENANT, PRIVATE)
-        // - pillarId: deprecated (not used in UI, kept for backward compatibility)
         const result = {
           objectiveId: o.id,
           title: o.title,
@@ -782,6 +781,9 @@ export class OkrOverviewController {
           ownerId: o.ownerId,
           parentId: o.parentId || null, // Include parentId for hierarchical tree view
           cycleId: o.cycleId || o.cycle?.id || null, // Include cycleId directly for easier access
+          pillarId: o.pillarId || null, // Include pillarId for strategic pillar linking
+          workspaceId: o.workspaceId || null, // Include workspaceId for workspace filtering
+          teamId: o.teamId || null, // Include teamId for team filtering
           owner: o.owner
             ? {
                 id: o.owner.id,

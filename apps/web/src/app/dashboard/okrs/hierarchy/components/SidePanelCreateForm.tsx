@@ -9,13 +9,17 @@ import { Target, TrendingUp } from 'lucide-react'
 interface SidePanelCreateFormProps {
   mode: 'objective' | 'kr' | null
   onModeChange: (mode: 'objective' | 'kr' | null) => void
-  onSuccess: (data: any) => void | Promise<void>
+  onSuccess: (data: any) => Promise<{ id: string }> | void | Promise<void>
   onCancel: () => void
   availableUsers?: Array<{ id: string; name: string; email?: string }>
   availableWorkspaces?: Array<{ id: string; name: string }>
   availableCycles?: Array<{ id: string; name: string }>
   availableTeams?: Array<{ id: string; name: string; workspaceId?: string }>
   parentObjectiveId?: string
+  parentObjectiveTitle?: string
+  defaultCycleId?: string
+  defaultWorkspaceId?: string
+  defaultTeamId?: string
   currentOrganization?: { id: string } | null
 }
 
@@ -29,6 +33,10 @@ export function SidePanelCreateForm({
   availableCycles = [],
   availableTeams = [],
   parentObjectiveId,
+  parentObjectiveTitle,
+  defaultCycleId,
+  defaultWorkspaceId,
+  defaultTeamId,
   currentOrganization,
 }: SidePanelCreateFormProps) {
   // If no mode selected, show mode selector
@@ -87,13 +95,20 @@ export function SidePanelCreateForm({
     return (
       <SidePanelCreateObjective
         onSave={async (data) => {
-          await onSuccess(data)
+          const result = await onSuccess(data)
+          return result || { id: '' }
         }}
         onCancel={() => onModeChange(null)}
         availableUsers={availableUsers}
         availableWorkspaces={availableWorkspaces}
         availableCycles={availableCycles}
         parentObjectiveId={parentObjectiveId}
+        parentObjectiveTitle={parentObjectiveTitle}
+        defaultCycleId={defaultCycleId}
+        defaultWorkspaceId={defaultWorkspaceId}
+        defaultTeamId={defaultTeamId}
+        availableTeams={availableTeams}
+        currentOrganization={currentOrganization}
       />
     )
   }

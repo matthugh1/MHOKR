@@ -229,7 +229,7 @@ export function RoleManagement() {
                     <Label>Scope Type</Label>
                     <Select
                       value={selectedScope}
-                      onValueChange={(value) => {
+                      onValueChange={(value: string) => {
                         setSelectedScope(value as ScopeType)
                         setNewAssignment({ ...newAssignment, scopeId: '' })
                       }}
@@ -249,7 +249,7 @@ export function RoleManagement() {
                     <Label>Scope</Label>
                     <Select
                       value={newAssignment.scopeId}
-                      onValueChange={(value) => setNewAssignment({ ...newAssignment, scopeId: value })}
+                      onValueChange={(value: string) => setNewAssignment({ ...newAssignment, scopeId: value })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select scope" />
@@ -278,7 +278,7 @@ export function RoleManagement() {
                     <Label>Role</Label>
                     <Select
                       value={newAssignment.role}
-                      onValueChange={(value) => setNewAssignment({ ...newAssignment, role: value as Role })}
+                      onValueChange={(value: string) => setNewAssignment({ ...newAssignment, role: value as Role })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select role" />

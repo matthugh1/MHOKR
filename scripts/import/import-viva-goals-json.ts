@@ -20,14 +20,14 @@ import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as bcrypt from 'bcrypt';
-import { VivaGoalsJSONParserService } from '../services/core-api/src/modules/okr/viva-goals-json-parser.service';
-import { VivaGoalsCSVParserService } from '../services/core-api/src/modules/okr/viva-goals-csv-parser.service';
-import { OkrImportService } from '../services/core-api/src/modules/okr/okr-import.service';
-import { OkrCycleService } from '../services/core-api/src/modules/okr/okr-cycle.service';
-import { CycleGeneratorService } from '../services/core-api/src/modules/okr/cycle-generator.service';
-import { ObjectiveOwnerService } from '../services/core-api/src/modules/okr/objective-owner.service';
-import { KeyResultOwnerService } from '../services/core-api/src/modules/okr/key-result-owner.service';
-import { PhasedTargetService } from '../services/core-api/src/modules/okr/phased-target.service';
+import { VivaGoalsJSONParserService } from '../../services/core-api/src/modules/okr/viva-goals-json-parser.service';
+import { VivaGoalsCSVParserService } from '../../services/core-api/src/modules/okr/viva-goals-csv-parser.service';
+import { OkrImportService } from '../../services/core-api/src/modules/okr/okr-import.service';
+import { OkrCycleService } from '../../services/core-api/src/modules/okr/okr-cycle.service';
+import { CycleGeneratorService } from '../../services/core-api/src/modules/okr/cycle-generator.service';
+import { ObjectiveOwnerService } from '../../services/core-api/src/modules/okr/objective-owner.service';
+import { KeyResultOwnerService } from '../../services/core-api/src/modules/okr/key-result-owner.service';
+import { PhasedTargetService } from '../../services/core-api/src/modules/okr/phased-target.service';
 
 // Create a simple PrismaService wrapper for use outside NestJS
 class SimplePrismaService extends PrismaClient {
@@ -217,7 +217,7 @@ async function main() {
       stats.objectivesUpdated = result.objectivesUpdated;
       stats.keyResultsCreated = result.keyResultsCreated;
       stats.keyResultsUpdated = result.keyResultsUpdated;
-      stats.errors.push(...result.errors.map(e => `${e.title}: ${e.error}`));
+      stats.errors.push(...result.errors.map((e: { title: string; error: string }) => `${e.title}: ${e.error}`));
       stats.warnings.push(...result.warnings);
       console.log(`   ✅ Objectives: ${result.objectivesCreated} created, ${result.objectivesUpdated} updated`);
       console.log(`   ✅ Key Results: ${result.keyResultsCreated} created, ${result.keyResultsUpdated} updated`);

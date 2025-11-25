@@ -18,7 +18,22 @@ import { OwnerList } from '@/components/okr/OwnerList'
 import { useTenantAdmin } from '@/hooks/useTenantAdmin'
 import { useTenantPermissions } from '@/hooks/useTenantPermissions'
 import { useToast } from '@/hooks/use-toast'
+import { useWorkspace } from '@/contexts/workspace.context'
 import api from '@/lib/api'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import { Check, ChevronsUpDown } from 'lucide-react'
 import {
   getObjectiveOwners,
   addObjectiveOwner,
@@ -30,6 +45,9 @@ import { AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type OKRStatus = "NOT_STARTED" | "ON_TRACK" | "AT_RISK" | "OFF_TRACK" | "COMPLETED" | "CANCELLED"
+
+// Valid status values for validation
+const VALID_OKR_STATUSES: OKRStatus[] = ["NOT_STARTED", "ON_TRACK", "AT_RISK", "OFF_TRACK", "COMPLETED", "CANCELLED"]
 type VisibilityLevel = "PUBLIC_TENANT" | "PRIVATE"
 
 interface SidePanelEditObjectiveProps {
@@ -38,14 +56,17 @@ interface SidePanelEditObjectiveProps {
     title: string
     ownerId: string
     workspaceId?: string
+    teamId?: string
     cycleId?: string
     status: OKRStatus
     goalType?: 'ASPIRATIONAL' | 'COMMITTED'
     visibilityLevel: VisibilityLevel
+    pillarId?: string | null
   }) => Promise<void>
   onCancel: () => void
   availableUsers?: Array<{ id: string; name: string; email?: string }>
   availableWorkspaces?: Array<{ id: string; name: string }>
+  availableTeams?: Array<{ id: string; name: string; workspaceId?: string }>
   availableCycles?: Array<{ id: string; name: string }>
 }
 
@@ -55,11 +76,16 @@ export function SidePanelEditObjective({
   onCancel,
   availableUsers = [],
   availableWorkspaces = [],
+  availableTeams = [],
   availableCycles = [],
 }: SidePanelEditObjectiveProps) {
   const [title, setTitle] = useState("")
   const [ownerId, setOwnerId] = useState("")
+  const [level, setLevel] = useState<'company' | 'workspace' | 'team'>('company')
   const [workspaceId, setWorkspaceId] = useState<string>("")
+  const [teamId, setTeamId] = useState<string>("")
+  const [workspaceOpen, setWorkspaceOpen] = useState(false)
+  const [teamOpen, setTeamOpen] = useState(false)
   const [cycleId, setCycleId] = useState<string>("")
   const [status, setStatus] = useState<OKRStatus>("ON_TRACK")
   const [goalType, setGoalType] = useState<'ASPIRATIONAL' | 'COMMITTED'>('ASPIRATIONAL')
@@ -70,6 +96,18 @@ export function SidePanelEditObjective({
   const [owners, setOwners] = useState<Owner[]>([])
   const [isLoadingOwners, setIsLoadingOwners] = useState(false)
   const [activeTab, setActiveTab] = useState('basic')
+  const [pillarId, setPillarId] = useState<string | null>(null)
+  const [availablePillars, setAvailablePillars] = useState<Array<{ id: string; name: string; color?: string | null; description?: string | null }>>([])
+  const [pillarOpen, setPillarOpen] = useState(false)
+  
+  const { currentOrganization } = useWorkspace()
+
+  // Find the selected pillar object - check both state and selectedNode
+  const currentPillarId = pillarId || selectedNode?.pillarId || null
+  const selectedPillar = useMemo(() => {
+    if (!currentPillarId) return null
+    return availablePillars.find((p) => p.id === currentPillarId) || null
+  }, [currentPillarId, availablePillars])
 
   // Build complete cycles list including current cycleId if not in availableCycles
   const allCycles = useMemo(() => {
@@ -89,30 +127,83 @@ export function SidePanelEditObjective({
   const tenantPermissions = useTenantPermissions()
   const { toast } = useToast()
 
+  // Determine current type based on workspaceId/teamId
+  const currentType = useMemo(() => {
+    if (!selectedNode) return 'company'
+    if (selectedNode.teamId) return 'team'
+    if (selectedNode.workspaceId) return 'workspace'
+    return 'company'
+  }, [selectedNode?.teamId, selectedNode?.workspaceId])
+
+  // Check if type can be changed (company type cannot be changed)
+  const canChangeType = currentType !== 'company'
+
   // Load objective data when node changes
   useEffect(() => {
     if (selectedNode && selectedNode.type === 'objective') {
       setTitle(selectedNode.title || "")
       setOwnerId(selectedNode.ownerId || "")
       setWorkspaceId(selectedNode.workspaceId || "")
+      setTeamId(selectedNode.teamId || "")
+      // Set type based on workspaceId/teamId - default to current type
+      if (selectedNode.teamId) {
+        setLevel('team')
+      } else if (selectedNode.workspaceId) {
+        setLevel('workspace')
+      } else {
+        setLevel('company')
+      }
       // Use cycleId directly from selectedNode - ensure it's set correctly
       if (selectedNode.cycleId) {
         setCycleId(selectedNode.cycleId)
       } else {
         setCycleId("")
       }
-      setStatus((selectedNode.status as OKRStatus) || "ON_TRACK")
-      setGoalType(selectedNode.goalType || "ASPIRATIONAL")
+      // Set status - use selectedNode.status directly if valid, otherwise default to ON_TRACK
+      const nodeStatus = selectedNode.status
+      
+      if (nodeStatus && typeof nodeStatus === 'string' && VALID_OKR_STATUSES.includes(nodeStatus as OKRStatus)) {
+        setStatus(nodeStatus as OKRStatus)
+      } else if (nodeStatus && typeof nodeStatus === 'string') {
+        // Try case-insensitive match
+        const normalized = nodeStatus.toUpperCase()
+        const matched = VALID_OKR_STATUSES.find(s => s.toUpperCase() === normalized)
+        if (matched) {
+          setStatus(matched)
+        } else {
+          setStatus("ON_TRACK")
+        }
+      } else {
+        // Default to ON_TRACK if status is missing or invalid
+        setStatus("ON_TRACK")
+      }
+      setGoalType((selectedNode as any).goalType || "ASPIRATIONAL")
       setVisibilityLevel((selectedNode.visibilityLevel as VisibilityLevel) || "PUBLIC_TENANT")
       setIsPublished(selectedNode.isPublished || false)
+      setPillarId(selectedNode.pillarId || null)
     } else {
       // Reset form when no node is selected
       setTitle("")
       setOwnerId("")
       setWorkspaceId("")
+      setTeamId("")
+      setLevel('company')
       setCycleId("")
+      setPillarId(null)
+      setStatus("ON_TRACK")
     }
-  }, [selectedNode?.id, selectedNode?.cycleId])
+  }, [selectedNode?.id])
+
+  // Reset workspace/team when level/type changes
+  useEffect(() => {
+    const effectiveLevel = level || currentType
+    if (effectiveLevel === 'company') {
+      setWorkspaceId("")
+      setTeamId("")
+    } else if (effectiveLevel === 'workspace') {
+      setTeamId("")
+    }
+  }, [level, currentType])
 
   // Load owners
   useEffect(() => {
@@ -135,6 +226,25 @@ export function SidePanelEditObjective({
     loadOwners()
   }, [selectedNode?.id])
 
+  // Load strategic pillars
+  useEffect(() => {
+    if (currentOrganization?.id) {
+      api.get('/reports/pillars')
+        .then((res) => {
+          const pillars = res.data || []
+          setAvailablePillars(pillars)
+          // If we have a pillarId from selectedNode but it's not in state yet, set it
+          if (selectedNode?.pillarId && !pillarId && pillars.some((p: { id: string }) => p.id === selectedNode.pillarId)) {
+            setPillarId(selectedNode.pillarId)
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to fetch strategic pillars', err)
+        })
+    }
+  }, [currentOrganization?.id, selectedNode?.pillarId, pillarId])
+
+
   const handleAddOwner = async (userId: string) => {
     if (!selectedNode?.id) return
     await addObjectiveOwner(selectedNode.id, userId)
@@ -154,14 +264,14 @@ export function SidePanelEditObjective({
     return tenantPermissions.canEditObjective({
       id: selectedNode.id,
       ownerId: selectedNode.ownerId,
-      tenantId: selectedNode.tenantId || null,
+      tenantId: currentOrganization?.id || null,
       workspaceId: selectedNode.workspaceId || null,
       teamId: selectedNode.teamId || null,
       isPublished: isPublished,
       cycle: null,
       cycleStatus: null,
     })
-  }, [selectedNode, isPublished, tenantPermissions])
+  }, [selectedNode, isPublished, tenantPermissions, currentOrganization?.id])
 
   const canPublish = useMemo(() => {
     if (!selectedNode || !selectedNode.id) return false
@@ -169,28 +279,28 @@ export function SidePanelEditObjective({
       (selectedNode.workspaceId && tenantPermissions.canEditObjective({
         id: selectedNode.id,
         ownerId: selectedNode.ownerId,
-        tenantId: selectedNode.tenantId || null,
+        tenantId: currentOrganization?.id || null,
         workspaceId: selectedNode.workspaceId || null,
         teamId: selectedNode.teamId || null,
         isPublished: false,
         cycle: null,
         cycleStatus: null,
       }))
-  }, [isTenantAdmin, selectedNode, tenantPermissions])
+  }, [isTenantAdmin, selectedNode, tenantPermissions, currentOrganization?.id])
 
   const canUnpublish = useMemo(() => {
     if (!selectedNode || !selectedNode.id) return false
     return isTenantAdmin || tenantPermissions.canEditObjective({
       id: selectedNode.id,
       ownerId: selectedNode.ownerId,
-      tenantId: selectedNode.tenantId || null,
+      tenantId: currentOrganization?.id || null,
       workspaceId: selectedNode.workspaceId || null,
       teamId: selectedNode.teamId || null,
       isPublished: isPublished,
       cycle: null,
       cycleStatus: null,
     })
-  }, [isTenantAdmin, selectedNode, isPublished, tenantPermissions])
+  }, [isTenantAdmin, selectedNode, isPublished, tenantPermissions, currentOrganization?.id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -206,14 +316,17 @@ export function SidePanelEditObjective({
 
     setIsSubmitting(true)
     try {
+      const effectiveLevel = level || currentType
       await onSave({
         title: title.trim(),
         ownerId,
-        workspaceId: workspaceId || undefined,
+        workspaceId: effectiveLevel === 'workspace' || effectiveLevel === 'team' ? (workspaceId || undefined) : undefined,
+        teamId: effectiveLevel === 'team' ? (teamId || undefined) : undefined,
         cycleId: cycleId || undefined,
         status,
         goalType,
         visibilityLevel,
+        pillarId: pillarId || undefined,
       })
     } catch (error) {
       console.error("Failed to update objective:", error)
@@ -299,22 +412,172 @@ export function SidePanelEditObjective({
             </div>
           )}
 
-          {availableWorkspaces.length > 0 && (
+          <div className="space-y-2">
+            <Label htmlFor="edit-type" className="text-sm font-medium text-slate-200">
+              Type <span className="text-red-400">*</span>
+            </Label>
+            <Select 
+              value={level || currentType} 
+              onValueChange={(value: string) => setLevel(value as 'company' | 'workspace' | 'team')} 
+              required
+              disabled={!canChangeType}
+            >
+              <SelectTrigger id="edit-type" className="bg-slate-800/50 border-slate-700 text-white h-10 hover:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500 disabled:opacity-50">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-800 border-slate-700 text-white">
+                <SelectItem value="company" className="text-white focus:bg-slate-700">Company</SelectItem>
+                <SelectItem value="workspace" className="text-white focus:bg-slate-700">Workspace</SelectItem>
+                <SelectItem value="team" className="text-white focus:bg-slate-700">Team</SelectItem>
+              </SelectContent>
+            </Select>
+            {!canChangeType && (
+              <p className="text-xs text-slate-500">Company-type objectives cannot be changed to workspace or team type.</p>
+            )}
+          </div>
+
+          {(level || currentType) === 'company' && currentOrganization && (
             <div className="space-y-2">
-              <Label htmlFor="edit-workspace" className="text-sm font-medium text-slate-200">Workspace</Label>
-              <Select value={workspaceId || "none"} onValueChange={(value) => setWorkspaceId(value === "none" ? "" : value)}>
-                <SelectTrigger id="edit-workspace" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 hover:bg-slate-700">
-                  <SelectValue placeholder="Select workspace" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700 text-white">
-                  <SelectItem value="none" className="text-white focus:bg-slate-700">None</SelectItem>
-                  {availableWorkspaces.map((workspace) => (
-                    <SelectItem key={workspace.id} value={workspace.id} className="text-white focus:bg-slate-700">
-                      {workspace.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-sm font-medium text-slate-200">Organization</Label>
+              <div className="text-sm text-slate-400 p-2 bg-slate-800/50 rounded border border-slate-700">
+                {currentOrganization.name || currentOrganization.id}
+              </div>
+            </div>
+          )}
+
+          {(level || currentType) === 'workspace' && (
+            <div className="space-y-2">
+              <Label htmlFor="edit-workspace" className="text-sm font-medium text-slate-200">
+                Workspace <span className="text-red-400">*</span>
+              </Label>
+              {availableWorkspaces.length === 0 ? (
+                <div className="text-sm text-slate-400 p-2">No workspaces available</div>
+              ) : (
+                <Popover open={workspaceOpen} onOpenChange={setWorkspaceOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={workspaceOpen}
+                      className="w-full justify-between h-10 bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700 hover:text-white"
+                    >
+                      <span className={cn(
+                        'truncate',
+                        workspaceId ? 'text-white' : 'text-slate-400'
+                      )}>
+                        {workspaceId
+                          ? availableWorkspaces.find((w) => w.id === workspaceId)?.name || 'Select workspace'
+                          : 'Select workspace'}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-70" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0 bg-slate-800 border-slate-700" align="start">
+                    <Command className="bg-slate-800">
+                      <CommandInput 
+                        placeholder="Search workspaces..." 
+                        className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                      />
+                      <CommandList>
+                        <CommandEmpty className="text-slate-400">No workspaces found.</CommandEmpty>
+                        <CommandGroup>
+                          {availableWorkspaces.map((workspace) => (
+                            <CommandItem
+                              key={workspace.id}
+                              value={`${workspace.name} ${workspace.id}`}
+                              onSelect={() => {
+                                setWorkspaceId(workspace.id)
+                                setWorkspaceOpen(false)
+                              }}
+                              className="cursor-pointer !opacity-100 !pointer-events-auto text-white hover:bg-slate-700 focus:bg-slate-700"
+                              style={{ opacity: 1, pointerEvents: 'auto' }}
+                            >
+                              <Check
+                                className={cn(
+                                  'mr-2 h-4 w-4',
+                                  workspaceId === workspace.id ? 'opacity-100 text-indigo-400' : 'opacity-0'
+                                )}
+                              />
+                              <span className="text-white">{workspace.name}</span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+          )}
+
+          {(level || currentType) === 'team' && (
+            <div className="space-y-2">
+              <Label htmlFor="edit-team" className="text-sm font-medium text-slate-200">
+                Team <span className="text-red-400">*</span>
+              </Label>
+              {availableTeams.length === 0 ? (
+                <div className="text-sm text-slate-400 p-2">No teams available</div>
+              ) : (
+                <Popover open={teamOpen} onOpenChange={setTeamOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={teamOpen}
+                      className="w-full justify-between h-10 bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700 hover:text-white"
+                    >
+                      <span className={cn(
+                        'truncate',
+                        teamId ? 'text-white' : 'text-slate-400'
+                      )}>
+                        {teamId
+                          ? availableTeams.find((t) => t.id === teamId)?.name || 'Select team'
+                          : 'Select team'}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-70" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0 bg-slate-800 border-slate-700" align="start">
+                    <Command className="bg-slate-800">
+                      <CommandInput 
+                        placeholder="Search teams..." 
+                        className="bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                      />
+                      <CommandList>
+                        <CommandEmpty className="text-slate-400">No teams found.</CommandEmpty>
+                        <CommandGroup>
+                          {availableTeams
+                            .filter((team) => !workspaceId || team.workspaceId === workspaceId)
+                            .map((team) => (
+                            <CommandItem
+                              key={team.id}
+                              value={`${team.name} ${team.id}`}
+                              onSelect={() => {
+                                setTeamId(team.id)
+                                // Automatically set workspace from team's workspaceId
+                                if (team.workspaceId) {
+                                  setWorkspaceId(team.workspaceId)
+                                }
+                                setTeamOpen(false)
+                              }}
+                              className="cursor-pointer !opacity-100 !pointer-events-auto text-white hover:bg-slate-700 focus:bg-slate-700"
+                              style={{ opacity: 1, pointerEvents: 'auto' }}
+                            >
+                              <Check
+                                className={cn(
+                                  'mr-2 h-4 w-4',
+                                  teamId === team.id ? 'opacity-100 text-indigo-400' : 'opacity-0'
+                                )}
+                              />
+                              <span className="text-white">{team.name}</span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
           )}
 
@@ -323,7 +586,7 @@ export function SidePanelEditObjective({
               <Label htmlFor="edit-cycle" className="text-sm font-medium text-slate-200">Cycle / Period</Label>
               <Select 
                 value={cycleId || selectedNode?.cycleId || "none"} 
-                onValueChange={(value) => setCycleId(value === "none" ? "" : value)}
+                onValueChange={(value: string) => setCycleId(value === "none" ? "" : value)}
               >
                 <SelectTrigger id="edit-cycle" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 hover:bg-slate-700">
                   <SelectValue placeholder="Select cycle" />
@@ -341,10 +604,113 @@ export function SidePanelEditObjective({
           )}
 
           <div className="space-y-2">
+            <Label htmlFor="edit-pillar" className="text-sm font-medium text-slate-200">
+              Strategic Pillar
+            </Label>
+            <Popover open={pillarOpen} onOpenChange={setPillarOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={pillarOpen}
+                  className="w-full justify-between h-10 bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700 hover:text-white"
+                >
+                  <span className={cn(
+                    'truncate flex items-center gap-2',
+                    currentPillarId ? 'text-white' : 'text-slate-400'
+                  )}>
+                    {selectedPillar ? (
+                      <>
+                        {selectedPillar.color && (
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: selectedPillar.color }}
+                          />
+                        )}
+                        {selectedPillar.name}
+                      </>
+                    ) : currentPillarId ? (
+                      // Show ID if pillar not found in availablePillars yet (still loading)
+                      `Pillar ${currentPillarId}`
+                    ) : (
+                      'None (optional)'
+                    )}
+                  </span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-70" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[400px] p-0 !bg-slate-800 !border-slate-700 !text-white" align="start" style={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#ffffff' }}>
+                <Command className="!bg-slate-800 !text-white" style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
+                  <CommandInput
+                    placeholder="Search pillars..."
+                    className="!bg-slate-800 !border-slate-700 !text-white placeholder:!text-slate-500"
+                    style={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#ffffff' }}
+                  />
+                  <CommandList className="!bg-slate-800" style={{ backgroundColor: '#1e293b' }}>
+                    <CommandEmpty className="!text-slate-400">No strategic pillars found.</CommandEmpty>
+                    <CommandGroup className="!bg-slate-800" style={{ backgroundColor: '#1e293b' }}>
+                      <CommandItem
+                        value="none"
+                        onSelect={() => {
+                          setPillarId(null)
+                          setPillarOpen(false)
+                        }}
+                        className="cursor-pointer !opacity-100 !pointer-events-auto !text-white hover:!bg-slate-700 focus:!bg-slate-700"
+                        style={{ opacity: 1, pointerEvents: 'auto', color: '#ffffff' }}
+                      >
+                        <Check
+                          className={cn(
+                            'mr-2 h-4 w-4',
+                            !currentPillarId ? 'opacity-100 text-indigo-400' : 'opacity-0'
+                          )}
+                        />
+                        <span className="text-white">None (optional)</span>
+                      </CommandItem>
+                      {availablePillars.map((pillar) => (
+                        <CommandItem
+                          key={pillar.id}
+                          value={`${pillar.name} ${pillar.id}`}
+                          onSelect={() => {
+                            setPillarId(pillar.id)
+                            setPillarOpen(false)
+                          }}
+                          className="cursor-pointer !opacity-100 !pointer-events-auto !text-white hover:!bg-slate-700 focus:!bg-slate-700"
+                          style={{ opacity: 1, pointerEvents: 'auto', color: '#ffffff' }}
+                        >
+                          <Check
+                            className={cn(
+                              'mr-2 h-4 w-4',
+                              currentPillarId === pillar.id ? 'opacity-100 text-indigo-400' : 'opacity-0'
+                            )}
+                          />
+                          <div className="flex items-center gap-2">
+                            {pillar.color && (
+                              <div
+                                className="w-3 h-3 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: pillar.color }}
+                              />
+                            )}
+                            <span className="text-white">{pillar.name}</span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            <p className="text-xs text-slate-500 mt-2">Link this objective to a strategic pillar for reporting and grouping.</p>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="edit-status" className="text-sm font-medium text-slate-200">
               Status <span className="text-red-400">*</span>
             </Label>
-            <Select value={status} onValueChange={(value) => setStatus(value as OKRStatus)} required>
+            <Select 
+              value={status || (selectedNode?.status && VALID_OKR_STATUSES.includes(selectedNode.status as OKRStatus) ? selectedNode.status : "ON_TRACK")} 
+              onValueChange={(value: string) => setStatus(value as OKRStatus)} 
+              required
+            >
               <SelectTrigger id="edit-status" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 hover:bg-slate-700">
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
@@ -375,7 +741,7 @@ export function SidePanelEditObjective({
             </Label>
             <Select
               value={visibilityLevel}
-              onValueChange={(value) => setVisibilityLevel(value as VisibilityLevel)}
+              onValueChange={(value: string) => setVisibilityLevel(value as VisibilityLevel)}
               required
             >
               <SelectTrigger id="edit-visibility" className="bg-slate-800/50 border-slate-700 text-white h-10 focus:border-indigo-500 focus:ring-indigo-500 hover:bg-slate-700">

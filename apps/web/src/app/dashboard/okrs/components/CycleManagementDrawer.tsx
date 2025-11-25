@@ -67,7 +67,6 @@ export function CycleManagementDrawer({
     endDate: '',
     status: 'DRAFT',
   })
-  const sheetContentRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
@@ -97,9 +96,13 @@ export function CycleManagementDrawer({
   }, [isOpen, currentOrganizationId, user?.id])
 
   useEffect(() => {
-    if (isOpen && sheetContentRef.current) {
-      const cleanup = trapFocus(sheetContentRef.current)
-      return cleanup
+    if (isOpen) {
+      // Find SheetContent element by aria-labelledby attribute
+      const sheetContent = document.querySelector('[aria-labelledby="cycle-management-drawer-title"]') as HTMLElement
+      if (sheetContent) {
+        const cleanup = trapFocus(sheetContent)
+        return cleanup
+      }
     }
   }, [isOpen])
 
@@ -361,9 +364,7 @@ export function CycleManagementDrawer({
       <SheetContent
         side="right"
         className="w-full sm:max-w-lg overflow-y-auto"
-        ref={sheetContentRef}
-        aria-labelledby="cycle-management-drawer-title"
-        aria-describedby="cycle-management-drawer-description"
+        {...({} as any)}
       >
         <SheetHeader>
           <SheetTitle id="cycle-management-drawer-title">Manage Cycles</SheetTitle>

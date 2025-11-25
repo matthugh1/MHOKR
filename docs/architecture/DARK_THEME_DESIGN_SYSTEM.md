@@ -287,3 +287,4 @@ When migrating from light theme (`neutral-*`) to dark theme (`slate-*`):
    - Add `bg-slate-950` to root container
    - Ensure `text-slate-200` for base text color
 
+

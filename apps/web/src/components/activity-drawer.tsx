@@ -262,7 +262,7 @@ export function ActivityDrawer({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-600 mb-1 block">Action</label>
-              <Select value={actionFilter} onValueChange={(value) => handleFilterChange(value, userIdFilter)}>
+              <Select value={actionFilter} onValueChange={(value: string) => handleFilterChange(value, userIdFilter)}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
@@ -277,7 +277,7 @@ export function ActivityDrawer({
             </div>
             <div>
               <label className="text-xs text-slate-600 mb-1 block">Actor</label>
-              <Select value={userIdFilter} onValueChange={(value) => handleFilterChange(actionFilter, value)}>
+              <Select value={userIdFilter} onValueChange={(value: string) => handleFilterChange(actionFilter, value)}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>

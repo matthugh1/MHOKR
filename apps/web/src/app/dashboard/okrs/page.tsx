@@ -17,7 +17,7 @@
 
 'use client'
 
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
@@ -73,7 +73,7 @@ import { GovernanceStatusBar } from './components/GovernanceStatusBar'
 import { CycleManagementDrawer } from './components/CycleManagementDrawer'
 
 // NOTE: This screen is now the system of record for CRUD on Objectives, Key Results, and Initiatives.
-export default function OKRsPage() {
+function OKRsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { okrTreeView } = useFeatureFlags()
@@ -289,7 +289,7 @@ export default function OKRsPage() {
   const [availableUsers, setAvailableUsers] = useState<any[]>([])
   const [overdueCheckIns, setOverdueCheckIns] = useState<Array<{ krId: string; objectiveId: string }>>([])
   const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null)
-  const [selectedStatus, setSelectedStatus] = useState<string | null>(null)
+  const [selectedStatus, setSelectedStatus] = useState<'NOT_STARTED' | 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED' | null>(null)
   const [activityDrawerOpen, setActivityDrawerOpen] = useState(false)
   const [activityItems, setActivityItems] = useState<ActivityItem[]>([])
   const [activityEntityName, setActivityEntityName] = useState('')
@@ -451,7 +451,7 @@ export default function OKRsPage() {
         const response = await api.get('/reports/cycles/active')
         const cycles = response.data || []
         setActiveCycles(cycles)
-        if (cycles.length > 0 && !cycleInitializedRef.current && (selectedCycleId === null || selectedTimeframeKey === 'all')) {
+        if (cycles.length > 0 && !cycleInitializedRef.current && (selectedCycleId === null || selectedTimeframeKey === 'all' || selectedTimeframeKey === null)) {
           setSelectedTimeframeKey(cycles[0].id)
           setSelectedTimeframeLabel(cycles[0].name)
           setSelectedCycleId(cycles[0].id)
@@ -552,18 +552,18 @@ export default function OKRsPage() {
         id: 'synthetic-active-cycle',
         name: 'Q4 2025 (Active)',
         status: 'ACTIVE',
-        startsAt: undefined,
-        endsAt: undefined,
+        startsAt: new Date().toISOString(),
+        endsAt: new Date().toISOString(),
       },
     ]
   }, [cyclesFromApi])
 
   // W4.M1: Legacy periods removed - only cycles are canonical
-  const legacyPeriods: Array<{ id: string; label: string }> = []
+  const legacyPeriods: Array<{ id: string; name: string; startDate: string; endDate: string }> = []
 
   // State for timeframe selection (key and label)
   // W4.M1: Only cycles, no periods
-  const [selectedTimeframeKey, setSelectedTimeframeKey] = useState<string | null>(() => {
+  const [selectedTimeframeKey, setSelectedTimeframeKey] = useState<string>(() => {
     if (normalizedCycles.length > 0) return normalizedCycles[0].id
     return 'all' // Default to 'all' if no cycles available
   })
@@ -1153,7 +1153,7 @@ export default function OKRsPage() {
                     attentionCount={attentionCount}
                     onOpenAttentionDrawer={() => setAttentionDrawerOpen(true)}
                     canCreateObjective={canCreateObjective}
-                    canEditOKR={permissions.canEditOKR({ ownerId: user?.id || '', organizationId: currentOrganization?.id || null })}
+                    canEditOKR={permissions.canEditOKR({ ownerId: user?.id || '', tenantId: currentOrganization?.id || null })}
                     isSuperuser={isSuperuser}
                     onCreateObjective={() => {
                       setCreationDrawerMode('objective')
@@ -1349,7 +1349,7 @@ export default function OKRsPage() {
               <OKRTreeContainer
                 key={reloadTrigger}
                 availableUsers={availableUsers}
-                activeCycles={activeCycles}
+                activeCycles={activeCycles.map(c => ({ ...c, organizationId: c.tenantId }))}
                 overdueCheckIns={overdueCheckIns}
                 filterWorkspaceId={filterWorkspaceId}
                 filterTeamId={filterTeamId}
@@ -1367,18 +1367,9 @@ export default function OKRsPage() {
                   onAddInitiativeToObjective: handleAddInitiativeToObjectiveClick,
                   onAddInitiativeToKr: handleAddInitiativeToKrClick,
                   onAddCheckIn: handleAddCheckIn,
-                  onOpenHistory: (entityType?: 'OBJECTIVE' | 'KEY_RESULT', entityId?: string) => {
-                    if (entityType && entityId) {
-                      const entityTitle = entityType === 'OBJECTIVE' 
-                        ? okrs.find(o => o.id === entityId)?.title
-                        : okrs.flatMap(o => o.keyResults || []).find(kr => kr.id === entityId)?.title
-                      handleOpenActivityDrawer(entityType, entityId, entityTitle)
-                    } else {
-                      // Fallback for backward compatibility
-                      handleOpenActivityDrawer('OBJECTIVE', objective.id, objective.title)
-                    }
+                  onOpenHistory: (entityType: 'OBJECTIVE' | 'KEY_RESULT', entityId: string, entityTitle?: string) => {
+                    handleOpenActivityDrawer(entityType, entityId, entityTitle)
                   },
-                  onEditKeyResult: handleEditKeyResult,
                   onOpenContextualAddMenu: handleOpenContextualAddMenu,
                   onContextualAddKeyResult: handleContextualAddKeyResult,
                   onContextualAddInitiative: handleContextualAddInitiative,
@@ -1412,18 +1403,9 @@ export default function OKRsPage() {
                   onAddInitiativeToObjective: handleAddInitiativeToObjectiveClick,
                   onAddInitiativeToKr: handleAddInitiativeToKrClick,
                   onAddCheckIn: handleAddCheckIn,
-                  onOpenHistory: (entityType?: 'OBJECTIVE' | 'KEY_RESULT', entityId?: string) => {
-                    if (entityType && entityId) {
-                      const entityTitle = entityType === 'OBJECTIVE' 
-                        ? okrs.find(o => o.id === entityId)?.title
-                        : okrs.flatMap(o => o.keyResults || []).find(kr => kr.id === entityId)?.title
-                      handleOpenActivityDrawer(entityType, entityId, entityTitle)
-                    } else {
-                      // Fallback for backward compatibility
-                      handleOpenActivityDrawer('OBJECTIVE', objective.id, objective.title)
-                    }
+                  onOpenHistory: (entityType: 'OBJECTIVE' | 'KEY_RESULT', entityId: string, entityTitle?: string) => {
+                    handleOpenActivityDrawer(entityType, entityId, entityTitle)
                   },
-                  onEditKeyResult: handleEditKeyResult,
                   // Story 5: Contextual Add menu handlers
                   onOpenContextualAddMenu: handleOpenContextualAddMenu,
                   onContextualAddKeyResult: handleContextualAddKeyResult,
@@ -1484,7 +1466,7 @@ export default function OKRsPage() {
           })()}
 
           {/* Delete Confirmation Dialog */}
-          <AlertDialog open={!!pendingDeleteOkr} onOpenChange={(open) => !open && setPendingDeleteOkr(null)}>
+          <AlertDialog open={!!pendingDeleteOkr} onOpenChange={(open: boolean) => !open && setPendingDeleteOkr(null)}>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Delete OKR</AlertDialogTitle>
@@ -1780,6 +1762,14 @@ export default function OKRsPage() {
         </PageContainer>
       </DashboardLayout>
     </ProtectedRoute>
+  )
+}
+
+export default function OKRsPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <OKRsPageContent />
+    </Suspense>
   )
 }
 
