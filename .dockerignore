@@ -1,0 +1,59 @@
+# Dependencies - these get installed fresh in Docker
+node_modules
+**/node_modules
+
+# Build outputs
+.next
+**/dist
+**/.turbo
+
+# Development files
+.git
+.gitignore
+*.md
+LICENSE
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+**/test
+**/tests
+**/__tests__
+**/coverage
+
+# Documentation
+docs
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Azure deployment scripts (not needed in container)
+azure
+
+# Import data and scripts
+import
+scripts/import
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+tmp
+temp
+*.tmp
+
+# Other unnecessary files
+.eslintcache
+.prettierignore
+tsconfig.tsbuildinfo
+
