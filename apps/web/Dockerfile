@@ -37,45 +37,37 @@ RUN mkdir -p ./.next
 RUN echo '{"backendGitTag":null}' > ./.next/backend-tag.json && \
     echo '{"appVersion":"docker-build","buildTimestamp":"'$(date -Iseconds)'","backendGitTag":null}' > ./public/version.json
 
-# Skip typecheck in Docker build (test files cause issues)
-# Type checking should be done in CI/CD pipeline
-# Use build:docker script that skips prebuild hooks
-# Pass NEXT_PUBLIC_API_URL as build arg if provided
+# Build the application with standalone output
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 RUN npm run build:docker
 
-FROM node:20-alpine
+# Production image using standalone output
+FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-# Copy root package.json and tsconfig.json for workspace support
-COPY package.json ./
-COPY package-lock.json* ./
-COPY tsconfig.json ./
+ENV NODE_ENV=production
 
-# Copy built packages from builder stage
-COPY --from=builder /app/packages ./packages
+# Don't run as root
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
-# Copy web app package.json
-COPY apps/web/package*.json ./apps/web/
+# Copy the standalone server
+COPY --from=builder /app/apps/web/.next/standalone ./
 
-# Install dependencies from root using workspaces
-RUN npm install --omit=dev --workspace=apps/web --legacy-peer-deps && npm cache clean --force
+# Copy static files (these must be served alongside the app)
+COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 
-WORKDIR /app/apps/web
+# Copy public directory
+COPY --from=builder /app/apps/web/public ./apps/web/public
 
-# Copy built application
-COPY --from=builder /app/apps/web/.next ./.next
-COPY --from=builder /app/apps/web/next.config.js ./
-
-# Copy public directory (will exist from builder stage)
-COPY --from=builder /app/apps/web/public ./public
+USER nextjs
 
 EXPOSE 5173
 
-CMD ["npm", "start"]
+ENV PORT=5173
+ENV HOSTNAME="0.0.0.0"
 
-
-
-
+# Run the standalone server
+CMD ["node", "apps/web/server.js"]
