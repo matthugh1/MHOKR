@@ -1033,17 +1033,17 @@ export default function BuilderPage() {
   return (
     <ProtectedRoute>
       <DashboardLayout>
-        <div className="h-full flex flex-col bg-neutral-50">
+        <div className="h-full flex flex-col bg-slate-950">
           {/* Integrated Header - Seamless with canvas */}
-          <div className="absolute top-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-sm border-b border-neutral-200">
+          <div className="absolute top-0 left-0 right-0 z-20 bg-slate-900/95 backdrop-blur-sm border-b border-slate-800">
             <div className="max-w-[1600px] mx-auto px-6 py-3">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <h1 className="text-xl font-semibold text-foreground">Visual OKR Builder</h1>
+                  <h1 className="text-xl font-semibold text-white">Visual OKR Builder</h1>
                   {badges.length > 0 && (
                     <div className="flex items-center gap-2">
                       {badges.map((badge, idx) => (
-                        <span key={idx} className="text-xs px-2 py-1 rounded-full bg-neutral-100 text-neutral-600">
+                        <span key={idx} className="text-xs px-2 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
                           {badge.label}
                         </span>
                       ))}
@@ -1110,12 +1110,12 @@ export default function BuilderPage() {
               {/* Empty State */}
               {isEmpty && (
                 <Panel position="top-center" className="bg-transparent">
-                  <div className="bg-white rounded-xl shadow-lg border border-neutral-200 p-8 max-w-md text-center">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-100 flex items-center justify-center">
-                      <Target className="h-8 w-8 text-blue-600" />
+                  <div className="bg-slate-900 rounded-xl shadow-lg border border-slate-800 p-8 max-w-md text-center">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-indigo-500/20 flex items-center justify-center">
+                      <Target className="h-8 w-8 text-indigo-400" />
                     </div>
-                    <h2 className="text-xl font-semibold text-foreground mb-2">Create Your First OKR</h2>
-                    <p className="text-sm text-neutral-600 mb-6">
+                    <h2 className="text-xl font-semibold text-white mb-2">Create Your First OKR</h2>
+                    <p className="text-sm text-slate-400 mb-6">
                       Build your OKR structure visually. Start with an Objective, then add Key Results and Initiatives.
                     </p>
                     <Button
@@ -1125,11 +1125,11 @@ export default function BuilderPage() {
                       <Plus className="h-4 w-4" />
                       Create Objective
                     </Button>
-                    <div className="mt-6 pt-6 border-t border-neutral-200">
-                      <div className="text-xs font-semibold text-neutral-500 mb-3">How it works</div>
-                      <div className="space-y-2 text-xs text-neutral-600 text-left">
+                    <div className="mt-6 pt-6 border-t border-slate-800">
+                      <div className="text-xs font-semibold text-slate-400 mb-3">How it works</div>
+                      <div className="space-y-2 text-xs text-slate-400 text-left">
                         <div className="flex items-start gap-2">
-                          <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 flex-shrink-0"></div>
+                          <div className="w-2 h-2 rounded-full bg-indigo-500 mt-1.5 flex-shrink-0"></div>
                           <span>Objectives are your main goals</span>
                         </div>
                         <div className="flex items-start gap-2">
@@ -1154,15 +1154,15 @@ export default function BuilderPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => setLegendExpanded(true)}
-                      className="bg-white shadow-lg gap-2"
+                      className="bg-slate-900 shadow-lg gap-2 text-white border border-slate-800"
                     >
                       <HelpCircle className="h-4 w-4" />
                       Help
                     </Button>
                   ) : (
-                    <div className="bg-white rounded-lg shadow-lg border border-neutral-200 p-4 space-y-3 min-w-[240px]">
+                    <div className="bg-slate-900 rounded-lg shadow-lg border border-slate-800 p-4 space-y-3 min-w-[240px]">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-semibold">Legend</span>
+                        <span className="text-sm font-semibold text-white">Legend</span>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1175,13 +1175,13 @@ export default function BuilderPage() {
 
                       {/* OKR Level Context */}
                       {levelDisplay && (
-                        <div className="pb-3 border-b border-neutral-200">
-                          <div className="text-xs font-semibold text-neutral-500 mb-2">CREATING OKRS FOR</div>
+                        <div className="pb-3 border-b border-slate-800">
+                          <div className="text-xs font-semibold text-slate-400 mb-2">CREATING OKRS FOR</div>
                           <div className="flex items-center gap-2">
                             <levelDisplay.icon className={`h-4 w-4 ${levelDisplay.color}`} />
                             <div>
-                              <div className="text-sm font-semibold">{levelDisplay.name}</div>
-                              <div className="text-xs text-neutral-500">{levelDisplay.label} Level</div>
+                              <div className="text-sm font-semibold text-white">{levelDisplay.name}</div>
+                              <div className="text-xs text-slate-400">{levelDisplay.label} Level</div>
                             </div>
                           </div>
                         </div>
@@ -1189,7 +1189,7 @@ export default function BuilderPage() {
 
                       {/* Node Types */}
                       <div className="space-y-2">
-                        <div className="text-xs font-semibold text-neutral-500 mb-2">Node Types</div>
+                        <div className="text-xs font-semibold text-slate-400 mb-2">Node Types</div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full bg-blue-500"></div>
                           <span className="text-xs">Objective</span>
@@ -1205,16 +1205,16 @@ export default function BuilderPage() {
                       </div>
 
                       {/* Instructions */}
-                      <div className="pt-3 border-t border-neutral-200 space-y-1.5">
-                        <div className="flex items-start gap-2 text-xs text-neutral-600">
+                      <div className="pt-3 border-t border-slate-800 space-y-1.5">
+                        <div className="flex items-start gap-2 text-xs text-slate-400">
                           <span>•</span>
                           <span>Drag from circles to connect nodes</span>
                         </div>
-                        <div className="flex items-start gap-2 text-xs text-neutral-600">
+                        <div className="flex items-start gap-2 text-xs text-slate-400">
                           <span>•</span>
                           <span>Click nodes to edit details</span>
                         </div>
-                        <div className="flex items-start gap-2 text-xs text-neutral-600">
+                        <div className="flex items-start gap-2 text-xs text-slate-400">
                           <span>•</span>
                           <span>Use Auto-Layout to reorganize</span>
                         </div>
@@ -1226,12 +1226,12 @@ export default function BuilderPage() {
 
               {/* Node Creator - Floating Panel */}
               {showNodeCreator && (
-                <Panel position="top-right" className="bg-white p-4 rounded-lg shadow-lg border border-neutral-200 min-w-[220px]">
+                <Panel position="top-right" className="bg-slate-900 p-4 rounded-lg shadow-lg border border-slate-800 min-w-[220px]">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-sm">Add Node</h3>
+                    <h3 className="font-semibold text-sm text-white">Add Node</h3>
                     <button
                       onClick={() => setShowNodeCreator(false)}
-                      className="text-neutral-400 hover:text-neutral-600"
+                      className="text-slate-400 hover:text-white"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -1629,7 +1629,7 @@ function _EditNodeForm({
                 <ChevronDown className="h-4 w-4 opacity-50" />
               </button>
               {showOwnerDropdown && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-input rounded-md shadow-lg">
+                <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-slate-700 rounded-md shadow-lg">
                   <div className="p-2">
                     <div className="relative">
                       <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
@@ -1693,7 +1693,7 @@ function _EditNodeForm({
                 <ChevronDown className="h-4 w-4 opacity-50" />
               </button>
               {showContextDropdown && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-input rounded-md shadow-lg">
+                <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-slate-700 rounded-md shadow-lg">
                   <div className="p-2">
                     <div className="relative">
                       <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
@@ -1787,7 +1787,7 @@ function _EditNodeForm({
                 <ChevronDown className="h-4 w-4 opacity-50" />
               </button>
               {showParentDropdown && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-input rounded-md shadow-lg">
+                <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-slate-700 rounded-md shadow-lg">
                   <div className="p-2">
                     <div className="relative">
                       <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
@@ -2100,7 +2100,7 @@ function _EditNodeForm({
                 <ChevronDown className="h-4 w-4 opacity-50" />
               </button>
               {showOwnerDropdown && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-input rounded-md shadow-lg">
+                <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-slate-700 rounded-md shadow-lg">
                   <div className="p-2">
                     <div className="relative">
                       <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
@@ -2354,7 +2354,7 @@ function _EditNodeForm({
                 <ChevronDown className="h-4 w-4 opacity-50" />
               </button>
               {showOwnerDropdown && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-input rounded-md shadow-lg">
+                <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-slate-700 rounded-md shadow-lg">
                   <div className="p-2">
                     <div className="relative">
                       <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-400" />

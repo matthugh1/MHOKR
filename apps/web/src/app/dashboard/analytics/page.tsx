@@ -405,7 +405,7 @@ export default function AnalyticsPage() {
                 <button
                   onClick={handleExportCSV}
                   disabled={exporting || loading}
-                  className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-800 shadow-sm hover:bg-neutral-50 active:scale-[0.99] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 shadow-sm hover:bg-slate-700 active:scale-[0.99] transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Download className="h-3 w-3 inline mr-1.5" />
                   {exporting ? 'Exporting...' : 'Export CSV'}
@@ -427,7 +427,7 @@ export default function AnalyticsPage() {
           ) : fetchError ? (
             <div className="text-center py-12">
               <p className="text-red-600 font-medium mb-2">{fetchError}</p>
-              <p className="text-sm text-neutral-500">Please check your permissions or try refreshing the page.</p>
+              <p className="text-sm text-slate-400">Please check your permissions or try refreshing the page.</p>
             </div>
           ) : (
             <>
@@ -472,11 +472,11 @@ export default function AnalyticsPage() {
                 {/* Time period filter for overdue */}
                 {overdue.length > 0 && (
                   <div className="flex items-center gap-2 mt-2">
-                    <span className="text-xs text-neutral-500">Filter:</span>
+                    <span className="text-xs text-slate-400">Filter:</span>
                     <select
                       value={overduePeriod}
                       onChange={(e) => setOverduePeriod(e.target.value as '7' | '14' | '30' | 'all')}
-                      className="text-xs border border-neutral-200 rounded px-2 py-1 bg-white"
+                      className="text-xs border border-slate-700 rounded px-2 py-1 bg-slate-800 text-slate-200"
                     >
                       <option value="all">All time</option>
                       <option value="7">Last 7 days</option>
@@ -493,9 +493,9 @@ export default function AnalyticsPage() {
                   title="Strategic Coverage"
                   subtitle="Pillar coverage in active cycle"
                 />
-                <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm">
                   {pillarCoverage.length === 0 ? (
-                    <div className="text-sm text-neutral-500 text-center py-6">
+                    <div className="text-sm text-slate-400 text-center py-6">
                       No strategic pillars defined or no active cycle
                       {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
                     </div>
@@ -504,7 +504,7 @@ export default function AnalyticsPage() {
                       {pillarCoverage.map((pillar) => (
                         <div
                           key={pillar.pillarId}
-                          className="flex items-center justify-between pb-3 border-b border-neutral-100 last:border-0"
+                          className="flex items-center justify-between pb-3 border-b border-slate-800 last:border-0"
                         >
                           <div className="flex-1">
                             <p className="text-sm font-medium text-foreground">
@@ -517,7 +517,7 @@ export default function AnalyticsPage() {
                                 No active OKRs this cycle
                               </span>
                             ) : (
-                              <span className="text-sm text-neutral-600">
+                              <span className="text-sm text-slate-300">
                                 {pillar.objectiveCountInActiveCycle} OKR{pillar.objectiveCountInActiveCycle !== 1 ? 's' : ''}
                               </span>
                             )}
@@ -535,14 +535,14 @@ export default function AnalyticsPage() {
                   title="Health Heatmap"
                   subtitle={`Objective status by ${heatmapBy === 'team' ? 'team' : 'strategic pillar'}`}
                 />
-                <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm">
                   <div className="mb-4 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-neutral-500">Group by:</span>
+                      <span className="text-xs text-slate-400">Group by:</span>
                       <select
                         value={heatmapBy}
                         onChange={(e) => setHeatmapBy(e.target.value as 'team' | 'pillar')}
-                        className="text-xs border border-neutral-200 rounded px-2 py-1 bg-white"
+                        className="text-xs border border-slate-700 rounded px-2 py-1 bg-slate-800 text-slate-200"
                       >
                         <option value="team">Team</option>
                         <option value="pillar">Pillar</option>
@@ -550,7 +550,7 @@ export default function AnalyticsPage() {
                     </div>
                   </div>
                   {!healthHeatmap || healthHeatmap.buckets.length === 0 ? (
-                    <div className="text-sm text-neutral-500 text-center py-6">
+                    <div className="text-sm text-slate-400 text-center py-6">
                       No data available
                     </div>
                   ) : (
@@ -601,7 +601,7 @@ export default function AnalyticsPage() {
                               }
 
                               return (
-                                <tr key={total.dimensionId || 'unassigned'} className="border-b border-neutral-100 hover:bg-neutral-50">
+                                <tr key={total.dimensionId || 'unassigned'} className="border-b border-slate-800 hover:bg-neutral-50">
                                   <td className="py-2 px-3 font-medium text-foreground">
                                     {total.dimensionName}
                                   </td>
@@ -645,7 +645,7 @@ export default function AnalyticsPage() {
                                     {statusCounts.COMPLETED > 0 ? (
                                       <Link
                                         href={buildFilterUrl('COMPLETED')}
-                                        className="text-neutral-600 hover:text-neutral-700 hover:underline font-medium"
+                                        className="text-slate-300 hover:text-neutral-700 hover:underline font-medium"
                                       >
                                         {statusCounts.COMPLETED}
                                       </Link>
@@ -657,7 +657,7 @@ export default function AnalyticsPage() {
                                     {statusCounts.CANCELLED > 0 ? (
                                       <Link
                                         href={buildFilterUrl('CANCELLED')}
-                                        className="text-neutral-600 hover:text-neutral-700 hover:underline font-medium"
+                                        className="text-slate-300 hover:text-neutral-700 hover:underline font-medium"
                                       >
                                         {statusCounts.CANCELLED}
                                       </Link>
@@ -693,9 +693,9 @@ export default function AnalyticsPage() {
                   title="At-Risk Items"
                   subtitle="Objectives and Key Results requiring attention"
                 />
-                <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm">
                   {atRiskItems.length === 0 ? (
-                    <div className="text-sm text-neutral-500 text-center py-6">
+                    <div className="text-sm text-slate-400 text-center py-6">
                       No at-risk items found
                     </div>
                   ) : (
@@ -732,7 +732,7 @@ export default function AnalyticsPage() {
                         }
 
                         return (
-                          <div key={`${item.entityType}-${item.id}`} className="flex items-start gap-4 pb-4 border-b border-neutral-100 last:border-0">
+                          <div key={`${item.entityType}-${item.id}`} className="flex items-start gap-4 pb-4 border-b border-slate-800 last:border-0">
                             <div className={`w-2 h-2 rounded-full mt-2 ${
                               item.status === 'OFF_TRACK' || item.status === 'BLOCKED' ? 'bg-rose-500' :
                               item.status === 'AT_RISK' ? 'bg-amber-500' :
@@ -745,7 +745,7 @@ export default function AnalyticsPage() {
                               >
                                 {item.title}
                               </Link>
-                              <div className="mt-1 flex items-center gap-3 text-xs text-neutral-500">
+                              <div className="mt-1 flex items-center gap-3 text-xs text-slate-400">
                                 <span className="capitalize">{item.entityType.toLowerCase().replace('_', ' ')}</span>
                                 <span>•</span>
                                 <span>Owner: {item.owner.name || item.owner.id}</span>
@@ -775,7 +775,7 @@ export default function AnalyticsPage() {
                         )
                       })}
                       {atRiskItems.length > 5 && (
-                        <div className="text-xs text-neutral-500 text-center pt-2">
+                        <div className="text-xs text-slate-400 text-center pt-2">
                           And {atRiskItems.length - 5} more...
                         </div>
                       )}
@@ -791,12 +791,12 @@ export default function AnalyticsPage() {
                     title="Cycle Health"
                     subtitle={`Health metrics for ${activeCycles[0].name}`}
                   />
-                  <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                  <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm">
                     {cycleHealth ? (
                       <div className="space-y-6">
                         {/* Totals by Status */}
                         <div>
-                          <h5 className="text-xs font-semibold uppercase tracking-wide text-neutral-600 mb-3">
+                          <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-300 mb-3">
                             Objectives by Status
                           </h5>
                           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -807,11 +807,11 @@ export default function AnalyticsPage() {
                                   status === 'AT_RISK' ? 'text-amber-600' :
                                   status === 'OFF_TRACK' || status === 'BLOCKED' ? 'text-rose-600' :
                                   status === 'COMPLETED' ? 'text-violet-600' :
-                                  'text-neutral-600'
+                                  'text-slate-300'
                                 }`}>
                                   {count}
                                 </div>
-                                <div className="text-xs text-neutral-500 mt-1 capitalize">
+                                <div className="text-xs text-slate-400 mt-1 capitalize">
                                   {status.replace('_', ' ').toLowerCase()}
                                 </div>
                               </div>
@@ -821,7 +821,7 @@ export default function AnalyticsPage() {
 
                         {/* Average Confidence */}
                         <div>
-                          <h5 className="text-xs font-semibold uppercase tracking-wide text-neutral-600 mb-3">
+                          <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-300 mb-3">
                             Average Confidence
                           </h5>
                           <div className="text-3xl font-bold text-foreground">
@@ -829,14 +829,14 @@ export default function AnalyticsPage() {
                               ? `${cycleHealth.avgConfidence.toFixed(1)}%`
                               : '—'}
                           </div>
-                          <div className="text-xs text-neutral-500 mt-1">
+                          <div className="text-xs text-slate-400 mt-1">
                             Based on latest check-ins across all Key Results
                           </div>
                         </div>
 
                         {/* Coverage Metrics */}
                         <div>
-                          <h5 className="text-xs font-semibold uppercase tracking-wide text-neutral-600 mb-3">
+                          <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-300 mb-3">
                             Coverage Metrics
                           </h5>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -844,7 +844,7 @@ export default function AnalyticsPage() {
                               <div className="text-2xl font-bold text-foreground">
                                 {cycleHealth.coverage.objectivesWith2PlusKRsPct.toFixed(1)}%
                               </div>
-                              <div className="text-xs text-neutral-500 mt-1">
+                              <div className="text-xs text-slate-400 mt-1">
                                 Objectives with ≥2 Key Results
                               </div>
                             </div>
@@ -852,7 +852,7 @@ export default function AnalyticsPage() {
                               <div className="text-2xl font-bold text-foreground">
                                 {cycleHealth.coverage.krsWithRecentCheckInPct.toFixed(1)}%
                               </div>
-                              <div className="text-xs text-neutral-500 mt-1">
+                              <div className="text-xs text-slate-400 mt-1">
                                 Key Results with check-in in last 14 days
                               </div>
                             </div>
@@ -860,7 +860,7 @@ export default function AnalyticsPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="text-sm text-neutral-500 text-center py-6">
+                      <div className="text-sm text-slate-400 text-center py-6">
                         No cycle health data available
                       </div>
                     )}
@@ -874,22 +874,22 @@ export default function AnalyticsPage() {
                   title="Execution Risk"
                   subtitle="Key Results overdue for check-in"
                 />
-                <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm">
                   {overdue.length === 0 ? (
-                    <div className="text-sm text-neutral-500 text-center py-6">
+                    <div className="text-sm text-slate-400 text-center py-6">
                       No overdue check-ins
                       {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
                     </div>
                   ) : (
                     <div className="space-y-4">
                       {overdue.slice(0, 5).map((item) => (
-                        <div key={item.krId} className="flex items-start gap-4 pb-4 border-b border-neutral-100 last:border-0">
+                        <div key={item.krId} className="flex items-start gap-4 pb-4 border-b border-slate-800 last:border-0">
                           <div className="w-2 h-2 rounded-full mt-2 bg-red-500" />
                           <div className="flex-1">
                             <p className="text-sm text-foreground">
                               <span className="font-medium">{item.krTitle}</span>
                             </p>
-                            <div className="mt-1 flex items-center gap-3 text-xs text-neutral-500">
+                            <div className="mt-1 flex items-center gap-3 text-xs text-slate-400">
                               <span>Owner: {item.owner.name || item.owner.id}</span>
                               <span>•</span>
                               <span className="text-red-600 font-medium">{item.daysOverdue}d overdue</span>
@@ -904,7 +904,7 @@ export default function AnalyticsPage() {
                         </div>
                       ))}
                       {overdue.length > 5 && (
-                        <div className="text-xs text-neutral-500 text-center pt-2">
+                        <div className="text-xs text-slate-400 text-center pt-2">
                           And {overdue.length - 5} more...
                         </div>
                       )}
@@ -919,24 +919,24 @@ export default function AnalyticsPage() {
                   title="Recent Activity"
                   subtitle="Last 10 check-ins"
                 />
-                <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm">
                   {feed.length === 0 ? (
-                    <div className="text-sm text-neutral-500 text-center py-6">
+                    <div className="text-sm text-slate-400 text-center py-6">
                       No recent activity.
                       {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
                     </div>
                   ) : (
                     <div className="space-y-4">
                       {feed.map((item) => (
-                        <div key={item.id} className="flex items-start gap-4 pb-4 border-b border-neutral-100 last:border-0">
+                        <div key={item.id} className="flex items-start gap-4 pb-4 border-b border-slate-800 last:border-0">
                           <div className="w-2 h-2 rounded-full mt-2 bg-blue-500" />
                           <div className="flex-1">
                             <p className="text-sm text-foreground">
                               <span className="font-medium">{item.userName || 'Unknown User'}</span>{' '}
-                              <span className="text-neutral-600">checked in</span>{' '}
+                              <span className="text-slate-300">checked in</span>{' '}
                               <span className="font-medium">{item.krTitle}</span>
                             </p>
-                            <div className="mt-1 flex items-center gap-3 text-xs text-neutral-500">
+                            <div className="mt-1 flex items-center gap-3 text-xs text-slate-400">
                               <span>Value: {item.value}</span>
                               <span>•</span>
                               <span>Confidence: {item.confidence}%</span>

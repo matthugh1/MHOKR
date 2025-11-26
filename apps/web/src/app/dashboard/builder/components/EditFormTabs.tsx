@@ -259,7 +259,7 @@ export function EditFormTabs({
           {/* Lock messaging */}
           {lockInfo.isLocked && (
             <>
-              <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-3 text-sm text-neutral-600 shadow-sm">
+              <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-3 text-sm text-slate-300 shadow-sm">
                 {lockInfo.message || 'This item is locked.'}
               </div>
             </>
@@ -954,7 +954,7 @@ export function EditFormTabs({
                   <ChevronDown className="h-4 w-4 opacity-50" />
                 </button>
                 {showOwnerDropdown && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-input rounded-md shadow-lg">
+                  <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-slate-700 rounded-md shadow-lg">
                     <div className="p-2">
                       <div className="relative">
                         <Search className="absolute left-2 top-2.5 h-4 w-4 text-slate-400" />
@@ -1017,7 +1017,7 @@ export function EditFormTabs({
                   <ChevronDown className="h-4 w-4 opacity-50" />
                 </button>
                 {showContextDropdown && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-input rounded-md shadow-lg">
+                  <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-slate-700 rounded-md shadow-lg">
                     <div className="p-2">
                       <Input
                         placeholder="Search context..."
@@ -1101,7 +1101,7 @@ export function EditFormTabs({
                   <ChevronDown className="h-4 w-4 opacity-50" />
                 </button>
                 {showParentDropdown && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-input rounded-md shadow-lg">
+                  <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-slate-700 rounded-md shadow-lg">
                     <div className="p-2">
                       <Input
                         placeholder="Search objectives..."

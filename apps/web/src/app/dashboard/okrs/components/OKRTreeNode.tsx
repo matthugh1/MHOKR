@@ -79,7 +79,7 @@ const getProgressBarColor = (status: string) => {
     case 'COMPLETED':
       return 'bg-green-600'
     default:
-      return 'bg-neutral-400'
+      return 'bg-slate-600'
   }
 }
 
@@ -181,7 +181,7 @@ export function TreeNode({
             type="button"
             onClick={handleToggle}
             className={cn(
-              'flex-shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-neutral-200 transition-colors',
+              'flex-shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-slate-800 transition-colors',
               !hasDirectChildren && 'invisible'
             )}
             aria-label={isExpanded ? 'Collapse' : 'Expand'}
@@ -303,7 +303,7 @@ export function TreeNode({
             type="button"
             onClick={handleToggle}
             className={cn(
-              'flex-shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-neutral-200 transition-colors',
+              'flex-shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-slate-800 transition-colors',
               !hasInitiatives && 'invisible'
             )}
             aria-label={isExpanded ? 'Collapse' : 'Expand'}
@@ -332,7 +332,7 @@ export function TreeNode({
             
             {/* Progress bar */}
             {krData.progress !== undefined && (
-              <div className="mt-1 w-full h-1 rounded-full bg-neutral-200 overflow-hidden">
+              <div className="mt-1 w-full h-1 rounded-full bg-slate-700 overflow-hidden">
                 <motion.div
                   className={cn('h-full rounded-full', progressBarColor)}
                   initial={false}
@@ -406,7 +406,7 @@ export function TreeNode({
             </div>
             
             {/* Divider line under initiative */}
-            <div className="mt-2 w-full h-px bg-neutral-200" />
+            <div className="mt-2 w-full h-px bg-slate-700" />
           </div>
         </div>
       </div>

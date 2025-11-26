@@ -82,16 +82,16 @@ export function EditPanel({
     return (
       <div
         className={cn(
-          'fixed right-0 top-0 h-full w-[450px] bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-out',
+          'fixed right-0 top-0 h-full w-[450px] bg-slate-900 shadow-2xl z-50 transform transition-transform duration-300 ease-out border-l border-slate-800',
           isOpen ? 'translate-x-0' : 'translate-x-full'
         )}
       >
         <div className="p-8">
-          <div className="rounded-xl border border-neutral-200 bg-white p-4 text-neutral-600 shadow-sm">
+          <div className="rounded-xl border border-slate-800 bg-slate-800/50 p-4 text-slate-300 shadow-sm">
             <p className="text-sm">
               This draft could not be loaded.
             </p>
-            <p className="text-xs text-neutral-500 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               {/* TODO [phase6-polish]: Add CTA to create a new objective */}
             </p>
           </div>
@@ -103,25 +103,25 @@ export function EditPanel({
   return (
     <div
       className={cn(
-        'fixed right-0 top-0 h-full w-[450px] bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-out',
+        'fixed right-0 top-0 h-full w-[450px] bg-slate-900 shadow-2xl z-50 transform transition-transform duration-300 ease-out border-l border-slate-800',
         isOpen ? 'translate-x-0' : 'translate-x-full'
       )}
     >
       {/* Header */}
-      <div className="sticky top-0 bg-white border-b border-neutral-200 z-10">
+      <div className="sticky top-0 bg-slate-900 border-b border-slate-800 z-10">
         <div className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">
             <Icon className={cn('h-5 w-5', typeInfo.color)} />
             <div>
-              <h3 className="text-lg font-semibold text-foreground">{typeInfo.label}</h3>
-              <p className="text-xs text-muted-foreground">Edit details</p>
+              <h3 className="text-lg font-semibold text-white">{typeInfo.label}</h3>
+              <p className="text-xs text-slate-400">Edit details</p>
             </div>
           </div>
           <Button
             variant="ghost"
             size="icon"
             onClick={onClose}
-            className="h-8 w-8"
+            className="h-8 w-8 text-slate-400 hover:text-white"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -134,21 +134,21 @@ export function EditPanel({
           {/* Lock messaging */}
           {lockMessage && (
             <>
-              <div className="mt-3 rounded-lg border border-neutral-100 bg-neutral-50 p-3 text-sm text-neutral-600 shadow-sm">
+              <div className="mt-3 rounded-lg border border-slate-700 bg-slate-800/50 p-3 text-sm text-slate-300 shadow-sm">
                 {lockMessage}
               </div>
             </>
           )}
           
           {/* Main content wrapped in design system card */}
-          <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+          <div className="rounded-xl border border-slate-800 bg-slate-800/30 p-4 shadow-sm">
             {children}
           </div>
         </div>
       </div>
 
       {/* Footer Actions */}
-      <div className="sticky bottom-0 bg-white border-t border-neutral-200 p-4">
+      <div className="sticky bottom-0 bg-slate-900 border-t border-slate-800 p-4">
         <div className="flex gap-2 justify-between items-center">
           {canDelete && (
             <div className="flex items-center gap-2">

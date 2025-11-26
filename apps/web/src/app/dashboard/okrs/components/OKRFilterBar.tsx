@@ -230,7 +230,7 @@ export function OKRFilterBar({
               "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none h-9",
               selectedStatus === null
                 ? "bg-violet-100 text-violet-700 border border-violet-300"
-                : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
+                : "bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700"
             )}
             onClick={() => handleStatusChange(null)}
             aria-label="Show all statuses"
@@ -242,8 +242,8 @@ export function OKRFilterBar({
             className={cn(
               "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none h-9",
               selectedStatus === 'NOT_STARTED'
-                ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
-                : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
+                ? "bg-slate-700 text-slate-200 border border-slate-600"
+                : "bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700"
             )}
             onClick={() => handleStatusChange('NOT_STARTED')}
             aria-label="Filter by status: Not started"
@@ -256,7 +256,7 @@ export function OKRFilterBar({
               "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none h-9",
               selectedStatus === 'ON_TRACK'
                 ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
-                : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
+                : "bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700"
             )}
             onClick={() => handleStatusChange('ON_TRACK')}
             aria-label="Filter by status: On track"
@@ -269,7 +269,7 @@ export function OKRFilterBar({
               "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none h-9",
               selectedStatus === 'AT_RISK'
                 ? "bg-amber-100 text-amber-700 border border-amber-300"
-                : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
+                : "bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700"
             )}
             onClick={() => handleStatusChange('AT_RISK')}
             aria-label="Filter by status: At risk"
@@ -282,7 +282,7 @@ export function OKRFilterBar({
               "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none h-9",
               selectedStatus === 'BLOCKED'
                 ? "bg-rose-100 text-rose-700 border border-rose-300"
-                : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
+                : "bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700"
             )}
             onClick={() => handleStatusChange('BLOCKED')}
             aria-label="Filter by status: Blocked"
@@ -294,8 +294,8 @@ export function OKRFilterBar({
             className={cn(
               "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none h-9",
               selectedStatus === 'COMPLETED'
-                ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
-                : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
+                ? "bg-slate-700 text-slate-200 border border-slate-600"
+                : "bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700"
             )}
             onClick={() => handleStatusChange('COMPLETED')}
             aria-label="Filter by status: Completed"
@@ -307,8 +307,8 @@ export function OKRFilterBar({
             className={cn(
               "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none h-9",
               selectedStatus === 'CANCELLED'
-                ? "bg-neutral-200 text-neutral-800 border border-neutral-400"
-                : "bg-neutral-100 text-neutral-700 border border-neutral-300 hover:bg-neutral-200"
+                ? "bg-slate-700 text-slate-200 border border-slate-600"
+                : "bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700"
             )}
             onClick={() => handleStatusChange('CANCELLED')}
             aria-label="Filter by status: Cancelled"

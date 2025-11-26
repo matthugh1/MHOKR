@@ -283,7 +283,7 @@ export function OKRHierarchyList({
           <>
             {/* Vertical line from parent */}
             <div 
-              className="absolute left-0 top-0 bottom-0 w-0.5 bg-neutral-300"
+              className="absolute left-0 top-0 bottom-0 w-0.5 bg-slate-700"
               style={{
                 left: `${indentLevel - 24}px`,
                 height: isLastChild ? 'calc(50% + 12px)' : '100%', // Stop at middle if last child
@@ -291,7 +291,7 @@ export function OKRHierarchyList({
             />
             {/* Horizontal line connecting to this node */}
             <div 
-              className="absolute top-6 w-6 h-0.5 bg-neutral-300"
+              className="absolute top-6 w-6 h-0.5 bg-slate-700"
               style={{
                 left: `${indentLevel - 24}px`,
               }}
@@ -299,7 +299,7 @@ export function OKRHierarchyList({
             {/* Continue vertical line if parent has more siblings */}
             {parentHasMoreSiblings && !isLastChild && (
               <div 
-                className="absolute top-0 bottom-0 w-0.5 bg-neutral-300"
+                className="absolute top-0 bottom-0 w-0.5 bg-slate-700"
                 style={{
                   left: `${indentLevel - 48}px`,
                 }}
@@ -317,11 +317,11 @@ export function OKRHierarchyList({
             }}
             className={cn(
               'absolute flex items-center justify-center w-6 h-6 rounded-md',
-              'bg-white border shadow-sm z-20',
+              'bg-slate-900 border shadow-sm z-20',
               'transition-all duration-200 ease-in-out',
               isHierarchyExpanded 
-                ? 'border-purple-300 bg-purple-50 shadow-md scale-105' 
-                : 'border-neutral-300 hover:bg-neutral-50 hover:border-neutral-400 hover:shadow-md',
+                ? 'border-purple-500 bg-purple-500/20 shadow-md scale-105' 
+                : 'border-slate-700 hover:bg-slate-800 hover:border-slate-600 hover:shadow-md',
               'focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-1',
               'active:scale-95' // Press animation
             )}
@@ -340,7 +340,7 @@ export function OKRHierarchyList({
               {isHierarchyExpanded ? (
                 <ChevronDown className="h-4 w-4 text-purple-600" />
               ) : (
-                <ChevronRight className="h-4 w-4 text-neutral-600" />
+                <ChevronRight className="h-4 w-4 text-slate-400" />
               )}
             </div>
           </button>
@@ -361,7 +361,7 @@ export function OKRHierarchyList({
                 "text-[9px] px-1.5 py-0.5 h-4 font-medium shadow-sm",
                 node.level === 1 && "bg-blue-50 text-blue-700 border-blue-200",
                 node.level === 2 && "bg-purple-50 text-purple-700 border-purple-200",
-                node.level >= 3 && "bg-neutral-50 text-neutral-600 border-neutral-200"
+                node.level >= 3 && "bg-neutral-50 text-slate-400 border-neutral-200"
               )}
             >
               Level {node.level + 1}
@@ -378,7 +378,7 @@ export function OKRHierarchyList({
               top: node.level > 0 ? '42px' : '26px', // Adjust if depth badge is shown
             }}
           >
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 h-5 bg-white/90 text-neutral-500 border-neutral-300 shadow-sm">
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 h-5 bg-slate-900/90 text-slate-400 border-slate-700 shadow-sm">
               {childCounts.objectives} {childCounts.objectives === 1 ? 'child' : 'children'}
             </Badge>
           </div>
@@ -391,7 +391,7 @@ export function OKRHierarchyList({
             "hover:opacity-100 opacity-0 group-hover:opacity-100",
             node.level === 0 && "bg-purple-50/30 border border-purple-100/50",
             node.level === 1 && "bg-blue-50/20 border border-blue-100/30",
-            node.level >= 2 && "bg-neutral-50/10"
+            node.level >= 2 && "bg-slate-800/10"
           )}
           style={{
             marginLeft: isChild ? `${indentLevel}px` : '0px',
