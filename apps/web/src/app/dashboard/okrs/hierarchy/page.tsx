@@ -386,6 +386,12 @@ function OKRHierarchyPageContent() {
   }, [selectedCycleId, selectedStatus, selectedScope, searchQuery, currentOrganization?.id])
 
   // Fetch OKR data
+  console.log('[HierarchyPage] Calling useHierarchyOKRs with:', {
+    tenantId: currentOrganization?.id,
+    cycleId: selectedCycleId,
+    scope: selectedScope,
+    enabled: !!currentOrganization?.id
+  })
   const { treeData, loading, error, refetch, loadChildren, loadingNodeIds, pagination } = useHierarchyOKRs({
     tenantId: currentOrganization?.id || null,
     cycleId: selectedCycleId,
@@ -395,6 +401,12 @@ function OKRHierarchyPageContent() {
     enabled: !!currentOrganization?.id,
     page: currentPage,
     pageSize,
+  })
+  console.log('[HierarchyPage] useHierarchyOKRs returned:', { 
+    hasTreeData: !!treeData, 
+    rootsCount: treeData?.roots?.length || 0,
+    loading, 
+    error 
   })
 
   // Lazy load users, workspaces, and teams only when needed (for forms)
@@ -444,9 +456,17 @@ function OKRHierarchyPageContent() {
 
   // Convert tree data to test page format
   const data = useMemo(() => {
+    console.log('[HierarchyPage] Computing data from treeData', { 
+      hasTrreeData: !!treeData, 
+      rootsCount: treeData?.roots?.length || 0,
+      loading,
+      error,
+      tenantId: currentOrganization?.id,
+      cycleId: selectedCycleId
+    })
     if (!treeData) return []
     return treeData.roots.map(root => convertNodeToItem(root, expandedIds))
-  }, [treeData, expandedIds])
+  }, [treeData, expandedIds, loading, error, currentOrganization?.id, selectedCycleId])
 
   // Find selected item in tree
   const selectedItem = useMemo(() => {
