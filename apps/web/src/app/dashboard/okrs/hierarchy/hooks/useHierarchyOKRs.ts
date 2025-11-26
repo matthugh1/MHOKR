@@ -54,10 +54,22 @@ export function useHierarchyOKRs({
 
   // Track which nodes have had their children loaded
   const loadedNodeIdsRef = useRef<Set<string>>(new Set())
+  
+  // Request counter to prevent race conditions
+  const requestCounterRef = useRef(0)
 
   // Fetch root objectives only (parentId is null)
   const fetchRootObjectives = useCallback(async (pageNum: number = 1) => {
+    // Increment request counter to track this request
+    requestCounterRef.current += 1
+    const thisRequestId = requestCounterRef.current
+    
+    console.log('[useHierarchyOKRs] fetchRootObjectives called', { 
+      requestId: thisRequestId, enabled, tenantId, cycleId, scope, pageNum 
+    })
+    
     if (!enabled || !tenantId) {
+      console.log('[useHierarchyOKRs] Early return - not enabled or no tenantId')
       setLoading(false)
       return
     }
@@ -92,9 +104,21 @@ export function useHierarchyOKRs({
         params.set('search', searchQuery)
       }
 
+      console.log('[useHierarchyOKRs] Fetching:', `/okr/overview?${params.toString()}`)
       const response = await api.get(`/okr/overview?${params.toString()}`)
+      
+      // Check if this request is still the latest one
+      if (thisRequestId !== requestCounterRef.current) {
+        console.log('[useHierarchyOKRs] Ignoring stale response', { 
+          thisRequestId, currentRequestId: requestCounterRef.current 
+        })
+        return // Ignore stale responses
+      }
+      
       const envelope = response.data || {}
       const objectives = envelope.objectives || []
+
+      console.log('[useHierarchyOKRs] Received', objectives.length, 'objectives, totalCount:', envelope.totalCount)
 
       // Backend now filters by parentId=null, so all returned objectives are roots
       const rootObjectives = objectives
@@ -107,8 +131,17 @@ export function useHierarchyOKRs({
 
       // Transform root objectives to hierarchical structure
       const transformed = transformToHierarchy(rootObjectives)
+      console.log('[useHierarchyOKRs] Transformed to', transformed.roots.length, 'root nodes')
       setTreeData(transformed)
     } catch (err: any) {
+      // Check if this request is still the latest one
+      if (thisRequestId !== requestCounterRef.current) {
+        console.log('[useHierarchyOKRs] Ignoring stale error', { 
+          thisRequestId, currentRequestId: requestCounterRef.current 
+        })
+        return // Ignore stale errors
+      }
+      
       console.error('[useHierarchyOKRs] Failed to fetch root OKRs:', err)
       if (err.response?.status === 403) {
         setError('You do not have permission to view OKRs. Please contact your administrator.')
@@ -119,7 +152,10 @@ export function useHierarchyOKRs({
       }
       setTreeData(null)
     } finally {
-      setLoading(false)
+      // Only update loading state if this is still the latest request
+      if (thisRequestId === requestCounterRef.current) {
+        setLoading(false)
+      }
     }
   }, [tenantId, cycleId, status, scope, searchQuery, enabled, pageSize])
 
@@ -267,6 +303,7 @@ export function useHierarchyOKRs({
 
   // Initial fetch of root objectives
   useEffect(() => {
+    console.log('[useHierarchyOKRs] useEffect triggered', { tenantId, cycleId, status, scope, searchQuery, currentPage })
     // Reset to page 1 when filters change (but not when just page changes)
     if (currentPage === 1 || page === 1) {
       loadedNodeIdsRef.current.clear()
