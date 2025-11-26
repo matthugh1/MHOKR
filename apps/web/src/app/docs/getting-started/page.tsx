@@ -6,14 +6,14 @@ export default function GettingStartedPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-bold text-neutral-900 mb-4">Getting Started</h1>
+        <h1 className="text-4xl font-bold text-foreground mb-4">Getting Started</h1>
         <p className="text-lg text-neutral-600">
           Welcome to OKR Nexus! This guide will help you get started with your account and learn the basics of the platform.
         </p>
       </div>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Creating an Account</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Creating an Account</h2>
         <p className="text-neutral-600">
           To get started with OKR Nexus, you'll need to create an account. Follow these steps:
         </p>
@@ -46,7 +46,7 @@ export default function GettingStartedPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Logging In</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Logging In</h2>
         <p className="text-neutral-600">
           Once you have an account, log in using your email and password:
         </p>
@@ -68,7 +68,7 @@ export default function GettingStartedPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Understanding the Dashboard</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Understanding the Dashboard</h2>
         <p className="text-neutral-600">
           After logging in, you'll see the main dashboard which provides an overview of your organization's OKR health:
         </p>
@@ -108,7 +108,7 @@ export default function GettingStartedPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Core Concepts</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Core Concepts</h2>
         <div className="space-y-4">
           <Card>
             <CardHeader>
@@ -177,7 +177,7 @@ export default function GettingStartedPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Next Steps</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Next Steps</h2>
         <p className="text-neutral-600">
           Now that you understand the basics, here's what to do next:
         </p>

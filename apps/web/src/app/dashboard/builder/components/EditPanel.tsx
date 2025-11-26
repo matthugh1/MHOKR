@@ -113,8 +113,8 @@ export function EditPanel({
           <div className="flex items-center gap-3">
             <Icon className={cn('h-5 w-5', typeInfo.color)} />
             <div>
-              <h3 className="text-lg font-semibold text-neutral-900">{typeInfo.label}</h3>
-              <p className="text-xs text-neutral-500">Edit details</p>
+              <h3 className="text-lg font-semibold text-foreground">{typeInfo.label}</h3>
+              <p className="text-xs text-muted-foreground">Edit details</p>
             </div>
           </div>
           <Button

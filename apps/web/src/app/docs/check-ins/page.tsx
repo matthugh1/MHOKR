@@ -5,14 +5,14 @@ export default function CheckInsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-bold text-neutral-900 mb-4">Check-ins Guide</h1>
+        <h1 className="text-4xl font-bold text-foreground mb-4">Check-ins Guide</h1>
         <p className="text-lg text-neutral-600">
           Learn how to update progress on key results through check-ins and track your team's execution discipline.
         </p>
       </div>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">What are Check-ins?</h2>
+        <h2 className="text-2xl font-semibold text-foreground">What are Check-ins?</h2>
         <p className="text-neutral-600">
           Check-ins are regular updates to key result progress. They capture:
         </p>
@@ -39,7 +39,7 @@ export default function CheckInsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Creating a Check-in</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Creating a Check-in</h2>
         <p className="text-neutral-600">
           To record a check-in for a key result:
         </p>
@@ -66,7 +66,7 @@ export default function CheckInsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Check-in Cadence</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Check-in Cadence</h2>
         <p className="text-neutral-600">
           Check-in cadence determines how often updates are expected:
         </p>
@@ -114,7 +114,7 @@ export default function CheckInsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Understanding Confidence Levels</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Understanding Confidence Levels</h2>
         <p className="text-neutral-600">
           Confidence indicates how likely you are to achieve the target:
         </p>
@@ -145,7 +145,7 @@ export default function CheckInsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Overdue Check-ins</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Overdue Check-ins</h2>
         <p className="text-neutral-600">
           The system tracks check-ins that are overdue based on cadence:
         </p>
@@ -156,25 +156,25 @@ export default function CheckInsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Dashboard</h3>
+              <h3 className="font-semibold text-foreground mb-1">Dashboard</h3>
               <p className="text-sm text-neutral-700">
                 The main dashboard shows a count of overdue check-ins and highlights key results that need updates.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">My Dashboard</h3>
+              <h3 className="font-semibold text-foreground mb-1">My Dashboard</h3>
               <p className="text-sm text-neutral-700">
                 Your personal dashboard lists all your key results with overdue check-ins.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">OKRs Page</h3>
+              <h3 className="font-semibold text-foreground mb-1">OKRs Page</h3>
               <p className="text-sm text-neutral-700">
                 Key results with overdue check-ins are marked with visual indicators and shown in the attention drawer.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Analytics</h3>
+              <h3 className="font-semibold text-foreground mb-1">Analytics</h3>
               <p className="text-sm text-neutral-700">
                 The analytics page provides detailed reports on overdue check-ins across the organization.
               </p>
@@ -184,7 +184,7 @@ export default function CheckInsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Team Check-in Summary</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Team Check-in Summary</h2>
         <p className="text-neutral-600">
           Managers can view a summary of team check-ins:
         </p>
@@ -208,7 +208,7 @@ export default function CheckInsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Meeting Mode</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Meeting Mode</h2>
         <p className="text-neutral-600">
           Meeting Mode provides a focused view for live check-in reviews:
         </p>
@@ -219,25 +219,25 @@ export default function CheckInsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Live Summary View</h3>
+              <h3 className="font-semibold text-foreground mb-1">Live Summary View</h3>
               <p className="text-sm text-neutral-700">
                 All team members' updates are shown in a single, easy-to-scan view perfect for live meetings.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Capture Decisions</h3>
+              <h3 className="font-semibold text-foreground mb-1">Capture Decisions</h3>
               <p className="text-sm text-neutral-700">
                 Add "Next actions / decisions" notes for each team member during the meeting.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">AI Suggestions</h3>
+              <h3 className="font-semibold text-foreground mb-1">AI Suggestions</h3>
               <p className="text-sm text-neutral-700">
                 Use the "Suggest draft" button to get AI-powered suggestions for next actions based on blockers and help requests.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Export Summary</h3>
+              <h3 className="font-semibold text-foreground mb-1">Export Summary</h3>
               <p className="text-sm text-neutral-700">
                 Export the meeting summary as JSON when done, including all updates and decisions.
               </p>
@@ -247,7 +247,7 @@ export default function CheckInsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Check-in Requests</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Check-in Requests</h2>
         <p className="text-neutral-600">
           Managers can request check-ins from team members:
         </p>
@@ -275,7 +275,7 @@ export default function CheckInsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Best Practices</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Best Practices</h2>
         <div className="space-y-3">
           <Card>
             <CardHeader>
@@ -306,14 +306,14 @@ export default function CheckInsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Related Guides</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Related Guides</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <Link href="/docs/okr-management" className="block p-4 border rounded-lg hover:shadow-md transition-shadow">
-            <h3 className="font-semibold text-neutral-900 mb-2">OKR Management</h3>
+            <h3 className="font-semibold text-foreground mb-2">OKR Management</h3>
             <p className="text-sm text-neutral-600">Learn about creating key results that you'll track with check-ins</p>
           </Link>
           <Link href="/docs/analytics" className="block p-4 border rounded-lg hover:shadow-md transition-shadow">
-            <h3 className="font-semibold text-neutral-900 mb-2">Analytics</h3>
+            <h3 className="font-semibold text-foreground mb-2">Analytics</h3>
             <p className="text-sm text-neutral-600">See how check-in data contributes to analytics and reporting</p>
           </Link>
         </div>

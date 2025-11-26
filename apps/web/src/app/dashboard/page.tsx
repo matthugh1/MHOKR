@@ -334,13 +334,13 @@ export default function DashboardPage() {
                               <div className="text-2xl font-semibold">{myOkrsCount}</div>
                             </div>
                             <div className="text-sm">
-                              <div className="font-medium text-neutral-900 mb-1">At Risk</div>
+                              <div className="font-medium text-card-foreground mb-1">At Risk</div>
                               <div className={`text-2xl font-semibold ${myOkrsAtRisk > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
                                 {myOkrsAtRisk}
                               </div>
                             </div>
                             <div className="text-sm">
-                              <div className="font-medium text-neutral-900 mb-1">Key Results</div>
+                              <div className="font-medium text-card-foreground mb-1">Key Results</div>
                               <div className="text-2xl font-semibold">
                                 {myOkrs.reduce((sum, obj) => sum + (obj.keyResults?.length || 0), 0)}
                               </div>

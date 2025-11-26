@@ -5,14 +5,14 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-bold text-neutral-900 mb-4">Dashboard Guide</h1>
+        <h1 className="text-4xl font-bold text-foreground mb-4">Dashboard Guide</h1>
         <p className="text-lg text-neutral-600">
           The dashboard provides a comprehensive overview of your organization's OKR health and performance.
         </p>
       </div>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Organization Health Dashboard</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Organization Health Dashboard</h2>
         <p className="text-neutral-600">
           The main dashboard shows key metrics about your organization's OKR performance:
         </p>
@@ -34,31 +34,31 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <h3 className="font-semibold text-neutral-900 mb-2">Total Objectives</h3>
+                <h3 className="font-semibold text-foreground mb-2">Total Objectives</h3>
                 <p className="text-sm text-neutral-700">
                   Shows the total number of objectives in your organization, along with how many are on track.
                 </p>
               </div>
               <div>
-                <h3 className="font-semibold text-neutral-900 mb-2">% On Track</h3>
+                <h3 className="font-semibold text-foreground mb-2">% On Track</h3>
                 <p className="text-sm text-neutral-700">
                   Percentage of objectives that are currently on track to be completed. Green indicates good progress, yellow indicates warning, and red indicates at risk.
                 </p>
               </div>
               <div>
-                <h3 className="font-semibold text-neutral-900 mb-2">% At Risk</h3>
+                <h3 className="font-semibold text-foreground mb-2">% At Risk</h3>
                 <p className="text-sm text-neutral-700">
                   Percentage of objectives that are at risk of not being completed. Lower is better.
                 </p>
               </div>
               <div>
-                <h3 className="font-semibold text-neutral-900 mb-2">Overdue Check-ins</h3>
+                <h3 className="font-semibold text-foreground mb-2">Overdue Check-ins</h3>
                 <p className="text-sm text-neutral-700">
                   Number of key results that have overdue check-ins. This indicates execution discipline.
                 </p>
               </div>
               <div>
-                <h3 className="font-semibold text-neutral-900 mb-2">Needs Attention</h3>
+                <h3 className="font-semibold text-foreground mb-2">Needs Attention</h3>
                 <p className="text-sm text-neutral-700">
                   Combined count of at-risk objectives and overdue check-ins that require follow-up.
                 </p>
@@ -85,7 +85,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Execution Health Section</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Execution Health Section</h2>
         <p className="text-neutral-600">
           This section shows how well your team is executing on OKRs:
         </p>
@@ -124,7 +124,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Operating Rhythm</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Operating Rhythm</h2>
         <p className="text-neutral-600">
           The operating rhythm section shows recent activity across your organization:
         </p>
@@ -148,7 +148,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">My Dashboard</h2>
+        <h2 className="text-2xl font-semibold text-foreground">My Dashboard</h2>
         <p className="text-neutral-600">
           Access your personal dashboard from the navigation menu to see:
         </p>
@@ -201,7 +201,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Understanding Status Indicators</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Understanding Status Indicators</h2>
         <div className="space-y-2">
           <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded">
             <div className="w-3 h-3 bg-green-500 rounded-full"></div>
@@ -235,14 +235,14 @@ export default function DashboardPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Related Guides</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Related Guides</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <Link href="/docs/okr-management" className="block p-4 border rounded-lg hover:shadow-md transition-shadow">
-            <h3 className="font-semibold text-neutral-900 mb-2">OKR Management</h3>
+            <h3 className="font-semibold text-foreground mb-2">OKR Management</h3>
             <p className="text-sm text-neutral-600">Learn how to create and manage objectives and key results</p>
           </Link>
           <Link href="/docs/analytics" className="block p-4 border rounded-lg hover:shadow-md transition-shadow">
-            <h3 className="font-semibold text-neutral-900 mb-2">Analytics</h3>
+            <h3 className="font-semibold text-foreground mb-2">Analytics</h3>
             <p className="text-sm text-neutral-600">Dive deeper into OKR performance and reporting</p>
           </Link>
         </div>

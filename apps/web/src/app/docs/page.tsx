@@ -13,7 +13,7 @@ export default function DocsHomePage() {
     <div className="space-y-12">
       {/* Hero Section */}
       <div className="text-center space-y-4 pb-8 border-b">
-        <h1 className="text-4xl font-bold text-neutral-900">
+        <h1 className="text-4xl font-bold text-foreground">
           OKR Nexus Documentation
         </h1>
         <p className="text-xl text-neutral-600 max-w-2xl mx-auto">
@@ -30,7 +30,7 @@ export default function DocsHomePage() {
 
       {/* Quick Start */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Quick Start</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Quick Start</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
@@ -73,7 +73,7 @@ export default function DocsHomePage() {
 
       {/* Feature Guides */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Feature Guides</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Feature Guides</h2>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <Card className="hover:shadow-lg transition-shadow">
             <CardHeader>
@@ -198,10 +198,10 @@ export default function DocsHomePage() {
 
       {/* Common Tasks */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Common Tasks</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Common Tasks</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="border rounded-lg p-4 space-y-2">
-            <h3 className="font-semibold text-neutral-900">Create Your First OKR</h3>
+            <h3 className="font-semibold text-foreground">Create Your First OKR</h3>
             <p className="text-sm text-neutral-600">
               Learn how to create objectives and key results in{' '}
               <Link href="/docs/okr-management#creating-objectives" className="text-violet-600 hover:underline">
@@ -210,7 +210,7 @@ export default function DocsHomePage() {
             </p>
           </div>
           <div className="border rounded-lg p-4 space-y-2">
-            <h3 className="font-semibold text-neutral-900">Update Progress</h3>
+            <h3 className="font-semibold text-foreground">Update Progress</h3>
             <p className="text-sm text-neutral-600">
               Record check-ins and track progress in{' '}
               <Link href="/docs/check-ins" className="text-violet-600 hover:underline">
@@ -219,7 +219,7 @@ export default function DocsHomePage() {
             </p>
           </div>
           <div className="border rounded-lg p-4 space-y-2">
-            <h3 className="font-semibold text-neutral-900">Visualize Alignment</h3>
+            <h3 className="font-semibold text-foreground">Visualize Alignment</h3>
             <p className="text-sm text-neutral-600">
               Use the visual builder to see OKR connections in{' '}
               <Link href="/docs/visual-builder" className="text-violet-600 hover:underline">
@@ -228,7 +228,7 @@ export default function DocsHomePage() {
             </p>
           </div>
           <div className="border rounded-lg p-4 space-y-2">
-            <h3 className="font-semibold text-neutral-900">Set Up Your Team</h3>
+            <h3 className="font-semibold text-foreground">Set Up Your Team</h3>
             <p className="text-sm text-neutral-600">
               Configure workspaces and teams in{' '}
               <Link href="/docs/settings" className="text-violet-600 hover:underline">

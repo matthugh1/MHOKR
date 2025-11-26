@@ -548,30 +548,30 @@ export default function CheckInsPage() {
                           <div className="space-y-4">
                             {/* What moved */}
                             <div>
-                              <div className="text-[11px] font-semibold text-neutral-700 uppercase tracking-wide mb-2">
+                              <div className="text-[11px] font-semibold text-card-foreground uppercase tracking-wide mb-2">
                                 What moved
                               </div>
-                              <p className="text-xs text-neutral-600 whitespace-pre-wrap">
+                              <p className="text-xs text-muted-foreground whitespace-pre-wrap">
                                 {whatMovedText}
                               </p>
                             </div>
 
                             {/* Blockers */}
                             <div>
-                              <div className="text-[11px] font-semibold text-rose-700 uppercase tracking-wide mb-2">
+                              <div className="text-[11px] font-semibold text-destructive uppercase tracking-wide mb-2">
                                 Blockers
                               </div>
-                              <p className="text-xs text-rose-600 whitespace-pre-wrap">
+                              <p className="text-xs text-destructive/90 whitespace-pre-wrap">
                                 {blockersText}
                               </p>
                             </div>
 
                             {/* Need help */}
                             <div>
-                              <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wide mb-2">
+                              <div className="text-[11px] font-semibold text-amber-500 uppercase tracking-wide mb-2">
                                 Need help
                               </div>
-                              <p className="text-xs text-amber-600 whitespace-pre-wrap">
+                              <p className="text-xs text-amber-400 whitespace-pre-wrap">
                                 {needHelpText}
                               </p>
                             </div>
@@ -579,7 +579,7 @@ export default function CheckInsPage() {
                             {/* Next actions / decisions */}
                             <div>
                               <div className="flex items-center justify-between mb-2">
-                                <div className="text-[11px] font-semibold text-neutral-700 uppercase tracking-wide">
+                                <div className="text-[11px] font-semibold text-card-foreground uppercase tracking-wide">
                                   Next actions / decisions
                                 </div>
                                 <Button
@@ -610,7 +610,7 @@ export default function CheckInsPage() {
                                 }
                                 placeholder="Capture decisions and follow-ups here..."
                                 rows={4}
-                                className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-y"
+                                className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-y"
                                 aria-label={`Next actions and decisions for ${member.userName}`}
                               />
                             </div>

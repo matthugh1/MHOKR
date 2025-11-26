@@ -141,14 +141,14 @@ export function OKRFilterBar({
       <div className="flex items-center gap-2 flex-wrap">
         {/* Unified Scope Selector */}
         {availableScopes.length > 0 && (
-          <div className="flex items-center gap-1 rounded-lg border border-neutral-300 bg-neutral-50 p-1" role="group" aria-label="Scope filter">
+          <div className="flex items-center gap-1 rounded-lg border border-border bg-muted p-1" role="group" aria-label="Scope filter">
             {availableScopes.includes('my') && (
               <button
                 className={cn(
                   "px-3 py-1.5 rounded-md text-sm font-semibold transition-colors focus:ring-2 focus:ring-ring focus:outline-none h-9",
                   selectedScope === 'my'
                     ? "bg-violet-600 text-white shadow-md hover:bg-violet-700"
-                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted-foreground/10"
                 )}
                 onClick={() => handleScopeChange('my')}
                 aria-pressed={selectedScope === 'my'}
@@ -162,7 +162,7 @@ export function OKRFilterBar({
                   "px-3 py-1.5 rounded-md text-sm font-semibold transition-colors focus:ring-2 focus:ring-ring focus:outline-none h-9",
                   selectedScope === 'team-workspace'
                     ? "bg-violet-600 text-white shadow-md hover:bg-violet-700"
-                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted-foreground/10"
                 )}
                 onClick={() => handleScopeChange('team-workspace')}
                 aria-pressed={selectedScope === 'team-workspace'}
@@ -176,7 +176,7 @@ export function OKRFilterBar({
                   "px-3 py-1.5 rounded-md text-sm font-semibold transition-colors focus:ring-2 focus:ring-ring focus:outline-none h-9",
                   selectedScope === 'tenant'
                     ? "bg-violet-600 text-white shadow-md hover:bg-violet-700"
-                    : "text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted-foreground/10"
                 )}
                 onClick={() => handleScopeChange('tenant')}
                 aria-pressed={selectedScope === 'tenant'}

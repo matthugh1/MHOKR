@@ -182,31 +182,31 @@ export function ProgressBreakdownTooltip({
         </TooltipTrigger>
         <TooltipContent
           side="top"
-          className="max-w-sm p-3 bg-white border shadow-lg"
+          className="max-w-sm p-3 bg-popover border shadow-lg"
         >
           <div className="space-y-3">
             <div>
-              <div className="text-xs font-semibold text-neutral-900 mb-1">
+              <div className="text-xs font-semibold text-popover-foreground mb-1">
                 Progress Breakdown
               </div>
-              <div className="text-xs text-neutral-600 leading-relaxed">
+              <div className="text-xs text-muted-foreground leading-relaxed">
                 {calculationString}
               </div>
             </div>
 
             {/* Visual breakdown bars */}
-            <div className="space-y-2 pt-2 border-t border-neutral-200">
+            <div className="space-y-2 pt-2 border-t border-border">
               {contributions.map((contribution) => (
                 <div key={contribution.id} className="space-y-1">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-neutral-700 truncate flex-1 min-w-0 mr-2">
+                    <span className="text-popover-foreground truncate flex-1 min-w-0 mr-2">
                       {contribution.title}
                     </span>
-                    <span className="text-neutral-600 font-medium whitespace-nowrap">
+                    <span className="text-muted-foreground font-medium whitespace-nowrap">
                       {Math.round(contribution.contributionPercent)}%
                     </span>
                   </div>
-                  <div className="w-full h-1.5 rounded-full bg-neutral-200 overflow-hidden">
+                  <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
                       style={{
@@ -214,7 +214,7 @@ export function ProgressBreakdownTooltip({
                       }}
                     />
                   </div>
-                  <div className="flex items-center justify-between text-[10px] text-neutral-500">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                     <span>{(contribution as any).type === 'CHILD_OBJECTIVE' ? 'Child Objective' : 'Key Result'} Progress: {Math.round(clampProgress(contribution.progress))}%</span>
                     <span>Weight: {contribution.weight}</span>
                   </div>
@@ -223,17 +223,17 @@ export function ProgressBreakdownTooltip({
             </div>
 
             {loading && (
-              <div className="text-[10px] text-neutral-500 pt-1 border-t border-neutral-200">
+              <div className="text-[10px] text-muted-foreground pt-1 border-t border-border">
                 Loading breakdown...
               </div>
             )}
             {error && (
-              <div className="text-[10px] text-red-500 pt-1 border-t border-neutral-200">
+              <div className="text-[10px] text-destructive pt-1 border-t border-border">
                 {error}
               </div>
             )}
             {!loading && !error && (
-              <div className="text-[10px] text-neutral-500 pt-1 border-t border-neutral-200">
+              <div className="text-[10px] text-muted-foreground pt-1 border-t border-border">
                 Progress calculated from {useApiData 
                   ? (breakdown?.calculationMethod === 'WEIGHTED_AVERAGE' ? `${itemType}s` : 'items')
                   : (keyResults.length > 0 ? 'Key Results' : 'Child Objectives')

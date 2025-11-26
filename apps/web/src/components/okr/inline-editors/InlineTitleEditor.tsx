@@ -110,13 +110,13 @@ export function InlineTitleEditor({
       >
         <div
           className={cn(
-            'flex items-start gap-1.5 text-neutral-900 break-words',
+            'flex items-start gap-1.5 text-foreground break-words',
             className
           )}
         >
           <span className="break-words">{value}</span>
           {lockReason && (
-            <Lock className="h-3 w-3 text-neutral-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <Lock className="h-3 w-3 text-muted-foreground flex-shrink-0 mt-0.5" aria-hidden="true" />
           )}
         </div>
       </RbacWhyTooltip>
@@ -142,7 +142,7 @@ export function InlineTitleEditor({
         />
         <div className="flex items-center gap-1 flex-shrink-0">
           {isSaving ? (
-            <Loader2 className="h-4 w-4 animate-spin text-neutral-400" aria-hidden="true" />
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden="true" />
           ) : (
             <>
               <button
@@ -151,7 +151,7 @@ export function InlineTitleEditor({
                   handleSave()
                 }}
                 disabled={isSaving}
-                className="p-0.5 hover:bg-neutral-100 rounded text-emerald-600"
+                className="p-0.5 hover:bg-muted rounded text-emerald-600"
                 aria-label="Save"
               >
                 <Check className="h-4 w-4" />
@@ -162,7 +162,7 @@ export function InlineTitleEditor({
                   handleCancel()
                 }}
                 disabled={isSaving}
-                className="p-0.5 hover:bg-neutral-100 rounded text-neutral-400"
+                className="p-0.5 hover:bg-muted rounded text-muted-foreground"
                 aria-label="Cancel"
               >
                 <X className="h-4 w-4" />
@@ -183,7 +183,7 @@ export function InlineTitleEditor({
         }
       }}
       className={cn(
-        'text-left break-words text-[14px] font-medium text-neutral-900 hover:bg-neutral-50 px-1 py-0.5 rounded -mx-1 transition-colors w-full',
+        'text-left break-words text-[14px] font-medium text-foreground hover:bg-muted px-1 py-0.5 rounded -mx-1 transition-colors w-full',
         className
       )}
       role="button"

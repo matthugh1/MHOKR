@@ -5,14 +5,14 @@ export default function SettingsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-bold text-neutral-900 mb-4">Settings & Administration</h1>
+        <h1 className="text-4xl font-bold text-foreground mb-4">Settings & Administration</h1>
         <p className="text-lg text-neutral-600">
           Configure your organization, workspaces, teams, and user permissions.
         </p>
       </div>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Overview</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Overview</h2>
         <p className="text-neutral-600">
           Settings are organized into several sections accessible from the sidebar under "Settings":
         </p>
@@ -47,7 +47,7 @@ export default function SettingsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Organization Settings</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Organization Settings</h2>
         <p className="text-neutral-600">
           Organization settings control your company-wide configuration:
         </p>
@@ -58,7 +58,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Organization Information</h3>
+              <h3 className="font-semibold text-foreground mb-1">Organization Information</h3>
               <ul className="list-disc list-inside space-y-1 text-sm text-neutral-700 ml-4">
                 <li>View organization name and details</li>
                 <li>Edit organization name and slug</li>
@@ -66,13 +66,13 @@ export default function SettingsPage() {
               </ul>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Members</h3>
+              <h3 className="font-semibold text-foreground mb-1">Members</h3>
               <p className="text-sm text-neutral-700">
                 View all members of your organization. See their roles, workspaces, and team assignments.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Workspaces</h3>
+              <h3 className="font-semibold text-foreground mb-1">Workspaces</h3>
               <p className="text-sm text-neutral-700">
                 See all workspaces within your organization and manage their settings.
               </p>
@@ -104,7 +104,7 @@ export default function SettingsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Workspace Settings</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Workspace Settings</h2>
         <p className="text-neutral-600">
           Workspaces represent departments, divisions, or other organizational units:
         </p>
@@ -115,7 +115,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Creating Workspaces</h3>
+              <h3 className="font-semibold text-foreground mb-1">Creating Workspaces</h3>
               <ol className="list-decimal list-inside space-y-1 text-sm text-neutral-700 ml-4">
                 <li>Navigate to Workspace Settings</li>
                 <li>Click "Create Workspace"</li>
@@ -125,13 +125,13 @@ export default function SettingsPage() {
               </ol>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Editing Workspaces</h3>
+              <h3 className="font-semibold text-foreground mb-1">Editing Workspaces</h3>
               <p className="text-sm text-neutral-700">
                 Edit workspace details, change owners, and manage workspace membership. Only workspace owners and organization admins can edit.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Workspace Members</h3>
+              <h3 className="font-semibold text-foreground mb-1">Workspace Members</h3>
               <p className="text-sm text-neutral-700">
                 View and manage who belongs to each workspace. Add or remove members as organizational structure changes.
               </p>
@@ -141,7 +141,7 @@ export default function SettingsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Team Settings</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Team Settings</h2>
         <p className="text-neutral-600">
           Teams are smaller groups within workspaces that own OKRs together:
         </p>
@@ -152,7 +152,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Creating Teams</h3>
+              <h3 className="font-semibold text-foreground mb-1">Creating Teams</h3>
               <ol className="list-decimal list-inside space-y-1 text-sm text-neutral-700 ml-4">
                 <li>Navigate to Team Settings</li>
                 <li>Click "Create Team"</li>
@@ -163,13 +163,13 @@ export default function SettingsPage() {
               </ol>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Team Members</h3>
+              <h3 className="font-semibold text-foreground mb-1">Team Members</h3>
               <p className="text-sm text-neutral-700">
                 Add or remove team members. Team members can own OKRs for that team and see team-specific OKRs.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Team OKRs</h3>
+              <h3 className="font-semibold text-foreground mb-1">Team OKRs</h3>
               <p className="text-sm text-neutral-700">
                 Teams can own objectives together. When creating an OKR, you can assign it to a team in addition to an individual owner.
               </p>
@@ -179,7 +179,7 @@ export default function SettingsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">People Settings</h2>
+        <h2 className="text-2xl font-semibold text-foreground">People Settings</h2>
         <p className="text-neutral-600">
           The People page manages all users in your organization:
         </p>
@@ -190,7 +190,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Creating Users</h3>
+              <h3 className="font-semibold text-foreground mb-1">Creating Users</h3>
               <ol className="list-decimal list-inside space-y-1 text-sm text-neutral-700 ml-4">
                 <li>Click "Create User" button</li>
                 <li>Fill in user details:
@@ -206,13 +206,13 @@ export default function SettingsPage() {
               </ol>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Viewing Users</h3>
+              <h3 className="font-semibold text-foreground mb-1">Viewing Users</h3>
               <p className="text-sm text-neutral-700">
                 The people table shows all users with their roles, workspaces, teams, and permissions. Use filters to find specific users.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Editing Users</h3>
+              <h3 className="font-semibold text-foreground mb-1">Editing Users</h3>
               <p className="text-sm text-neutral-700">
                 Click on a user to open the edit drawer. Update roles, workspace/team assignments, and view effective permissions.
               </p>
@@ -222,7 +222,7 @@ export default function SettingsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Roles and Permissions</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Roles and Permissions</h2>
         <p className="text-neutral-600">
           OKR Nexus uses a role-based access control (RBAC) system:
         </p>
@@ -257,7 +257,7 @@ export default function SettingsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Effective Permissions</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Effective Permissions</h2>
         <p className="text-neutral-600">
           The People page includes an RBAC Inspector to view effective permissions:
         </p>
@@ -278,7 +278,7 @@ export default function SettingsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">User Impersonation</h2>
+        <h2 className="text-2xl font-semibold text-foreground">User Impersonation</h2>
         <p className="text-neutral-600">
           Superusers can impersonate other users for support and debugging:
         </p>
@@ -296,7 +296,7 @@ export default function SettingsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Filtering and Search</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Filtering and Search</h2>
         <p className="text-neutral-600">
           The People page includes powerful filtering:
         </p>
@@ -314,7 +314,7 @@ export default function SettingsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Best Practices</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Best Practices</h2>
         <div className="space-y-3">
           <Card>
             <CardHeader>
@@ -358,14 +358,14 @@ export default function SettingsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Related Guides</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Related Guides</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <Link href="/docs/getting-started" className="block p-4 border rounded-lg hover:shadow-md transition-shadow">
-            <h3 className="font-semibold text-neutral-900 mb-2">Getting Started</h3>
+            <h3 className="font-semibold text-foreground mb-2">Getting Started</h3>
             <p className="text-sm text-neutral-600">Learn the basics before configuring your organization</p>
           </Link>
           <Link href="/docs/okr-management" className="block p-4 border rounded-lg hover:shadow-md transition-shadow">
-            <h3 className="font-semibold text-neutral-900 mb-2">OKR Management</h3>
+            <h3 className="font-semibold text-foreground mb-2">OKR Management</h3>
             <p className="text-sm text-neutral-600">Understand how settings affect OKR creation and visibility</p>
           </Link>
         </div>

@@ -282,12 +282,13 @@ function OKRHierarchyPageContent() {
   const { toast } = useToast()
 
   // Filter states from URL
-  const selectedCycleId = searchParams.get('cycleId')
+  const selectedCycleIdFromUrl = searchParams.get('cycleId')
   const selectedStatus = searchParams.get('status') as string | null
   const selectedScope = (searchParams.get('scope') as 'my' | 'team-workspace' | 'tenant') || 'tenant'
   const searchQuery = searchParams.get('search') || ''
 
   // Local state
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(selectedCycleIdFromUrl)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [checkInValue, setCheckInValue] = useState<string>('')
@@ -327,69 +328,119 @@ function OKRHierarchyPageContent() {
     tenantId: string
   }>>([])
 
-  // Fetch OKR data
-  const { treeData, loading, error, refetch } = useHierarchyOKRs({
-    tenantId: currentOrganization?.id || null,
-    cycleId: selectedCycleId,
-    status: selectedStatus,
-    scope: selectedScope,
-    searchQuery,
-    enabled: !!currentOrganization?.id,
-  })
+  // Track cycle initialization to set default active cycle
+  const cycleInitializedRef = useRef(false)
+  const lastOrgIdRef = useRef<string | null>(null)
 
-  // Load users, cycles, workspaces, and teams
+  // Load cycles early (needed for cycle selector and default selection)
   useEffect(() => {
-    const loadUsers = async () => {
-      try {
-        const response = await api.get('/users')
-        setAvailableUsers(response.data || [])
-      } catch (error: any) {
-        if (error.response?.status !== 403) {
-          console.error('Failed to load users:', error)
-        }
-        setAvailableUsers([])
-      }
-    }
-
     const loadCycles = async () => {
       try {
         const response = await api.get('/reports/cycles')
         const cycles = response.data || []
         setActiveCycles(cycles)
+        
+        // Set default active cycle on first load if no cycle is selected
+        if (!cycleInitializedRef.current && !selectedCycleIdFromUrl && cycles.length > 0) {
+          const activeCycle = cycles.find((c: any) => c.status === 'ACTIVE') || cycles[0]
+          if (activeCycle) {
+            setSelectedCycleId(activeCycle.id)
+            // Update URL to reflect default cycle
+            const params = new URLSearchParams(searchParams.toString())
+            params.set('cycleId', activeCycle.id)
+            router.push(`/dashboard/okrs/hierarchy?${params.toString()}`)
+            cycleInitializedRef.current = true
+          }
+        }
       } catch (error: any) {
         console.error('Failed to load cycles:', error)
         setActiveCycles([])
       }
     }
 
-    const loadWorkspaces = async () => {
-      if (!currentOrganization?.id) return
-      try {
-        const response = await api.get(`/workspaces?tenantId=${currentOrganization.id}`)
-        setWorkspaces(response.data || [])
-      } catch (error: any) {
-        console.error('Failed to load workspaces:', error)
-        setWorkspaces([])
-      }
-    }
-
-    const loadTeams = async () => {
-      try {
-        const response = await api.get(`/teams`)
-        setTeams(response.data || [])
-      } catch (error: any) {
-        console.error('Failed to load teams:', error)
-        setTeams([])
-      }
+    // Reset cycle initialization when organization changes
+    if (currentOrganization?.id !== lastOrgIdRef.current) {
+      cycleInitializedRef.current = false
+      lastOrgIdRef.current = currentOrganization?.id || null
     }
 
     if (currentOrganization?.id) {
-      loadUsers()
       loadCycles()
-      loadWorkspaces()
-      loadTeams()
     }
-  }, [currentOrganization?.id])
+  }, [currentOrganization?.id, selectedCycleIdFromUrl, searchParams, router])
+
+  // Sync cycleId from URL when it changes externally
+  useEffect(() => {
+    if (selectedCycleIdFromUrl !== selectedCycleId) {
+      setSelectedCycleId(selectedCycleIdFromUrl)
+    }
+  }, [selectedCycleIdFromUrl])
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageSize = 20
+
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [selectedCycleId, selectedStatus, selectedScope, searchQuery, currentOrganization?.id])
+
+  // Fetch OKR data
+  const { treeData, loading, error, refetch, loadChildren, loadingNodeIds, pagination } = useHierarchyOKRs({
+    tenantId: currentOrganization?.id || null,
+    cycleId: selectedCycleId,
+    status: selectedStatus,
+    scope: selectedScope,
+    searchQuery,
+    enabled: !!currentOrganization?.id,
+    page: currentPage,
+    pageSize,
+  })
+
+  // Lazy load users, workspaces, and teams only when needed (for forms)
+  const loadUsersLazy = useCallback(async () => {
+    if (availableUsers.length > 0) return // Already loaded
+    try {
+      const response = await api.get('/users')
+      setAvailableUsers(response.data || [])
+    } catch (error: any) {
+      if (error.response?.status !== 403) {
+        console.error('Failed to load users:', error)
+      }
+      setAvailableUsers([])
+    }
+  }, [availableUsers.length])
+
+  const loadWorkspacesLazy = useCallback(async () => {
+    if (workspaces.length > 0 || !currentOrganization?.id) return // Already loaded
+    try {
+      const response = await api.get(`/workspaces?tenantId=${currentOrganization.id}`)
+      setWorkspaces(response.data || [])
+    } catch (error: any) {
+      console.error('Failed to load workspaces:', error)
+      setWorkspaces([])
+    }
+  }, [workspaces.length, currentOrganization?.id])
+
+  const loadTeamsLazy = useCallback(async () => {
+    if (teams.length > 0) return // Already loaded
+    try {
+      const response = await api.get(`/teams`)
+      setTeams(response.data || [])
+    } catch (error: any) {
+      console.error('Failed to load teams:', error)
+      setTeams([])
+    }
+  }, [teams.length])
+
+  // Load users/workspaces/teams when edit or create tabs are opened
+  useEffect(() => {
+    if (sidePanelTab === 'edit' || sidePanelTab === 'create') {
+      loadUsersLazy()
+      loadWorkspacesLazy()
+      loadTeamsLazy()
+    }
+  }, [sidePanelTab, loadUsersLazy, loadWorkspacesLazy, loadTeamsLazy])
 
   // Convert tree data to test page format
   const data = useMemo(() => {
@@ -432,8 +483,19 @@ function OKRHierarchyPageContent() {
     }
   }, [selectedItem])
 
-  // Toggle expand/collapse
-  const toggleExpand = (id: string) => {
+  // Toggle expand/collapse with on-demand child loading
+  const toggleExpand = useCallback(async (id: string) => {
+    const isCurrentlyExpanded = expandedIds.has(id)
+    
+    if (!isCurrentlyExpanded) {
+      // Expanding - check if we need to load children
+      const node = treeData?.allNodes.get(id)
+      if (node && node.type === 'objective' && node.children.length === 0) {
+        // This objective has no children loaded yet, fetch them
+        await loadChildren(id)
+      }
+    }
+    
     setExpandedIds(prev => {
       const next = new Set(prev)
       if (next.has(id)) {
@@ -443,7 +505,7 @@ function OKRHierarchyPageContent() {
       }
       return next
     })
-  }
+  }, [expandedIds, treeData, loadChildren])
 
   // Handle check-in submission
   const handleCheckIn = useCallback(async () => {
@@ -687,15 +749,22 @@ function OKRHierarchyPageContent() {
           
           <div className="flex items-center gap-3 flex-1 min-w-0 z-10">
             {/* Expand/Collapse Icon */}
-            {item.children && item.children.length > 0 ? (
+            {item.type === 'objective' ? (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
                   toggleExpand(item.id)
                 }}
-                className="p-1 rounded hover:bg-slate-700 text-slate-400"
+                className="p-1 rounded hover:bg-slate-700 text-slate-400 disabled:opacity-50"
+                disabled={loadingNodeIds.has(item.id)}
               >
-                {item.expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {loadingNodeIds.has(item.id) ? (
+                  <div className="w-3.5 h-3.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                ) : item.expanded ? (
+                  <ChevronDown size={14} />
+                ) : (
+                  <ChevronRight size={14} />
+                )}
               </button>
             ) : (
               <div className="w-6" />
@@ -1010,9 +1079,9 @@ function OKRHierarchyPageContent() {
           {/* Two-Panel Workspace */}
           <div className="flex-1 flex overflow-hidden h-full min-h-0">
             {/* LEFT PANEL: The Cascade Tree */}
-            <div className="flex-1 overflow-y-auto bg-slate-900/30">
+            <div className="flex-1 flex flex-col bg-slate-900/30 min-h-0">
               {/* Toolbar */}
-              <div className="px-6 py-3 flex items-center justify-between border-b border-slate-800/50">
+              <div className="px-6 py-3 flex items-center justify-between border-b border-slate-800/50 flex-shrink-0">
                 <div className="flex gap-2">
                   <button className="px-3 py-1 text-xs font-medium bg-indigo-500/20 text-indigo-300 rounded-full">Hierarchy View</button>
                   <button className="px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-300 transition">Flat List</button>
@@ -1023,25 +1092,72 @@ function OKRHierarchyPageContent() {
                 </div>
               </div>
               
-              {/* Tree Content */}
-              {loading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="text-slate-500">Loading OKRs...</div>
-                </div>
-              ) : error ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="text-rose-500">{error}</div>
-                </div>
-              ) : (
-                <div className="py-2">
-                  {data.length > 0 ? (
-                    data.map(item => renderRow(item))
-                  ) : (
-                    <div className="flex items-center justify-center py-12">
-                      <div className="text-slate-500">No OKRs found</div>
+              {/* Scrollable Tree Content */}
+              <div className="flex-1 overflow-y-auto min-h-0">
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="text-slate-500">Loading OKRs...</div>
+                  </div>
+                ) : error ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="text-rose-500">{error}</div>
+                  </div>
+                ) : (
+                  <div className="py-2">
+                    {data.length > 0 ? (
+                      data.map(item => renderRow(item))
+                    ) : (
+                      <div className="flex items-center justify-center py-12">
+                        <div className="text-slate-500">No OKRs found</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              {/* Pagination Controls - Always visible at bottom */}
+              {!loading && !error && (
+                <nav className="flex-shrink-0 border-t border-slate-800 bg-slate-900/50 px-6 py-4 flex items-center justify-between gap-4 text-sm text-slate-400" aria-label="Pagination">
+                  <div className="text-slate-500" role="status">
+                    {pagination.totalCount > 0 ? (
+                      <>
+                        Showing {(pagination.currentPage - 1) * pagination.pageSize + 1} - {Math.min(pagination.currentPage * pagination.pageSize, pagination.totalCount)} of {pagination.totalCount} root objectives
+                        {pagination.totalPages > 1 && ` (Page ${pagination.currentPage} of ${pagination.totalPages})`}
+                      </>
+                    ) : (
+                      <>No objectives found</>
+                    )}
+                  </div>
+                  {pagination.totalPages > 1 && (
+                    <div className="flex items-center gap-4">
+                      <button
+                        className={cn(
+                          "rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-300",
+                          "focus:ring-offset-2 focus:ring-offset-slate-900"
+                        )}
+                        disabled={pagination.currentPage <= 1}
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        aria-label="Previous page"
+                      >
+                        ‹ Previous
+                      </button>
+                      <div className="tabular-nums text-slate-400" aria-current="page">
+                        Page {pagination.currentPage} of {pagination.totalPages}
+                      </div>
+                      <button
+                        className={cn(
+                          "rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-300",
+                          "focus:ring-offset-2 focus:ring-offset-slate-900"
+                        )}
+                        disabled={pagination.currentPage >= pagination.totalPages}
+                        onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
+                        aria-label="Next page"
+                      >
+                        Next ›
+                      </button>
                     </div>
                   )}
-                </div>
+                </nav>
               )}
             </div>
 

@@ -1039,7 +1039,7 @@ export default function BuilderPage() {
             <div className="max-w-[1600px] mx-auto px-6 py-3">
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <h1 className="text-xl font-semibold text-neutral-900">Visual OKR Builder</h1>
+                  <h1 className="text-xl font-semibold text-foreground">Visual OKR Builder</h1>
                   {badges.length > 0 && (
                     <div className="flex items-center gap-2">
                       {badges.map((badge, idx) => (
@@ -1114,7 +1114,7 @@ export default function BuilderPage() {
                     <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-100 flex items-center justify-center">
                       <Target className="h-8 w-8 text-blue-600" />
                     </div>
-                    <h2 className="text-xl font-semibold text-neutral-900 mb-2">Create Your First OKR</h2>
+                    <h2 className="text-xl font-semibold text-foreground mb-2">Create Your First OKR</h2>
                     <p className="text-sm text-neutral-600 mb-6">
                       Build your OKR structure visually. Start with an Objective, then add Key Results and Initiatives.
                     </p>

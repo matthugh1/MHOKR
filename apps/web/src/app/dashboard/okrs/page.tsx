@@ -1045,13 +1045,13 @@ function OKRsPageContent() {
               
               {/* View Toggle (List | Tree) - only show if feature flag enabled */}
               {okrTreeView && (
-                <div className="flex items-center gap-1 rounded-lg border border-neutral-300 bg-neutral-50 p-1" role="group" aria-label="View mode">
+                <div className="flex items-center gap-1 rounded-lg border border-border bg-muted p-1" role="group" aria-label="View mode">
                   <button
                     className={cn(
                       "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
                       viewMode === 'list'
-                        ? "bg-white text-neutral-900 shadow-sm"
-                        : "text-neutral-600 hover:text-neutral-900"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
                     )}
                     onClick={() => setViewMode('list')}
                     aria-pressed={viewMode === 'list'}
@@ -1062,8 +1062,8 @@ function OKRsPageContent() {
                     className={cn(
                       "px-3 py-1.5 rounded-md text-sm font-medium transition-colors focus:ring-2 focus:ring-ring focus:outline-none",
                       viewMode === 'tree'
-                        ? "bg-white text-neutral-900 shadow-sm"
-                        : "text-neutral-600 hover:text-neutral-900"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
                     )}
                     onClick={() => setViewMode('tree')}
                     aria-pressed={viewMode === 'tree'}

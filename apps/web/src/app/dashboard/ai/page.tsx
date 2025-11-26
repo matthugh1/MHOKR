@@ -108,14 +108,14 @@ export default function AIAssistantPage() {
               title="Executive summary draft"
               subtitle="AI-generated summary of current OKR status"
             />
-            <Card className="border-neutral-200">
+            <Card className="border-border">
               <CardHeader>
-                <CardTitle className="text-lg font-semibold text-neutral-900">
+                <CardTitle className="text-lg font-semibold text-card-foreground">
                   Weekly OKR Status Summary
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3 text-sm text-neutral-700">
+                <div className="space-y-3 text-sm text-card-foreground/90">
                   <p>
                     This week, your organization has {placeholderInsights.length} active insights 
                     from AI analysis. The system has identified several patterns in your OKR data 
@@ -126,7 +126,7 @@ export default function AIAssistantPage() {
                     Key highlights include trend analysis, risk detection, and blocker identification 
                     across your objectives and key results.
                   </p>
-                  <p className="text-xs text-neutral-500 italic">
+                  <p className="text-xs text-muted-foreground italic">
                     Note: This is a placeholder summary. Full AI-powered executive summaries will be 
                     available once backend integration is complete.
                   </p>

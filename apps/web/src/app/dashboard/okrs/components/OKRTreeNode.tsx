@@ -200,7 +200,7 @@ export function TreeNode({
           {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="text-sm font-semibold text-neutral-900 truncate">
+              <h4 className="text-sm font-semibold text-foreground truncate">
                 {objectiveData.title}
               </h4>
               <OkrBadge tone="neutral" className="text-[10px]">
@@ -322,7 +322,7 @@ export function TreeNode({
           {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="text-sm font-medium text-neutral-900 truncate">
+              <h4 className="text-sm font-medium text-foreground truncate">
                 {krData.title}
               </h4>
               <OkrBadge tone={statusBadge.tone}>

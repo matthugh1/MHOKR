@@ -910,7 +910,7 @@ function PeopleSettings() {
                       <Building2 className="h-4 w-4 text-slate-600" />
                       <div>
                         <Label className="text-xs text-slate-600">Tenant (auto-detected)</Label>
-                        <p className="text-sm font-medium text-slate-900">{organization.name}</p>
+                        <p className="text-sm font-medium text-foreground">{organization.name}</p>
                       </div>
                     </div>
                   </div>

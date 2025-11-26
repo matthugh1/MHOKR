@@ -5,14 +5,14 @@ export default function AIAssistantPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-bold text-neutral-900 mb-4">AI Assistant</h1>
+        <h1 className="text-4xl font-bold text-foreground mb-4">AI Assistant</h1>
         <p className="text-lg text-neutral-600">
           Get AI-powered insights, recommendations, and assistance for your OKRs.
         </p>
       </div>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Overview</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Overview</h2>
         <p className="text-neutral-600">
           OKR Nexus includes AI assistants that help you create better OKRs, understand alignment, and analyze progress. The AI Assistant page provides insights generated specifically for your organization.
         </p>
@@ -29,7 +29,7 @@ export default function AIAssistantPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Accessing AI Assistant</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Accessing AI Assistant</h2>
         <p className="text-neutral-600">
           To view AI-generated insights:
         </p>
@@ -40,7 +40,7 @@ export default function AIAssistantPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">AI Personas</h2>
+        <h2 className="text-2xl font-semibold text-foreground">AI Personas</h2>
         <p className="text-neutral-600">
           OKR Nexus includes three specialized AI personas (note: currently in development):
         </p>
@@ -100,7 +100,7 @@ export default function AIAssistantPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Generated Insights</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Generated Insights</h2>
         <p className="text-neutral-600">
           The AI Assistant page displays insights automatically generated for you:
         </p>
@@ -111,25 +111,25 @@ export default function AIAssistantPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Trend Analysis</h3>
+              <h3 className="font-semibold text-foreground mb-1">Trend Analysis</h3>
               <p className="text-sm text-neutral-700">
                 Identifies positive or negative trends in your OKR progress based on recent check-ins.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Risk Detection</h3>
+              <h3 className="font-semibold text-foreground mb-1">Risk Detection</h3>
               <p className="text-sm text-neutral-700">
                 Flags key results or objectives that haven't been updated recently or show concerning patterns.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Pattern Identification</h3>
+              <h3 className="font-semibold text-foreground mb-1">Pattern Identification</h3>
               <p className="text-sm text-neutral-700">
                 Identifies common blockers, themes, or issues mentioned across multiple OKRs.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Recommendations</h3>
+              <h3 className="font-semibold text-foreground mb-1">Recommendations</h3>
               <p className="text-sm text-neutral-700">
                 Suggests actions to improve OKR quality, alignment, or execution.
               </p>
@@ -139,7 +139,7 @@ export default function AIAssistantPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Risk Signals</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Risk Signals</h2>
         <p className="text-neutral-600">
           The AI Assistant monitors and highlights risk signals:
         </p>
@@ -181,7 +181,7 @@ export default function AIAssistantPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Executive Summary</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Executive Summary</h2>
         <p className="text-neutral-600">
           AI generates executive summaries of your OKR status:
         </p>
@@ -209,7 +209,7 @@ export default function AIAssistantPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Using AI in OKR Creation</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Using AI in OKR Creation</h2>
         <p className="text-neutral-600">
           While the AI Assistant page shows insights, AI assistance is also available during OKR creation:
         </p>
@@ -230,7 +230,7 @@ export default function AIAssistantPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Best Practices</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Best Practices</h2>
         <div className="space-y-3">
           <Card>
             <CardHeader>
@@ -257,14 +257,14 @@ export default function AIAssistantPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Related Guides</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Related Guides</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <Link href="/docs/okr-management" className="block p-4 border rounded-lg hover:shadow-md transition-shadow">
-            <h3 className="font-semibold text-neutral-900 mb-2">OKR Management</h3>
+            <h3 className="font-semibold text-foreground mb-2">OKR Management</h3>
             <p className="text-sm text-neutral-600">Learn how to create OKRs that AI can help improve</p>
           </Link>
           <Link href="/docs/analytics" className="block p-4 border rounded-lg hover:shadow-md transition-shadow">
-            <h3 className="font-semibold text-neutral-900 mb-2">Analytics</h3>
+            <h3 className="font-semibold text-foreground mb-2">Analytics</h3>
             <p className="text-sm text-neutral-600">See detailed analytics that complement AI insights</p>
           </Link>
         </div>

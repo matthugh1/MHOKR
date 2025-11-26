@@ -5,14 +5,14 @@ export default function VisualBuilderPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-bold text-neutral-900 mb-4">Visual Builder</h1>
+        <h1 className="text-4xl font-bold text-foreground mb-4">Visual Builder</h1>
         <p className="text-lg text-neutral-600">
           Create and visualize OKR hierarchies using drag-and-drop nodes and connections.
         </p>
       </div>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Overview</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Overview</h2>
         <p className="text-neutral-600">
           The Visual Builder provides an interactive, graph-based view of your OKRs. You can see relationships between objectives, key results, and initiatives, and create new OKRs directly in the visual interface.
         </p>
@@ -29,7 +29,7 @@ export default function VisualBuilderPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Getting Started</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Getting Started</h2>
         <p className="text-neutral-600">
           To access the Visual Builder:
         </p>
@@ -41,7 +41,7 @@ export default function VisualBuilderPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Understanding Nodes</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Understanding Nodes</h2>
         <p className="text-neutral-600">
           The Visual Builder uses three types of nodes to represent OKRs:
         </p>
@@ -100,7 +100,7 @@ export default function VisualBuilderPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Node Connections</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Node Connections</h2>
         <p className="text-neutral-600">
           Connections show the hierarchical relationships between OKRs:
         </p>
@@ -111,19 +111,19 @@ export default function VisualBuilderPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Objective → Key Result</h3>
+              <h3 className="font-semibold text-foreground mb-1">Objective → Key Result</h3>
               <p className="text-sm text-neutral-700">
                 Key results are connected to their parent objectives. These connections show how progress on key results contributes to objective completion.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Key Result → Initiative</h3>
+              <h3 className="font-semibold text-foreground mb-1">Key Result → Initiative</h3>
               <p className="text-sm text-neutral-700">
                 Initiatives are connected to the key results they support. This shows the work that drives progress on key results.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Alignment Connections</h3>
+              <h3 className="font-semibold text-foreground mb-1">Alignment Connections</h3>
               <p className="text-sm text-neutral-700">
                 Optional connections can show alignment between objectives across different levels of the organization (e.g., company → department → team).
               </p>
@@ -133,7 +133,7 @@ export default function VisualBuilderPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Creating OKRs in the Builder</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Creating OKRs in the Builder</h2>
         <p className="text-neutral-600">
           You can create new OKRs directly from the visual builder:
         </p>
@@ -158,7 +158,7 @@ export default function VisualBuilderPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Editing OKRs</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Editing OKRs</h2>
         <p className="text-neutral-600">
           To edit an OKR in the visual builder:
         </p>
@@ -178,7 +178,7 @@ export default function VisualBuilderPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Canvas Navigation</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Canvas Navigation</h2>
         <p className="text-neutral-600">
           Navigate and manipulate the canvas with these controls:
         </p>
@@ -213,7 +213,7 @@ export default function VisualBuilderPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Mini-map</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Mini-map</h2>
         <p className="text-neutral-600">
           The mini-map in the bottom-right corner provides:
         </p>
@@ -230,7 +230,7 @@ export default function VisualBuilderPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Auto-Layout</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Auto-Layout</h2>
         <p className="text-neutral-600">
           The visual builder automatically arranges nodes in a hierarchical layout:
         </p>
@@ -252,7 +252,7 @@ export default function VisualBuilderPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Filtering and Search</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Filtering and Search</h2>
         <p className="text-neutral-600">
           Filter what appears on the canvas:
         </p>
@@ -263,25 +263,25 @@ export default function VisualBuilderPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">By Cycle</h3>
+              <h3 className="font-semibold text-foreground mb-1">By Cycle</h3>
               <p className="text-sm text-neutral-700">
                 Select a cycle from the dropdown to show only OKRs from that time period.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">By Workspace/Team</h3>
+              <h3 className="font-semibold text-foreground mb-1">By Workspace/Team</h3>
               <p className="text-sm text-neutral-700">
                 Filter to show only OKRs from specific workspaces or teams.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">By Status</h3>
+              <h3 className="font-semibold text-foreground mb-1">By Status</h3>
               <p className="text-sm text-neutral-700">
                 Show or hide OKRs based on their status (on track, at risk, etc.).
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Search</h3>
+              <h3 className="font-semibold text-foreground mb-1">Search</h3>
               <p className="text-sm text-neutral-700">
                 Use the search box to find specific OKRs. Matching nodes will be highlighted.
               </p>
@@ -291,7 +291,7 @@ export default function VisualBuilderPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Export and Sharing</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Export and Sharing</h2>
         <p className="text-neutral-600">
           You can export the visual view:
         </p>
@@ -308,7 +308,7 @@ export default function VisualBuilderPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Best Practices</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Best Practices</h2>
         <div className="space-y-3">
           <Card>
             <CardHeader>
@@ -339,10 +339,10 @@ export default function VisualBuilderPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Related Guides</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Related Guides</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <Link href="/docs/okr-management" className="block p-4 border rounded-lg hover:shadow-md transition-shadow">
-            <h3 className="font-semibold text-neutral-900 mb-2">OKR Management</h3>
+            <h3 className="font-semibold text-foreground mb-2">OKR Management</h3>
             <p className="text-sm text-neutral-600">Learn more about creating and managing OKRs in list view</p>
           </Link>
         </div>

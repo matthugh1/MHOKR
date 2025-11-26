@@ -5,14 +5,14 @@ export default function OKRManagementPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-bold text-neutral-900 mb-4">OKR Management</h1>
+        <h1 className="text-4xl font-bold text-foreground mb-4">OKR Management</h1>
         <p className="text-lg text-neutral-600">
           Learn how to create, edit, and manage objectives, key results, and initiatives in OKR Nexus.
         </p>
       </div>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Overview</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Overview</h2>
         <p className="text-neutral-600">
           The OKRs page is where you manage all your objectives, key results, and initiatives. This is the central hub for OKR operations in your organization.
         </p>
@@ -29,7 +29,7 @@ export default function OKRManagementPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900" id="creating-objectives">Creating Objectives</h2>
+        <h2 className="text-2xl font-semibold text-foreground" id="creating-objectives">Creating Objectives</h2>
         <p className="text-neutral-600">
           Objectives are high-level goals that define what you want to achieve. To create an objective:
         </p>
@@ -73,7 +73,7 @@ export default function OKRManagementPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Creating Key Results</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Creating Key Results</h2>
         <p className="text-neutral-600">
           Key Results are measurable outcomes that indicate progress toward an objective. To create a key result:
         </p>
@@ -117,7 +117,7 @@ export default function OKRManagementPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Creating Initiatives</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Creating Initiatives</h2>
         <p className="text-neutral-600">
           Initiatives are specific projects or activities that drive progress on key results:
         </p>
@@ -145,7 +145,7 @@ export default function OKRManagementPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Editing OKRs</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Editing OKRs</h2>
         <p className="text-neutral-600">
           You can edit objectives, key results, and initiatives:
         </p>
@@ -199,7 +199,7 @@ export default function OKRManagementPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Filtering and Search</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Filtering and Search</h2>
         <p className="text-neutral-600">
           The OKRs page includes powerful filtering and search capabilities:
         </p>
@@ -210,37 +210,37 @@ export default function OKRManagementPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">By Cycle</h3>
+              <h3 className="font-semibold text-foreground mb-1">By Cycle</h3>
               <p className="text-sm text-neutral-700">
                 Use the cycle selector to filter OKRs by time period. Shows only active cycles by default.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">By Workspace</h3>
+              <h3 className="font-semibold text-foreground mb-1">By Workspace</h3>
               <p className="text-sm text-neutral-700">
                 Filter to see OKRs from specific workspaces within your organization.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">By Team</h3>
+              <h3 className="font-semibold text-foreground mb-1">By Team</h3>
               <p className="text-sm text-neutral-700">
                 Narrow down to OKRs owned by specific teams.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">By Owner</h3>
+              <h3 className="font-semibold text-foreground mb-1">By Owner</h3>
               <p className="text-sm text-neutral-700">
                 Filter to see OKRs owned by specific individuals.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">By Status</h3>
+              <h3 className="font-semibold text-foreground mb-1">By Status</h3>
               <p className="text-sm text-neutral-700">
                 Filter by status: On Track, At Risk, Off Track, or Completed.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Search</h3>
+              <h3 className="font-semibold text-foreground mb-1">Search</h3>
               <p className="text-sm text-neutral-700">
                 Use the search box to find OKRs by title, description, or owner name.
               </p>
@@ -250,7 +250,7 @@ export default function OKRManagementPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Viewing OKRs</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Viewing OKRs</h2>
         <p className="text-neutral-600">
           OKRs are displayed in a list view with expandable rows:
         </p>
@@ -261,25 +261,25 @@ export default function OKRManagementPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Expandable Rows</h3>
+              <h3 className="font-semibold text-foreground mb-1">Expandable Rows</h3>
               <p className="text-sm text-neutral-700">
                 Click on an objective row to expand and see its key results and initiatives. Expand multiple objectives to compare them side-by-side.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Progress Indicators</h3>
+              <h3 className="font-semibold text-foreground mb-1">Progress Indicators</h3>
               <p className="text-sm text-neutral-700">
                 Visual progress bars show completion percentage. Status badges indicate if objectives are on track, at risk, or off track.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Quick Actions</h3>
+              <h3 className="font-semibold text-foreground mb-1">Quick Actions</h3>
               <p className="text-sm text-neutral-700">
                 Hover over rows to see quick action buttons for creating key results, initiatives, and check-ins.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Activity Drawer</h3>
+              <h3 className="font-semibold text-foreground mb-1">Activity Drawer</h3>
               <p className="text-sm text-neutral-700">
                 Click the activity icon to see the full history of changes, check-ins, and updates for any OKR.
               </p>
@@ -289,7 +289,7 @@ export default function OKRManagementPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Deleting OKRs</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Deleting OKRs</h2>
         <p className="text-neutral-600">
           To delete an objective, key result, or initiative:
         </p>
@@ -313,7 +313,7 @@ export default function OKRManagementPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Cycle Health Strip</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Cycle Health Strip</h2>
         <p className="text-neutral-600">
           At the top of the OKRs page, you'll see a cycle health strip that provides quick insights:
         </p>
@@ -331,7 +331,7 @@ export default function OKRManagementPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Attention Drawer</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Attention Drawer</h2>
         <p className="text-neutral-600">
           The attention drawer highlights OKRs that need your focus:
         </p>
@@ -352,7 +352,7 @@ export default function OKRManagementPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Permissions and Visibility</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Permissions and Visibility</h2>
         <p className="text-neutral-600">
           OKR visibility is controlled by permissions and settings:
         </p>
@@ -388,14 +388,14 @@ export default function OKRManagementPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Related Guides</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Related Guides</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <Link href="/docs/check-ins" className="block p-4 border rounded-lg hover:shadow-md transition-shadow">
-            <h3 className="font-semibold text-neutral-900 mb-2">Check-ins</h3>
+            <h3 className="font-semibold text-foreground mb-2">Check-ins</h3>
             <p className="text-sm text-neutral-600">Learn how to update key result progress with check-ins</p>
           </Link>
           <Link href="/docs/visual-builder" className="block p-4 border rounded-lg hover:shadow-md transition-shadow">
-            <h3 className="font-semibold text-neutral-900 mb-2">Visual Builder</h3>
+            <h3 className="font-semibold text-foreground mb-2">Visual Builder</h3>
             <p className="text-sm text-neutral-600">Visualize OKR hierarchies and relationships</p>
           </Link>
         </div>

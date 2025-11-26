@@ -507,7 +507,7 @@ export default function AnalyticsPage() {
                           className="flex items-center justify-between pb-3 border-b border-neutral-100 last:border-0"
                         >
                           <div className="flex-1">
-                            <p className="text-sm font-medium text-neutral-900">
+                            <p className="text-sm font-medium text-foreground">
                               {pillar.pillarName}
                             </p>
                           </div>
@@ -602,7 +602,7 @@ export default function AnalyticsPage() {
 
                               return (
                                 <tr key={total.dimensionId || 'unassigned'} className="border-b border-neutral-100 hover:bg-neutral-50">
-                                  <td className="py-2 px-3 font-medium text-neutral-900">
+                                  <td className="py-2 px-3 font-medium text-foreground">
                                     {total.dimensionName}
                                   </td>
                                   <td className="text-center py-2 px-2">
@@ -665,7 +665,7 @@ export default function AnalyticsPage() {
                                       <span className="text-neutral-400">0</span>
                                     )}
                                   </td>
-                                  <td className="text-center py-2 px-2 font-semibold text-neutral-900">
+                                  <td className="text-center py-2 px-2 font-semibold text-foreground">
                                     {total.total > 0 ? (
                                       <Link
                                         href={buildFilterUrl()}
@@ -701,7 +701,7 @@ export default function AnalyticsPage() {
                   ) : (
                     <div className="space-y-4">
                       <div className="flex items-center justify-between mb-4">
-                        <div className="text-sm font-semibold text-neutral-900">
+                        <div className="text-sm font-semibold text-foreground">
                           {atRiskItems.length} item{atRiskItems.length !== 1 ? 's' : ''} at risk
                         </div>
                         <Link
@@ -741,7 +741,7 @@ export default function AnalyticsPage() {
                             <div className="flex-1">
                               <Link
                                 href={buildFilterUrl()}
-                                className="text-sm font-medium text-neutral-900 hover:text-violet-600 hover:underline"
+                                className="text-sm font-medium text-foreground hover:text-violet-600 hover:underline"
                               >
                                 {item.title}
                               </Link>
@@ -824,7 +824,7 @@ export default function AnalyticsPage() {
                           <h5 className="text-xs font-semibold uppercase tracking-wide text-neutral-600 mb-3">
                             Average Confidence
                           </h5>
-                          <div className="text-3xl font-bold text-neutral-900">
+                          <div className="text-3xl font-bold text-foreground">
                             {cycleHealth.avgConfidence !== null
                               ? `${cycleHealth.avgConfidence.toFixed(1)}%`
                               : '—'}
@@ -841,7 +841,7 @@ export default function AnalyticsPage() {
                           </h5>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                              <div className="text-2xl font-bold text-neutral-900">
+                              <div className="text-2xl font-bold text-foreground">
                                 {cycleHealth.coverage.objectivesWith2PlusKRsPct.toFixed(1)}%
                               </div>
                               <div className="text-xs text-neutral-500 mt-1">
@@ -849,7 +849,7 @@ export default function AnalyticsPage() {
                               </div>
                             </div>
                             <div>
-                              <div className="text-2xl font-bold text-neutral-900">
+                              <div className="text-2xl font-bold text-foreground">
                                 {cycleHealth.coverage.krsWithRecentCheckInPct.toFixed(1)}%
                               </div>
                               <div className="text-xs text-neutral-500 mt-1">
@@ -886,7 +886,7 @@ export default function AnalyticsPage() {
                         <div key={item.krId} className="flex items-start gap-4 pb-4 border-b border-neutral-100 last:border-0">
                           <div className="w-2 h-2 rounded-full mt-2 bg-red-500" />
                           <div className="flex-1">
-                            <p className="text-sm text-neutral-900">
+                            <p className="text-sm text-foreground">
                               <span className="font-medium">{item.krTitle}</span>
                             </p>
                             <div className="mt-1 flex items-center gap-3 text-xs text-neutral-500">
@@ -931,7 +931,7 @@ export default function AnalyticsPage() {
                         <div key={item.id} className="flex items-start gap-4 pb-4 border-b border-neutral-100 last:border-0">
                           <div className="w-2 h-2 rounded-full mt-2 bg-blue-500" />
                           <div className="flex-1">
-                            <p className="text-sm text-neutral-900">
+                            <p className="text-sm text-foreground">
                               <span className="font-medium">{item.userName || 'Unknown User'}</span>{' '}
                               <span className="text-neutral-600">checked in</span>{' '}
                               <span className="font-medium">{item.krTitle}</span>

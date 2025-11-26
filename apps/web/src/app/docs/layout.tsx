@@ -80,14 +80,14 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
                     <Link
                       key={result.href}
                       href={result.href}
-                      className="block px-4 py-3 hover:bg-neutral-50 border-b border-neutral-100 last:border-0"
+                      className="block px-4 py-3 hover:bg-muted border-b border-border last:border-0"
                       onClick={() => {
                         setSearchQuery('')
                         setShowSearch(false)
                       }}
                     >
-                      <div className="font-medium text-neutral-900">{result.title}</div>
-                      <div className="text-xs text-neutral-500 mt-1">{result.keywords}</div>
+                      <div className="font-medium text-foreground">{result.title}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{result.keywords}</div>
                     </Link>
                   ))}
                 </div>
@@ -95,7 +95,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
             </div>
           </div>
 
-          <Link href="/dashboard" className="ml-4 text-sm text-neutral-600 hover:text-neutral-900">
+          <Link href="/dashboard" className="ml-4 text-sm text-muted-foreground hover:text-foreground">
             Back to App
           </Link>
         </div>

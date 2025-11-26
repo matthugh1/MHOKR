@@ -1647,7 +1647,7 @@ export function ObjectiveRow({
                                       ariaLabel="Edit key result title"
                                       resource={objectiveForHook}
                                       disabled={false}
-                                      className="text-[13px] font-medium text-neutral-900"
+                                      className="text-[13px] font-medium text-foreground"
                                     />
                                   </div>
                                   {/* Edit button - visible when user can edit */}
@@ -2086,7 +2086,7 @@ export function ObjectiveRow({
                                                         <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                                                           <div className="flex items-center gap-2">
                                                             <Rocket className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-                                                            <div className="text-[12px] text-neutral-900 font-medium">
+                                                            <div className="text-[12px] text-foreground font-medium">
                                                               {init.title}
                                                             </div>
                                                             <OkrBadge tone={initStatusBadge.tone}>
@@ -2215,7 +2215,7 @@ export function ObjectiveRow({
                                                         <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                                                           <div className="flex items-center gap-2">
                                                             <Rocket className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-                                                            <div className="text-[12px] text-neutral-900 font-medium">
+                                                            <div className="text-[12px] text-foreground font-medium">
                                                               {init.title}
                                                             </div>
                                                             <OkrBadge tone={initStatusBadge.tone}>
@@ -2322,7 +2322,7 @@ export function ObjectiveRow({
                                                         <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                                                           <div className="flex items-center gap-2">
                                                             <Rocket className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-                                                            <div className="text-[12px] text-neutral-900 font-medium">
+                                                            <div className="text-[12px] text-foreground font-medium">
                                                               {init.title}
                                                             </div>
                                                             <OkrBadge tone={initStatusBadge.tone}>
@@ -2377,7 +2377,7 @@ export function ObjectiveRow({
                                           {/* Completed Initiatives (collapsed by default, can expand) */}
                                           {groupedInitiatives.COMPLETED.length > 0 && (
                                             <details className="group">
-                                              <summary className="cursor-pointer text-[11px] font-medium text-neutral-600 hover:text-neutral-900 mb-2 flex items-center gap-2">
+                                              <summary className="cursor-pointer text-[11px] font-medium text-neutral-600 hover:text-foreground mb-2 flex items-center gap-2">
                                                 <ChevronDown className="h-3 w-3 text-neutral-400 group-open:rotate-180 transition-transform" />
                                                 Completed ({groupedInitiatives.COMPLETED.length})
                                               </summary>
@@ -2537,7 +2537,7 @@ export function ObjectiveRow({
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
-                                      <div className="text-[13px] text-neutral-900 font-medium">
+                                      <div className="text-[13px] text-foreground font-medium">
                                         {init.title}
                                       </div>
                                       <OkrBadge tone={initStatusBadge.tone}>
@@ -2642,7 +2642,7 @@ export function ObjectiveRow({
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
-                                      <div className="text-[13px] text-neutral-900 font-medium">
+                                      <div className="text-[13px] text-foreground font-medium">
                                         {init.title}
                                       </div>
                                       <OkrBadge tone={initStatusBadge.tone}>
@@ -2738,7 +2738,7 @@ export function ObjectiveRow({
                                 <div className="flex items-start justify-between gap-2">
                                   <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                                     <div className="flex items-center gap-2">
-                                      <div className="text-[13px] text-neutral-900 font-medium">
+                                      <div className="text-[13px] text-foreground font-medium">
                                         {init.title}
                                       </div>
                                       <OkrBadge tone={initStatusBadge.tone}>
@@ -2801,7 +2801,7 @@ export function ObjectiveRow({
                     {/* Completed Initiatives */}
                     {groupedInitiatives.COMPLETED.length > 0 && (
                       <details className="group">
-                        <summary className="cursor-pointer text-[12px] font-medium text-neutral-600 hover:text-neutral-900 mb-2 flex items-center gap-2">
+                        <summary className="cursor-pointer text-[12px] font-medium text-neutral-600 hover:text-foreground mb-2 flex items-center gap-2">
                           <ChevronDown className="h-3.5 w-3.5 text-neutral-400 group-open:rotate-180 transition-transform" />
                           Completed ({groupedInitiatives.COMPLETED.length})
                         </summary>

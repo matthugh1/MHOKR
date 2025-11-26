@@ -5,14 +5,14 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-bold text-neutral-900 mb-4">Analytics & Reporting</h1>
+        <h1 className="text-4xl font-bold text-foreground mb-4">Analytics & Reporting</h1>
         <p className="text-lg text-neutral-600">
           Deep insights into your organization's OKR performance and execution health.
         </p>
       </div>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Overview</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Overview</h2>
         <p className="text-neutral-600">
           The Analytics page provides comprehensive reporting and analysis of your OKR data. Access detailed metrics, identify trends, and export data for external analysis.
         </p>
@@ -29,7 +29,7 @@ export default function AnalyticsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Accessing Analytics</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Accessing Analytics</h2>
         <p className="text-neutral-600">
           To view analytics:
         </p>
@@ -41,7 +41,7 @@ export default function AnalyticsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Key Metrics</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Key Metrics</h2>
         <p className="text-neutral-600">
           The analytics page displays high-level metrics at the top:
         </p>
@@ -94,7 +94,7 @@ export default function AnalyticsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Strategic Coverage</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Strategic Coverage</h2>
         <p className="text-neutral-600">
           The Strategic Coverage section shows how well your strategic pillars are covered by OKRs:
         </p>
@@ -105,7 +105,7 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">What It Shows</h3>
+              <h3 className="font-semibold text-foreground mb-1">What It Shows</h3>
               <p className="text-sm text-neutral-700">
                 For each strategic pillar defined in your organization, this section shows:
               </p>
@@ -116,7 +116,7 @@ export default function AnalyticsPage() {
               </ul>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Using This Information</h3>
+              <h3 className="font-semibold text-foreground mb-1">Using This Information</h3>
               <p className="text-sm text-neutral-700">
                 Identify strategic gaps and ensure your OKRs align with your organization's strategic pillars. Pillars with zero OKRs in the active cycle are highlighted.
               </p>
@@ -126,7 +126,7 @@ export default function AnalyticsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Execution Risk</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Execution Risk</h2>
         <p className="text-neutral-600">
           The Execution Risk section identifies key results that need attention:
         </p>
@@ -137,7 +137,7 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Information Displayed</h3>
+              <h3 className="font-semibold text-foreground mb-1">Information Displayed</h3>
               <p className="text-sm text-neutral-700 mb-2">
                 For each overdue key result, you'll see:
               </p>
@@ -151,7 +151,7 @@ export default function AnalyticsPage() {
               </ul>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Taking Action</h3>
+              <h3 className="font-semibold text-foreground mb-1">Taking Action</h3>
               <p className="text-sm text-neutral-700">
                 Use this list to prioritize follow-ups with key result owners. Key results are sorted by urgency (days late).
               </p>
@@ -161,7 +161,7 @@ export default function AnalyticsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Recent Activity</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Recent Activity</h2>
         <p className="text-neutral-600">
           The Recent Activity feed shows the latest check-ins across your organization:
         </p>
@@ -183,7 +183,7 @@ export default function AnalyticsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Exporting Data</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Exporting Data</h2>
         <p className="text-neutral-600">
           Administrators can export OKR data for external analysis:
         </p>
@@ -194,13 +194,13 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Export Button</h3>
+              <h3 className="font-semibold text-foreground mb-1">Export Button</h3>
               <p className="text-sm text-neutral-700">
                 Administrators will see an "Export CSV" button at the top of the analytics page. This exports all OKR data for the active cycle.
               </p>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">What's Exported</h3>
+              <h3 className="font-semibold text-foreground mb-1">What's Exported</h3>
               <ul className="list-disc list-inside space-y-1 text-sm text-neutral-700 ml-4">
                 <li>All objectives, key results, and initiatives</li>
                 <li>Progress values and confidence levels</li>
@@ -210,7 +210,7 @@ export default function AnalyticsPage() {
               </ul>
             </div>
             <div>
-              <h3 className="font-semibold text-neutral-900 mb-1">Using Exported Data</h3>
+              <h3 className="font-semibold text-foreground mb-1">Using Exported Data</h3>
               <p className="text-sm text-neutral-700">
                 Import the CSV into Excel, Google Sheets, or other analysis tools to create custom reports, charts, and dashboards.
               </p>
@@ -226,7 +226,7 @@ export default function AnalyticsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Cycle Selection</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Cycle Selection</h2>
         <p className="text-neutral-600">
           Analyze different time periods using the cycle selector:
         </p>
@@ -244,7 +244,7 @@ export default function AnalyticsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Interpreting Metrics</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Interpreting Metrics</h2>
         <div className="space-y-3">
           <Card>
             <CardHeader>
@@ -275,7 +275,7 @@ export default function AnalyticsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Best Practices</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Best Practices</h2>
         <div className="space-y-3">
           <Card>
             <CardHeader>
@@ -313,14 +313,14 @@ export default function AnalyticsPage() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-neutral-900">Related Guides</h2>
+        <h2 className="text-2xl font-semibold text-foreground">Related Guides</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <Link href="/docs/dashboard" className="block p-4 border rounded-lg hover:shadow-md transition-shadow">
-            <h3 className="font-semibold text-neutral-900 mb-2">Dashboard</h3>
+            <h3 className="font-semibold text-foreground mb-2">Dashboard</h3>
             <p className="text-sm text-neutral-600">See the high-level dashboard view that complements detailed analytics</p>
           </Link>
           <Link href="/docs/check-ins" className="block p-4 border rounded-lg hover:shadow-md transition-shadow">
-            <h3 className="font-semibold text-neutral-900 mb-2">Check-ins</h3>
+            <h3 className="font-semibold text-foreground mb-2">Check-ins</h3>
             <p className="text-sm text-neutral-600">Understand how check-ins contribute to analytics data</p>
           </Link>
         </div>
