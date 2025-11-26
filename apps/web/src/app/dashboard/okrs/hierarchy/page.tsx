@@ -9,6 +9,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@/components/protected-route'
+import { DashboardLayout } from '@/components/dashboard-layout'
 import { 
   ChevronRight, 
   ChevronDown, 
@@ -752,47 +753,10 @@ function OKRHierarchyPageContent() {
 
   return (
     <ProtectedRoute>
-      <div className="flex h-screen bg-slate-950 text-slate-200 font-sans overflow-hidden">
-        {/* Navigation Sidebar */}
-        <div className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
-          <div className="p-6">
-            <h1 className="text-xl font-bold text-white flex items-center gap-2">
-              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
-                <Layers size={18} className="text-white" />
-              </div>
-              OKR Nexus
-            </h1>
-          </div>
-          <nav className="flex-1 px-3 space-y-1">
-            {['Dashboard', 'OKRs', 'Visual Builder', 'Analytics'].map((item) => (
-              <a
-                key={item}
-                href={item === 'Dashboard' ? '/dashboard' : item === 'OKRs' ? '/dashboard/okrs' : item === 'Visual Builder' ? '/dashboard/builder' : '/dashboard/analytics'}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium ${item === 'OKRs' ? 'bg-indigo-600/10 text-indigo-400' : 'text-slate-400 hover:bg-slate-800/50'}`}
-              >
-                {item === 'Dashboard' && <Layers size={18} />}
-                {item === 'OKRs' && <Target size={18} />}
-                {item === 'Visual Builder' && <Activity size={18} />}
-                {item === 'Analytics' && <TrendingUp size={18} />}
-                {item}
-              </a>
-            ))}
-          </nav>
-          <div className="p-4 border-t border-slate-800">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-xs font-bold">
-                {(user?.firstName || user?.email?.charAt(0) || 'U').charAt(0).toUpperCase()}
-              </div>
-              <div className="text-sm">
-                <div className="text-white">{user?.firstName || user?.email || 'User'}</div>
-                <div className="text-slate-500 text-xs">{user?.email || ''}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0">
+      <DashboardLayout>
+        <div className="flex flex-col h-full bg-slate-950 text-slate-200 font-sans overflow-hidden">
+          {/* Main Content Area */}
+          <div className="flex-1 flex flex-col min-w-0 w-full">
           {/* Top Header */}
           <header className="border-b border-slate-800 bg-slate-900/50">
             <div className="h-16 flex items-center justify-between px-6">
@@ -1509,8 +1473,9 @@ function OKRHierarchyPageContent() {
               </div>
             </div>
           </div>
+          </div>
         </div>
-      </div>
+      </DashboardLayout>
 
       {/* Modals */}
       <NewCheckInModal

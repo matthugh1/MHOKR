@@ -186,7 +186,7 @@ export default function CheckInsPage() {
               subtitle="Summary of async updates from your team members"
             />
             <div className="text-center py-12">
-              <p className="text-neutral-500">
+              <p className="text-muted-foreground">
                 Loading team check-in summary...
               </p>
             </div>
@@ -211,7 +211,7 @@ export default function CheckInsPage() {
             <div className="flex items-center gap-2">
               <label
                 htmlFor="meeting-mode-toggle"
-                className="text-sm font-medium text-neutral-700"
+                className="text-sm font-medium text-foreground"
               >
                 Meeting Mode
               </label>
@@ -227,7 +227,7 @@ export default function CheckInsPage() {
                   isMeetingMode ? 'Exit Meeting Mode' : 'Enter Meeting Mode'
                 }
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 ${
-                  isMeetingMode ? 'bg-violet-600' : 'bg-neutral-300'
+                  isMeetingMode ? 'bg-violet-600' : 'bg-muted'
                 }`}
               >
                 <span
@@ -243,8 +243,8 @@ export default function CheckInsPage() {
             {!isMeetingMode && (
               <>
                 {/* Top note */}
-                <div className="mb-6 rounded-lg bg-neutral-50 border border-neutral-200 p-3">
-                  <p className="text-xs text-neutral-500 leading-relaxed">
+                <div className="mb-6 rounded-lg bg-muted border border-border p-3">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
                     This view shows team check-ins ordered by risk. People with
                     overdue updates or active blockers are shown first.
                   </p>
@@ -258,8 +258,8 @@ export default function CheckInsPage() {
                 {/* TODO [phase7-hardening]: Add manager/team RBAC checks */}
 
                 {rollup.length === 0 ? (
-                  <div className="rounded-xl bg-white border border-neutral-200 shadow-sm p-8 text-center">
-                    <p className="text-sm text-neutral-500">
+                  <div className="rounded-xl bg-card border border-border shadow-sm p-8 text-center">
+                    <p className="text-sm text-muted-foreground">
                       No check-in responses found for the selected period.
                     </p>
                   </div>
@@ -309,35 +309,35 @@ export default function CheckInsPage() {
                       return (
                         <div
                           key={member.userId}
-                          className={`rounded-xl bg-white border shadow-sm p-4 ${
+                          className={`rounded-xl bg-card border shadow-sm p-4 ${
                             member.hasBlockers ||
                             member.needsHelp ||
                             member.requestsOverdue > 0
-                              ? 'border-rose-200 bg-rose-50/30'
-                              : 'border-neutral-200'
+                              ? 'border-destructive/30 bg-destructive/10'
+                              : 'border-border'
                           }`}
                         >
                           {/* Per-user header */}
                           <div className="mb-4 flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <h2 className="text-sm font-semibold text-neutral-900">
+                                <h2 className="text-sm font-semibold text-card-foreground">
                                   {member.userName}
                                 </h2>
                                 {member.requestsOverdue > 0 ? (
-                                  <span className="text-[11px] font-medium text-rose-600 bg-rose-50 border border-rose-200 rounded-full px-2 py-0.5">
+                                  <span className="text-[11px] font-medium text-destructive bg-destructive/20 border border-destructive/30 rounded-full px-2 py-0.5">
                                     {member.requestsOverdue} overdue
                                   </span>
                                 ) : (
-                                  <span className="text-[11px] font-medium text-neutral-600 bg-neutral-50 border border-neutral-200 rounded-full px-2 py-0.5">
+                                  <span className="text-[11px] font-medium text-muted-foreground bg-muted border border-border rounded-full px-2 py-0.5">
                                     Up to date
                                   </span>
                                 )}
                               </div>
-                              <p className="text-xs text-neutral-500 mb-1">
+                              <p className="text-xs text-muted-foreground mb-1">
                                 {member.userEmail}
                               </p>
-                              <p className="text-xs text-neutral-500">
+                              <p className="text-xs text-muted-foreground">
                                 {formattedLastSubmitted
                                   ? `Last submitted: ${formattedLastSubmitted}`
                                   : 'No submissions yet'}
@@ -349,14 +349,14 @@ export default function CheckInsPage() {
                             {/* What moved */}
                             {whatMoved.length > 0 && (
                               <div>
-                                <div className="text-[11px] font-semibold text-neutral-700 uppercase tracking-wide mb-2">
+                                <div className="text-[11px] font-semibold text-card-foreground uppercase tracking-wide mb-2">
                                   What moved
                                 </div>
                                 <div className="space-y-2">
                                   {whatMoved.map((text, idx) => (
                                     <p
                                       key={idx}
-                                      className="text-xs text-neutral-600 whitespace-pre-wrap"
+                                      className="text-xs text-muted-foreground whitespace-pre-wrap"
                                     >
                                       {text}
                                     </p>
@@ -368,14 +368,14 @@ export default function CheckInsPage() {
                             {/* Blockers */}
                             {blockers.length > 0 && (
                               <div>
-                                <div className="text-[11px] font-semibold text-rose-700 uppercase tracking-wide mb-2">
+                                <div className="text-[11px] font-semibold text-destructive uppercase tracking-wide mb-2">
                                   Blockers
                                 </div>
                                 <div className="space-y-2">
                                   {blockers.map((text, idx) => (
                                     <p
                                       key={idx}
-                                      className="text-xs text-rose-600 whitespace-pre-wrap"
+                                      className="text-xs text-destructive/90 whitespace-pre-wrap"
                                     >
                                       {text}
                                     </p>
@@ -387,14 +387,14 @@ export default function CheckInsPage() {
                             {/* Need help */}
                             {needHelp.length > 0 && (
                               <div>
-                                <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wide mb-2">
+                                <div className="text-[11px] font-semibold text-amber-400 uppercase tracking-wide mb-2">
                                   Need help
                                 </div>
                                 <div className="space-y-2">
                                   {needHelp.map((text, idx) => (
                                     <p
                                       key={idx}
-                                      className="text-xs text-amber-600 whitespace-pre-wrap"
+                                      className="text-xs text-amber-300 whitespace-pre-wrap"
                                     >
                                       {text}
                                     </p>
@@ -406,7 +406,7 @@ export default function CheckInsPage() {
                             {whatMoved.length === 0 &&
                               blockers.length === 0 &&
                               needHelp.length === 0 && (
-                                <p className="text-xs text-neutral-500 italic">
+                                <p className="text-xs text-muted-foreground italic">
                                   No updates provided.
                                 </p>
                               )}
@@ -423,15 +423,15 @@ export default function CheckInsPage() {
             {isMeetingMode && (
               <>
                 {/* Meeting Mode banner */}
-                <div className="mb-6 rounded-lg bg-neutral-50 border border-neutral-200 p-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div className="mb-6 rounded-lg bg-muted border border-border p-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                   <div className="flex-1">
-                    <h2 className="text-sm font-semibold text-neutral-900 mb-1">
+                    <h2 className="text-sm font-semibold text-foreground mb-1">
                       Meeting Mode
                     </h2>
-                    <p className="text-xs text-neutral-600 mb-1">
+                    <p className="text-xs text-muted-foreground mb-1">
                       Live summary view
                     </p>
-                    <p className="text-xs text-neutral-500 leading-relaxed">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
                       Use this during the live review. Capture decisions and
                       follow-ups. Export when done.
                     </p>
@@ -439,7 +439,7 @@ export default function CheckInsPage() {
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <Button
                       onClick={handleExportSummary}
-                      className="bg-neutral-900 text-white hover:bg-neutral-800"
+                      className="bg-foreground text-background hover:bg-foreground/90"
                       aria-label="Export meeting summary as JSON"
                     >
                       Export summary
@@ -458,8 +458,8 @@ export default function CheckInsPage() {
                 {/* TODO [phase7-hardening]: Lock Meeting Mode behind RBAC (not every user should see this) */}
 
                 {rollup.length === 0 ? (
-                  <div className="rounded-xl bg-white border border-neutral-200 shadow-sm p-8 text-center">
-                    <p className="text-sm text-neutral-500">
+                  <div className="rounded-xl bg-card border border-border shadow-sm p-8 text-center">
+                    <p className="text-sm text-muted-foreground">
                       No check-in responses found for the selected period.
                     </p>
                   </div>
@@ -514,29 +514,29 @@ export default function CheckInsPage() {
                       return (
                         <div
                           key={member.userId}
-                          className="rounded-xl border border-neutral-200 bg-white shadow-sm hover:shadow-md transition-shadow p-4"
+                          className="rounded-xl border border-border bg-card shadow-sm hover:shadow-md transition-shadow p-4"
                         >
                           {/* Card header */}
                           <div className="mb-4 flex items-start justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <h2 className="text-sm font-semibold text-neutral-900">
+                                <h2 className="text-sm font-semibold text-card-foreground">
                                   {member.userName}
                                 </h2>
                                 {member.requestsOverdue > 0 ? (
-                                  <span className="text-[11px] font-medium text-rose-600 bg-rose-50 border border-rose-200 rounded-full px-2 py-0.5">
+                                  <span className="text-[11px] font-medium text-destructive bg-destructive/20 border border-destructive/30 rounded-full px-2 py-0.5">
                                     {member.requestsOverdue} overdue
                                   </span>
                                 ) : (
-                                  <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                                  <span className="text-[11px] font-medium text-primary bg-primary/20 border border-primary/30 rounded-full px-2 py-0.5">
                                     Up to date
                                   </span>
                                 )}
                               </div>
-                              <p className="text-xs text-neutral-500 mb-1">
+                              <p className="text-xs text-muted-foreground mb-1">
                                 {member.userEmail}
                               </p>
-                              <p className="text-xs text-neutral-500">
+                              <p className="text-xs text-muted-foreground">
                                 {formattedLastSubmitted
                                   ? `Last submitted: ${formattedLastSubmitted}`
                                   : 'No submissions yet'}

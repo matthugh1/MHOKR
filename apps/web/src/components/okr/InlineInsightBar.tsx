@@ -152,7 +152,7 @@ export function InlineInsightBar({ objectiveId, isVisible, onCheckInClick }: Inl
             </Badge>
           )}
           {insights.krs.completed > 0 && (
-            <Badge variant="outline" className="text-xs px-1 py-0 text-neutral-600" role="status" aria-label={`${insights.krs.completed} key results completed`}>
+            <Badge variant="outline" className="text-xs px-1 py-0 text-muted-foreground" role="status" aria-label={`${insights.krs.completed} key results completed`}>
               {insights.krs.completed} completed
             </Badge>
           )}

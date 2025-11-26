@@ -72,9 +72,9 @@ export function ProgressSlider({
   if (!canEdit || disabled) {
     return (
       <div className={cn('flex items-center gap-3', className)}>
-        {label && <span className="text-[11px] text-neutral-500 min-w-[60px]">{label}:</span>}
+        {label && <span className="text-[11px] text-muted-foreground min-w-[60px]">{label}:</span>}
         <div className="flex-1 flex items-center gap-2">
-          <div className="flex-1 h-2 rounded-full bg-neutral-200 overflow-hidden">
+          <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
             <div
               className={cn(
                 'h-full rounded-full transition-all',
@@ -87,7 +87,7 @@ export function ProgressSlider({
               style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
             />
           </div>
-          <span className="text-[11px] font-medium text-neutral-600 min-w-[35px] text-right">
+          <span className="text-[11px] font-medium text-muted-foreground min-w-[35px] text-right">
             {Math.round(clampProgress(progress))}%
           </span>
         </div>

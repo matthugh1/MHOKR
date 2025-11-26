@@ -1303,12 +1303,12 @@ function PeopleSettings() {
               <>
                 <SheetHeader>
                   <SheetTitle className="flex items-center gap-2">
-                    <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-sm font-medium">
+                    <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium text-primary">
                       {selectedUser.name.split(' ').map((n: string) => n[0]).join('')}
                     </div>
                     <div>
-                      <div>{selectedUser.name}</div>
-                      <div className="text-sm font-normal text-slate-500">{selectedUser.email}</div>
+                      <div className="text-foreground">{selectedUser.name}</div>
+                      <div className="text-sm font-normal text-muted-foreground">{selectedUser.email}</div>
                     </div>
                   </SheetTitle>
                   <SheetDescription>

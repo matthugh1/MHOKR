@@ -45,19 +45,19 @@ export interface ActivityItemCardProps {
  */
 export function ActivityItemCard({ actorName, timestamp, action, summary }: ActivityItemCardProps) {
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white p-3 shadow-sm text-sm text-neutral-800">
+    <div className="rounded-lg border border-border bg-card p-3 shadow-sm text-sm text-card-foreground">
       <div className="flex items-center gap-2 mb-1">
-        <span className="text-sm font-medium text-neutral-900">
+        <span className="text-sm font-medium text-card-foreground">
           {actorName}
         </span>
-        <span className="text-xs text-neutral-500">
+        <span className="text-xs text-muted-foreground">
           {formatTimeAgo(timestamp)}
         </span>
       </div>
-      <p className="text-sm text-neutral-700 mb-1">
+      <p className="text-sm text-card-foreground mb-1">
         {action}
       </p>
-      <p className="text-xs text-neutral-600">
+      <p className="text-xs text-muted-foreground">
         {summary}
       </p>
     </div>

@@ -61,8 +61,8 @@ export function PageContainer({
   }
   
   const backgroundClasses = {
-    white: 'bg-white',
-    neutral: 'bg-neutral-50',
+    white: 'bg-slate-900',
+    neutral: 'bg-slate-950',
     none: ''
   }
   
@@ -81,7 +81,7 @@ export function PageContainer({
     )}>
       {/* Gradient overlay for dashboard pages */}
       {withGradient && variant === 'dashboard' && (
-        <div className="absolute top-0 left-0 w-full h-[160px] bg-gradient-to-b from-white/60 to-transparent pointer-events-none" />
+        <div className="absolute top-0 left-0 w-full h-[160px] bg-gradient-to-b from-slate-900/60 to-transparent pointer-events-none" />
       )}
       
       <div className={cn(

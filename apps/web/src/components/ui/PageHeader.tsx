@@ -36,17 +36,17 @@ export function PageHeader({ title, subtitle, description, badges = [], children
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
       className={cn(
-        'rounded-2xl border border-slate-200/50',
-        'bg-gradient-to-br from-slate-50 to-white',
-        'shadow-[0_4px_20px_-2px_rgba(0,0,0,0.1)]',
+        'rounded-2xl border border-slate-800/50',
+        'bg-gradient-to-br from-slate-900/50 to-slate-800/50',
+        'shadow-[0_4px_20px_-2px_rgba(0,0,0,0.3)]',
         'p-6 mb-8'
       )}
     >
       <div className="space-y-3">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">{title}</h1>
+          <h1 className="text-3xl font-bold text-white">{title}</h1>
           {(subtitle || description) && (
-            <p className="text-slate-600 mt-1 text-sm">{subtitle || description}</p>
+            <p className="text-slate-400 mt-1 text-sm">{subtitle || description}</p>
           )}
         </div>
         {children && (

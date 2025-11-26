@@ -14,10 +14,10 @@ export function OkrBadge({ tone = 'neutral', children, className }: OkrBadgeProp
     <span
       className={cn(
         "inline-flex items-center rounded-md px-2 py-[2px] text-[11px] font-medium leading-none border",
-        tone === 'good' && "bg-emerald-50 text-emerald-700 border-emerald-200",
-        tone === 'warn' && "bg-amber-50 text-amber-700 border-amber-200",
-        tone === 'bad' && "bg-rose-50 text-rose-700 border-rose-200",
-        (!tone || tone === 'neutral') && "bg-neutral-100 text-neutral-700 border-neutral-300",
+        tone === 'good' && "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+        tone === 'warn' && "bg-amber-500/20 text-amber-300 border-amber-500/30",
+        tone === 'bad' && "bg-destructive/20 text-destructive border-destructive/30",
+        (!tone || tone === 'neutral') && "bg-muted text-muted-foreground border-border",
         className
       )}
     >

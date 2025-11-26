@@ -31,7 +31,7 @@ export function BuildStamp({ variant = 'inline', className = '' }: BuildStampPro
 
   if (variant === 'footer') {
     return (
-      <div className={`text-[10px] text-neutral-400 text-center py-2 ${className}`}>
+      <div className={`text-[10px] text-muted-foreground text-center py-2 ${className}`}>
         {displayText}
       </div>
     )
@@ -39,7 +39,7 @@ export function BuildStamp({ variant = 'inline', className = '' }: BuildStampPro
 
   // inline variant
   return (
-    <div className={`rounded-lg border border-neutral-200 bg-white px-2 py-1 text-[10px] text-neutral-600 shadow-sm ${className}`}>
+    <div className={`rounded-lg border border-border bg-card px-2 py-1 text-[10px] text-muted-foreground shadow-sm ${className}`}>
       {displayText}
     </div>
   )

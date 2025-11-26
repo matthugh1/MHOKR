@@ -293,7 +293,7 @@ export default function DashboardPage() {
 
           {loading ? (
             <div className="text-center py-12">
-              <p className="text-neutral-500">Loading dashboard...</p>
+              <p className="text-muted-foreground">Loading dashboard...</p>
             </div>
           ) : (
             <>
@@ -325,17 +325,17 @@ export default function DashboardPage() {
                     </CardHeader>
                     <CardContent>
                       {myOkrsLoading ? (
-                        <div className="text-sm text-neutral-500 py-4">Loading your OKRs...</div>
+                        <div className="text-sm text-muted-foreground py-4">Loading your OKRs...</div>
                       ) : (
                         <>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                             <div className="text-sm">
-                              <div className="font-medium text-neutral-900 mb-1">Objectives</div>
+                              <div className="font-medium text-card-foreground mb-1">Objectives</div>
                               <div className="text-2xl font-semibold">{myOkrsCount}</div>
                             </div>
                             <div className="text-sm">
                               <div className="font-medium text-neutral-900 mb-1">At Risk</div>
-                              <div className={`text-2xl font-semibold ${myOkrsAtRisk > 0 ? 'text-rose-600' : 'text-neutral-700'}`}>
+                              <div className={`text-2xl font-semibold ${myOkrsAtRisk > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
                                 {myOkrsAtRisk}
                               </div>
                             </div>
@@ -391,7 +391,7 @@ export default function DashboardPage() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-sm text-neutral-600 mb-4">
+                      <div className="text-sm text-muted-foreground mb-4">
                         {userRoles.managedTeams.length > 0 && (
                           <p className="mb-2">
                             Managing {userRoles.managedTeams.length} team{userRoles.managedTeams.length !== 1 ? 's' : ''}
@@ -439,7 +439,7 @@ export default function DashboardPage() {
                           cycleId={activeCycleId}
                         />
                       ) : (
-                        <div className="text-sm text-neutral-500 py-4">
+                        <div className="text-sm text-muted-foreground py-4">
                           Loading cycle health data...
                         </div>
                       )}
@@ -456,10 +456,10 @@ export default function DashboardPage() {
                 className="mt-10"
               >
                 <div className="mb-4">
-                  <h2 className="text-lg font-semibold text-neutral-900 flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-card-foreground flex items-center gap-2">
                     Attention Feed
                   </h2>
-                  <p className="text-sm text-neutral-500 mt-1">
+                  <p className="text-sm text-muted-foreground mt-1">
                     Items requiring your attention
                   </p>
                 </div>
@@ -490,7 +490,7 @@ export default function DashboardPage() {
                         {attentionItems.slice(0, 5).map((item, index) => (
                           <div
                             key={`${item.type}-${item.objectiveId}-${item.keyResultId || ''}-${index}`}
-                            className="flex items-start gap-3 p-3 rounded-md border border-neutral-200 hover:bg-neutral-50 transition-colors"
+                            className="flex items-start gap-3 p-3 rounded-md border border-border hover:bg-muted transition-colors"
                           >
                             <div className="mt-0.5">{getAttentionItemIcon(item.type)}</div>
                             <div className="flex-1 min-w-0">
@@ -499,7 +499,7 @@ export default function DashboardPage() {
                                   {item.type.replace(/_/g, ' ')}
                                 </Badge>
                               </div>
-                              <p className="text-sm text-neutral-700">
+                              <p className="text-sm text-card-foreground">
                                 {getAttentionItemLabel(item)}
                               </p>
                               <Button
@@ -522,7 +522,7 @@ export default function DashboardPage() {
                         ))}
                       </div>
                     ) : (
-                      <div className="text-sm text-neutral-500 text-center py-6">
+                      <div className="text-sm text-muted-foreground text-center py-6">
                         No items need attention at this time.
                       </div>
                     )}
@@ -538,8 +538,8 @@ export default function DashboardPage() {
                   transition={{ duration: 0.3, delay: 0.4 }}
                   className="mt-6"
                 >
-                  <div className="text-sm bg-gradient-to-r from-violet-50 via-fuchsia-50 to-violet-50 border border-neutral-200 rounded-lg p-3 shadow-sm flex items-start gap-2">
-                    <div className="flex items-center justify-center h-6 w-6 rounded-full bg-violet-100 text-violet-700 flex-shrink-0">
+                  <div className="text-sm bg-gradient-to-r from-violet-500/10 via-fuchsia-500/10 to-violet-500/10 border border-border rounded-lg p-3 shadow-sm flex items-start gap-2">
+                    <div className="flex items-center justify-center h-6 w-6 rounded-full bg-violet-500/20 text-violet-300 flex-shrink-0">
                       <Sparkles size={14} />
                     </div>
                     <p className="text-sm leading-5">{aiSummary}</p>

@@ -26,11 +26,11 @@ export interface SectionHeaderProps {
 export function SectionHeader({ title, subtitle, className = '' }: SectionHeaderProps) {
   return (
     <div className={`flex items-center justify-between mb-2 ${className}`}>
-      <div className="text-sm font-medium text-neutral-900">
+      <div className="text-sm font-medium text-foreground">
         {title}
       </div>
       {subtitle && (
-        <div className="text-[11px] text-neutral-500">
+        <div className="text-[11px] text-muted-foreground">
           {subtitle}
         </div>
       )}

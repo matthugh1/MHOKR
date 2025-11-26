@@ -125,20 +125,20 @@ export function CycleSelector({ cycles, legacyPeriods = [], selectedId, onSelect
         onClick={() => setIsOpen(!isOpen)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700 shadow-sm flex items-center gap-2 hover:bg-neutral-50 transition-colors"
+        className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm flex items-center gap-2 hover:bg-accent hover:text-accent-foreground transition-colors"
       >
-        <span className="font-medium text-neutral-800 truncate">{buttonLabel}</span>
-        <ChevronDown className={`h-4 w-4 text-neutral-400 flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <span className="font-medium text-foreground truncate">{buttonLabel}</span>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground flex-shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {/* Popover Menu */}
       {isOpen && (
-        <div className="absolute z-50 mt-2 w-72 rounded-lg border border-neutral-200 bg-white shadow-lg p-3">
+        <div className="absolute z-50 mt-2 w-72 rounded-lg border border-border bg-popover shadow-lg p-3 text-popover-foreground">
           {/* Current & Upcoming Section */}
           {currentAndUpcoming.length > 0 ? (
             <div className="mb-4">
               {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
-              <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-2">
                 Current & Upcoming
               </div>
               <div className="space-y-1">
@@ -146,10 +146,10 @@ export function CycleSelector({ cycles, legacyPeriods = [], selectedId, onSelect
                   <div
                     key={cycle.id}
                     onClick={() => handleSelect(cycle.id, cycle.name)}
-                    className="rounded-md hover:bg-neutral-100 cursor-pointer text-sm text-neutral-700 flex items-center justify-between w-full px-3 py-2"
+                    className="rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm text-popover-foreground flex items-center justify-between w-full px-3 py-2"
                   >
-                    <span className="font-medium text-neutral-800">{cycle.name}</span>
-                    <span className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-0.5 text-[10px] font-medium text-neutral-700">
+                    <span className="font-medium text-popover-foreground">{cycle.name}</span>
+                    <span className="inline-flex items-center rounded-md border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                       {/* TODO [phase7-hardening]: drive statuses from backend cycle.status */}
                       {getStatusLabel(cycle.status)}
                     </span>
@@ -159,7 +159,7 @@ export function CycleSelector({ cycles, legacyPeriods = [], selectedId, onSelect
             </div>
           ) : (
             <div className="mb-4">
-              <div className="text-xs text-neutral-500 px-3 py-2">
+              <div className="text-xs text-muted-foreground px-3 py-2">
                 No cycles defined yet.
                 {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
               </div>
@@ -170,7 +170,7 @@ export function CycleSelector({ cycles, legacyPeriods = [], selectedId, onSelect
           {previousCycles.length > 0 ? (
             <div className="mb-4">
               {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
-              <div className="text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2 px-2">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-2">
                 Previous
               </div>
               <div className="max-h-[160px] overflow-y-auto space-y-1">
@@ -178,10 +178,10 @@ export function CycleSelector({ cycles, legacyPeriods = [], selectedId, onSelect
                   <div
                     key={cycle.id}
                     onClick={() => handleSelect(cycle.id, cycle.name)}
-                    className="rounded-md hover:bg-neutral-100 cursor-pointer text-sm text-neutral-700 flex items-center justify-between w-full px-3 py-2"
+                    className="rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm text-popover-foreground flex items-center justify-between w-full px-3 py-2"
                   >
-                    <span className="font-medium text-neutral-800">{cycle.name}</span>
-                    <span className="inline-flex items-center rounded-md border border-neutral-200 bg-white px-2 py-0.5 text-[10px] font-medium text-neutral-700">
+                    <span className="font-medium text-popover-foreground">{cycle.name}</span>
+                    <span className="inline-flex items-center rounded-md border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                       {/* TODO [phase7-hardening]: drive statuses from backend cycle.status */}
                       {getStatusLabel(cycle.status)}
                     </span>
@@ -202,32 +202,32 @@ export function CycleSelector({ cycles, legacyPeriods = [], selectedId, onSelect
             <div className="space-y-1">
               <div
                 onClick={() => handleSelect('unassigned', 'Unassigned / Backlog')}
-                className={`rounded-md hover:bg-neutral-100 cursor-pointer text-sm text-neutral-700 flex items-center justify-between w-full px-3 py-2 ${
-                  selectedId === 'unassigned' ? 'bg-neutral-100' : ''
+                className={`rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm text-popover-foreground flex items-center justify-between w-full px-3 py-2 ${
+                  selectedId === 'unassigned' ? 'bg-accent text-accent-foreground' : ''
                 }`}
               >
-                <span className="font-medium text-neutral-800">Unassigned / Backlog</span>
+                <span className="font-medium text-popover-foreground">Unassigned / Backlog</span>
               </div>
               <div
                 onClick={() => handleSelect('all', 'All cycles')}
-                className={`rounded-md hover:bg-neutral-100 cursor-pointer text-sm text-neutral-700 flex items-center justify-between w-full px-3 py-2 ${
-                  selectedId === 'all' ? 'bg-neutral-100' : ''
+                className={`rounded-md hover:bg-accent hover:text-accent-foreground cursor-pointer text-sm text-popover-foreground flex items-center justify-between w-full px-3 py-2 ${
+                  selectedId === 'all' ? 'bg-accent text-accent-foreground' : ''
                 }`}
               >
-                <span className="font-medium text-neutral-800">All cycles</span>
+                <span className="font-medium text-popover-foreground">All cycles</span>
               </div>
             </div>
           </div>
 
           {/* Footer: Manage Cycles Link */}
           {onManageCycles && (
-            <div className="mt-4 pt-4 border-t border-neutral-200">
+            <div className="mt-4 pt-4 border-t border-border">
               <button
                 onClick={() => {
                   setIsOpen(false)
                   onManageCycles()
                 }}
-                className="w-full text-left text-sm text-neutral-600 hover:text-neutral-900 px-3 py-2 rounded-md hover:bg-neutral-100 transition-colors"
+                className="w-full text-left text-sm text-muted-foreground hover:text-foreground px-3 py-2 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
                 aria-label="Manage cycles"
               >
                 Manage cycles…

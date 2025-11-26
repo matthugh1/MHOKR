@@ -322,7 +322,7 @@ function OrganizationSettings() {
           title="Organization Settings"
           subtitle="Manage organization settings and structure"
         />
-        <div className="text-slate-600">Loading...</div>
+        <div className="text-muted-foreground">Loading...</div>
       </PageContainer>
     )
   }
@@ -339,8 +339,8 @@ function OrganizationSettings() {
           ]}
         />
         <div className="space-y-6">
-          <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
-            <p className="text-sm text-purple-900">
+          <div className="p-3 bg-primary/10 border border-primary/30 rounded-lg">
+            <p className="text-sm text-foreground">
               <strong>Superuser Mode:</strong> You have access to all organizations in the system.
             </p>
           </div>
@@ -362,11 +362,11 @@ function OrganizationSettings() {
             <CardContent>
               <div className="space-y-3">
                 {allOrganizations.map((org) => (
-                  <div key={org.id} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                  <div key={org.id} className="border border-border rounded-lg p-4 hover:bg-muted transition-colors">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-slate-500" />
-                        <div className="font-medium">{org.name}</div>
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <div className="font-medium text-foreground">{org.name}</div>
                         <Badge variant="secondary" className="text-xs">
                           {org.slug}
                         </Badge>
@@ -375,7 +375,7 @@ function OrganizationSettings() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleDeleteOrganization(org)}
-                        className="text-red-600 border-red-300 hover:text-red-700 hover:bg-red-50 hover:border-red-400"
+                        className="text-destructive border-destructive/30 hover:text-destructive hover:bg-destructive/10 hover:border-destructive/50"
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
                         Delete
@@ -383,16 +383,16 @@ function OrganizationSettings() {
                     </div>
                     <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
                       <div>
-                        <div className="text-slate-500">Workspaces</div>
-                        <div className="font-semibold">{org.workspaces?.length || 0}</div>
+                        <div className="text-muted-foreground">Workspaces</div>
+                        <div className="font-semibold text-foreground">{org.workspaces?.length || 0}</div>
                       </div>
                       <div>
-                        <div className="text-slate-500">Members</div>
-                        <div className="font-semibold">{org.members?.length || 0}</div>
+                        <div className="text-muted-foreground">Members</div>
+                        <div className="font-semibold text-foreground">{org.members?.length || 0}</div>
                       </div>
                       <div>
-                        <div className="text-slate-500">Organization ID</div>
-                        <div className="font-mono text-xs">{org.id}</div>
+                        <div className="text-muted-foreground">Organization ID</div>
+                        <div className="font-mono text-xs text-foreground">{org.id}</div>
                       </div>
                     </div>
                   </div>
@@ -428,7 +428,7 @@ function OrganizationSettings() {
                     onChange={(e) => setCreateSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                     placeholder="acme-corp"
                   />
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Lowercase, alphanumeric, and hyphens only. Used as a unique identifier.
                   </p>
                 </div>
@@ -496,7 +496,7 @@ function OrganizationSettings() {
         />
         <Card>
           <CardContent className="p-6">
-            <div className="text-slate-600">
+            <div className="text-muted-foreground">
               You are not a member of any organization yet. Please contact your administrator.
             </div>
           </CardContent>
@@ -519,7 +519,7 @@ function OrganizationSettings() {
         <Card>
           <CardContent className="p-6">
             <div className="text-center space-y-4">
-              <div className="text-slate-600">
+              <div className="text-muted-foreground">
                 No organizations exist yet. Create your first organization to get started.
               </div>
               <Button onClick={() => setShowCreateDialog(true)}>
@@ -557,7 +557,7 @@ function OrganizationSettings() {
                     onChange={(e) => setCreateSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                     placeholder="acme-corp"
                   />
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Lowercase, alphanumeric, and hyphens only. Used as a unique identifier.
                   </p>
                 </div>
@@ -589,18 +589,18 @@ function OrganizationSettings() {
       />
       <div className="space-y-6">
         {isSuperuser && (
-          <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
-            <p className="text-sm text-purple-900">
+          <div className="p-3 bg-primary/10 border border-primary/30 rounded-lg">
+            <p className="text-sm text-foreground">
               <strong>Superuser Mode:</strong> You have system-wide access to all organizations.
             </p>
           </div>
         )}
         {!isSuperuser && (
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-900">
+          <div className="p-3 bg-primary/10 border border-primary/30 rounded-lg">
+            <p className="text-sm text-foreground">
               <strong>Hierarchy:</strong> Organization → Workspaces → Teams → People
             </p>
-            <p className="text-xs text-blue-700 mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               Your organization contains multiple workspaces (departments). Each workspace has teams, and each team has members.
             </p>
           </div>
@@ -624,7 +624,7 @@ function OrganizationSettings() {
                   variant="outline"
                   size="sm"
                   onClick={() => handleDeleteOrganization(organization)}
-                  className="text-red-600 border-red-300 hover:text-red-700 hover:bg-red-50 hover:border-red-400"
+                  className="text-destructive border-destructive/30 hover:text-destructive hover:bg-destructive/10 hover:border-destructive/50"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Delete
@@ -635,16 +635,16 @@ function OrganizationSettings() {
           <CardContent>
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <div className="text-sm text-slate-500">Organization ID</div>
-                <div className="text-sm font-mono mt-1">{organization.slug}</div>
+                <div className="text-sm text-muted-foreground">Organization ID</div>
+                <div className="text-sm font-mono mt-1 text-foreground">{organization.slug}</div>
               </div>
               <div>
-                <div className="text-sm text-slate-500">Workspaces</div>
-                <div className="text-2xl font-semibold mt-1">{workspaces.length}</div>
+                <div className="text-sm text-muted-foreground">Workspaces</div>
+                <div className="text-2xl font-semibold mt-1 text-foreground">{workspaces.length}</div>
               </div>
               <div>
-                <div className="text-sm text-slate-500">Members</div>
-                <div className="text-2xl font-semibold mt-1">{members.length}</div>
+                <div className="text-sm text-muted-foreground">Members</div>
+                <div className="text-2xl font-semibold mt-1 text-foreground">{members.length}</div>
               </div>
             </div>
           </CardContent>
@@ -700,9 +700,9 @@ function OrganizationSettings() {
                 Are you sure you want to delete <strong>{organizationToDelete?.name}</strong>? This action cannot be undone.
               </DialogDescription>
             </DialogHeader>
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
-              <p className="text-sm text-red-900 font-semibold mb-2">Warning: This will permanently delete:</p>
-              <ul className="text-sm text-red-800 list-disc list-inside space-y-1">
+            <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 mt-4">
+              <p className="text-sm text-destructive font-semibold mb-2">Warning: This will permanently delete:</p>
+              <ul className="text-sm text-destructive/90 list-disc list-inside space-y-1">
                 <li>The organization and all its data</li>
                 <li>All workspaces within this organization</li>
                 <li>All teams within those workspaces</li>
@@ -736,14 +736,14 @@ function OrganizationSettings() {
           <CardContent>
             <div className="space-y-3">
               {workspaces.length === 0 ? (
-                <p className="text-sm text-slate-500">No workspaces yet. Create one in the Workspaces section.</p>
+                <p className="text-sm text-muted-foreground">No workspaces yet. Create one in the Workspaces section.</p>
               ) : (
                 workspaces.map((workspace) => (
-                  <div key={workspace.id} className="border border-slate-200 rounded-lg p-3">
+                  <div key={workspace.id} className="border border-border rounded-lg p-3">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <Briefcase className="h-4 w-4 text-slate-500" />
-                        <div className="font-medium">{workspace.name}</div>
+                        <Briefcase className="h-4 w-4 text-muted-foreground" />
+                        <div className="font-medium text-foreground">{workspace.name}</div>
                       </div>
                       <Badge variant="secondary" className="text-xs">
                         {workspace.teams?.length || 0} teams
@@ -752,10 +752,10 @@ function OrganizationSettings() {
                     {workspace.teams && workspace.teams.length > 0 && (
                       <div className="ml-6 space-y-1">
                         {workspace.teams.map((team: any) => (
-                          <div key={team.id} className="flex items-center gap-2 text-sm text-slate-600">
+                          <div key={team.id} className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Users className="h-3 w-3" />
                             <span>{team.name}</span>
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-muted-foreground/70">
                               ({team.members?.length || 0} members)
                             </span>
                           </div>
@@ -780,14 +780,14 @@ function OrganizationSettings() {
           <CardContent>
             <div className="space-y-2">
               {members.map((member) => (
-                <div key={member.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                <div key={member.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-sm font-medium">
+                    <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-sm font-medium text-primary">
                       {member.name.split(' ').map((n: string) => n[0]).join('')}
                     </div>
                     <div>
-                      <div className="font-medium">{member.name}</div>
-                      <div className="text-sm text-slate-500">{member.email}</div>
+                      <div className="font-medium text-foreground">{member.name}</div>
+                      <div className="text-sm text-muted-foreground">{member.email}</div>
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -813,31 +813,31 @@ function OrganizationSettings() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-900 mb-2">
+              <div className="bg-primary/10 border border-primary/30 rounded-lg p-4">
+                <p className="text-sm text-foreground mb-2">
                   <strong>Private OKRs:</strong> Users listed here can view OKRs marked as "Private" (HR, Legal, M&A confidential).
                 </p>
-                <p className="text-xs text-blue-700">
+                <p className="text-xs text-muted-foreground">
                   The OKR owner and tenant owner can always view private OKRs. This whitelist grants additional users access.
                 </p>
               </div>
               
-              <div className="space-y-2 max-h-64 overflow-y-auto border border-slate-200 rounded-lg p-3">
+              <div className="space-y-2 max-h-64 overflow-y-auto border border-border rounded-lg p-3">
                 {allUsers.length === 0 ? (
-                  <p className="text-sm text-slate-500">Loading users...</p>
+                  <p className="text-sm text-muted-foreground">Loading users...</p>
                 ) : (
                   allUsers.map((u) => (
-                    <label key={u.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded cursor-pointer">
+                    <label key={u.id} className="flex items-center gap-3 p-2 hover:bg-muted rounded cursor-pointer">
                       <input
                         type="checkbox"
                         checked={privateWhitelist.includes(u.id)}
                         onChange={() => toggleUserInWhitelist(u.id)}
-                        className="rounded border-slate-300"
+                        className="rounded border-border"
                       />
                       <div className="flex-1">
-                        <div className="font-medium text-sm">{u.name || u.email}</div>
+                        <div className="font-medium text-sm text-foreground">{u.name || u.email}</div>
                         {u.email && u.name && (
-                          <div className="text-xs text-slate-500">{u.email}</div>
+                          <div className="text-xs text-muted-foreground">{u.email}</div>
                         )}
                       </div>
                       {privateWhitelist.includes(u.id) && (
@@ -848,8 +848,8 @@ function OrganizationSettings() {
                 )}
               </div>
               
-              <div className="flex items-center justify-between pt-2 border-t">
-                <div className="text-sm text-slate-600">
+              <div className="flex items-center justify-between pt-2 border-t border-border">
+                <div className="text-sm text-muted-foreground">
                   {privateWhitelist.length} user{privateWhitelist.length !== 1 ? 's' : ''} selected
                 </div>
                 <Button 

@@ -18,10 +18,10 @@ export interface KpiCardProps {
  */
 export function KpiCard({ label, value, meta, tone = 'neutral', trend, delay = 0 }: KpiCardProps) {
   const toneClasses = {
-    good: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-    warning: 'bg-amber-50 text-amber-700 border border-amber-200',
-    bad: 'bg-rose-50 text-rose-700 border border-rose-200',
-    neutral: 'bg-neutral-50 text-neutral-700 border border-neutral-200',
+    good: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+    warning: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
+    bad: 'bg-rose-500/20 text-rose-300 border border-rose-500/30',
+    neutral: 'bg-slate-800 text-slate-300 border border-slate-700',
   }
 
   const trendIcon = trend?.direction === 'up' ? '▲' : trend?.direction === 'down' ? '▼' : '–'
@@ -34,13 +34,13 @@ export function KpiCard({ label, value, meta, tone = 'neutral', trend, delay = 0
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay }}
-      className="bg-white rounded-xl border border-neutral-200 shadow-sm p-4 flex flex-col transition-all duration-200 hover:shadow-md hover:border-neutral-300"
+      className="bg-slate-900 rounded-xl border border-slate-800 shadow-sm p-4 flex flex-col transition-all duration-200 hover:shadow-md hover:border-slate-700"
     >
-      <div className="text-[11px] uppercase tracking-wide text-neutral-500 mb-2">
+      <div className="text-[11px] uppercase tracking-wide text-slate-400 mb-2">
         {label}
       </div>
       <motion.div
-        className="text-3xl font-semibold text-neutral-900 mb-1"
+        className="text-3xl font-semibold text-white mb-1"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3, delay: delay + 0.1 }}
@@ -51,7 +51,7 @@ export function KpiCard({ label, value, meta, tone = 'neutral', trend, delay = 0
         <div className="flex items-center gap-2 text-xs">
           {meta && (
             typeof meta === 'string' ? (
-              <span className="text-neutral-500">{meta}</span>
+              <span className="text-slate-400">{meta}</span>
             ) : (
               meta
             )

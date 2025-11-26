@@ -162,16 +162,16 @@ export function ObjectiveCard({
   const publishedBadgeTone = isPublished ? 'neutral' : 'warn'
 
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+    <section className="rounded-xl border border-border bg-card shadow-sm hover:shadow-md transition-shadow duration-200">
       {/* Header */}
-      <div className="p-4 border-b">
+      <div className="p-4 border-b border-border">
         <div className="flex items-start justify-between gap-4">
           {/* Left side */}
           <div className="flex flex-col gap-1 flex-1 min-w-0">
-            <h3 className="text-lg font-semibold text-neutral-900 leading-tight">
+            <h3 className="text-lg font-semibold text-card-foreground leading-tight">
               {title}
             </h3>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-600">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               {/* Status badge */}
               <div className="flex items-center gap-1">
                 <OkrBadge tone={statusBadge.tone}>
@@ -347,9 +347,9 @@ export function ObjectiveCard({
         {/* Progress bar */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-neutral-600">Progress</span>
+            <span className="text-xs text-muted-foreground">Progress</span>
             <div className="flex items-center gap-1.5">
-              <span className="text-sm font-semibold text-neutral-900">
+              <span className="text-sm font-semibold text-card-foreground">
                 {Math.round(clampProgress(progressPct))}%
               </span>
               {/* Show breakdown tooltip if Objective has Key Results */}
@@ -379,7 +379,7 @@ export function ObjectiveCard({
               )}
             </div>
           </div>
-          <div className="w-full h-2 rounded-full bg-neutral-200 overflow-hidden">
+          <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
             <div
               className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300"
               style={{ width: `${Math.min(100, Math.max(0, progressPct))}%` }}
@@ -389,14 +389,14 @@ export function ObjectiveCard({
 
         {/* Objective Progress Trend Chart */}
         {keyResults.length > 0 && objectiveId && (
-          <div className="mb-4 pb-4 border-b border-neutral-200">
+          <div className="mb-4 pb-4 border-b border-border">
             <ObjectiveProgressTrendChart objectiveId={objectiveId} />
           </div>
         )}
 
         {/* Key Results */}
         <div>
-          <h4 className="text-xs font-semibold text-neutral-700 mb-2 uppercase tracking-wide">
+          <h4 className="text-xs font-semibold text-card-foreground mb-2 uppercase tracking-wide">
             Key Results {keyResults.length > 0 && `(${keyResults.length})`}
           </h4>
           {keyResults.length > 0 ? (
@@ -417,10 +417,10 @@ export function ObjectiveCard({
                 
                 return (
                   <li key={kr.id}>
-                    <div className="flex items-start justify-between rounded-lg border border-neutral-200 bg-white/50 p-3 hover:bg-neutral-50 transition-colors">
+                    <div className="flex items-start justify-between rounded-lg border border-border bg-muted/30 p-3 hover:bg-muted/50 transition-colors">
                       <div className="flex flex-col gap-1 flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <div className="text-sm font-medium text-neutral-900 leading-tight">
+                          <div className="text-sm font-medium text-card-foreground leading-tight">
                             {kr.title}
                           </div>
                           <OkrBadge tone={krStatusBadge.tone}>
@@ -437,7 +437,7 @@ export function ObjectiveCard({
                         </div>
                         {kr.currentValue !== undefined && kr.targetValue !== undefined && 
                          kr.startValue !== undefined && (
-                          <div className="text-[12px] leading-snug text-neutral-500">
+                          <div className="text-[12px] leading-snug text-muted-foreground">
                             {(() => {
                               // Don't display "Number" as a unit - it's redundant
                               const unitDisplay = kr.unit && kr.unit.toLowerCase() !== 'number' ? ` ${kr.unit}` : ''
@@ -455,7 +455,7 @@ export function ObjectiveCard({
                       <div className="flex flex-col items-end gap-2 flex-shrink-0 ml-2">
                         {onAddInitiativeToKr && (
                           <button
-                            className="text-[11px] font-medium text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
+                            className="text-[11px] font-medium text-muted-foreground hover:text-foreground underline underline-offset-2"
                             onClick={() => onAddInitiativeToKr(kr.id)}
                             aria-label={`Add new Initiative to this Key Result: ${kr.title}`}
                             // [phase5-core:done] hooked into shared handlers from OKR page for KR check-ins and initiative creation.
@@ -465,7 +465,7 @@ export function ObjectiveCard({
                         )}
                         {onAddCheckIn && (
                           <button
-                            className="text-[11px] font-medium text-neutral-500 hover:text-neutral-800 underline underline-offset-2"
+                            className="text-[11px] font-medium text-muted-foreground hover:text-foreground underline underline-offset-2"
                             onClick={() => onAddCheckIn(kr.id)}
                             aria-label={`Add check-in for Key Result: ${kr.title}`}
                             // [phase5-core:done] hooked into shared handlers from OKR page for KR check-ins and initiative creation.
@@ -480,7 +480,7 @@ export function ObjectiveCard({
               })}
             </ul>
           ) : (
-            <div className="text-xs text-neutral-500 text-center py-2">
+            <div className="text-xs text-muted-foreground text-center py-2">
               No key results yet
             </div>
           )}
@@ -489,7 +489,7 @@ export function ObjectiveCard({
         {/* Initiatives */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <div className="text-[12px] font-semibold uppercase tracking-wide text-neutral-500">
+            <div className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
               Initiatives
             </div>
             {onAddInitiative && (
@@ -513,21 +513,21 @@ export function ObjectiveCard({
                 return (
                   <li key={init.id} className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-neutral-900">
+                      <span className="text-sm font-medium text-card-foreground">
                         {init.title}
                       </span>
                       <OkrBadge tone={initStatusBadge.tone}>
                         {initStatusBadge.label}
                       </OkrBadge>
                       {dueDateFormatted && (
-                        <span className={`text-[12px] ${dueSoon ? 'text-rose-600' : 'text-neutral-500'}`}>
+                        <span className={`text-[12px] ${dueSoon ? 'text-destructive' : 'text-muted-foreground'}`}>
                           Due {dueDateFormatted}
                           {dueSoon && ' • Upcoming'}
                         </span>
                       )}
                     </div>
                     {init.keyResultId && init.keyResultTitle && (
-                      <div className="text-[11px] text-neutral-500">
+                      <div className="text-[11px] text-muted-foreground">
                         (supports KR: {init.keyResultTitle})
                       </div>
                     )}
@@ -537,7 +537,7 @@ export function ObjectiveCard({
               })}
             </ul>
           ) : (
-            <div className="text-xs text-neutral-500 text-center py-2">
+            <div className="text-xs text-muted-foreground text-center py-2">
               No initiatives yet
             </div>
           )}

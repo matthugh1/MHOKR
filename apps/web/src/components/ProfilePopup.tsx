@@ -145,38 +145,38 @@ export function ProfilePopup({ isOpen, onClose }: ProfilePopupProps) {
         <div className="space-y-6 mt-4">
           {/* User Information */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Users className="h-4 w-4" />
               Your Information
             </h3>
-            <div className="bg-slate-50 rounded-lg p-4 space-y-2">
+            <div className="bg-muted rounded-lg p-4 space-y-2">
               <div>
-                <p className="text-xs text-slate-500">Name</p>
-                <p className="text-sm font-medium text-slate-900">
+                <p className="text-xs text-muted-foreground">Name</p>
+                <p className="text-sm font-medium text-foreground">
                   {user?.firstName} {user?.lastName}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-slate-500">Email</p>
-                <p className="text-sm font-medium text-slate-900">{user?.email}</p>
+                <p className="text-xs text-muted-foreground">Email</p>
+                <p className="text-sm font-medium text-foreground">{user?.email}</p>
               </div>
             </div>
           </div>
 
-          <div className="border-t border-slate-200" />
+          <div className="border-t border-border" />
 
           {/* Organization */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Building2 className="h-4 w-4" />
               Organization
             </h3>
             {currentOrganization ? (
-              <div className="bg-slate-50 rounded-lg p-4">
-                <p className="text-sm font-medium text-slate-900">{currentOrganization.name}</p>
+              <div className="bg-muted rounded-lg p-4">
+                <p className="text-sm font-medium text-foreground">{currentOrganization.name}</p>
                 {permissions.rolesByScope?.tenant?.find(t => t.tenantId === currentOrganization.id) && (
                   <div className="mt-3 space-y-2">
-                    <p className="text-xs text-slate-500 mb-2">Your Roles:</p>
+                    <p className="text-xs text-muted-foreground mb-2">Your Roles:</p>
                     <div className="flex flex-wrap gap-2">
                       {permissions.rolesByScope.tenant
                         .find(t => t.tenantId === currentOrganization.id)
@@ -198,8 +198,8 @@ export function ProfilePopup({ isOpen, onClose }: ProfilePopupProps) {
                 )}
               </div>
             ) : (
-              <div className="bg-slate-50 rounded-lg p-4">
-                <p className="text-sm text-slate-500">No organization assigned</p>
+              <div className="bg-muted rounded-lg p-4">
+                <p className="text-sm text-muted-foreground">No organization assigned</p>
               </div>
             )}
           </div>
@@ -207,9 +207,9 @@ export function ProfilePopup({ isOpen, onClose }: ProfilePopupProps) {
           {/* Workspaces */}
           {permissions.rolesByScope?.workspace && permissions.rolesByScope.workspace.length > 0 && (
             <>
-              <div className="border-t border-slate-200" />
+              <div className="border-t border-border" />
               <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Network className="h-4 w-4" />
                   Workspaces
                 </h3>
@@ -217,8 +217,8 @@ export function ProfilePopup({ isOpen, onClose }: ProfilePopupProps) {
                   {permissions.rolesByScope.workspace.map((workspace) => {
                     const workspaceInfo = workspaces.find(w => w.id === workspace.workspaceId)
                     return (
-                      <div key={workspace.workspaceId} className="bg-slate-50 rounded-lg p-4 space-y-2">
-                        <p className="text-sm font-medium text-slate-900">
+                      <div key={workspace.workspaceId} className="bg-muted rounded-lg p-4 space-y-2">
+                        <p className="text-sm font-medium text-foreground">
                           {workspaceInfo?.name || `Workspace ${workspace.workspaceId}`}
                         </p>
                         <div className="flex flex-wrap gap-2">
@@ -247,9 +247,9 @@ export function ProfilePopup({ isOpen, onClose }: ProfilePopupProps) {
           {/* Teams */}
           {permissions.rolesByScope?.team && permissions.rolesByScope.team.length > 0 && (
             <>
-              <div className="border-t border-slate-200" />
+              <div className="border-t border-border" />
               <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Users className="h-4 w-4" />
                   Teams
                 </h3>
@@ -257,8 +257,8 @@ export function ProfilePopup({ isOpen, onClose }: ProfilePopupProps) {
                   {permissions.rolesByScope.team.map((team) => {
                     const teamInfo = teams.find(t => t.id === team.teamId)
                     return (
-                      <div key={team.teamId} className="bg-slate-50 rounded-lg p-4 space-y-2">
-                        <p className="text-sm font-medium text-slate-900">
+                      <div key={team.teamId} className="bg-muted rounded-lg p-4 space-y-2">
+                        <p className="text-sm font-medium text-foreground">
                           {teamInfo?.name || `Team ${team.teamId}`}
                         </p>
                         <div className="flex flex-wrap gap-2">
@@ -285,9 +285,9 @@ export function ProfilePopup({ isOpen, onClose }: ProfilePopupProps) {
           )}
 
           {/* Role Descriptions */}
-          <div className="border-t border-slate-200" />
+          <div className="border-t border-border" />
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Shield className="h-4 w-4" />
               Role Permissions
             </h3>

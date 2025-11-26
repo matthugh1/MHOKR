@@ -27,11 +27,11 @@ export interface StatCardProps {
  */
 export function StatCard({ title, value, subtitle }: StatCardProps) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-      <div className="text-xs text-neutral-500">{title}</div>
-      <div className="text-2xl font-semibold text-neutral-900">{value}</div>
+    <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm">
+      <div className="text-xs text-slate-400">{title}</div>
+      <div className="text-2xl font-semibold text-white">{value}</div>
       {subtitle && (
-        <div className="text-[11px] text-neutral-500 mt-1">{subtitle}</div>
+        <div className="text-[11px] text-slate-400 mt-1">{subtitle}</div>
       )}
     </div>
   )

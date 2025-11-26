@@ -369,9 +369,9 @@ const getProgressBarColor = (status: string) => {
       return 'bg-rose-500'
     case 'COMPLETED':
     case 'CANCELLED':
-      return 'bg-neutral-400'
+      return 'bg-muted'
     default:
-      return 'bg-neutral-300'
+      return 'bg-muted'
   }
 }
 
@@ -440,14 +440,14 @@ const getCyclePill = (cycleLabel: string, cycleStatus: string) => {
   if (cycleStatus === "ARCHIVED") {
     return {
       text: cleanCycleLabel,
-      className: cn(baseClasses, "bg-neutral-200 text-neutral-600"),
+      className: cn(baseClasses, "bg-muted text-muted-foreground"),
       activeChip: null,
     }
   }
   if (cycleStatus === "ACTIVE") {
     return {
       text: cleanCycleLabel,
-      className: cn(baseClasses, "bg-neutral-100 text-neutral-700 ring-1 ring-inset ring-neutral-300"),
+      className: cn(baseClasses, "bg-muted text-muted-foreground ring-1 ring-inset ring-border"),
       activeChip: { text: "Active", className: cn(baseClasses, "bg-emerald-500 text-white") },
     }
   }
@@ -1163,13 +1163,13 @@ export function ObjectiveRow({
 
   return (
     <section 
-      className="border border-neutral-200 rounded-xl bg-blue-50/30 shadow-sm hover:shadow-md transition-all duration-200"
+      className="border border-border rounded-xl bg-primary/10 shadow-sm hover:shadow-md transition-all duration-200"
       aria-expanded={isExpanded}
       style={{ overflow: 'visible' }}
     >
       {/* Collapsed header (always visible) */}
       <div
-        className="py-3.5 px-4 cursor-pointer hover:bg-neutral-50 transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 rounded-t-xl"
+        className="py-3.5 px-4 cursor-pointer hover:bg-muted transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 rounded-t-xl"
         onClick={() => onToggle(objective.id)}
         onKeyDown={handleKeyDown}
         role="button"
@@ -1281,7 +1281,7 @@ export function ObjectiveRow({
                     <PopoverTrigger asChild>
                       <button
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 transition-colors"
+                        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
                         aria-label="View additional information"
                       >
                         <Info className="h-3 w-3" />
@@ -1292,13 +1292,13 @@ export function ObjectiveRow({
                       <div className="space-y-2 text-xs">
                         {optimisticObjective.pillarId && (
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-neutral-500 min-w-[60px]">Pillar:</span>
+                            <span className="font-medium text-muted-foreground min-w-[60px]">Pillar:</span>
                             <PillarBadge pillarId={optimisticObjective.pillarId} />
                           </div>
                         )}
                         {optimisticObjective.goalType && (
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-neutral-500 min-w-[60px]">Goal Type:</span>
+                            <span className="font-medium text-muted-foreground min-w-[60px]">Goal Type:</span>
                             <Badge variant="outline" className="text-xs">
                               {optimisticObjective.goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
                             </Badge>
@@ -1315,7 +1315,7 @@ export function ObjectiveRow({
           <div className="hidden md:flex items-center gap-3 flex-1 max-w-md">
             {/* Progress bar with breakdown tooltip */}
             <div className="flex items-center gap-1.5 flex-1">
-              <div className="flex-1 h-1 rounded-full bg-neutral-200 overflow-hidden" style={{ height: '4px' }}>
+              <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden" style={{ height: '4px' }}>
                 <motion.div
                   className={cn("h-full rounded-full", progressBarColor)}
                   initial={false}
@@ -1435,10 +1435,10 @@ export function ObjectiveRow({
                 
                 {/* Add menu dropdown */}
                 {addMenuOpen && (
-                  <div className="absolute right-0 top-full mt-1 rounded-md border bg-white shadow-lg text-[13px] z-50 min-w-[180px]">
+                  <div className="absolute right-0 top-full mt-1 rounded-md border border-border bg-popover shadow-lg text-popover-foreground text-[13px] z-50 min-w-[180px]">
                     {canCreateKeyResult && (
                       <button
-                        className="w-full px-3 py-2 text-left hover:bg-neutral-100 rounded-t-md"
+                        className="w-full px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground rounded-t-md"
                         onClick={() => {
                           if (onContextualAddKeyResult) {
                             onContextualAddKeyResult(objective.id, objective.title)
@@ -1453,7 +1453,7 @@ export function ObjectiveRow({
                     )}
                     {canCreateInitiative && (
                       <button
-                        className={`w-full px-3 py-2 text-left hover:bg-neutral-100 ${canCreateKeyResult ? '' : 'rounded-t-md'} rounded-b-md`}
+                        className={`w-full px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground ${canCreateKeyResult ? '' : 'rounded-t-md'} rounded-b-md`}
                         onClick={() => {
                           if (onContextualAddInitiative) {
                             onContextualAddInitiative(objective.id, objective.title)
@@ -1502,14 +1502,14 @@ export function ObjectiveRow({
             )}
             
             {/* Secondary Actions Group: Edit and More menu */}
-            <div className="flex items-center gap-1 border-l border-neutral-200 pl-2">
+            <div className="flex items-center gap-1 border-l border-border pl-2">
               {/* Edit button - hidden if not permitted */}
               {onEdit && canEdit && (
                 <div onClick={(e) => e.stopPropagation()}>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 px-2 text-[12px] font-medium hover:bg-neutral-100"
+                    className="h-8 px-2 text-[12px] font-medium hover:bg-accent hover:text-accent-foreground"
                     onClick={() => onEdit(objective.id)}
                     aria-label="Edit objective"
                   >
@@ -1534,7 +1534,7 @@ export function ObjectiveRow({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0 hover:bg-neutral-100"
+                    className="h-8 w-8 p-0 hover:bg-accent hover:text-accent-foreground"
                     onClick={() => setMenuOpen(!menuOpen)}
                     aria-label="More actions"
                   >
@@ -1546,7 +1546,7 @@ export function ObjectiveRow({
                   <div className="absolute right-0 top-full mt-1 rounded-md border bg-white shadow-lg text-[13px] z-50 min-w-[160px]">
                     {onDelete && canDelete && (
                       <button
-                        className="w-full px-3 py-2 text-left hover:bg-neutral-100 rounded-md text-rose-600"
+                        className="w-full px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground rounded-md text-destructive"
                         onClick={() => {
                           onDelete(objective.id)
                           setMenuOpen(false)

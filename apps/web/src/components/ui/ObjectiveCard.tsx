@@ -76,8 +76,8 @@ export function ObjectiveCard({
   return (
     <div
       className={cn(
-        'rounded-xl border border-neutral-200 p-4',
-        'bg-white shadow-sm',
+        'rounded-xl border border-border p-4',
+        'bg-card shadow-sm',
         'transition-all duration-200',
         'hover:ring-1 hover:ring-blue-200 hover:shadow-md'
       )}
@@ -85,7 +85,7 @@ export function ObjectiveCard({
       {/* First row: title + status chip + published badge */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-semibold text-slate-900 mb-2 line-clamp-2">
+          <h3 className="text-lg font-semibold text-card-foreground mb-2 line-clamp-2">
             {title}
           </h3>
           <div className="flex items-center gap-2 flex-wrap">
@@ -106,12 +106,12 @@ export function ObjectiveCard({
       {/* Second row: progress bar */}
       <div className="mb-3">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-xs text-slate-600">Progress</span>
-          <span className="text-sm font-semibold text-slate-900">
+          <span className="text-xs text-muted-foreground">Progress</span>
+          <span className="text-sm font-semibold text-card-foreground">
             {Math.round(progressPct)}%
           </span>
         </div>
-        <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
+        <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
           <div
             className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300"
             style={{ width: `${Math.min(100, Math.max(0, progressPct))}%` }}
@@ -120,8 +120,8 @@ export function ObjectiveCard({
       </div>
 
       {/* Third row: owner, check-in, history */}
-      <div className="flex items-center justify-between pt-3 border-t border-slate-200">
-        <div className="flex items-center gap-3 text-sm text-slate-600">
+      <div className="flex items-center justify-between pt-3 border-t border-border">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             {ownerAvatarUrl ? (
               <img
@@ -130,15 +130,15 @@ export function ObjectiveCard({
                 className="h-6 w-6 rounded-full"
               />
             ) : (
-              <div className="h-6 w-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-700">
+              <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium text-primary">
                 {initials}
               </div>
             )}
-            <span className="text-slate-700">{ownerName}</span>
+            <span className="text-card-foreground">{ownerName}</span>
           </div>
           {nextCheckInText && (
             <>
-              <span className="text-slate-600">•</span>
+              <span className="text-muted-foreground">•</span>
               <span className="text-xs">{nextCheckInText}</span>
             </>
           )}

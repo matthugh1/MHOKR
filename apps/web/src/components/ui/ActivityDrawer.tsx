@@ -57,19 +57,19 @@ export function ActivityDrawer({
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             className={cn(
               'fixed right-0 top-0 h-full w-[400px] max-w-[90%] z-50',
-              'bg-white text-slate-900 border-l border-slate-200',
+              'bg-card text-card-foreground border-l border-border',
               'shadow-2xl rounded-l-2xl',
               'flex flex-col'
             )}
           >
             {/* Header */}
-            <div className="p-6 border-b border-slate-200 bg-slate-50">
+            <div className="p-6 border-b border-border bg-muted">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-neutral-900">
+                  <div className="text-sm font-medium text-card-foreground">
                     {headerTitle}
                   </div>
-                  <div className="text-[11px] text-neutral-500">
+                  <div className="text-[11px] text-muted-foreground">
                     Recent updates
                   </div>
                   {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
@@ -77,7 +77,7 @@ export function ActivityDrawer({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 text-slate-600 hover:text-slate-900"
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
                   onClick={onClose}
                 >
                   <X className="h-4 w-4" />
@@ -88,7 +88,7 @@ export function ActivityDrawer({
             {/* Scrollable body */}
             <div className="flex-1 overflow-y-auto px-4 pb-4">
               {(!safeItems || safeItems.length === 0) ? (
-                <div className="rounded-lg border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500 shadow-sm">
+                <div className="rounded-lg border border-border bg-card p-6 text-center text-sm text-muted-foreground shadow-sm">
                   No recent activity.
                   {/* TODO [phase6-polish]: tracked in GH issue 'Phase 6 polish bundle' */}
                 </div>
@@ -108,11 +108,11 @@ export function ActivityDrawer({
               
               {/* Load more button */}
               {hasMore && onLoadMore && (
-                <div className="pt-4 border-t border-slate-200">
+                <div className="pt-4 border-t border-border">
                   {/* TODO [phase7-performance]: Wire this to /activity/* with pagination params (limit, cursor) */}
                   <button
                     onClick={onLoadMore}
-                    className="text-sm text-blue-600 hover:text-blue-700 underline w-full text-center"
+                    className="text-sm text-primary hover:text-primary/80 underline w-full text-center"
                   >
                     Load more…
                   </button>
@@ -120,7 +120,7 @@ export function ActivityDrawer({
               )}
               
               {/* Build stamp footer */}
-              <div className="pt-4 border-t border-neutral-200">
+              <div className="pt-4 border-t border-border">
                 <BuildStamp variant="footer" />
               </div>
             </div>
