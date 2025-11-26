@@ -111,7 +111,7 @@ export default function DashboardPage() {
         const response = await api.get('/me/summary')
         const summary = response.data || {}
         const ownedObjectives = summary.ownedObjectives || []
-        
+
         // Transform to match Objective interface
         const objectives: Objective[] = ownedObjectives.map((obj: any) => ({
           id: obj.id,
@@ -120,14 +120,14 @@ export default function DashboardPage() {
           progress: obj.progress,
           keyResults: [], // Will be populated separately if needed
         }))
-        
+
         setMyOkrs(objectives)
-        
+
         // Check permissions for creating/publishing
         const overviewResponse = await api.get<OKROverviewResponse>(
           `/okr/overview?tenantId=${currentOrganization.id}&page=1&pageSize=1`
         ).catch(() => ({ data: { canCreateObjective: false, canPublishOKR: false } }))
-        
+
         setCanCreateObjective(overviewResponse.data.canCreateObjective || false)
         setCanPublishOKR(overviewResponse.data.canPublishOKR || false)
       } catch (error) {
@@ -149,7 +149,7 @@ export default function DashboardPage() {
       if (workspaceLoading) {
         return
       }
-      
+
       if (!currentOrganization?.id) {
         setLoading(false)
         return
@@ -259,10 +259,10 @@ export default function DashboardPage() {
               subtitle={userRoles.isSuperuser
                 ? 'System-wide overview with read-only access.'
                 : userRoles.isAdmin
-                ? 'Organisation-wide OKR performance and cross-workspace insights.'
-                : userRoles.isManager
-                ? 'Your OKRs, team performance, and cycle overview.'
-                : 'Your OKRs and progress tracking.'}
+                  ? 'Organisation-wide OKR performance and cross-workspace insights.'
+                  : userRoles.isManager
+                    ? 'Your OKRs, team performance, and cycle overview.'
+                    : 'Your OKRs and progress tracking.'}
               badges={[
                 { label: 'AI-assisted', tone: 'neutral' },
               ]}
@@ -377,15 +377,15 @@ export default function DashboardPage() {
                             {userRoles.managedTeams.length > 0 && userRoles.managedWorkspaces.length > 0
                               ? "My Team & Workspace OKRs"
                               : userRoles.managedTeams.length > 0
-                              ? "My Team's OKRs"
-                              : "My Workspace OKRs"}
+                                ? "My Team's OKRs"
+                                : "My Workspace OKRs"}
                           </CardTitle>
                           <CardDescription>
                             {userRoles.managedTeams.length > 0 && userRoles.managedWorkspaces.length > 0
                               ? 'Objectives and key results for your team and workspace'
                               : userRoles.managedTeams.length > 0
-                              ? 'Objectives and key results for your team'
-                              : 'Objectives and key results for your workspace'}
+                                ? 'Objectives and key results for your team'
+                                : 'Objectives and key results for your workspace'}
                           </CardDescription>
                         </div>
                       </div>
@@ -415,7 +415,7 @@ export default function DashboardPage() {
               )}
 
               {/* SECTION 4: Cycle Overview - For managers and admins */}
-              {(userRoles.isManager || userRoles.isAdmin || userRoles.isSuperuser) && activeCycleId && (
+              {(userRoles.isManager || userRoles.isAdmin || userRoles.isSuperuser || user?.role === 'ORG_ADMIN') && activeCycleId && (
                 <motion.section
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}

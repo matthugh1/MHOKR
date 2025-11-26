@@ -51,7 +51,7 @@ export function useHierarchyOKRs({
   const [loadingNodeIds, setLoadingNodeIds] = useState<Set<string>>(new Set())
   const [totalCount, setTotalCount] = useState(0)
   const [currentPage, setCurrentPage] = useState(page)
-  
+
   // Track which nodes have had their children loaded
   const loadedNodeIdsRef = useRef<Set<string>>(new Set())
 
@@ -70,11 +70,12 @@ export function useHierarchyOKRs({
         tenantId,
         page: pageNum.toString(),
         pageSize: pageSize.toString(),
+        parentId: 'null', // Fetch only root objectives
       })
 
       // Don't use hierarchyView=true as it bypasses pagination
       // We'll fetch paginated results and filter for root objectives client-side
-      
+
       if (cycleId) {
         params.set('cycleId', cycleId)
       }
@@ -95,22 +96,13 @@ export function useHierarchyOKRs({
       const envelope = response.data || {}
       const objectives = envelope.objectives || []
 
-      // Filter to only root objectives (parentId is null or undefined)
-      const rootObjectives = objectives.filter((obj: any) => !obj.parentId && !obj.parentObjectiveId)
-      
-      // Calculate total count of root objectives
-      // Since we're filtering client-side, we need to estimate
-      // If we got a full page of root objectives, there might be more
-      // For now, use a simple heuristic: if we got pageSize root objectives, assume there are more
-      if (rootObjectives.length === pageSize && objectives.length === pageSize) {
-        // Got a full page, estimate there are more root objectives
-        // Use a conservative estimate: assume at least 2 pages worth
-        setTotalCount(Math.max(rootObjectives.length * 2, envelope.totalCount || 0))
-      } else {
-        // Got fewer than pageSize, this is likely all root objectives
-        setTotalCount(rootObjectives.length)
-      }
-      
+      // Backend now filters by parentId=null, so all returned objectives are roots
+      const rootObjectives = objectives
+
+      // Use total count from backend response
+      // The backend calculates totalCount based on visibility filtering of all matching objectives
+      setTotalCount(envelope.totalCount || rootObjectives.length)
+
       setCurrentPage(pageNum)
 
       // Transform root objectives to hierarchical structure
@@ -144,6 +136,7 @@ export function useHierarchyOKRs({
         tenantId,
         page: '1',
         pageSize: '50', // Load a reasonable batch size
+        parentId: nodeId, // Fetch children of this node
       })
 
       // Apply same filters as root fetch
@@ -163,10 +156,8 @@ export function useHierarchyOKRs({
       const envelope = response.data || {}
       const allObjectives = envelope.objectives || []
 
-      // Filter to only children of this node (client-side filter since backend doesn't expose parentId query param)
-      const children = allObjectives.filter((obj: any) => 
-        (obj.parentId === nodeId || obj.parentObjectiveId === nodeId)
-      )
+      // Backend now filters by parentId=nodeId
+      const children = allObjectives
 
       if (children.length === 0) {
         // No children found, mark as loaded anyway

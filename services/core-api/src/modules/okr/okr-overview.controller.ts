@@ -59,11 +59,11 @@ export class OkrOverviewController {
     private rbacService: RBACService,
     private objectiveService: ObjectiveService,
     private importService: OkrImportService,
-  ) {}
+  ) { }
 
   @Get('overview')
   @RequireAction('view_okr')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get unified OKR overview with nested Key Results and Initiatives',
     description: 'Returns paginated list of objectives with their key results and initiatives. Only returns objectives visible to the requester based on RBAC and visibility rules. Supports filtering by cycle, status, scope, visibility level, and owner.'
   })
@@ -76,8 +76,8 @@ export class OkrOverviewController {
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
   @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Items per page (default: 20, max: 50)' })
   @ApiQuery({ name: 'hierarchyView', required: false, type: Boolean, description: 'If true, fetch complete hierarchy (all root objectives + descendants, ignores pagination)' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Paginated list of objectives with key results and initiatives',
     schema: {
       type: 'object',
@@ -99,6 +99,7 @@ export class OkrOverviewController {
     @Query('scope') scope: string | undefined,
     @Query('visibilityLevel') visibilityLevel: string | undefined,
     @Query('ownerId') ownerId: string | undefined,
+    @Query('parentId') parentId: string | undefined,
     @Query('page') page: string | undefined,
     @Query('pageSize') pageSize: string | undefined,
     @Query('hierarchyView') hierarchyView: string | undefined,
@@ -113,12 +114,12 @@ export class OkrOverviewController {
       // SINGLE-TENANT ACCESS: Users can only access their primary organization
       // The tenantId in req.user comes from primaryOrganizationId (set by JWT strategy)
       const userOrganizationId = req.user.tenantId;
-      
+
       // If user has no organization (undefined), deny access
       if (userOrganizationId === undefined) {
         throw new BadRequestException('You do not have access to this organisation. No organization assigned.');
       }
-      
+
       // Strict validation: only allow access to primary organization
       // Superusers (null) can access any organization
       if (userOrganizationId !== null && userOrganizationId !== tenantId) {
@@ -133,7 +134,7 @@ export class OkrOverviewController {
       // Parse pagination parameters
       const pageNum = page ? parseInt(page, 10) : 1;
       const pageSizeNum = pageSize ? parseInt(pageSize, 10) : 20;
-      
+
       // Validate pagination parameters
       if (pageNum < 1) {
         throw new BadRequestException('Page must be >= 1');
@@ -144,14 +145,23 @@ export class OkrOverviewController {
 
       // Build where clause for objectives (tenant isolation already enforced)
       const where: any = { tenantId };
-      
+
+      // Apply parentId filter
+      if (parentId !== undefined) {
+        if (parentId === 'null') {
+          where.parentId = null;
+        } else {
+          where.parentId = parentId;
+        }
+      }
+
       // Apply scope-based filtering before other filters
       if (scope) {
         const validScopes = ['my', 'team-workspace', 'tenant'];
         if (!validScopes.includes(scope)) {
           throw new BadRequestException(`Invalid scope. Must be one of: ${validScopes.join(', ')}`);
         }
-        
+
         if (scope === 'my') {
           // Filter by owner: only OKRs owned by the requester
           where.ownerId = requesterUserId;
@@ -159,7 +169,7 @@ export class OkrOverviewController {
           // Filter by workspace/team IDs the user manages or belongs to
           // Prefer lead roles (WORKSPACE_LEAD, TEAM_LEAD) over member roles
           const userContext = await this.rbacService.buildUserContext(requesterUserId, false);
-          
+
           // Collect workspace IDs where user has lead roles
           const workspaceIds: string[] = [];
           for (const [workspaceId, roles] of userContext.workspaceRoles.entries()) {
@@ -168,7 +178,7 @@ export class OkrOverviewController {
               workspaceIds.push(workspaceId);
             }
           }
-          
+
           // Collect team IDs where user has lead roles
           const teamIds: string[] = [];
           for (const [teamId, roles] of userContext.teamRoles.entries()) {
@@ -177,7 +187,7 @@ export class OkrOverviewController {
               teamIds.push(teamId);
             }
           }
-          
+
           // Fallback: if no lead roles, use member roles
           if (workspaceIds.length === 0 && teamIds.length === 0) {
             for (const [workspaceId] of userContext.workspaceRoles.entries()) {
@@ -187,7 +197,7 @@ export class OkrOverviewController {
               teamIds.push(teamId);
             }
           }
-          
+
           // Apply filters: OKRs must belong to one of these workspaces or teams
           if (workspaceIds.length > 0 || teamIds.length > 0) {
             const orConditions: any[] = [];
@@ -209,12 +219,12 @@ export class OkrOverviewController {
           // Show all tenant OKRs (visibility filtering will still apply)
         }
       }
-      
+
       // Apply optional filters
       if (cycleId) {
         where.cycleId = cycleId;
       }
-      
+
       if (status) {
         // Validate status enum
         const validStatuses = ['ON_TRACK', 'AT_RISK', 'BLOCKED', 'COMPLETED', 'CANCELLED'];
@@ -268,7 +278,7 @@ export class OkrOverviewController {
         let allObjectives;
         try {
           this.logger.debug(`Fetching objectives with tenantId=${tenantId}, userTenantId=${userOrganizationId}, hierarchyView=${isHierarchyView}`);
-          
+
           if (isHierarchyView) {
             // Hierarchy view: Fetch all root objectives + all their descendants
             // Step 1: Fetch all root objectives (parentId is null)
@@ -328,18 +338,18 @@ export class OkrOverviewController {
             // Step 2: Phase 2.2 Optimization - Use PostgreSQL recursive CTE to fetch all descendants in a single query
             // This replaces the recursive JavaScript function that made multiple database round trips
             const rootIds = rootObjectives.map(o => o.id);
-            
+
             if (rootIds.length === 0) {
               allObjectives = rootObjectives;
             } else {
               // Build WHERE conditions for the CTE using Prisma.sql parameterized queries
               // All user input values are parameterized through Prisma.sql template tag
               // This prevents SQL injection by ensuring values are properly escaped
-              
+
               // Build the query conditionally with all values parameterized
               // For the IN clause, we'll build it with individual conditions or use a different approach
               let query: Prisma.Sql;
-              
+
               if (rootIds.length === 1 && !where.tenantId && !where.cycleId && !where.status && !where.pillarId && !where.teamId) {
                 // Simple case: single root ID, no filters
                 query = Prisma.sql`
@@ -361,13 +371,13 @@ export class OkrOverviewController {
                 // Complex case: build query with all conditions
                 // We'll use Prisma.sql with conditional building
                 const hasFilters = !!(where.tenantId || where.cycleId || where.status || where.pillarId || where.teamId);
-                
+
                 // Build IN clause safely - rootIds come from database queries so they're safe,
                 // but we still parameterize them through Prisma.sql for consistency
                 // Since Prisma.join has type issues, we'll build the IN clause with individual conditions
                 // or use a workaround: validate IDs are UUIDs (which they are from Prisma) and use Prisma.raw
                 // But to be safe, we'll use Prisma.sql with direct interpolation for each value
-                
+
                 // Build parentId condition - use OR for multiple IDs to avoid Prisma.join type issues
                 // This is safe because rootIds come from Prisma queries, not user input
                 let parentIdCondition: Prisma.Sql;
@@ -381,7 +391,7 @@ export class OkrOverviewController {
                   const idsList = rootIds.map(id => `'${id.replace(/'/g, "''")}'`).join(', ');
                   parentIdCondition = Prisma.raw(`"parentId" IN (${idsList})`);
                 }
-                
+
                 if (hasFilters) {
                   // Build query with filters
                   query = Prisma.sql`
@@ -428,19 +438,19 @@ export class OkrOverviewController {
                   `;
                 }
               }
-              
+
               // Execute parameterized query - all values are safely parameterized by Prisma
               const descendantIdsResult = await this.prisma.$queryRaw<Array<{ id: string }>>(query);
-              
+
               const allDescendantIds = descendantIdsResult.map(r => r.id);
-              
+
               // Step 3: Fetch all descendants with full data
               const descendants = allDescendantIds.length > 0
                 ? await this.prisma.objective.findMany({
-                    where: {
-                      ...where,
-                      id: { in: allDescendantIds },
-                    },
+                  where: {
+                    ...where,
+                    id: { in: allDescendantIds },
+                  },
                   include: {
                     keyResults: {
                       select: {
@@ -487,10 +497,10 @@ export class OkrOverviewController {
                     },
                   },
                 })
-              : [];
-            
-            // Combine root objectives and descendants
-            allObjectives = [...rootObjectives, ...descendants];
+                : [];
+
+              // Combine root objectives and descendants
+              allObjectives = [...rootObjectives, ...descendants];
             }
           } else {
             // Regular view: Fetch with pagination support
@@ -549,367 +559,367 @@ export class OkrOverviewController {
               ],
             });
           }
-      } catch (queryError: any) {
-        // Error logging kept for debugging
-        this.logger.error('Database query error', { message: queryError?.message, stack: queryError?.stack });
-        throw queryError;
-      }
-      // Removed debug logging - use structured logging service in production
-
-    // Filter objectives by visibility
-    const visibleObjectives = [];
-    for (const objective of allObjectives) {
-      if (!objective.tenantId) {
-        continue;
-      }
-      try {
-        const canSee = await this.visibilityService.canUserSeeObjective({
-          objective: {
-            id: objective.id,
-            ownerId: objective.ownerId,
-            tenantId: objective.tenantId,
-            visibilityLevel: objective.visibilityLevel,
-          },
-          requesterUserId,
-          requesterOrgId: userOrganizationId,
-        });
-
-        // Removed debug logging for visibility checks - use structured logging service in production
-
-        if (canSee) {
-          visibleObjectives.push(objective);
+        } catch (queryError: any) {
+          // Error logging kept for debugging
+          this.logger.error('Database query error', { message: queryError?.message, stack: queryError?.stack });
+          throw queryError;
         }
-      } catch (visibilityError: any) {
-        this.logger.warn(`Error checking visibility for objective ${objective.id}: ${visibilityError?.message}`);
-        // If visibility check fails, exclude the objective (fail closed for security)
-        continue;
-      }
-    }
+        // Removed debug logging - use structured logging service in production
 
-    // Calculate total count AFTER visibility filtering
-    const totalCount = visibleObjectives.length;
-    
-    // Record telemetry for filtered list
-    const filteredCount = allObjectives.length - visibleObjectives.length;
-    if (filteredCount > 0) {
-      listTelemetry.recordCounter('list.filtered', {
-        tenantId: userOrganizationId || 'null',
-        filteredCount,
-        totalCount: allObjectives.length,
-        requesterUserId,
-      });
-    }
-    
-    // Removed debug logging - use structured logging service in production
-
-    // Apply pagination to filtered results (skip if hierarchy view)
-    let paginatedObjectives;
-    if (isHierarchyView) {
-      // Hierarchy view: Return all visible objectives (complete hierarchy)
-      paginatedObjectives = visibleObjectives;
-    } else {
-      // Regular view: Apply pagination
-      const skip = (pageNum - 1) * pageSizeNum;
-      const take = pageSizeNum;
-      paginatedObjectives = visibleObjectives.slice(skip, skip + take);
-    }
-
-    // Fetch all initiatives for these objectives' Key Results
-    const keyResultIds = paginatedObjectives.flatMap(o => 
-      o.keyResults.map(okr => okr.keyResult.id)
-    );
-
-    // Fetch initiatives linked to Key Results
-    const krInitiatives = keyResultIds.length > 0
-      ? await this.prisma.initiative.findMany({
-          where: {
-            keyResultId: { in: keyResultIds },
-          },
-        })
-      : [];
-
-    // Group initiatives by keyResultId for efficient lookup
-    const initiativesByKrId = new Map<string, typeof krInitiatives>();
-    krInitiatives.forEach(init => {
-      if (init.keyResultId) {
-        if (!initiativesByKrId.has(init.keyResultId)) {
-          initiativesByKrId.set(init.keyResultId, []);
-        }
-        initiativesByKrId.get(init.keyResultId)!.push(init);
-      }
-    });
-
-    // Build resource context for governance checks
-    // Ensure tenantId is never undefined - if it is, we shouldn't have gotten this far
-    if (userOrganizationId === undefined) {
-      this.logger.error('CRITICAL: userOrganizationId is undefined after validation check');
-      throw new BadRequestException('User organization not properly set');
-    }
-
-    const actingUser = {
-      id: requesterUserId,
-      tenantId: userOrganizationId,
-    };
-
-    // Transform to unified response format with canEdit/canDelete/canCheckIn flags
-    const objectives = await Promise.all(
-      paginatedObjectives.map(async (o) => {
-        // Check if user can edit this objective
-        let canEdit = false;
-        let canDelete = false;
-        try {
-          const resourceContext = await buildResourceContextFromOKR(this.prisma, o.id);
-          canEdit = await this.rbacService.canPerformAction(requesterUserId, 'edit_okr', resourceContext);
-          canDelete = await this.rbacService.canPerformAction(requesterUserId, 'delete_okr', resourceContext);
-
-          // Check governance locks (publish lock + cycle lock)
-          if (canEdit || canDelete) {
-            try {
-              await this.governanceService.checkAllLocksForObjective({
-                objective: {
-                  id: o.id,
-                  isPublished: o.isPublished,
-                },
-                actingUser,
-                rbacService: this.rbacService,
-              });
-            } catch (error) {
-              // If locked and user is not admin, deny edit/delete
-              // (checkAllLocksForObjective throws if locked and user cannot bypass)
-              canEdit = false;
-              canDelete = false;
-            }
-          }
-        } catch (error) {
-          // If RBAC check fails, canEdit/canDelete remain false
-          this.logger.warn(`Error checking permissions for objective ${o.id}: ${(error as any)?.message}`);
-        }
-
-        // Filter key results by visibility and add canCheckIn flag
-        const visibleKeyResults = [];
-        for (const okr of o.keyResults) {
-          const kr = okr.keyResult;
-          
-          const canSeeKr = await this.visibilityService.canUserSeeKeyResult({
-            keyResult: {
-              id: kr.id,
-              ownerId: kr.ownerId,
-            },
-            parentObjective: {
-              id: o.id,
-              ownerId: o.ownerId,
-              tenantId: o.tenantId || '',
-              visibilityLevel: o.visibilityLevel,
-            },
-            requesterUserId,
-            requesterOrgId: userOrganizationId,
-          });
-
-          if (!canSeeKr) {
+        // Filter objectives by visibility
+        const visibleObjectives = [];
+        for (const objective of allObjectives) {
+          if (!objective.tenantId) {
             continue;
           }
-
-          // Check if user can check in on this KR
-          let canCheckIn = false;
           try {
-            const resourceContext = await buildResourceContextFromOKR(this.prisma, o.id);
-            canCheckIn = await this.rbacService.canPerformAction(requesterUserId, 'edit_okr', resourceContext);
+            const canSee = await this.visibilityService.canUserSeeObjective({
+              objective: {
+                id: objective.id,
+                ownerId: objective.ownerId,
+                tenantId: objective.tenantId,
+                visibilityLevel: objective.visibilityLevel,
+              },
+              requesterUserId,
+              requesterOrgId: userOrganizationId,
+            });
 
-            // Check governance locks for check-in
-            if (canCheckIn) {
-              try {
-                await this.governanceService.checkAllLocksForKeyResult({
-                  parentObjective: {
-                    id: o.id,
-                    isPublished: o.isPublished,
-                  },
-                  actingUser,
-                  rbacService: this.rbacService,
-                });
-              } catch (error) {
-                // If locked and user is not admin, deny check-in
-                canCheckIn = false;
-              }
+            // Removed debug logging for visibility checks - use structured logging service in production
+
+            if (canSee) {
+              visibleObjectives.push(objective);
             }
-          } catch (error) {
-            // If RBAC check fails, canCheckIn remains false
-            this.logger.warn(`Error checking canCheckIn for KR ${kr.id}: ${(error as any)?.message}`);
+          } catch (visibilityError: any) {
+            this.logger.warn(`Error checking visibility for objective ${objective.id}: ${visibilityError?.message}`);
+            // If visibility check fails, exclude the objective (fail closed for security)
+            continue;
           }
+        }
 
-          const krInitiatives = initiativesByKrId.get(kr.id) || [];
-          visibleKeyResults.push({
-            keyResultId: kr.id,
-            title: kr.title,
-            status: kr.status,
-            progress: kr.progress,
-            canCheckIn,
-            startValue: kr.startValue,
-            targetValue: kr.targetValue,
-            currentValue: kr.currentValue,
-            unit: kr.unit,
-            ownerId: kr.ownerId,
-            owner: kr.owner
-              ? {
-                  id: kr.owner.id,
-                  name: kr.owner.name,
-                  email: kr.owner.email,
-                }
-              : null,
-            initiatives: krInitiatives.map((i) => ({
-              id: i.id,
-              title: i.title,
-              status: i.status,
-              dueDate: i.dueDate,
-              keyResultId: i.keyResultId,
-            })),
+        // Calculate total count AFTER visibility filtering
+        const totalCount = visibleObjectives.length;
+
+        // Record telemetry for filtered list
+        const filteredCount = allObjectives.length - visibleObjectives.length;
+        if (filteredCount > 0) {
+          listTelemetry.recordCounter('list.filtered', {
+            tenantId: userOrganizationId || 'null',
+            filteredCount,
+            totalCount: allObjectives.length,
+            requesterUserId,
           });
         }
 
-        // W4.M1: Taxonomy alignment - canonical fields only
-        // - status: progress state (ON_TRACK, AT_RISK, etc.)
-        // - isPublished: governance state (true = Published, false = Draft)
-        // - visibilityLevel: canonical enum (PUBLIC_TENANT, PRIVATE)
-        const result = {
-          objectiveId: o.id,
-          title: o.title,
-          status: o.status, // Progress state: ON_TRACK | AT_RISK | OFF_TRACK | COMPLETED | CANCELLED
-          publishState: o.isPublished ? 'PUBLISHED' : 'DRAFT', // Governance state: PUBLISHED | DRAFT
-          visibilityLevel: o.visibilityLevel, // Canonical: PUBLIC_TENANT | PRIVATE (deprecated values normalized to PUBLIC_TENANT)
-          cycleStatus: o.cycle ? o.cycle.status : 'NONE',
-          isPublished: o.isPublished, // Boolean kept for backward compatibility
-          progress: o.progress,
-          ownerId: o.ownerId,
-          parentId: o.parentId || null, // Include parentId for hierarchical tree view
-          cycleId: o.cycleId || o.cycle?.id || null, // Include cycleId directly for easier access
-          pillarId: o.pillarId || null, // Include pillarId for strategic pillar linking
-          workspaceId: o.workspaceId || null, // Include workspaceId for workspace filtering
-          teamId: o.teamId || null, // Include teamId for team filtering
-          owner: o.owner
-            ? {
-                id: o.owner.id,
-                name: o.owner.name,
-                email: o.owner.email,
-              }
-            : null,
-          cycle: o.cycle
-            ? {
-                id: o.cycle.id,
-                name: o.cycle.name,
-                status: o.cycle.status,
-              }
-            : null,
-          canEdit,
-          canDelete,
-          keyResults: visibleKeyResults,
-          // Merge initiatives: both direct objective initiatives AND initiatives from Key Results
-          // Initiatives linked to KRs don't have objectiveId, so we need to include them here
-          initiatives: [
-            // Direct objective initiatives (have objectiveId)
-            ...o.initiatives.map((i) => ({
-              id: i.id,
-              title: i.title,
-              status: i.status,
-              dueDate: i.dueDate,
-              keyResultId: i.keyResultId,
-            })),
-            // Initiatives from Key Results (may not have objectiveId, but belong to this objective via KR)
-            ...visibleKeyResults.flatMap((kr) =>
-              (kr.initiatives || []).map((i) => ({
-                id: i.id,
-                title: i.title,
-                status: i.status,
-                dueDate: i.dueDate,
-                keyResultId: i.keyResultId,
-              }))
-            ),
-          ].filter((init, index, self) =>
-            // Deduplicate by ID (in case an initiative has both objectiveId and keyResultId)
-            index === self.findIndex((i) => i.id === init.id)
-          ),
-        };
-        return result;
-      })
-    );
+        // Removed debug logging - use structured logging service in production
 
-    // Check if user can create objectives in this context
-    let canCreateObjective = false;
-    try {
-      // Use the tenantId from query params (what user is viewing) for RBAC check
-      // This is the tenant context we're checking permissions against
-      const tenantIdForRBAC = tenantId || userOrganizationId || '';
-      
-      // Build resource context for creation check (no specific OKR ID needed)
-      const resourceContext = {
-        tenantId: tenantIdForRBAC,
-        workspaceId: null,
-        teamId: null,
-      };
+        // Apply pagination to filtered results (skip if hierarchy view)
+        let paginatedObjectives;
+        if (isHierarchyView) {
+          // Hierarchy view: Return all visible objectives (complete hierarchy)
+          paginatedObjectives = visibleObjectives;
+        } else {
+          // Regular view: Apply pagination
+          const skip = (pageNum - 1) * pageSizeNum;
+          const take = pageSizeNum;
+          paginatedObjectives = visibleObjectives.slice(skip, skip + take);
+        }
 
-      // Check RBAC permission for create_okr action
-      try {
-        canCreateObjective = await this.rbacService.canPerformAction(
-          requesterUserId,
-          'create_okr',
-          resourceContext,
+        // Fetch all initiatives for these objectives' Key Results
+        const keyResultIds = paginatedObjectives.flatMap(o =>
+          o.keyResults.map(okr => okr.keyResult.id)
         );
-      } catch (rbacError) {
-        this.logger.error('RBAC check failed', { error: rbacError });
-        canCreateObjective = false;
-      }
 
-      // Removed debug logging - use structured logging service in production
+        // Fetch initiatives linked to Key Results
+        const krInitiatives = keyResultIds.length > 0
+          ? await this.prisma.initiative.findMany({
+            where: {
+              keyResultId: { in: keyResultIds },
+            },
+          })
+          : [];
 
-      // If user has create permission, check cycle governance if cycleId is provided
-      if (canCreateObjective && cycleId) {
-        try {
-          const cycle = await this.prisma.cycle.findUnique({
-            where: { id: cycleId },
-            select: { status: true },
-          });
+        // Group initiatives by keyResultId for efficient lookup
+        const initiativesByKrId = new Map<string, typeof krInitiatives>();
+        krInitiatives.forEach(init => {
+          if (init.keyResultId) {
+            if (!initiativesByKrId.has(init.keyResultId)) {
+              initiativesByKrId.set(init.keyResultId, []);
+            }
+            initiativesByKrId.get(init.keyResultId)!.push(init);
+          }
+        });
 
-          // If cycle is LOCKED or ARCHIVED, only admins can create
-          if (cycle && (cycle.status === 'LOCKED' || cycle.status === 'ARCHIVED')) {
-            // Check if user has admin override (edit_okr permission indicates admin role)
-            const adminResourceContext = {
-              tenantId: tenantIdForRBAC,
-              workspaceId: null,
-              teamId: null,
+        // Build resource context for governance checks
+        // Ensure tenantId is never undefined - if it is, we shouldn't have gotten this far
+        if (userOrganizationId === undefined) {
+          this.logger.error('CRITICAL: userOrganizationId is undefined after validation check');
+          throw new BadRequestException('User organization not properly set');
+        }
+
+        const actingUser = {
+          id: requesterUserId,
+          tenantId: userOrganizationId,
+        };
+
+        // Transform to unified response format with canEdit/canDelete/canCheckIn flags
+        const objectives = await Promise.all(
+          paginatedObjectives.map(async (o) => {
+            // Check if user can edit this objective
+            let canEdit = false;
+            let canDelete = false;
+            try {
+              const resourceContext = await buildResourceContextFromOKR(this.prisma, o.id);
+              canEdit = await this.rbacService.canPerformAction(requesterUserId, 'edit_okr', resourceContext);
+              canDelete = await this.rbacService.canPerformAction(requesterUserId, 'delete_okr', resourceContext);
+
+              // Check governance locks (publish lock + cycle lock)
+              if (canEdit || canDelete) {
+                try {
+                  await this.governanceService.checkAllLocksForObjective({
+                    objective: {
+                      id: o.id,
+                      isPublished: o.isPublished,
+                    },
+                    actingUser,
+                    rbacService: this.rbacService,
+                  });
+                } catch (error) {
+                  // If locked and user is not admin, deny edit/delete
+                  // (checkAllLocksForObjective throws if locked and user cannot bypass)
+                  canEdit = false;
+                  canDelete = false;
+                }
+              }
+            } catch (error) {
+              // If RBAC check fails, canEdit/canDelete remain false
+              this.logger.warn(`Error checking permissions for objective ${o.id}: ${(error as any)?.message}`);
+            }
+
+            // Filter key results by visibility and add canCheckIn flag
+            const visibleKeyResults = [];
+            for (const okr of o.keyResults) {
+              const kr = okr.keyResult;
+
+              const canSeeKr = await this.visibilityService.canUserSeeKeyResult({
+                keyResult: {
+                  id: kr.id,
+                  ownerId: kr.ownerId,
+                },
+                parentObjective: {
+                  id: o.id,
+                  ownerId: o.ownerId,
+                  tenantId: o.tenantId || '',
+                  visibilityLevel: o.visibilityLevel,
+                },
+                requesterUserId,
+                requesterOrgId: userOrganizationId,
+              });
+
+              if (!canSeeKr) {
+                continue;
+              }
+
+              // Check if user can check in on this KR
+              let canCheckIn = false;
+              try {
+                const resourceContext = await buildResourceContextFromOKR(this.prisma, o.id);
+                canCheckIn = await this.rbacService.canPerformAction(requesterUserId, 'edit_okr', resourceContext);
+
+                // Check governance locks for check-in
+                if (canCheckIn) {
+                  try {
+                    await this.governanceService.checkAllLocksForKeyResult({
+                      parentObjective: {
+                        id: o.id,
+                        isPublished: o.isPublished,
+                      },
+                      actingUser,
+                      rbacService: this.rbacService,
+                    });
+                  } catch (error) {
+                    // If locked and user is not admin, deny check-in
+                    canCheckIn = false;
+                  }
+                }
+              } catch (error) {
+                // If RBAC check fails, canCheckIn remains false
+                this.logger.warn(`Error checking canCheckIn for KR ${kr.id}: ${(error as any)?.message}`);
+              }
+
+              const krInitiatives = initiativesByKrId.get(kr.id) || [];
+              visibleKeyResults.push({
+                keyResultId: kr.id,
+                title: kr.title,
+                status: kr.status,
+                progress: kr.progress,
+                canCheckIn,
+                startValue: kr.startValue,
+                targetValue: kr.targetValue,
+                currentValue: kr.currentValue,
+                unit: kr.unit,
+                ownerId: kr.ownerId,
+                owner: kr.owner
+                  ? {
+                    id: kr.owner.id,
+                    name: kr.owner.name,
+                    email: kr.owner.email,
+                  }
+                  : null,
+                initiatives: krInitiatives.map((i) => ({
+                  id: i.id,
+                  title: i.title,
+                  status: i.status,
+                  dueDate: i.dueDate,
+                  keyResultId: i.keyResultId,
+                })),
+              });
+            }
+
+            // W4.M1: Taxonomy alignment - canonical fields only
+            // - status: progress state (ON_TRACK, AT_RISK, etc.)
+            // - isPublished: governance state (true = Published, false = Draft)
+            // - visibilityLevel: canonical enum (PUBLIC_TENANT, PRIVATE)
+            const result = {
+              objectiveId: o.id,
+              title: o.title,
+              status: o.status, // Progress state: ON_TRACK | AT_RISK | OFF_TRACK | COMPLETED | CANCELLED
+              publishState: o.isPublished ? 'PUBLISHED' : 'DRAFT', // Governance state: PUBLISHED | DRAFT
+              visibilityLevel: o.visibilityLevel, // Canonical: PUBLIC_TENANT | PRIVATE (deprecated values normalized to PUBLIC_TENANT)
+              cycleStatus: o.cycle ? o.cycle.status : 'NONE',
+              isPublished: o.isPublished, // Boolean kept for backward compatibility
+              progress: o.progress,
+              ownerId: o.ownerId,
+              parentId: o.parentId || null, // Include parentId for hierarchical tree view
+              cycleId: o.cycleId || o.cycle?.id || null, // Include cycleId directly for easier access
+              pillarId: o.pillarId || null, // Include pillarId for strategic pillar linking
+              workspaceId: o.workspaceId || null, // Include workspaceId for workspace filtering
+              teamId: o.teamId || null, // Include teamId for team filtering
+              owner: o.owner
+                ? {
+                  id: o.owner.id,
+                  name: o.owner.name,
+                  email: o.owner.email,
+                }
+                : null,
+              cycle: o.cycle
+                ? {
+                  id: o.cycle.id,
+                  name: o.cycle.name,
+                  status: o.cycle.status,
+                }
+                : null,
+              canEdit,
+              canDelete,
+              keyResults: visibleKeyResults,
+              // Merge initiatives: both direct objective initiatives AND initiatives from Key Results
+              // Initiatives linked to KRs don't have objectiveId, so we need to include them here
+              initiatives: [
+                // Direct objective initiatives (have objectiveId)
+                ...o.initiatives.map((i) => ({
+                  id: i.id,
+                  title: i.title,
+                  status: i.status,
+                  dueDate: i.dueDate,
+                  keyResultId: i.keyResultId,
+                })),
+                // Initiatives from Key Results (may not have objectiveId, but belong to this objective via KR)
+                ...visibleKeyResults.flatMap((kr) =>
+                  (kr.initiatives || []).map((i) => ({
+                    id: i.id,
+                    title: i.title,
+                    status: i.status,
+                    dueDate: i.dueDate,
+                    keyResultId: i.keyResultId,
+                  }))
+                ),
+              ].filter((init, index, self) =>
+                // Deduplicate by ID (in case an initiative has both objectiveId and keyResultId)
+                index === self.findIndex((i) => i.id === init.id)
+              ),
             };
+            return result;
+          })
+        );
+
+        // Check if user can create objectives in this context
+        let canCreateObjective = false;
+        try {
+          // Use the tenantId from query params (what user is viewing) for RBAC check
+          // This is the tenant context we're checking permissions against
+          const tenantIdForRBAC = tenantId || userOrganizationId || '';
+
+          // Build resource context for creation check (no specific OKR ID needed)
+          const resourceContext = {
+            tenantId: tenantIdForRBAC,
+            workspaceId: null,
+            teamId: null,
+          };
+
+          // Check RBAC permission for create_okr action
+          try {
             canCreateObjective = await this.rbacService.canPerformAction(
               requesterUserId,
-              'edit_okr', // Use edit_okr as proxy for admin override
-              adminResourceContext,
+              'create_okr',
+              resourceContext,
             );
+          } catch (rbacError) {
+            this.logger.error('RBAC check failed', { error: rbacError });
+            canCreateObjective = false;
+          }
+
+          // Removed debug logging - use structured logging service in production
+
+          // If user has create permission, check cycle governance if cycleId is provided
+          if (canCreateObjective && cycleId) {
+            try {
+              const cycle = await this.prisma.cycle.findUnique({
+                where: { id: cycleId },
+                select: { status: true },
+              });
+
+              // If cycle is LOCKED or ARCHIVED, only admins can create
+              if (cycle && (cycle.status === 'LOCKED' || cycle.status === 'ARCHIVED')) {
+                // Check if user has admin override (edit_okr permission indicates admin role)
+                const adminResourceContext = {
+                  tenantId: tenantIdForRBAC,
+                  workspaceId: null,
+                  teamId: null,
+                };
+                canCreateObjective = await this.rbacService.canPerformAction(
+                  requesterUserId,
+                  'edit_okr', // Use edit_okr as proxy for admin override
+                  adminResourceContext,
+                );
+              }
+            } catch (error) {
+              // If cycle lookup fails, conservatively deny creation
+              canCreateObjective = false;
+            }
+          }
+
+          // SUPERUSER can create everything
+          if (userOrganizationId === null) {
+            canCreateObjective = true;
           }
         } catch (error) {
-          // If cycle lookup fails, conservatively deny creation
+          // If RBAC check fails, conservatively deny creation
+          this.logger.error('Error checking canCreateObjective', { error });
           canCreateObjective = false;
         }
-      }
 
-      // SUPERUSER can create everything
-      if (userOrganizationId === null) {
-        canCreateObjective = true;
-      }
-    } catch (error) {
-      // If RBAC check fails, conservatively deny creation
-      this.logger.error('Error checking canCreateObjective', { error });
-      canCreateObjective = false;
-    }
+        // ALWAYS include canCreateObjective in response (even if false)
+        // Return paginated envelope with creation permission flag
+        const responsePayload = {
+          page: pageNum,
+          pageSize: pageSizeNum,
+          totalCount,
+          objectives,
+          canCreateObjective: canCreateObjective || false, // Explicitly ensure it's always included
+        };
 
-    // ALWAYS include canCreateObjective in response (even if false)
-    // Return paginated envelope with creation permission flag
-    const responsePayload = {
-      page: pageNum,
-      pageSize: pageSizeNum,
-      totalCount,
-      objectives,
-      canCreateObjective: canCreateObjective || false, // Explicitly ensure it's always included
-    };
+        // Removed debug logging - use structured logging service in production
 
-    // Removed debug logging - use structured logging service in production
-
-    return responsePayload;
+        return responsePayload;
       });
     } catch (error: any) {
       this.logger.error('Error in getOverview', {
@@ -942,7 +952,7 @@ export class OkrOverviewController {
     // Tenant isolation: validate user has access to this organization
     const userOrganizationId = req.user.tenantId;
     const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
-    
+
     // If user has a specific org and it doesn't match, deny access
     if (userOrganizationId !== null && orgFilter && orgFilter.tenantId !== tenantId) {
       throw new BadRequestException('You do not have access to this organisation');
@@ -1012,7 +1022,7 @@ export class OkrOverviewController {
           },
         },
       });
-      
+
       // Deduplicate users by ID (a user can have multiple role assignments)
       const userMap = new Map<string, { id: string; name: string; email: string }>();
       tenantAssignments.forEach(assignment => {
@@ -1148,12 +1158,12 @@ export class OkrOverviewController {
   @UseGuards(RateLimitGuard)
   @RequireAction('create_okr')
   @HttpCode(200)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Import OKRs from Viva Goals CSV',
     description: 'Imports Objectives and Key Results from a Viva Goals CSV export. Supports deduplication by externalId. Returns import results with success/failure counts and errors.'
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Import completed',
     schema: {
       type: 'object',
@@ -1163,7 +1173,7 @@ export class OkrOverviewController {
         objectivesUpdated: { type: 'number' },
         keyResultsCreated: { type: 'number' },
         keyResultsUpdated: { type: 'number' },
-        errors: { 
+        errors: {
           type: 'array',
           items: {
             type: 'object',
