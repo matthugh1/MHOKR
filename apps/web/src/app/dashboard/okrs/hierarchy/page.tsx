@@ -1112,6 +1112,11 @@ function OKRHierarchyPageContent() {
                   </div>
                 </div>
 
+                {/* Debug Info - TEMPORARY */}
+                <div className="px-4 py-2 bg-slate-800 text-xs text-slate-400 border-b border-slate-700">
+                  DEBUG: tenantId={currentOrganization?.id || 'null'} | cycleId={selectedCycleId || 'null'} | loading={String(loading)} | error={error || 'none'} | dataCount={data.length} | treeRoots={treeData?.roots?.length || 0}
+                </div>
+                
                 {/* Scrollable Tree Content */}
                 <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0">
                   {loading ? (
