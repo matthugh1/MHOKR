@@ -185,12 +185,35 @@ export class AuthService {
     const { passwordHash, ...userWithoutPassword } = user;
     const nameParts = user.name.split(' ');
 
+    // Build RBAC context to determine legacy role
+    const rbacContext = await this.rbacService.buildUserContext(user.id, false);
+
+    // Determine legacy role based on primary organization tenant roles
+    let legacyRole = 'user'; // Default
+
+    if (user.isSuperuser) {
+      legacyRole = 'SUPERUSER';
+    } else if (user.primaryOrganizationId) {
+      const tenantRoles = rbacContext.tenantRoles.get(user.primaryOrganizationId);
+      if (tenantRoles) {
+        if (tenantRoles.includes('TENANT_OWNER') || tenantRoles.includes('TENANT_ADMIN')) {
+          legacyRole = 'ORG_ADMIN';
+        } else if (tenantRoles.includes('TENANT_VIEWER')) {
+          legacyRole = 'VIEWER';
+        } else {
+          legacyRole = 'MEMBER';
+        }
+      } else {
+        legacyRole = 'MEMBER';
+      }
+    }
+
     return {
       user: {
         ...userWithoutPassword,
         firstName: nameParts[0] || '',
         lastName: nameParts.slice(1).join(' ') || '',
-        role: 'user',
+        role: legacyRole,
         isSuperuser: user.isSuperuser || false,
       },
       accessToken,
@@ -286,11 +309,36 @@ export class AuthService {
     const { passwordHash, ...userWithoutPassword } = user;
     const nameParts = user.name.split(' ');
 
+    // Build RBAC context to determine legacy role
+    const rbacContext = await this.rbacService.buildUserContext(user.id, false);
+
+    // Determine legacy role based on primary organization tenant roles
+    let legacyRole = 'user'; // Default
+
+    if (user.isSuperuser) {
+      legacyRole = 'SUPERUSER';
+    } else if (user.primaryOrganizationId) {
+      const tenantRoles = rbacContext.tenantRoles.get(user.primaryOrganizationId);
+      if (tenantRoles) {
+        if (tenantRoles.includes('TENANT_OWNER') || tenantRoles.includes('TENANT_ADMIN')) {
+          legacyRole = 'ORG_ADMIN';
+        } else if (tenantRoles.includes('TENANT_VIEWER')) {
+          legacyRole = 'VIEWER';
+        } else {
+          legacyRole = 'MEMBER';
+        }
+      } else {
+        // No tenant roles? Check workspace roles?
+        // Fallback to MEMBER if they have any association, otherwise user
+        legacyRole = 'MEMBER';
+      }
+    }
+
     return {
       ...userWithoutPassword,
       firstName: nameParts[0] || '',
       lastName: nameParts.slice(1).join(' ') || '',
-      role: 'user',
+      role: legacyRole,
       isSuperuser: user.isSuperuser || false,
     };
   }
