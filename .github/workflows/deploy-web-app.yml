@@ -38,6 +38,9 @@ jobs:
           NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'https://okr-nexus-api-gateway.azurewebsites.net' }}
         run: |
           npm ci
+          # Install ts-node globally or ensure it's available for build scripts
+          npm install -g ts-node typescript @types/node || true
+          # Run build (prebuild scripts will use ts-node)
           npm run build
 
       - name: Create deployment package
