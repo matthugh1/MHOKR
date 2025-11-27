@@ -17,9 +17,23 @@ const nextConfig = {
   },
   // Ensure version.json is accessible and proxy API requests to backend
   async rewrites() {
-    // Proxy API requests to core-api directly (port 3001) since it's exposed to host
-    // In production/Docker, this would go through api-gateway
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+    const isUsingApiGateway = backendUrl && 
+      !backendUrl.includes('localhost:3001') && 
+      !backendUrl.includes('localhost:3000')
+    
+    // Only use rewrites in development (direct to core-api)
+    // In production with API Gateway, axios makes direct requests (no rewrite needed)
+    if (isUsingApiGateway) {
+      return [
+        {
+          source: '/version.json',
+          destination: '/version.json',
+        },
+      ]
+    }
+    
+    // Development: Proxy API requests to core-api directly (port 3001)
     return [
       {
         source: '/version.json',

@@ -21,8 +21,13 @@ export const api = axios.create({
 // Add /api prefix to all requests when using API Gateway
 api.interceptors.request.use((config) => {
   // If we're using API Gateway and the URL doesn't already start with /api, add it
+  // Use absolute URL to bypass Next.js rewrites when using API Gateway
   if (isUsingApiGateway && config.url && !config.url.startsWith('/api/') && !config.url.startsWith('http')) {
     config.url = `/api${config.url.startsWith('/') ? '' : '/'}${config.url}`
+    // Ensure we use absolute URL to bypass Next.js server-side rewrites
+    if (!config.url.startsWith('http')) {
+      config.baseURL = API_URL
+    }
   }
   return config
 })
