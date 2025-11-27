@@ -16,6 +16,14 @@ const { IgnorePlugin } = require('webpack');
 module.exports = function (options) {
   return {
     ...options,
+    module: {
+      rules: [
+        {
+          test: /\.html$/,
+          type: 'asset/source',
+        },
+      ],
+    },
     plugins: [
       ...options.plugins,
       // Ignore optional dependencies that cause webpack build errors
