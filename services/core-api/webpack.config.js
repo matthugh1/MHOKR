@@ -1,5 +1,6 @@
 const path = require('path');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
+const { IgnorePlugin } = require('webpack');
 
 /**
  * Custom webpack configuration for NestJS core-api service.
@@ -7,6 +8,7 @@ const CopyWebpackPlugin = require('copy-webpack-plugin');
  * This config extends the default NestJS webpack config to:
  * 1. Copy Prisma schema to dist folder
  * 2. Copy Linux Prisma binary (debian-openssl-3.0.x) for Azure App Service deployment
+ * 3. Ignore optional dependencies of node-pre-gyp (used by bcrypt)
  * 
  * The binary targets are configured in prisma/schema.prisma:
  *   binaryTargets = ["native", "debian-openssl-3.0.x"]
@@ -16,6 +18,33 @@ module.exports = function (options) {
     ...options,
     plugins: [
       ...options.plugins,
+      // Ignore optional dependencies that cause webpack build errors
+      new IgnorePlugin({
+        checkResource(resource) {
+          const lazyImports = [
+            '@nestjs/microservices',
+            '@nestjs/websockets/socket-module',
+            'cache-manager',
+            'class-validator',
+            'class-transformer',
+            // node-pre-gyp optional deps (fixes bcrypt build)
+            'aws-sdk',
+            'nock',
+            'mock-aws-s3',
+          ];
+          if (!lazyImports.includes(resource)) {
+            return false;
+          }
+          try {
+            require.resolve(resource, {
+              paths: [process.cwd()],
+            });
+          } catch (err) {
+            return true;
+          }
+          return false;
+        },
+      }),
       new CopyWebpackPlugin({
         patterns: [
           // Copy Prisma schema (required for Prisma client to work)
@@ -35,6 +64,11 @@ module.exports = function (options) {
           },
         ],
       }),
+    ],
+    // Fix for "Can't resolve 'cardinal', 'pg-hstore', etc." in some libs
+    externals: [
+      ...(options.externals || []),
+      // Mark bcrypt as external if bundling fails, but trying IgnorePlugin first
     ],
   };
 };
