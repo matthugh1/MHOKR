@@ -6,6 +6,7 @@ on:
       - 'apps/web/**'
       - 'packages/types/**'
       - 'packages/utils/**'
+      - '.github/workflows/deploy-web-app.yml'
     branches:
       - main
   workflow_dispatch:
