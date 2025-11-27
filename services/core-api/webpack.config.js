@@ -57,10 +57,20 @@ module.exports = function (options) {
       }),
       new CopyWebpackPlugin({
         patterns: [
-          // Copy package.json (required by some runtime code, e.g., Prisma)
+          // Create minimal package.json (required by some runtime code, e.g., Prisma)
+          // We create a minimal version to avoid pnpm treating dist/ as a workspace
           {
             from: path.resolve(__dirname, 'package.json'),
             to: path.resolve(__dirname, 'dist/package.json'),
+            transform(content) {
+              const pkg = JSON.parse(content.toString());
+              // Only include fields needed at runtime
+              return JSON.stringify({
+                name: pkg.name,
+                version: pkg.version,
+                private: true
+              }, null, 2);
+            },
           },
           // Copy Prisma schema (required for Prisma client to work)
           {
