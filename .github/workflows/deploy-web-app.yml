@@ -52,27 +52,24 @@ jobs:
           # Copy standalone build
           cp -r .next/standalone/* "$TEMP_DIR/"
           
-          # Copy static files - Next.js standalone mode expects static files at .next/static/ 
-          # relative to the working directory when server.js runs
-          # Since we run "node apps/web/server.js" from root, Next.js looks for .next/static/ at root
+          # Copy static files - Next.js standalone mode needs static files at apps/web/.next/static/
+          # since server.js is at apps/web/server.js and resolves paths relative to its location
           if [ -d ".next/static" ]; then
-            # Copy to root .next/static/ (where Next.js standalone expects them)
-            mkdir -p "$TEMP_DIR/.next/static"
-            cp -r .next/static/* "$TEMP_DIR/.next/static/"
-            echo "✓ Copied static files to root .next/static/"
-            
-            # Also copy to apps/web/.next/static/ (in case Next.js resolves relative to server.js)
+            # The standalone build already has apps/web/.next/ directory, we just need to add static/
             mkdir -p "$TEMP_DIR/apps/web/.next/static"
             cp -r .next/static/* "$TEMP_DIR/apps/web/.next/static/"
-            echo "✓ Copied static files to apps/web/.next/static/ (backup)"
+            echo "✓ Copied static files to apps/web/.next/static/"
             
-            # Verify structure
-            echo "Static files at root:"
-            ls -la "$TEMP_DIR/.next/static/" | head -5
-            echo "Static files at apps/web:"
-            ls -la "$TEMP_DIR/apps/web/.next/static/" | head -5
+            # Verify the copy worked
+            STATIC_COUNT=$(find "$TEMP_DIR/apps/web/.next/static" -type f | wc -l)
+            echo "✓ Copied $STATIC_COUNT static files"
+            
+            # List a few files to verify
+            echo "Sample static files:"
+            find "$TEMP_DIR/apps/web/.next/static/chunks" -type f | head -5
           else
             echo "⚠ Warning: .next/static directory not found"
+            exit 1
           fi
           
           # Copy public directory
