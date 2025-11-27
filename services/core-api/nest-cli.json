@@ -4,6 +4,7 @@
   "sourceRoot": "src",
   "entryFile": "services/core-api/src/main",
   "compilerOptions": {
+    "webpack": true,
     "deleteOutDir": true
   }
 }

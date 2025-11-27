@@ -59,6 +59,7 @@
     "uuid": "^9.0.1"
   },
   "devDependencies": {
+    "copy-webpack-plugin": "^11.0.0",
     "@nestjs/cli": "^10.3.0",
     "@nestjs/schematics": "^10.1.0",
     "@nestjs/testing": "^10.3.0",
