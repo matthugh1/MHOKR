@@ -57,6 +57,11 @@ module.exports = function (options) {
       }),
       new CopyWebpackPlugin({
         patterns: [
+          // Copy package.json (required by some runtime code, e.g., Prisma)
+          {
+            from: path.resolve(__dirname, 'package.json'),
+            to: path.resolve(__dirname, 'dist/package.json'),
+          },
           // Copy Prisma schema (required for Prisma client to work)
           {
             from: path.resolve(__dirname, 'prisma/schema.prisma'),
