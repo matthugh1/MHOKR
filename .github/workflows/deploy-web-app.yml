@@ -1,0 +1,77 @@
+name: Deploy Web App to Azure App Service
+
+on:
+  push:
+    paths:
+      - 'apps/web/**'
+      - 'packages/types/**'
+      - 'packages/utils/**'
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies (root)
+        run: npm ci
+
+      - name: Build shared packages
+        run: |
+          cd packages/types && npm ci && npm run build
+          cd ../utils && npm ci && npm run build || true
+
+      - name: Build Web App
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'https://okr-nexus-api-gateway.azurewebsites.net' }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Create deployment package
+        working-directory: apps/web
+        run: |
+          # Create a temporary directory for the package
+          TEMP_DIR=$(mktemp -d)
+          
+          # Copy standalone build
+          cp -r .next/standalone/* "$TEMP_DIR/"
+          
+          # Copy static files
+          if [ -d ".next/static" ]; then
+            mkdir -p "$TEMP_DIR/apps/web/.next/static"
+            cp -r .next/static/* "$TEMP_DIR/apps/web/.next/static/"
+          fi
+          
+          # Copy public directory
+          if [ -d "public" ]; then
+            mkdir -p "$TEMP_DIR/apps/web/public"
+            cp -r public/* "$TEMP_DIR/apps/web/public/" 2>/dev/null || true
+          fi
+          
+          # Create ZIP from temp directory
+          cd "$TEMP_DIR"
+          zip -r ../release.zip .
+          cd -
+          mv "$TEMP_DIR/../release.zip" ./release.zip
+          rm -rf "$TEMP_DIR"
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: 'okr-nexus-web'
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: 'apps/web/release.zip'
+
