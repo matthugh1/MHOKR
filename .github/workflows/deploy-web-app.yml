@@ -83,5 +83,6 @@ jobs:
         with:
           app-name: 'okr-nexus-web'
           package: 'apps/web/release.zip'
+          resource-group: 'vibe-code-test'
           slot-name: 'Production'
 
