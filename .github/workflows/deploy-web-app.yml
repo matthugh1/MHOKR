@@ -50,11 +50,10 @@ jobs:
           TEMP_DIR=$(mktemp -d)
           
           # Copy standalone build
-          # We need to structure the artifact so that apps/web/server.js exists, matching the startup command.
-          # Since the build is run in apps/web, the standalone output is flat (server.js is at root of standalone).
-          # We must move it to apps/web/ in the temp dir.
-          mkdir -p "$TEMP_DIR/apps/web"
-          cp -r .next/standalone/* "$TEMP_DIR/apps/web/"
+          # Copy standalone build
+          # The standalone build preserves the monorepo structure (apps/web/server.js),
+          # so we copy it to the root of the temp dir.
+          cp -r .next/standalone/* "$TEMP_DIR/"
           
           # Copy static files - Next.js standalone mode needs static files at apps/web/.next/static/
           if [ -d ".next/static" ]; then
@@ -112,6 +111,6 @@ jobs:
           az webapp config set \
             --name "${APP_NAME}" \
             --resource-group "vibe-code-test" \
-            --startup-file "node apps/web/server.js" \
+            --startup-file "cd apps/web && node server.js" \
             --output none || echo "Note: Startup command may need to be set manually"
 
