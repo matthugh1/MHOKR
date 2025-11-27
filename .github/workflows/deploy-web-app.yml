@@ -52,21 +52,25 @@ jobs:
           # Copy standalone build
           cp -r .next/standalone/* "$TEMP_DIR/"
           
-          # Copy static files - Next.js serves from /_next/static/ but needs files at .next/static/ relative to server.js
-          # Since server.js is at apps/web/server.js, static files should be at apps/web/.next/static/
-          # Also copy to root .next/static/ as a fallback for Next.js standalone mode
+          # Copy static files - Next.js standalone mode expects static files at .next/static/ 
+          # relative to the working directory when server.js runs
+          # Since we run "node apps/web/server.js" from root, Next.js looks for .next/static/ at root
           if [ -d ".next/static" ]; then
-            # Copy to apps/web/.next/static/ (primary location)
-            mkdir -p "$TEMP_DIR/apps/web/.next/static"
-            cp -r .next/static/* "$TEMP_DIR/apps/web/.next/static/"
-            echo "✓ Copied static files to apps/web/.next/static/"
-            
-            # Also copy to root .next/static/ (fallback for Next.js standalone)
+            # Copy to root .next/static/ (where Next.js standalone expects them)
             mkdir -p "$TEMP_DIR/.next/static"
             cp -r .next/static/* "$TEMP_DIR/.next/static/"
-            echo "✓ Copied static files to root .next/static/ (fallback)"
+            echo "✓ Copied static files to root .next/static/"
             
-            ls -la "$TEMP_DIR/apps/web/.next/static/" | head -10
+            # Also copy to apps/web/.next/static/ (in case Next.js resolves relative to server.js)
+            mkdir -p "$TEMP_DIR/apps/web/.next/static"
+            cp -r .next/static/* "$TEMP_DIR/apps/web/.next/static/"
+            echo "✓ Copied static files to apps/web/.next/static/ (backup)"
+            
+            # Verify structure
+            echo "Static files at root:"
+            ls -la "$TEMP_DIR/.next/static/" | head -5
+            echo "Static files at apps/web:"
+            ls -la "$TEMP_DIR/apps/web/.next/static/" | head -5
           else
             echo "⚠ Warning: .next/static directory not found"
           fi
