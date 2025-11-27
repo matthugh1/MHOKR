@@ -96,4 +96,11 @@ jobs:
             "https://${APP_NAME}.scm.azurewebsites.net/api/zipdeploy" \
             --data-binary @"apps/web/release.zip" \
             --header "Content-Type: application/zip"
+          
+          # Set working directory and startup command via Azure CLI
+          az webapp config set \
+            --name "${APP_NAME}" \
+            --resource-group "vibe-code-test" \
+            --startup-file "node apps/web/server.js" \
+            --output none || echo "Note: Startup command may need to be set manually"
 
