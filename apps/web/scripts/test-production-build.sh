@@ -28,19 +28,20 @@ echo "Test directory: $TEST_DIR"
 # Copy standalone build
 cp -r .next/standalone/* "$TEST_DIR/"
 
-# Copy static files to root .next/static/ (where Next.js standalone expects them)
-if [ -d ".next/static" ]; then
-  mkdir -p "$TEST_DIR/.next/static"
-  cp -r .next/static/* "$TEST_DIR/.next/static/"
-  echo "✓ Copied static files to root .next/static/"
-  
-  # Also copy to apps/web/.next/static/ (backup)
-  mkdir -p "$TEST_DIR/apps/web/.next/static"
-  cp -r .next/static/* "$TEST_DIR/apps/web/.next/static/"
-  echo "✓ Copied static files to apps/web/.next/static/ (backup)"
-else
-  echo "⚠ Warning: .next/static directory not found"
-fi
+          # Copy static files to apps/web/.next/static/ (where server.js expects them)
+          # The standalone build already has apps/web/.next/ directory, we just need to add static/
+          if [ -d ".next/static" ]; then
+            mkdir -p "$TEST_DIR/apps/web/.next/static"
+            cp -r .next/static/* "$TEST_DIR/apps/web/.next/static/"
+            echo "✓ Copied static files to apps/web/.next/static/"
+            
+            # Verify
+            STATIC_COUNT=$(find "$TEST_DIR/apps/web/.next/static" -type f | wc -l)
+            echo "✓ Copied $STATIC_COUNT static files"
+          else
+            echo "⚠ Warning: .next/static directory not found"
+            exit 1
+          fi
 
 # Copy public directory
 if [ -d "public" ]; then
