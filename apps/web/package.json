@@ -7,8 +7,8 @@
     "build": "npm run prebuild && next build",
     "build:docker": "next build",
     "prebuild": "npm run resolve:backend-tag && npm run generate:version",
-    "resolve:backend-tag": "npx ts-node scripts/resolve_backend_tag.ts",
-    "generate:version": "npx ts-node scripts/generate_version_json.ts",
+    "resolve:backend-tag": "npx tsx scripts/resolve_backend_tag.ts",
+    "generate:version": "npx tsx scripts/generate_version_json.ts",
     "start": "next start --port 5173",
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
@@ -61,6 +61,7 @@
     "postcss": "^8",
     "tailwindcss": "^3.3.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.7.0",
     "typescript": "^5"
   }
 }
