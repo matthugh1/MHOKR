@@ -54,10 +54,18 @@ jobs:
           
           # Copy static files - Next.js serves from /_next/static/ but needs files at .next/static/ relative to server.js
           # Since server.js is at apps/web/server.js, static files should be at apps/web/.next/static/
+          # Also copy to root .next/static/ as a fallback for Next.js standalone mode
           if [ -d ".next/static" ]; then
+            # Copy to apps/web/.next/static/ (primary location)
             mkdir -p "$TEMP_DIR/apps/web/.next/static"
             cp -r .next/static/* "$TEMP_DIR/apps/web/.next/static/"
             echo "✓ Copied static files to apps/web/.next/static/"
+            
+            # Also copy to root .next/static/ (fallback for Next.js standalone)
+            mkdir -p "$TEMP_DIR/.next/static"
+            cp -r .next/static/* "$TEMP_DIR/.next/static/"
+            echo "✓ Copied static files to root .next/static/ (fallback)"
+            
             ls -la "$TEMP_DIR/apps/web/.next/static/" | head -10
           else
             echo "⚠ Warning: .next/static directory not found"
