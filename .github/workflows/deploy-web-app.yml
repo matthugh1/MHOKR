@@ -38,7 +38,9 @@ jobs:
           NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL || 'https://okr-nexus-api-gateway.azurewebsites.net' }}
         run: |
           npm ci
-          # Build (ts-node should be available via devDependencies)
+          # Ensure ts-node is available in PATH
+          export PATH="$PWD/node_modules/.bin:$PATH"
+          # Build
           npm run build
 
       - name: Create deployment package
