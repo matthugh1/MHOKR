@@ -16,6 +16,7 @@ const { IgnorePlugin } = require('webpack');
 module.exports = function (options) {
   return {
     ...options,
+    externalsType: 'commonjs', // Ensure externals use CommonJS require()
     module: {
       ...options.module,
       rules: [
@@ -57,18 +58,26 @@ module.exports = function (options) {
       }),
       new CopyWebpackPlugin({
         patterns: [
-          // Create minimal package.json (required by some runtime code, e.g., Prisma)
+          // Create minimal package.json (required by some runtime code, e.g., Prisma, bcrypt)
           // We create a minimal version to avoid pnpm treating dist/ as a workspace
+          // But include fields needed by node-pre-gyp (used by bcrypt)
           {
             from: path.resolve(__dirname, 'package.json'),
             to: path.resolve(__dirname, 'dist/package.json'),
             transform(content) {
               const pkg = JSON.parse(content.toString());
-              // Only include fields needed at runtime
+              // Include fields needed at runtime, especially for node-pre-gyp validation
+              // node-pre-gyp (used by bcrypt) validates package.json and needs these fields
               return JSON.stringify({
                 name: pkg.name,
                 version: pkg.version,
-                private: true
+                private: true,
+                main: 'main.js',
+                binary: {
+                  module_name: 'bcrypt_lib',
+                  module_path: './lib/binding',
+                  host: 'https://github.com'
+                }
               }, null, 2);
             },
           },
@@ -87,14 +96,24 @@ module.exports = function (options) {
             to: path.resolve(__dirname, 'dist/'),
             noErrorOnMissing: true, // Don't fail if binary doesn't exist (e.g., on Windows)
           },
+          // Copy bcrypt native module (marked as external, so we need to copy it)
+          {
+            from: path.resolve(__dirname, '../../node_modules/bcrypt'),
+            to: path.resolve(__dirname, 'dist/node_modules/bcrypt'),
+            globOptions: {
+              ignore: ['**/test/**', '**/*.md', '**/CHANGELOG.md'],
+            },
+            noErrorOnMissing: true,
+          },
         ],
       }),
     ],
-    // Fix for "Can't resolve 'cardinal', 'pg-hstore', etc." in some libs
-    externals: [
-      ...(options.externals || []),
-      // Mark bcrypt as external if bundling fails, but trying IgnorePlugin first
-    ],
+      // Mark bcrypt as external - it's a native module that can't be bundled
+      // We'll copy it separately to dist
+      externals: [
+        ...(options.externals || []),
+        'bcrypt',
+      ],
   };
 };
 
