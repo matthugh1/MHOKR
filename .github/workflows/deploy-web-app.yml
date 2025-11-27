@@ -52,17 +52,30 @@ jobs:
           # Copy standalone build
           cp -r .next/standalone/* "$TEMP_DIR/"
           
-          # Copy static files
+          # Copy static files - Next.js serves from /_next/static/ but needs files at .next/static/ relative to server.js
+          # Since server.js is at apps/web/server.js, static files should be at apps/web/.next/static/
           if [ -d ".next/static" ]; then
             mkdir -p "$TEMP_DIR/apps/web/.next/static"
             cp -r .next/static/* "$TEMP_DIR/apps/web/.next/static/"
+            echo "✓ Copied static files to apps/web/.next/static/"
+            ls -la "$TEMP_DIR/apps/web/.next/static/" | head -10
+          else
+            echo "⚠ Warning: .next/static directory not found"
           fi
           
           # Copy public directory
           if [ -d "public" ]; then
             mkdir -p "$TEMP_DIR/apps/web/public"
             cp -r public/* "$TEMP_DIR/apps/web/public/" 2>/dev/null || true
+            echo "✓ Copied public files"
           fi
+          
+          # Verify structure
+          echo "Verifying deployment structure..."
+          echo "Server.js location:"
+          find "$TEMP_DIR" -name "server.js" -type f
+          echo "Static files location:"
+          find "$TEMP_DIR" -path "*/static/chunks/*" -type f | head -5 || echo "No static chunks found!"
           
           # Create ZIP from temp directory
           cd "$TEMP_DIR"
