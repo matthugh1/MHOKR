@@ -88,6 +88,9 @@ jobs:
           echo "Static files location:"
           find "$TEMP_DIR" -path "*/static/chunks/*" -type f | head -5 || echo "No static chunks found!"
           
+          # Copy startup script
+          cp apps/web/startup.sh "$TEMP_DIR/"
+          
           # Create ZIP from temp directory
           cd "$TEMP_DIR"
           zip -r ../release.zip .
@@ -112,6 +115,6 @@ jobs:
           az webapp config set \
             --name "${APP_NAME}" \
             --resource-group "vibe-code-test" \
-            --startup-file "cd apps/web && node server.js" \
+            --startup-file "sh startup.sh" \
             --output none || echo "Note: Startup command may need to be set manually"
 
