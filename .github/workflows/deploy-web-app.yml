@@ -79,11 +79,11 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
 
-      - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v2
-        with:
-          app-name: 'okr-nexus-web'
-          package: 'apps/web/release.zip'
-          resource-group: 'vibe-code-test'
-          slot-name: 'Production'
+      - name: Deploy to Azure Web App using Zip Deploy
+        run: |
+          az webapp deploy \
+            --name okr-nexus-web \
+            --resource-group vibe-code-test \
+            --src-path apps/web/release.zip \
+            --type zip
 
