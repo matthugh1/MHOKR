@@ -402,11 +402,12 @@ function OKRHierarchyPageContent() {
     page: currentPage,
     pageSize,
   })
-  console.log('[HierarchyPage] useHierarchyOKRs returned:', { 
-    hasTreeData: !!treeData, 
+  console.log('[HierarchyPage] useHierarchyOKRs returned:', {
+    hasTreeData: !!treeData,
     rootsCount: treeData?.roots?.length || 0,
-    loading, 
-    error 
+    loading,
+    error,
+    pagination
   })
 
   // Lazy load users, workspaces, and teams only when needed (for forms)
@@ -456,8 +457,8 @@ function OKRHierarchyPageContent() {
 
   // Convert tree data to test page format
   const data = useMemo(() => {
-    console.log('[HierarchyPage] Computing data from treeData', { 
-      hasTrreeData: !!treeData, 
+    console.log('[HierarchyPage] Computing data from treeData', {
+      hasTrreeData: !!treeData,
       rootsCount: treeData?.roots?.length || 0,
       loading,
       error,
@@ -1097,9 +1098,9 @@ function OKRHierarchyPageContent() {
             </header>
 
             {/* Two-Panel Workspace */}
-            <div className="flex-1 flex overflow-hidden h-full min-h-0">
+            <div className="flex-1 flex overflow-hidden min-h-0">
               {/* LEFT PANEL: The Cascade Tree */}
-              <div className="flex-1 flex flex-col bg-slate-900/30 min-h-0 min-w-0">
+              <div className="flex-1 flex flex-col bg-slate-900/30 min-h-0 min-w-0 overflow-hidden">
                 {/* Toolbar */}
                 <div className="px-6 py-3 flex items-center justify-between border-b border-slate-800/50 flex-shrink-0">
                   <div className="flex gap-2">
@@ -1113,53 +1114,59 @@ function OKRHierarchyPageContent() {
                 </div>
 
                 {/* Debug Info - TEMPORARY */}
-                <div className="px-4 py-2 bg-slate-800 text-xs text-slate-400 border-b border-slate-700">
+                <div className="px-4 py-2 bg-slate-800 text-xs text-slate-400 border-b border-slate-700 flex-shrink-0">
                   DEBUG: tenantId={currentOrganization?.id || 'null'} | cycleId={selectedCycleId || 'null'} | loading={String(loading)} | error={error || 'none'} | dataCount={data.length} | treeRoots={treeData?.roots?.length || 0}
                 </div>
-                
-                {/* Scrollable Tree Content */}
-                <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0">
-                  {loading ? (
-                    <div className="flex items-center justify-center py-12">
-                      <div className="text-slate-500">Loading OKRs...</div>
-                    </div>
-                  ) : error ? (
-                    <div className="flex items-center justify-center py-12">
-                      <div className="text-rose-500">{error}</div>
-                    </div>
-                  ) : (
-                    <div className="py-2">
-                      {data.length > 0 ? (
-                        data.map(item => renderRow(item))
-                      ) : (
-                        <div className="flex items-center justify-center py-12">
-                          <div className="text-slate-500">No OKRs found</div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
 
-                {/* Pagination Controls - Always visible at bottom */}
-                {!loading && !error && (
-                  <nav className="flex-shrink-0 border-t border-slate-800 bg-slate-900/50 px-6 py-4 flex flex-wrap items-center justify-between gap-4 text-sm text-slate-400" aria-label="Pagination">
-                    <div className="text-slate-500" role="status">
-                      {pagination.totalCount > 0 ? (
-                        <>
-                          Showing {(pagination.currentPage - 1) * pagination.pageSize + 1} - {Math.min(pagination.currentPage * pagination.pageSize, pagination.totalCount)} of {pagination.totalCount} root objectives
-                          {pagination.totalPages > 1 && ` (Page ${pagination.currentPage} of ${pagination.totalPages})`}
-                        </>
-                      ) : (
-                        <>No objectives found</>
-                      )}
-                    </div>
+                {/* Content area with scrollable tree and pagination */}
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                  {/* Scrollable Tree Content - Must leave space for pagination */}
+                  <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0">
+                    {loading ? (
+                      <div className="flex items-center justify-center py-12">
+                        <div className="text-slate-500">Loading OKRs...</div>
+                      </div>
+                    ) : error ? (
+                      <div className="flex items-center justify-center py-12">
+                        <div className="text-rose-500">{error}</div>
+                      </div>
+                    ) : (
+                      <div className="py-2">
+                        {data.length > 0 ? (
+                          data.map(item => renderRow(item))
+                        ) : (
+                          <div className="flex items-center justify-center py-12">
+                            <div className="text-slate-500">No OKRs found</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pagination Controls - Always visible at bottom */}
+                  <nav className="flex-shrink-0 min-h-[60px] border-t-2 border-indigo-500 bg-slate-900 px-6 py-4 flex flex-wrap items-center justify-between gap-4 text-sm text-slate-400 z-10 shadow-lg" aria-label="Pagination">
+                  <div className="text-slate-500 font-medium" role="status">
+                    {loading ? (
+                      <span>Loading...</span>
+                    ) : error ? (
+                      <span className="text-rose-500">{error}</span>
+                    ) : pagination.totalCount > 0 ? (
+                      <>
+                        Showing {(pagination.currentPage - 1) * pagination.pageSize + 1} - {Math.min(pagination.currentPage * pagination.pageSize, pagination.totalCount)} of {pagination.totalCount} root objectives
+                        {pagination.totalPages > 1 && ` (Page ${pagination.currentPage} of ${pagination.totalPages})`}
+                      </>
+                    ) : (
+                      <>No objectives found</>
+                    )}
+                  </div>
+                  {!error && (
                     <div className="flex items-center gap-4">
                       <button
                         className={cn(
                           "rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-300",
                           "focus:ring-offset-2 focus:ring-offset-slate-900"
                         )}
-                        disabled={pagination.currentPage <= 1}
+                        disabled={loading || pagination.currentPage <= 1}
                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                         aria-label="Previous page"
                       >
@@ -1173,15 +1180,16 @@ function OKRHierarchyPageContent() {
                           "rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-300",
                           "focus:ring-offset-2 focus:ring-offset-slate-900"
                         )}
-                        disabled={pagination.currentPage >= pagination.totalPages}
+                        disabled={loading || pagination.currentPage >= pagination.totalPages}
                         onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
                         aria-label="Next page"
                       >
                         Next ›
                       </button>
                     </div>
+                  )}
                   </nav>
-                )}
+                </div>
               </div>
 
               {/* RIGHT PANEL: The Action & Management Rail (Contextual) */}

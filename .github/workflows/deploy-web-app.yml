@@ -50,12 +50,14 @@ jobs:
           TEMP_DIR=$(mktemp -d)
           
           # Copy standalone build
-          cp -r .next/standalone/* "$TEMP_DIR/"
+          # We need to structure the artifact so that apps/web/server.js exists, matching the startup command.
+          # Since the build is run in apps/web, the standalone output is flat (server.js is at root of standalone).
+          # We must move it to apps/web/ in the temp dir.
+          mkdir -p "$TEMP_DIR/apps/web"
+          cp -r .next/standalone/* "$TEMP_DIR/apps/web/"
           
           # Copy static files - Next.js standalone mode needs static files at apps/web/.next/static/
-          # since server.js is at apps/web/server.js and resolves paths relative to its location
           if [ -d ".next/static" ]; then
-            # The standalone build already has apps/web/.next/ directory, we just need to add static/
             mkdir -p "$TEMP_DIR/apps/web/.next/static"
             cp -r .next/static/* "$TEMP_DIR/apps/web/.next/static/"
             echo "✓ Copied static files to apps/web/.next/static/"

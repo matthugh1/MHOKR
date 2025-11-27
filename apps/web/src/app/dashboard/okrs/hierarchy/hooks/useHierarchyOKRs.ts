@@ -54,7 +54,7 @@ export function useHierarchyOKRs({
 
   // Track which nodes have had their children loaded
   const loadedNodeIdsRef = useRef<Set<string>>(new Set())
-  
+
   // Request counter to prevent race conditions
   const requestCounterRef = useRef(0)
 
@@ -63,11 +63,11 @@ export function useHierarchyOKRs({
     // Increment request counter to track this request
     requestCounterRef.current += 1
     const thisRequestId = requestCounterRef.current
-    
-    console.log('[useHierarchyOKRs] fetchRootObjectives called', { 
-      requestId: thisRequestId, enabled, tenantId, cycleId, scope, pageNum 
+
+    console.log('[useHierarchyOKRs] fetchRootObjectives called', {
+      requestId: thisRequestId, enabled, tenantId, cycleId, scope, pageNum
     })
-    
+
     if (!enabled || !tenantId) {
       console.log('[useHierarchyOKRs] Early return - not enabled or no tenantId')
       setLoading(false)
@@ -106,15 +106,15 @@ export function useHierarchyOKRs({
 
       console.log('[useHierarchyOKRs] Fetching:', `/okr/overview?${params.toString()}`)
       const response = await api.get(`/okr/overview?${params.toString()}`)
-      
+
       // Check if this request is still the latest one
       if (thisRequestId !== requestCounterRef.current) {
-        console.log('[useHierarchyOKRs] Ignoring stale response', { 
-          thisRequestId, currentRequestId: requestCounterRef.current 
+        console.log('[useHierarchyOKRs] Ignoring stale response', {
+          thisRequestId, currentRequestId: requestCounterRef.current
         })
         return // Ignore stale responses
       }
-      
+
       const envelope = response.data || {}
       const objectives = envelope.objectives || []
 
@@ -125,7 +125,11 @@ export function useHierarchyOKRs({
 
       // Use total count from backend response
       // The backend calculates totalCount based on visibility filtering of all matching objectives
-      setTotalCount(envelope.totalCount || rootObjectives.length)
+      // Handle explicit 0 correctly (0 || length would be length if length > 0, which is wrong if total is 0 but we have local items?? No, impossible)
+      // But safer to check type
+      const total = typeof envelope.totalCount === 'number' ? envelope.totalCount : rootObjectives.length
+      console.log('[useHierarchyOKRs] Setting totalCount:', total, 'from envelope:', envelope.totalCount)
+      setTotalCount(total)
 
       setCurrentPage(pageNum)
 
@@ -136,12 +140,12 @@ export function useHierarchyOKRs({
     } catch (err: any) {
       // Check if this request is still the latest one
       if (thisRequestId !== requestCounterRef.current) {
-        console.log('[useHierarchyOKRs] Ignoring stale error', { 
-          thisRequestId, currentRequestId: requestCounterRef.current 
+        console.log('[useHierarchyOKRs] Ignoring stale error', {
+          thisRequestId, currentRequestId: requestCounterRef.current
         })
         return // Ignore stale errors
       }
-      
+
       console.error('[useHierarchyOKRs] Failed to fetch root OKRs:', err)
       if (err.response?.status === 403) {
         setError('You do not have permission to view OKRs. Please contact your administrator.')
