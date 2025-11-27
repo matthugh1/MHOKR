@@ -17,7 +17,9 @@ module.exports = function (options) {
   return {
     ...options,
     module: {
+      ...options.module,
       rules: [
+        ...(options.module?.rules || []),
         {
           test: /\.html$/,
           type: 'asset/source',
