@@ -17,7 +17,7 @@ NC='\033[0m'
 
 # Service configurations
 declare -A SERVICES
-SERVICES[core-api]="3001|node dist/services/core-api/src/main.js"
+SERVICES[core-api]="3001|node dist/main.js"
 SERVICES[ai-service]="3002|node dist/main.js"
 SERVICES[integration-service]="3003|node dist/main.js"
 SERVICES[api-gateway]="3000|node dist/index.js"
