@@ -9,6 +9,7 @@ const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({
         message: 'Hello from Minimal Server (Probe 3)',
+        deployedAt: '2025-11-28T12:40:00Z',
         node: process.version,
         port: port,
         env: process.env.NODE_ENV,
