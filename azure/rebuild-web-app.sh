@@ -72,3 +72,5 @@ echo -e "${GREEN}✓${NC} Built with NEXT_PUBLIC_API_URL=$API_GATEWAY_URL"
 echo -e "\n${YELLOW}Next step: Update the web app container to use the new image${NC}"
 echo -e "Run: az containerapp update --name ${APP_NAME_PREFIX}-web --resource-group $RESOURCE_GROUP --image $WEB_IMAGE_NAME"
 
+
+

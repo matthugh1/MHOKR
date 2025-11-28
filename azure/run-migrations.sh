@@ -21,3 +21,5 @@ az containerapp exec \
 
 echo -e "${GREEN}Migrations complete!${NC}"
 
+
+

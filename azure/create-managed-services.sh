@@ -109,3 +109,5 @@ echo -e "3. Delete old containerized PostgreSQL and Redis (optional)"
 
 echo -e "\n${GREEN}Setup complete!${NC}"
 
+
+

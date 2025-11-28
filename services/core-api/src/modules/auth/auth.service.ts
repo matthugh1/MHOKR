@@ -342,5 +342,73 @@ export class AuthService {
       isSuperuser: user.isSuperuser || false,
     };
   }
+
+
+  async validateAzureUser(profile: {
+    oid: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+  }) {
+    const normalizedEmail = profile.email.toLowerCase().trim();
+
+    // 1. Try to find by Azure AD ID
+    let user = await this.prisma.user.findUnique({
+      where: { azureAdId: profile.oid },
+    });
+
+    // 2. If not found, try to find by email and link
+    if (!user) {
+      user = await this.prisma.user.findUnique({
+        where: { email: normalizedEmail },
+      });
+
+      if (user) {
+        // Link existing user
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { azureAdId: profile.oid },
+        });
+      }
+    }
+
+    // 3. If still not found, create new user (JIT)
+    if (!user) {
+      // Create user without password
+      user = await this.prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          name: `${profile.firstName} ${profile.lastName}`.trim(),
+          azureAdId: profile.oid,
+        },
+      });
+    }
+
+    // Return user for JWT generation
+    return this.loginWithUser(user);
+  }
+
+  async loginWithUser(user: any) {
+    // Generate JWT
+    const accessToken = this.jwtService.sign({
+      sub: user.id,
+      email: user.email,
+      name: user.name,
+    });
+
+    const { passwordHash, ...userWithoutPassword } = user;
+    const nameParts = user.name.split(' ');
+
+    return {
+      user: {
+        ...userWithoutPassword,
+        firstName: nameParts[0] || '',
+        lastName: nameParts.slice(1).join(' ') || '',
+        role: 'MEMBER', // Default
+        isSuperuser: user.isSuperuser || false,
+      },
+      accessToken,
+    };
+  }
 }
 

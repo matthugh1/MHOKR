@@ -11,21 +11,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@okr-nexus/types": "*"
+    "@okr-nexus/types": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.3.3"
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-

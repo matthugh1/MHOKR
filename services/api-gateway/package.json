@@ -10,7 +10,7 @@
     "lint": "eslint \"src/**/*.ts\" --fix"
   },
   "dependencies": {
-    "@okr-nexus/types": "*",
+    "@okr-nexus/types": "workspace:*",
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "helmet": "^7.1.0",
@@ -30,15 +30,3 @@
     "typescript": "^5.3.3"
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-

@@ -88,3 +88,5 @@ echo -e "3. Verify services are running: az containerapp list --resource-group $
 echo -e "\n${GREEN}Deployment completed successfully!${NC}"
 
 
+
+

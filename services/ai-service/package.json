@@ -24,8 +24,8 @@
     "@nestjs/platform-express": "^11.1.7",
     "@nestjs/platform-socket.io": "^11.1.7",
     "@nestjs/swagger": "^11.2.1",
-    "@okr-nexus/types": "*",
-    "@okr-nexus/utils": "*",
+    "@okr-nexus/types": "workspace:*",
+    "@okr-nexus/utils": "workspace:*",
     "axios": "^1.6.5",
     "ioredis": "^5.3.2",
     "next": "14.2.33",
@@ -49,14 +49,3 @@
     "typescript": "^5.3.3"
   }
 }
-
-
-
-
-
-
-
-
-
-
-

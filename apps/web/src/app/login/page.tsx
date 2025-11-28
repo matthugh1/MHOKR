@@ -38,6 +38,31 @@ export default function LoginPage() {
             Enter your credentials to access your OKR workspace
           </CardDescription>
         </CardHeader>
+        <div className="px-6 pb-2">
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => {
+              const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+              // If using API gateway (port 3000), we might need /api prefix, but usually gateway handles routing
+              // Let's assume direct connection for dev or proper routing
+              window.location.href = `${apiUrl}/auth/azure`;
+            }}
+          >
+            <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="microsoft" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M0 32h214.6v214.6H0V32zm233.4 0H448v214.6H233.4V32zM0 265.4h214.6V480H0V265.4zm233.4 0H448V480H233.4V265.4z"></path></svg>
+            Sign in with Microsoft
+          </Button>
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-background px-2 text-muted-foreground">
+                Or continue with
+              </span>
+            </div>
+          </div>
+        </div>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
             {error && (

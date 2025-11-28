@@ -5,6 +5,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { AzureAdStrategy } from './strategies/azure-ad.strategy';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { JwksVerifier } from './utils/jwks-verifier';
 import { RBACModule } from '../rbac/rbac.module';
@@ -35,8 +36,8 @@ import { RBACModule } from '../rbac/rbac.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwksVerifier],
+  providers: [AuthService, JwtStrategy, AzureAdStrategy, JwksVerifier],
   exports: [AuthService, JwksVerifier],
 })
-export class AuthModule {}
+export class AuthModule { }
 

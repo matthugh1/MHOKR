@@ -161,3 +161,5 @@ echo -e "3. Update NEXTAUTH_URL and CORS_ORIGINS after deployment with actual UR
 echo -e "\n${GREEN}File location: $SCRIPT_DIR/.env${NC}\n"
 
 
+
+

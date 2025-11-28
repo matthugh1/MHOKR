@@ -19,3 +19,5 @@ npx prisma migrate deploy
 
 echo "Migration applied successfully!"
 
+
+
