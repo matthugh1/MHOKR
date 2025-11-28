@@ -9,6 +9,23 @@ let nextHandle;
 let bootError = null;
 let isReady = false;
 
+// Simple file logger
+function log(msg) {
+    const time = new Date().toISOString();
+    const line = `[${time}] ${msg}\n`;
+    console.log(msg);
+    try {
+        fs.appendFileSync('startup.log', line);
+    } catch (e) {
+        // ignore
+    }
+}
+
+log('Starting custom server (Probe 2)...');
+log(`CWD: ${process.cwd()}`);
+log(`__dirname: ${__dirname}`);
+log(`PORT: ${port}`);
+
 // Helper to list files for debugging
 function tryListFiles() {
     try {
@@ -23,46 +40,30 @@ const server = createServer((req, res) => {
     const parsedUrl = parse(req.url, true);
     const { pathname } = parsedUrl;
 
-    // 1. Boot Status Endpoint - Always available
+    // 1. Boot Status Endpoint
     if (pathname === '/api/boot-status') {
         res.setHeader('Content-Type', 'application/json');
+        let logs = '';
+        try { logs = fs.readFileSync('startup.log', 'utf8'); } catch (e) { logs = e.message; }
+
         res.end(JSON.stringify({
-            status: isReady ? 'ready' : (bootError ? 'failed' : 'booting'),
+            status: isReady ? 'ready' : 'disabled',
             error: bootError ? bootError.toString() : null,
-            stack: bootError ? bootError.stack : null,
-            env: {
-                NODE_ENV: process.env.NODE_ENV,
-                PORT: process.env.PORT
-            },
+            env: { NODE_ENV: process.env.NODE_ENV, PORT: process.env.PORT },
             cwd: process.cwd(),
-            dirname: __dirname,
-            files: tryListFiles()
+            files: tryListFiles(),
+            logs: logs
         }, null, 2));
         return;
     }
 
-    // 2. Handle Boot Errors
-    if (bootError) {
-        res.statusCode = 500;
-        res.setHeader('Content-Type', 'text/plain');
-        res.end(`Application failed to start:\n\n${bootError.stack || bootError}`);
+    // 2. Hello Endpoint
+    if (pathname === '/api/hello') {
+        res.end('Hello from Probe 2');
         return;
     }
 
-    // 3. Handle Booting State
-    if (!isReady) {
-        // Check if it's a static file request, maybe we can serve it even if Next isn't ready?
-        // Best to wait, but for debugging, let's serve static files if possible.
-        if (pathname.startsWith('/_next/static/') || pathname.startsWith('/public/')) {
-            // Fall through to static handler
-        } else {
-            res.statusCode = 503;
-            res.end('Application is booting... Refresh in a few seconds.');
-            return;
-        }
-    }
-
-    // 4. Static File Serving (Explicit)
+    // 3. Static File Serving (Explicit)
     if (pathname.startsWith('/_next/static/')) {
         const relativePath = pathname.replace('/_next/static/', '');
         const filePath = path.join(__dirname, '.next/static', relativePath);
@@ -70,31 +71,27 @@ const server = createServer((req, res) => {
         return;
     }
 
-    // 5. Public File Serving
+    // 4. Public File Serving
     const publicFilePath = path.join(__dirname, 'public', pathname);
     if (fs.existsSync(publicFilePath) && fs.statSync(publicFilePath).isFile()) {
         serveFile(res, publicFilePath);
         return;
     }
 
-    // 6. Delegate to Next.js
-    if (isReady && nextHandle) {
-        nextHandle(req, res, parsedUrl);
-    } else {
-        res.statusCode = 500;
-        res.end('Server state inconsistent');
-    }
+    // 5. Fallback
+    res.statusCode = 404;
+    res.end('Next.js is disabled in this probe. Use /api/boot-status to check logs.');
 });
 
 server.listen(port, (err) => {
     if (err) {
-        console.error('Failed to start server:', err);
+        log('Failed to start server: ' + err);
         process.exit(1);
     }
-    console.log(`> Bootloader listening on http://localhost:${port}`);
+    log(`> Bootloader listening on http://localhost:${port}`);
 
-    // Initialize Next.js in background
-    initNext();
+    // DISABLED NEXT.JS INIT FOR DIAGNOSIS
+    // initNext();
 });
 
 async function initNext() {
@@ -129,15 +126,10 @@ function serveFile(res, filePath) {
             '.json': 'application/json',
             '.png': 'image/png',
             '.jpg': 'image/jpeg',
-            '.gif': 'image/gif',
             '.svg': 'image/svg+xml',
             '.ico': 'image/x-icon',
-            '.woff': 'font/woff',
-            '.woff2': 'font/woff2',
-            '.ttf': 'font/ttf',
-            '.otf': 'font/otf'
+            '.woff2': 'font/woff2'
         };
-
         const contentType = mimeTypes[ext] || 'application/octet-stream';
         res.setHeader('Content-Type', contentType);
         fs.createReadStream(filePath).pipe(res);
