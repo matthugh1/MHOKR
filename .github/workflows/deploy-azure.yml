@@ -59,6 +59,9 @@ jobs:
       - name: Make scripts executable
         run: chmod +x azure/appservice/*.sh
 
+      - name: Generate Prisma Client
+        run: pnpm --filter @okr-nexus/core-api run prisma:generate
+
       - name: Build all services
         run: ./azure/appservice/build-services.sh
 
