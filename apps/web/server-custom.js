@@ -1,111 +1,127 @@
 const { createServer } = require('http');
 const { parse } = require('url');
-const next = require('next');
 const path = require('path');
 const fs = require('fs');
 
 const port = process.env.PORT || 3000;
-const dev = process.env.NODE_ENV !== 'production';
-const app = next({ dev, dir: __dirname });
-const handle = app.getRequestHandler();
+let nextApp;
+let nextHandle;
+let bootError = null;
+let isReady = false;
 
-console.log('Starting custom server...');
-console.log(`CWD: ${process.cwd()}`);
-console.log(`__dirname: ${__dirname}`);
-
-// Verify static directory exists
-const staticDir = path.join(__dirname, '.next/static');
-if (fs.existsSync(staticDir)) {
-    console.log(`✅ .next/static found at: ${staticDir}`);
-    // List some files
+// Helper to list files for debugging
+function tryListFiles() {
     try {
-        const files = fs.readdirSync(staticDir);
-        console.log('Files in .next/static:', files.slice(0, 5));
+        return fs.readdirSync(__dirname);
     } catch (e) {
-        console.error('Error listing .next/static:', e);
+        return ['Error listing files: ' + e.message];
     }
-} else {
-    console.error(`❌ .next/static NOT found at: ${staticDir}`);
-    // Try to find where it is
-    try {
-        console.log('Listing root directory:');
-        console.log(fs.readdirSync(__dirname));
-    } catch (e) { }
 }
 
-app.prepare().then(() => {
-    createServer((req, res) => {
-        const parsedUrl = parse(req.url, true);
-        const { pathname } = parsedUrl;
+// Start server immediately (Bootloader)
+const server = createServer((req, res) => {
+    const parsedUrl = parse(req.url, true);
+    const { pathname } = parsedUrl;
 
-        // SIMPLE PROBE: Just check if server is alive and where we are
-        if (pathname === '/api/hello') {
-            res.setHeader('Content-Type', 'text/plain');
-            try {
-                const cwd = process.cwd();
-                const dir = __dirname;
-                const rootFiles = fs.readdirSync(dir).join(', ');
-                res.end(`Hello from Custom Server!\nCWD: ${cwd}\n__dirname: ${dir}\nRoot Files: ${rootFiles}`);
-            } catch (e) {
-                res.end(`Error: ${e.message}`);
-            }
+    // 1. Boot Status Endpoint - Always available
+    if (pathname === '/api/boot-status') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({
+            status: isReady ? 'ready' : (bootError ? 'failed' : 'booting'),
+            error: bootError ? bootError.toString() : null,
+            stack: bootError ? bootError.stack : null,
+            env: {
+                NODE_ENV: process.env.NODE_ENV,
+                PORT: process.env.PORT
+            },
+            cwd: process.cwd(),
+            dirname: __dirname,
+            files: tryListFiles()
+        }, null, 2));
+        return;
+    }
+
+    // 2. Handle Boot Errors
+    if (bootError) {
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'text/plain');
+        res.end(`Application failed to start:\n\n${bootError.stack || bootError}`);
+        return;
+    }
+
+    // 3. Handle Booting State
+    if (!isReady) {
+        // Check if it's a static file request, maybe we can serve it even if Next isn't ready?
+        // Best to wait, but for debugging, let's serve static files if possible.
+        if (pathname.startsWith('/_next/static/') || pathname.startsWith('/public/')) {
+            // Fall through to static handler
+        } else {
+            res.statusCode = 503;
+            res.end('Application is booting... Refresh in a few seconds.');
             return;
         }
+    }
 
-        // DEBUG ENDPOINT: List files (non-recursive first to be safe)
-        if (pathname === '/api/debug-files') {
-            res.setHeader('Content-Type', 'application/json');
-            try {
-                const files = [];
-                // Level 0
-                fs.readdirSync(__dirname).forEach(f => {
-                    files.push(f);
-                    const p = path.join(__dirname, f);
-                    if (fs.statSync(p).isDirectory() && f !== 'node_modules') {
-                        // Level 1
-                        try {
-                            fs.readdirSync(p).forEach(f2 => files.push(`${f}/${f2}`));
-                        } catch (e) { }
-                    }
-                });
+    // 4. Static File Serving (Explicit)
+    if (pathname.startsWith('/_next/static/')) {
+        const relativePath = pathname.replace('/_next/static/', '');
+        const filePath = path.join(__dirname, '.next/static', relativePath);
+        serveFile(res, filePath);
+        return;
+    }
 
-                res.end(JSON.stringify({
-                    cwd: process.cwd(),
-                    dirname: __dirname,
-                    files: files
-                }, null, 2));
-            } catch (e) {
-                res.end(JSON.stringify({ error: e.message }));
-            }
-            return;
-        }
+    // 5. Public File Serving
+    const publicFilePath = path.join(__dirname, 'public', pathname);
+    if (fs.existsSync(publicFilePath) && fs.statSync(publicFilePath).isFile()) {
+        serveFile(res, publicFilePath);
+        return;
+    }
 
-        // 1. Handle _next/static
-        if (pathname.startsWith('/_next/static/')) {
-            const relativePath = pathname.replace('/_next/static/', '');
-            const filePath = path.join(__dirname, '.next/static', relativePath);
-            serveFile(res, filePath);
-            return;
-        }
-
-        // 2. Handle public files (served at root)
-        const publicFilePath = path.join(__dirname, 'public', pathname);
-        if (fs.existsSync(publicFilePath) && fs.statSync(publicFilePath).isFile()) {
-            serveFile(res, publicFilePath);
-            return;
-        }
-
-        // Fallback to Next.js handler
-        handle(req, res, parsedUrl);
-    }).listen(port, (err) => {
-        if (err) throw err;
-        console.log(`> Ready on http://localhost:${port}`);
-    });
+    // 6. Delegate to Next.js
+    if (isReady && nextHandle) {
+        nextHandle(req, res, parsedUrl);
+    } else {
+        res.statusCode = 500;
+        res.end('Server state inconsistent');
+    }
 });
+
+server.listen(port, (err) => {
+    if (err) {
+        console.error('Failed to start server:', err);
+        process.exit(1);
+    }
+    console.log(`> Bootloader listening on http://localhost:${port}`);
+
+    // Initialize Next.js in background
+    initNext();
+});
+
+async function initNext() {
+    try {
+        console.log('Initializing Next.js...');
+        // Check if 'next' module exists
+        try {
+            require.resolve('next');
+        } catch (e) {
+            throw new Error(`Cannot find module 'next'. NODE_PATH=${process.env.NODE_ENV}`);
+        }
+
+        const next = require('next');
+        const dev = process.env.NODE_ENV !== 'production';
+        nextApp = next({ dev, dir: __dirname });
+        nextHandle = nextApp.getRequestHandler();
+        await nextApp.prepare();
+        isReady = true;
+        console.log('Next.js ready!');
+    } catch (err) {
+        console.error('Failed to initialize Next.js:', err);
+        bootError = err;
+    }
+}
 
 function serveFile(res, filePath) {
     if (fs.existsSync(filePath)) {
-        // Basic mime types
         const ext = path.extname(filePath).toLowerCase();
         const mimeTypes = {
             '.js': 'application/javascript',
@@ -119,15 +135,13 @@ function serveFile(res, filePath) {
             '.woff': 'font/woff',
             '.woff2': 'font/woff2',
             '.ttf': 'font/ttf',
-            '.otf': 'font/otf',
-            '.eot': 'application/vnd.ms-fontobject'
+            '.otf': 'font/otf'
         };
 
         const contentType = mimeTypes[ext] || 'application/octet-stream';
         res.setHeader('Content-Type', contentType);
         fs.createReadStream(filePath).pipe(res);
     } else {
-        // Let Next.js handle 404s or maybe it's a dynamic route that looks like a file
         res.statusCode = 404;
         res.end('File not found');
     }
