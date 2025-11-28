@@ -158,6 +158,10 @@ cd "$PROJECT_ROOT"
 echo -e "${YELLOW}Installing workspace dependencies...${NC}"
 pnpm install --frozen-lockfile
 
+# Generate Prisma Client explicitly to ensure types are available (even if postinstall skipped)
+echo -e "${YELLOW}Generating Prisma Client...${NC}"
+pnpm --filter @okr-nexus/core-api run prisma:generate
+
 # Build shared packages first
 echo -e "${YELLOW}Building shared packages...${NC}"
 pnpm --filter @okr-nexus/types build
