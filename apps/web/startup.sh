@@ -9,6 +9,10 @@ echo "Current directory: $(pwd)"
 cd apps/web
 echo "Changed directory to: $(pwd)"
 
+# Debug: List files to verify structure
+echo "Directory structure:"
+find . -maxdepth 3 -not -path '*/node_modules/*'
+
 # Start the server
 # We use node directly as server.js is the entry point for standalone build
 exec node server.js

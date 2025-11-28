@@ -58,9 +58,15 @@ jobs:
           
           # Copy static files - Next.js standalone mode needs static files at apps/web/.next/static/
           if [ -d ".next/static" ]; then
+            # Copy to nested location (standard)
             mkdir -p "$TEMP_DIR/apps/web/.next/static"
             cp -r .next/static/* "$TEMP_DIR/apps/web/.next/static/"
-            echo "✓ Copied static files to apps/web/.next/static/"
+            
+            # Copy to root location (fallback)
+            mkdir -p "$TEMP_DIR/.next/static"
+            cp -r .next/static/* "$TEMP_DIR/.next/static/"
+            
+            echo "✓ Copied static files to both nested and root locations"
             
             # Verify the copy worked
             STATIC_COUNT=$(find "$TEMP_DIR/apps/web/.next/static" -type f | wc -l)
@@ -76,9 +82,15 @@ jobs:
           
           # Copy public directory
           if [ -d "public" ]; then
+            # Copy to nested location
             mkdir -p "$TEMP_DIR/apps/web/public"
             cp -r public/* "$TEMP_DIR/apps/web/public/" 2>/dev/null || true
-            echo "✓ Copied public files"
+            
+            # Copy to root location
+            mkdir -p "$TEMP_DIR/public"
+            cp -r public/* "$TEMP_DIR/public/" 2>/dev/null || true
+            
+            echo "✓ Copied public files to both nested and root locations"
           fi
           
           # Verify structure
