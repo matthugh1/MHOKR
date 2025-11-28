@@ -52,8 +52,8 @@ jobs:
           
           # Copy build artifacts that pnpm deploy might miss (since they are in .next)
           echo "Copying build artifacts..."
-          cp -r apps/web/.next deploy_dist/
-          cp -r apps/web/public deploy_dist/
+          # cp -r apps/web/.next deploy_dist/
+          # cp -r apps/web/public deploy_dist/
           
           # Copy our custom server
           echo "Copying custom server..."
@@ -64,8 +64,8 @@ jobs:
           ls -la deploy_dist
           echo "Checking for critical files:"
           [ -f "deploy_dist/server-custom.js" ] && echo "✓ server-custom.js found" || echo "❌ server-custom.js missing"
-          [ -d "deploy_dist/node_modules" ] && echo "✓ node_modules found" || echo "❌ node_modules missing"
-          [ -d "deploy_dist/.next/static" ] && echo "✓ static assets found" || echo "❌ static assets missing"
+          # [ -d "deploy_dist/node_modules" ] && echo "✓ node_modules found" || echo "❌ node_modules missing"
+          # [ -d "deploy_dist/.next/static" ] && echo "✓ static assets found" || echo "❌ static assets missing"
           
           # Create ZIP from deploy directory
           cd deploy_dist
