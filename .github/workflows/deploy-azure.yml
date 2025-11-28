@@ -9,7 +9,7 @@ on:
       - 'apps/web/**'
       - 'packages/**'
       - 'azure/appservice/**'
-      - '.github/workflows/deploy-app-service.yml'
+      - '.github/workflows/deploy-azure.yml'
   workflow_dispatch:
     inputs:
       deploy_all:
