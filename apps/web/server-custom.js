@@ -38,31 +38,37 @@ app.prepare().then(() => {
         const parsedUrl = parse(req.url, true);
         const { pathname } = parsedUrl;
 
-        // DEBUG ENDPOINT: List files to diagnose structure
+        // SIMPLE PROBE: Just check if server is alive and where we are
+        if (pathname === '/api/hello') {
+            res.setHeader('Content-Type', 'text/plain');
+            try {
+                const cwd = process.cwd();
+                const dir = __dirname;
+                const rootFiles = fs.readdirSync(dir).join(', ');
+                res.end(`Hello from Custom Server!\nCWD: ${cwd}\n__dirname: ${dir}\nRoot Files: ${rootFiles}`);
+            } catch (e) {
+                res.end(`Error: ${e.message}`);
+            }
+            return;
+        }
+
+        // DEBUG ENDPOINT: List files (non-recursive first to be safe)
         if (pathname === '/api/debug-files') {
             res.setHeader('Content-Type', 'application/json');
             try {
-                const listFiles = (dir, depth = 0) => {
-                    if (depth > 3) return ['...'];
-                    let results = [];
-                    const list = fs.readdirSync(dir);
-                    list.forEach(file => {
-                        const filePath = path.join(dir, file);
-                        const stat = fs.statSync(filePath);
-                        if (stat && stat.isDirectory()) {
-                            if (file !== 'node_modules') { // Skip node_modules to keep output small
-                                results = results.concat(listFiles(filePath, depth + 1).map(f => file + '/' + f));
-                            } else {
-                                results.push('node_modules/');
-                            }
-                        } else {
-                            results.push(file);
-                        }
-                    });
-                    return results;
-                };
+                const files = [];
+                // Level 0
+                fs.readdirSync(__dirname).forEach(f => {
+                    files.push(f);
+                    const p = path.join(__dirname, f);
+                    if (fs.statSync(p).isDirectory() && f !== 'node_modules') {
+                        // Level 1
+                        try {
+                            fs.readdirSync(p).forEach(f2 => files.push(`${f}/${f2}`));
+                        } catch (e) { }
+                    }
+                });
 
-                const files = listFiles(__dirname);
                 res.end(JSON.stringify({
                     cwd: process.cwd(),
                     dirname: __dirname,
@@ -83,7 +89,6 @@ app.prepare().then(() => {
         }
 
         // 2. Handle public files (served at root)
-        // Try to find the file in the public directory
         const publicFilePath = path.join(__dirname, 'public', pathname);
         if (fs.existsSync(publicFilePath) && fs.statSync(publicFilePath).isFile()) {
             serveFile(res, publicFilePath);
