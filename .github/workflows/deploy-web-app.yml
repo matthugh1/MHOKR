@@ -60,9 +60,10 @@ jobs:
           echo "Merging app dependencies..."
           cp -r .next/standalone/apps/web/node_modules/* "$TEMP_DIR/node_modules/"
           
-          # 3. Copy server.js to root
-          echo "Copying server.js..."
+          # 3. Copy server.js and server-custom.js to root
+          echo "Copying server files..."
           cp .next/standalone/apps/web/server.js "$TEMP_DIR/"
+          cp server-custom.js "$TEMP_DIR/"
           
           # 4. Copy .next directory to root
           echo "Copying .next directory..."
@@ -90,6 +91,7 @@ jobs:
           ls -la "$TEMP_DIR"
           echo "Checking for critical files:"
           [ -f "$TEMP_DIR/server.js" ] && echo "✓ server.js found" || echo "❌ server.js missing"
+          [ -f "$TEMP_DIR/server-custom.js" ] && echo "✓ server-custom.js found" || echo "❌ server-custom.js missing"
           [ -d "$TEMP_DIR/node_modules/next" ] && echo "✓ next dependency found" || echo "❌ next dependency missing"
           [ -d "$TEMP_DIR/.next/static" ] && echo "✓ static assets found" || echo "❌ static assets missing"
           
@@ -118,6 +120,6 @@ jobs:
           az webapp config set \
             --name "${APP_NAME}" \
             --resource-group "vibe-code-test" \
-            --startup-file "node server.js" \
+            --startup-file "node server-custom.js" \
             --output none || echo "Note: Startup command may need to be set manually"
 
