@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build all services for Azure App Service deployment
-# No Docker - just npm build
+# Uses pnpm for build and deployment packaging
 
 set -e
 
@@ -19,34 +19,22 @@ echo -e "${YELLOW}Building all services...${NC}"
 BUILD_DIR="$SCRIPT_DIR/build"
 mkdir -p "$BUILD_DIR"
 
+# Ensure pnpm is available
+if ! command -v pnpm &> /dev/null; then
+    echo -e "${RED}Error: pnpm is not installed${NC}"
+    exit 1
+fi
+
 # Function to build a NestJS service
 build_nestjs_service() {
     local SERVICE_NAME=$1
-    local SERVICE_PATH="$PROJECT_ROOT/services/$SERVICE_NAME"
+    local PACKAGE_NAME="@okr-nexus/$SERVICE_NAME"
     
-    echo -e "\n${YELLOW}Building $SERVICE_NAME...${NC}"
+    echo -e "\n${YELLOW}Building $SERVICE_NAME ($PACKAGE_NAME)...${NC}"
     
-    if [ ! -d "$SERVICE_PATH" ]; then
-        echo -e "${RED}Error: Service directory not found: $SERVICE_PATH${NC}"
-        return 1
-    fi
-    
-    cd "$SERVICE_PATH"
-    
-    # Install dependencies
-    echo "  Installing dependencies..."
-    npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps
-    
-    # Generate Prisma client if this is core-api
-    if [ "$SERVICE_NAME" = "core-api" ]; then
-        echo "  Generating Prisma client..."
-        npx prisma generate
-    fi
-    
-    # Clean and build - use rm -rf instead of rimraf to avoid issues
-    echo "  Compiling TypeScript..."
-    rm -rf dist 2>/dev/null || true
-    npx tsc -p tsconfig.json
+    # Build the service using pnpm filter
+    # This assumes the root pnpm install has already run
+    pnpm --filter "$PACKAGE_NAME" build
     
     # Create deployment package
     echo "  Creating deployment package..."
@@ -55,55 +43,58 @@ build_nestjs_service() {
     # Create a temporary directory for the package
     local TEMP_DIR=$(mktemp -d)
     
-    # Copy necessary files
-    cp -r dist "$TEMP_DIR/"
-    cp package.json "$TEMP_DIR/"
-    cp package-lock.json "$TEMP_DIR/" 2>/dev/null || true
+    # Use pnpm deploy to create a production-ready node_modules + package.json
+    # This handles workspace dependencies correctly
+    pnpm --filter "$PACKAGE_NAME" --prod deploy "$TEMP_DIR"
+    
+    # Copy the built dist folder from the source to the deployment package
+    # (pnpm deploy might not copy dist if it's not in the files list, or if we just built it)
+    # Usually pnpm deploy copies the package as is, but we want the built artifacts.
+    # The safest way is to copy 'dist' from the service directory.
+    cp -r "services/$SERVICE_NAME/dist" "$TEMP_DIR/"
     
     # Copy Prisma files for core-api
     if [ "$SERVICE_NAME" = "core-api" ]; then
-        cp -r prisma "$TEMP_DIR/"
-    fi
-    
-    # Create node_modules with production dependencies only
-    cd "$TEMP_DIR"
-    npm ci --omit=dev --legacy-peer-deps 2>/dev/null || npm install --omit=dev --legacy-peer-deps
-    
-    # Generate Prisma client in the package
-    if [ "$SERVICE_NAME" = "core-api" ]; then
-        npx prisma generate
+        cp -r "services/$SERVICE_NAME/prisma" "$TEMP_DIR/"
+        
+        # Generate Prisma client in the package
+        # Run prisma from the core-api context (where it is installed) but targeting the temp dir schema
+        pnpm --filter "@okr-nexus/core-api" exec prisma generate --schema="$TEMP_DIR/prisma/schema.prisma"
     fi
     
     # Create ZIP
+    cd "$TEMP_DIR"
     zip -rq "$ZIP_FILE" .
+    cd - > /dev/null
     
     # Cleanup
     rm -rf "$TEMP_DIR"
     
     local SIZE=$(du -h "$ZIP_FILE" | cut -f1)
     echo -e "${GREEN}  ✓ Built $SERVICE_NAME ($SIZE)${NC}"
-    
-    cd "$PROJECT_ROOT"
 }
 
 # Function to build Next.js app
 build_nextjs_app() {
+    local APP_NAME="web"
+    local PACKAGE_NAME="@okr-nexus/web"
     local APP_PATH="$PROJECT_ROOT/apps/web"
     
     echo -e "\n${YELLOW}Building Next.js web app...${NC}"
-    
-    cd "$APP_PATH"
-    
-    # Install dependencies
-    echo "  Installing dependencies..."
-    npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps
     
     # Set build-time environment variables
     export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://okr-nexus-api-gateway.azurewebsites.net}"
     
     # Build with standalone output
     echo "  Building Next.js (standalone mode)..."
-    npm run build:docker  # Uses standalone output
+    # We use pnpm to run the build script defined in package.json
+    # Ensure your web package.json has "build:docker" or "build" that produces standalone output
+    # If "build:docker" doesn't exist, fall back to "build"
+    if grep -q "build:docker" "$APP_PATH/package.json"; then
+        pnpm --filter "$PACKAGE_NAME" run build:docker
+    else
+        pnpm --filter "$PACKAGE_NAME" run build
+    fi
     
     # Create deployment package
     echo "  Creating deployment package..."
@@ -113,21 +104,23 @@ build_nextjs_app() {
     local TEMP_DIR=$(mktemp -d)
     
     # Copy standalone build
-    cp -r .next/standalone/* "$TEMP_DIR/"
+    # The standalone build is usually in .next/standalone
+    cp -r "$APP_PATH/.next/standalone/"* "$TEMP_DIR/"
     
-    # Copy static files - Next.js serves from /_next/static/ but needs files at .next/static/ relative to server.js
-    # Since server.js is at apps/web/server.js, static files should be at apps/web/.next/static/
-    if [ -d ".next/static" ]; then
+    # Copy static files
+    # Next.js serves from /_next/static/ but needs files at .next/static/ relative to server.js
+    # Since server.js is at apps/web/server.js (in standalone), static files should be at apps/web/.next/static/
+    if [ -d "$APP_PATH/.next/static" ]; then
       mkdir -p "$TEMP_DIR/apps/web/.next/static"
-      cp -r .next/static/* "$TEMP_DIR/apps/web/.next/static/"
+      cp -r "$APP_PATH/.next/static/"* "$TEMP_DIR/apps/web/.next/static/"
     else
       echo "  ⚠️  Warning: .next/static directory not found"
     fi
     
     # Copy public directory
-    if [ -d "public" ]; then
+    if [ -d "$APP_PATH/public" ]; then
       mkdir -p "$TEMP_DIR/apps/web/public"
-      cp -r public/* "$TEMP_DIR/apps/web/public/" 2>/dev/null || true
+      cp -r "$APP_PATH/public/"* "$TEMP_DIR/apps/web/public/" 2>/dev/null || true
     fi
     
     # Verify structure
@@ -136,12 +129,6 @@ build_nextjs_app() {
       echo "    ✓ server.js found"
     else
       echo "    ✗ ERROR: server.js not found!"
-    fi
-    if [ -d "$TEMP_DIR/apps/web/.next/static" ]; then
-      local static_count=$(find "$TEMP_DIR/apps/web/.next/static" -type f | wc -l)
-      echo "    ✓ Static files found: $static_count files"
-    else
-      echo "    ✗ ERROR: Static files directory not found!"
     fi
     
     # Create startup script for Azure
@@ -155,28 +142,27 @@ EOF
     # Create ZIP
     cd "$TEMP_DIR"
     zip -rq "$ZIP_FILE" .
+    cd - > /dev/null
     
     # Cleanup
     rm -rf "$TEMP_DIR"
     
     local SIZE=$(du -h "$ZIP_FILE" | cut -f1)
     echo -e "${GREEN}  ✓ Built web app ($SIZE)${NC}"
-    
-    cd "$PROJECT_ROOT"
 }
+
+# Main execution
+cd "$PROJECT_ROOT"
+
+# Install dependencies for the whole workspace
+echo -e "${YELLOW}Installing workspace dependencies...${NC}"
+pnpm install --frozen-lockfile
 
 # Build shared packages first
 echo -e "${YELLOW}Building shared packages...${NC}"
-
-cd "$PROJECT_ROOT/packages/types"
-npm ci 2>/dev/null || npm install
-npm run build
-echo -e "${GREEN}  ✓ Built @okr-nexus/types${NC}"
-
-cd "$PROJECT_ROOT/packages/utils"
-npm ci 2>/dev/null || npm install
-npm run build 2>/dev/null || true
-echo -e "${GREEN}  ✓ Built @okr-nexus/utils${NC}"
+pnpm --filter @okr-nexus/types build
+pnpm --filter @okr-nexus/utils build
+echo -e "${GREEN}  ✓ Built shared packages${NC}"
 
 # Build all services
 build_nestjs_service "core-api"
@@ -193,4 +179,3 @@ echo -e "${GREEN}═════════════════════
 echo ""
 echo -e "${YELLOW}Build artifacts in: $BUILD_DIR${NC}"
 ls -lh "$BUILD_DIR"
-

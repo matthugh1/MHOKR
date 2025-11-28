@@ -12,7 +12,7 @@ export class WorkspaceService {
     private prisma: PrismaService,
     private auditLogService: AuditLogService,
     private rbacService: RBACService,
-  ) {}
+  ) { }
 
   async findAll(userOrganizationId: string | null | undefined, filterOrganizationId?: string) {
     // Tenant isolation: enforce tenant filtering
@@ -117,21 +117,21 @@ export class WorkspaceService {
     // Get unique workspace IDs
     const workspaceIds = [...new Set(
       workspaceAssignments
-        .map(wa => wa.scopeId)
-        .filter((id): id is string => id !== null)
+        .map((wa: any) => wa.scopeId)
+        .filter((id: string | null): id is string => id !== null)
     )];
 
     // Fetch direct workspaces
     const directWorkspaces = workspaceIds.length > 0
       ? await this.prisma.workspace.findMany({
-          where: { id: { in: workspaceIds } },
-          include: {
-            tenant: true,
-            parentWorkspace: true,
-            childWorkspaces: true,
-            teams: true,
-          },
-        })
+        where: { id: { in: workspaceIds } },
+        include: {
+          tenant: true,
+          parentWorkspace: true,
+          childWorkspaces: true,
+          teams: true,
+        },
+      })
       : [];
 
     // Also find workspaces through team memberships (Phase 4: RBAC only)
@@ -146,33 +146,33 @@ export class WorkspaceService {
     // Get team IDs and fetch teams with workspaces
     const teamIds = [...new Set(
       teamAssignments
-        .map(ta => ta.scopeId)
-        .filter((id): id is string => id !== null)
+        .map((ta: any) => ta.scopeId)
+        .filter((id: string | null): id is string => id !== null)
     )];
 
     const teamsWithWorkspaces = teamIds.length > 0
       ? await this.prisma.team.findMany({
-          where: { id: { in: teamIds } },
-          include: {
-            workspace: {
-              include: {
-                tenant: true,
-                parentWorkspace: true,
-                childWorkspaces: true,
-                teams: true,
-              },
+        where: { id: { in: teamIds } },
+        include: {
+          workspace: {
+            include: {
+              tenant: true,
+              parentWorkspace: true,
+              childWorkspaces: true,
+              teams: true,
             },
           },
-        })
+        },
+      })
       : [];
 
-    const indirectWorkspaces = teamsWithWorkspaces.map(t => t.workspace);
+    const indirectWorkspaces = teamsWithWorkspaces.map((t: any) => t.workspace);
 
     // Combine direct and indirect workspace memberships
     const allWorkspaces = [...directWorkspaces, ...indirectWorkspaces];
 
     // Extract unique workspaces (prioritize direct memberships)
-    const uniqueWorkspaces = allWorkspaces.filter((workspace, index, self) => 
+    const uniqueWorkspaces = allWorkspaces.filter((workspace, index, self) =>
       index === self.findIndex(w => w.id === workspace.id)
     );
 
@@ -181,7 +181,7 @@ export class WorkspaceService {
 
   async getDefaultWorkspace(userId: string) {
     const workspaces = await this.findByUserId(userId);
-    
+
     if (workspaces.length === 0) {
       throw new NotFoundException('User is not a member of any workspace');
     }
@@ -353,7 +353,7 @@ export class WorkspaceService {
     });
 
     // Find root workspaces (no parent)
-    const rootWorkspaces = allWorkspaces.filter(ws => !ws.parentWorkspaceId);
+    const rootWorkspaces = allWorkspaces.filter((ws: any) => !ws.parentWorkspaceId);
 
     return rootWorkspaces;
   }
@@ -466,7 +466,7 @@ export class WorkspaceService {
     const teamAssignments = await this.prisma.roleAssignment.findMany({
       where: {
         scopeType: 'TEAM',
-        scopeId: { in: teams.map(t => t.id) },
+        scopeId: { in: teams.map((t: any) => t.id) },
       },
       include: {
         user: {
@@ -503,18 +503,18 @@ export class WorkspaceService {
     });
 
     // Create team details map
-    const teamDetails = new Map(teams.map(t => [t.id, t]));
+    const teamDetails = new Map(teams.map((t: any) => [t.id, t]));
 
     // Aggregate by user
     const userMap = new Map();
-    
+
     // Add team members from RBAC
-    teamAssignments.forEach(assignment => {
+    teamAssignments.forEach((assignment: any) => {
       const team = teamDetails.get(assignment.scopeId!);
       if (!team) return;
 
       const legacyRole = this.mapRBACRoleToLegacyRole(assignment.role as Role, 'TEAM');
-      
+
       if (!userMap.has(assignment.userId)) {
         userMap.set(assignment.userId, {
           ...assignment.user,
@@ -537,9 +537,9 @@ export class WorkspaceService {
     });
 
     // Add workspace members from RBAC (if not already in map)
-    workspaceAssignments.forEach(assignment => {
+    workspaceAssignments.forEach((assignment: any) => {
       const legacyRole = this.mapRBACRoleToLegacyRole(assignment.role as Role, 'WORKSPACE');
-      
+
       if (!userMap.has(assignment.userId)) {
         userMap.set(assignment.userId, {
           ...assignment.user,
@@ -559,9 +559,9 @@ export class WorkspaceService {
     });
 
     // Add organization members from RBAC (if not already in map)
-    orgAssignments.forEach(assignment => {
+    orgAssignments.forEach((assignment: any) => {
       const legacyRole = this.mapRBACRoleToLegacyRole(assignment.role as Role, 'TENANT');
-      
+
       if (!userMap.has(assignment.userId)) {
         userMap.set(assignment.userId, {
           ...assignment.user,
@@ -611,8 +611,8 @@ export class WorkspaceService {
     });
 
     const teamIds = teamAssignments
-      .map(ta => ta.scopeId)
-      .filter((id): id is string => id !== null);
+      .map((ta: any) => ta.scopeId)
+      .filter((id: string | null): id is string => id !== null);
 
     if (teamIds.length > 0) {
       const teamsInWorkspace = await this.prisma.team.findFirst({
@@ -650,7 +650,7 @@ export class WorkspaceService {
     // Verify workspace exists and tenant match
     const workspace = await this.findById(workspaceId, userOrganizationId);
     OkrTenantGuard.assertSameTenant(workspace.tenantId, userOrganizationId);
-    
+
     // Verify user exists
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
