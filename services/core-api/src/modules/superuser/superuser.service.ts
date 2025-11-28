@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { RBACService } from '../rbac/rbac.service';
 import { Role } from '../rbac/types';
 
@@ -11,7 +11,7 @@ export class SuperuserService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private rbacService: RBACService,
-  ) {}
+  ) { }
 
   /**
    * Check if user is a superuser

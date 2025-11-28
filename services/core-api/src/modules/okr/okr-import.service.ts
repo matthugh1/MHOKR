@@ -3,7 +3,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { VivaGoalsCSVParserService, ParsedVivaGoalsRow } from './viva-goals-csv-parser.service';
 import { VivaGoalsJSONParserService, ParsedVivaGoalsJSONRow } from './viva-goals-json-parser.service';
@@ -44,7 +44,7 @@ export class OkrImportService {
     private objectiveOwnerService: ObjectiveOwnerService,
     private keyResultOwnerService: KeyResultOwnerService,
     private phasedTargetService: PhasedTargetService,
-  ) {}
+  ) { }
 
   /**
    * Import OKRs from Viva Goals CSV content
@@ -88,7 +88,7 @@ export class OkrImportService {
 
     // Topologically sort Objectives to ensure parents are imported before children
     const sortedObjectives = this.topologicalSortObjectives(objectives);
-    
+
     if (sortedObjectives.length !== objectives.length) {
       result.warnings.push(
         `Some objectives could not be sorted (circular dependencies or missing parents) - importing in original order`,
@@ -127,7 +127,7 @@ export class OkrImportService {
 
     // Topologically sort Key Results to ensure parent KRs are imported before child KRs
     const sortedKeyResults = this.topologicalSortKeyResults(keyResults, objectives);
-    
+
     if (sortedKeyResults.length !== keyResults.length) {
       result.warnings.push(
         `Some key results could not be sorted (circular dependencies or missing parents) - importing in original order`,
@@ -189,7 +189,7 @@ export class OkrImportService {
     }
 
     // Convert JSON format to CSV format for reuse of existing import logic
-    const csvFormatRows: ParsedVivaGoalsRow[] = parsedRows.map(row => 
+    const csvFormatRows: ParsedVivaGoalsRow[] = parsedRows.map(row =>
       this.convertJSONRowToCSVRow(row)
     );
 
@@ -212,7 +212,7 @@ export class OkrImportService {
 
     // Topologically sort Objectives to ensure parents are imported before children
     const sortedObjectives = this.topologicalSortObjectives(objectives);
-    
+
     if (sortedObjectives.length !== objectives.length) {
       result.warnings.push(
         `Some objectives could not be sorted (circular dependencies or missing parents) - importing in original order`,
@@ -250,7 +250,7 @@ export class OkrImportService {
 
     // Topologically sort Key Results to ensure parent KRs are imported before child KRs
     const sortedKeyResults = this.topologicalSortKeyResults(keyResults, objectives);
-    
+
     if (sortedKeyResults.length !== keyResults.length) {
       result.warnings.push(
         `Some key results could not be sorted (circular dependencies or missing parents) - importing in original order`,
@@ -691,7 +691,7 @@ export class OkrImportService {
               additionalOwnerId,
               tenantId,
             );
-            
+
             if (!isOwner) {
               // Add as additional owner
               await this.objectiveOwnerService.addOwner(
@@ -826,12 +826,12 @@ export class OkrImportService {
       } else if (externalIdToInternalId.has(row.parentExternalId)) {
         // Check mapping - could be either Objective or KR from current batch
         const parentInternalId = externalIdToInternalId.get(row.parentExternalId)!;
-        
+
         // Check if it's an Objective
         const parentObjective = await this.prisma.objective.findUnique({
           where: { id: parentInternalId },
         });
-        
+
         if (parentObjective) {
           objectiveId = parentInternalId;
         } else {
@@ -1002,7 +1002,7 @@ export class OkrImportService {
               additionalOwnerId,
               tenantId,
             );
-            
+
             if (!isOwner) {
               // Add as additional owner
               await this.keyResultOwnerService.addOwner(
@@ -1105,7 +1105,7 @@ export class OkrImportService {
     // User not found - create one with generated email
     try {
       const email = this.generateEmailFromName(trimmedName);
-      
+
       // Check if user with this email already exists (might be in different tenant)
       const existingByEmail = await this.prisma.user.findUnique({
         where: { email },
@@ -1221,7 +1221,7 @@ export class OkrImportService {
     // Multiple parts - use first two parts
     const firstName = parts[0];
     const lastName = parts.slice(1).join(''); // Join remaining parts
-    
+
     return `${firstName}.${lastName}@puzzel.com`;
   }
 
@@ -1484,97 +1484,97 @@ export class OkrImportService {
   private buildObjectiveMetadata(row: ParsedVivaGoalsRow): Record<string, any> {
     const metadata: Record<string, any> = {};
     const jsonRow = row as any; // Cast to access additional fields
-    
+
     // Store phased targets in metadata (until Ticket 1 is implemented)
     if (jsonRow.phasedTargets) {
       metadata.phasedTargets = jsonRow.phasedTargets;
     }
-    
+
     // Store delegation in metadata (until Ticket 3 is implemented)
     if (jsonRow.delegatedTo) {
       metadata.delegatedTo = jsonRow.delegatedTo;
     }
-    
+
     // Store check-in owners in metadata (until Ticket 4 is implemented)
     if (jsonRow.checkInOwners && jsonRow.checkInOwners.length > 0) {
       metadata.checkInOwners = jsonRow.checkInOwners;
     }
-    
+
     // Store permissions in metadata (until Ticket 2 is implemented)
     if (jsonRow.permissions) {
       metadata.permissions = jsonRow.permissions;
     }
-    
+
     // Store progress config in metadata (until Ticket 5 is implemented)
     if (jsonRow.progressConfig) {
       metadata.progressConfig = jsonRow.progressConfig;
     }
-    
+
     // Store score in metadata
     if (jsonRow.score !== null && jsonRow.score !== undefined) {
       metadata.score = jsonRow.score;
     }
-    
+
     // Store last check-in date (will migrate to lastCheckInAt field in Ticket 8)
     if (jsonRow.lastCheckin) {
       metadata.lastCheckIn = jsonRow.lastCheckin;
     }
-    
+
     return metadata;
   }
-  
+
   /**
    * Build metadata object for Key Result from parsed Viva Goals row
    */
   private buildKeyResultMetadata(row: ParsedVivaGoalsRow): Record<string, any> {
     const metadata: Record<string, any> = {};
     const jsonRow = row as any; // Cast to access additional fields
-    
+
     // Store phased targets
     if (jsonRow.phasedTargets) {
       metadata.phasedTargets = jsonRow.phasedTargets;
     }
-    
+
     // Store delegation
     if (jsonRow.delegatedTo) {
       metadata.delegatedTo = jsonRow.delegatedTo;
     }
-    
+
     // Store check-in owners
     if (jsonRow.checkInOwners && jsonRow.checkInOwners.length > 0) {
       metadata.checkInOwners = jsonRow.checkInOwners;
     }
-    
+
     // Store permissions
     if (jsonRow.permissions) {
       metadata.permissions = jsonRow.permissions;
     }
-    
+
     // Store progress config
     if (jsonRow.progressConfig) {
       metadata.progressConfig = jsonRow.progressConfig;
     }
-    
+
     // Store outcome details (for Ticket 6 enhancement)
     if (jsonRow.outcome) {
       metadata.outcome = jsonRow.outcome;
     }
-    
+
     // Store metric name (will migrate to metricName field)
     if (jsonRow.metricName) {
       metadata.metricName = jsonRow.metricName;
     }
-    
+
     // Store score
     if (jsonRow.score !== null && jsonRow.score !== undefined) {
       metadata.score = jsonRow.score;
     }
-    
+
     // Store last check-in date
     if (jsonRow.lastCheckin) {
       metadata.lastCheckIn = jsonRow.lastCheckin;
     }
-    
+
     return metadata;
   }
 
@@ -1645,14 +1645,14 @@ export class OkrImportService {
     // Calculate percentage from currentValue/targetValue
     if (jsonRow.progress !== null && jsonRow.progress !== undefined && jsonRow.target !== null && jsonRow.target !== undefined) {
       const unit = jsonRow.unit?.toLowerCase() || '';
-      
+
       // For Number or Dollar units, Progress is the currentValue
       if (unit === 'number' || unit === 'dollar') {
         if (jsonRow.target > 0) {
           return (jsonRow.progress / jsonRow.target) * 100;
         }
       }
-      
+
       // For Percentage unit, Progress might be currentValue (0-100) or completion %
       // If it's > 100, it's likely completion %, otherwise it's currentValue
       if (unit === 'percentage') {
@@ -1760,7 +1760,7 @@ export class OkrImportService {
             value =
               keyResult.startValue +
               (checkin.currentValue / 100.0) *
-                (keyResult.targetValue - keyResult.startValue);
+              (keyResult.targetValue - keyResult.startValue);
           } else {
             // Use as absolute value
             value = checkin.currentValue;

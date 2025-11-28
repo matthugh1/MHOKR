@@ -1,6 +1,6 @@
 import { Injectable, ConflictException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { OkrTenantGuard } from '../okr/tenant-guard';
 import { AuditLogService } from '../audit/audit-log.service';
 import { AuditTargetType, MemberRole } from '@prisma/client';
@@ -15,7 +15,7 @@ export class UserService {
     private prisma: PrismaService,
     private auditLogService: AuditLogService,
     private rbacService: RBACService,
-  ) {}
+  ) { }
 
   async findAll(userOrganizationId: string | null | undefined) {
     // Tenant isolation: enforce tenant filtering for all users
@@ -174,8 +174,8 @@ export class UserService {
     // Multi-tenant access is disabled - users can only access their primary organization.
     const primaryOrg = user.primaryOrganizationId
       ? await this.prisma.organization.findUnique({
-          where: { id: user.primaryOrganizationId },
-        })
+        where: { id: user.primaryOrganizationId },
+      })
       : null;
 
     // Return single organization (array format for backward compatibility with frontend)
@@ -221,13 +221,13 @@ export class UserService {
       // Fetch workspaces with relations, then filter to primary org only
       const allDirectWorkspaces = workspaceIds.length > 0
         ? await this.prisma.workspace.findMany({
-            where: { id: { in: workspaceIds } },
-            include: {
-              tenant: true,
-              parentWorkspace: true,
-              childWorkspaces: true,
-            },
-          })
+          where: { id: { in: workspaceIds } },
+          include: {
+            tenant: true,
+            parentWorkspace: true,
+            childWorkspaces: true,
+          },
+        })
         : [];
 
       // Filter workspaces to only include those in primary organization
@@ -277,17 +277,17 @@ export class UserService {
       // Fetch teams with workspace relations, then filter to primary org only
       const allTeamsWithWorkspaces = teamIds.length > 0
         ? await this.prisma.team.findMany({
-            where: { id: { in: teamIds } },
-            include: {
-              workspace: {
-                include: {
-                  tenant: true,
-                  parentWorkspace: true,
-                  childWorkspaces: true,
-                },
+          where: { id: { in: teamIds } },
+          include: {
+            workspace: {
+              include: {
+                tenant: true,
+                parentWorkspace: true,
+                childWorkspaces: true,
               },
             },
-          })
+          },
+        })
         : [];
 
       // Filter teams to only include those whose workspace belongs to primary organization
@@ -299,13 +299,13 @@ export class UserService {
     // Extract indirect workspaces from teams
     const indirectWorkspaces = teamsWithWorkspaces
       .map(t => t.workspace)
-      .filter((ws, index, self) => 
+      .filter((ws, index, self) =>
         index === self.findIndex(w => w.id === ws.id)
       );
 
     // Combine direct and indirect workspaces
     const allWorkspaces = [...directWorkspaces, ...indirectWorkspaces];
-    const workspaces = allWorkspaces.filter((ws, index, self) => 
+    const workspaces = allWorkspaces.filter((ws, index, self) =>
       index === self.findIndex(w => w.id === ws.id)
     );
 
@@ -318,11 +318,11 @@ export class UserService {
 
         if (teamRoles && teamRoles.length > 0) {
           // Use highest priority role from RBAC (TEAM_LEAD > TEAM_CONTRIBUTOR > TEAM_VIEWER)
-          const rbacRole = teamRoles.includes('TEAM_LEAD') 
-            ? 'TEAM_LEAD' 
+          const rbacRole = teamRoles.includes('TEAM_LEAD')
+            ? 'TEAM_LEAD'
             : teamRoles.includes('TEAM_CONTRIBUTOR')
-            ? 'TEAM_CONTRIBUTOR'
-            : teamRoles[0];
+              ? 'TEAM_CONTRIBUTOR'
+              : teamRoles[0];
           role = this.mapRBACRoleToLegacyRole(rbacRole as Role, 'TEAM');
         } else {
           // Fallback to MEMBER if no role found (shouldn't happen in Phase 4)
@@ -396,10 +396,10 @@ export class UserService {
   }
 
   async createUser(
-    data: { 
-      email: string; 
-      name: string; 
-      password: string; 
+    data: {
+      email: string;
+      name: string;
+      password: string;
       tenantId: string; // Required - all users must belong to an organization (auto-injected if not provided)
       workspaceId?: string; // Optional - only required if workspace role assignment needed
       role?: 'ORG_ADMIN' | 'MEMBER' | 'VIEWER';
@@ -409,7 +409,7 @@ export class UserService {
     actorUserId: string,
   ) {
     const isSuperuser = userOrganizationId === null;
-    
+
     // Tenant isolation: enforce mutation rules (skip for SUPERUSER who can create users)
     if (!isSuperuser) {
       OkrTenantGuard.assertCanMutateTenant(userOrganizationId);
@@ -611,7 +611,7 @@ export class UserService {
     if (!isSuperuser) {
       // Check if user's primaryOrganizationId matches the actor's tenant
       const belongsToTenant = user.primaryOrganizationId === userOrganizationId;
-      
+
       // Also check for TENANT role assignment
       const tenantAssignment = await this.prisma.roleAssignment.findFirst({
         where: {
@@ -678,7 +678,7 @@ export class UserService {
     // Tenant isolation: verify user belongs to caller's org via RBAC
     // Check if user's primaryOrganizationId matches the actor's tenant
     const belongsToTenant = user.primaryOrganizationId === userOrganizationId;
-    
+
     // Also check for TENANT role assignment
     const tenantAssignment = await this.prisma.roleAssignment.findFirst({
       where: {
