@@ -83,6 +83,20 @@ jobs:
           name: build-artifacts
           path: azure/appservice/build
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies (for migration)
+        run: pnpm install --frozen-lockfile
+
       - name: Log in to Azure
         uses: azure/login@v2
         with:
@@ -105,6 +119,9 @@ jobs:
 
       - name: Deploy Backend Services
         run: ./azure/appservice/deploy-backend.sh
+
+      - name: Run Database Migrations
+        run: ./azure/appservice/run-migration.sh
 
       - name: Deploy Web App
         run: ./azure/appservice/deploy-web.sh
