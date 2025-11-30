@@ -7,7 +7,7 @@ import { FeedbackQueryDto } from './dto/feedback-query.dto';
 export class FeedbackService {
   private readonly logger = new Logger(FeedbackService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async createFeedback(
     userId: string,
@@ -118,13 +118,12 @@ export class FeedbackService {
 
   async update(id: string, tenantId: string | null, updateDto: UpdateFeedbackDto) {
     // First check if feedback exists and user has access
-    const existing = await this.findOne(id, tenantId);
+    await this.findOne(id, tenantId);
 
     const updated = await this.prisma.feedback.update({
       where: { id },
       data: {
         ...updateDto,
-        updatedAt: new Date(),
       },
       include: {
         user: {
