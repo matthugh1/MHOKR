@@ -30,6 +30,7 @@ import {
 } from 'lucide-react'
 import { useFeatureFlags } from '@/hooks/useFeatureFlags'
 import { ProfilePopup } from '@/components/ProfilePopup'
+import { FeedbackButton } from '@/components/FeedbackButton'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -319,9 +320,15 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto bg-slate-950">
+      <main className="flex-1 overflow-auto bg-slate-950 flex flex-col">
+        {/* Header with Feedback Button */}
+        <div className="sticky top-0 z-10 bg-slate-950/95 backdrop-blur-sm border-b border-slate-800 px-6 py-3 flex items-center justify-end">
+          <FeedbackButton />
+        </div>
         <ImpersonationBanner />
-        {children}
+        <div className="flex-1 overflow-auto">
+          {children}
+        </div>
       </main>
 
       {/* Profile Popup */}

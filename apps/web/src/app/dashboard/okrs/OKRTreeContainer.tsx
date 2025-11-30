@@ -92,6 +92,8 @@ export function OKRTreeContainer({
   const [objectivesPage, setObjectivesPage] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [permissionError, setPermissionError] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const pageSize = 20
   
   const loadOKRs = useCallback(async () => {
     if (!currentOrganization?.id || !user?.id) return
@@ -224,6 +226,22 @@ export function OKRTreeContainer({
     })
   }, [objectivesPage, filterWorkspaceId, filterTeamId, filterOwnerId, filterOverdue, searchQuery, selectedTimeframeKey, overdueCheckIns])
   
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filterWorkspaceId, filterTeamId, filterOwnerId, searchQuery, selectedTimeframeKey, selectedScope, selectedCycleId, selectedStatus])
+  
+  // Calculate pagination
+  const effectiveTotalCount = filteredOKRs.length
+  const totalPages = Math.ceil(effectiveTotalCount / pageSize)
+  
+  // Apply client-side pagination
+  const paginatedFilteredOKRs = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize
+    const endIndex = startIndex + pageSize
+    return filteredOKRs.slice(startIndex, endIndex)
+  }, [filteredOKRs, currentPage, pageSize])
+  
   const preparedObjectives = useMemo(() => {
     return filteredOKRs.map((okr: any) => {
       const canEdit = okr.canEdit !== undefined ? okr.canEdit : false
@@ -293,7 +311,7 @@ export function OKRTreeContainer({
         objectiveForHook,
       } as TreeObjective
     })
-  }, [filteredOKRs, availableUsers, activeCycles, overdueCheckIns, tenantPermissions])
+  }, [paginatedFilteredOKRs, availableUsers, activeCycles, overdueCheckIns, tenantPermissions])
   
   if (loading) {
     return <div className="text-center py-12 text-slate-500">Loading OKRs...</div>
@@ -332,21 +350,75 @@ export function OKRTreeContainer({
   }
   
   return (
-    <OKRTreeView
-      objectives={preparedObjectives}
-      selectedNodeId={selectedNodeId}
-      selectedNodeType={selectedNodeType}
-      onNodeClick={onNodeClick}
-      onAddKeyResult={onAction.onAddKeyResult}
-      onAddInitiative={onAction.onAddInitiativeToObjective}
-      onAddInitiativeToKr={onAction.onAddInitiativeToKr}
-      onAddSubObjective={onAction.onContextualAddKeyResult ? (parentId, parentTitle) => {
-        // Create sub-objective handler - for now, we'll need to add a proper handler
-        // Sub-objectives are created as objectives with a parentId
-        // For now, we'll use the contextual add objective flow
-        // In a full implementation, we'd have a dedicated sub-objective creation handler
-        console.warn('[OKRTreeContainer] Sub-objective creation not yet implemented')
-      } : undefined}
-    />
+    <>
+      {/* Debug panel - always visible to diagnose pagination issue */}
+      <div className="mb-4 p-4 bg-yellow-100 border-2 border-yellow-500 rounded-lg text-sm font-mono shadow-lg z-50 relative">
+        <strong className="text-yellow-900 text-base">🔍 Tree View Pagination Debug:</strong>
+        <div className="mt-2 space-y-1 text-yellow-900">
+          <div><strong>filteredOKRs.length:</strong> {filteredOKRs.length}</div>
+          <div><strong>effectiveTotalCount:</strong> {effectiveTotalCount}</div>
+          <div><strong>pageSize:</strong> {pageSize}</div>
+          <div><strong>totalPages:</strong> {totalPages}</div>
+          <div><strong>currentPage:</strong> {currentPage}</div>
+          <div><strong>paginatedFilteredOKRs.length:</strong> {paginatedFilteredOKRs.length}</div>
+          <div className="mt-2 p-2 bg-yellow-200 rounded font-bold text-yellow-900">
+            Should show pagination? {totalPages > 1 ? '✅ YES' : '❌ NO'}
+          </div>
+        </div>
+      </div>
+      
+      <OKRTreeView
+        objectives={preparedObjectives}
+        selectedNodeId={selectedNodeId}
+        selectedNodeType={selectedNodeType}
+        onNodeClick={onNodeClick}
+        onAddKeyResult={onAction.onAddKeyResult}
+        onAddInitiative={onAction.onAddInitiativeToObjective}
+        onAddInitiativeToKr={onAction.onAddInitiativeToKr}
+        onAddSubObjective={onAction.onContextualAddKeyResult ? (parentId, parentTitle) => {
+          // Create sub-objective handler - for now, we'll need to add a proper handler
+          // Sub-objectives are created as objectives with a parentId
+          // For now, we'll use the contextual add objective flow
+          // In a full implementation, we'd have a dedicated sub-objective creation handler
+          console.warn('[OKRTreeContainer] Sub-objective creation not yet implemented')
+        } : undefined}
+      />
+      
+      {/* Pagination controls */}
+      {totalPages > 1 && (
+        <nav className="mt-6 flex items-center justify-between gap-4 border-t border-neutral-200 pt-4 text-sm text-neutral-700" aria-label="Pagination">
+          <div className="text-neutral-600" role="status">
+            Showing {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, effectiveTotalCount)} of {effectiveTotalCount} objectives
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              className={cn(
+                "rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-ring",
+                "focus:ring-offset-2"
+              )}
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              aria-label="Previous page"
+            >
+              ‹ Previous
+            </button>
+            <div className="tabular-nums text-neutral-600" aria-current="page">
+              Page {currentPage} of {totalPages}
+            </div>
+            <button
+              className={cn(
+                "rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-ring",
+                "focus:ring-offset-2"
+              )}
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              aria-label="Next page"
+            >
+              Next ›
+            </button>
+          </div>
+        </nav>
+      )}
+    </>
   )
 }

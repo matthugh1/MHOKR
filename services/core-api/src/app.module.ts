@@ -18,6 +18,7 @@ import { AuditModule } from './modules/audit/audit.module';
 import { SystemModule } from './modules/system/system.module';
 import { PolicyModule } from './policy/policy.module';
 import { ShareModule } from './modules/share/share.module';
+import { FeedbackModule } from './modules/feedback/feedback.module';
 import { TenantContextMiddleware } from './common/tenant/tenant-context.middleware';
 import { TenantMutationGuard } from './common/tenant/tenant-mutation.guard';
 import { TenantContextInterceptor } from './common/tenant/tenant-context.interceptor';
@@ -45,6 +46,7 @@ import { TenantContextInterceptor } from './common/tenant/tenant-context.interce
     SystemModule,
     PolicyModule, // Policy decision centre
     ShareModule, // Share links for OKR objects
+    FeedbackModule, // Beta feedback system
   ],
   providers: [
     NestReflector, // Provide Reflector for ScheduleModule

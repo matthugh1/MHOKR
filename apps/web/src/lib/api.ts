@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { errorTracker } from './error-tracker'
 
 // Direct connection to core-api (port 3001) in development
 // In production/Docker, this would go through API gateway (port 3000)
@@ -41,15 +42,30 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Handle auth errors
+// Handle auth errors and track API errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    const url = error.config?.url || ''
+    const isLoginRequest = url.includes('/auth/login') || url.includes('/api/auth/login')
+    const isRegisterRequest = url.includes('/auth/register') || url.includes('/api/auth/register')
+    const isFeedbackRequest = url.includes('/feedback') || url.includes('/api/feedback')
+    
+    // Skip cancellation errors - these are expected when components unmount or requests are cancelled
+    const isCancellationError =
+      error?.name === 'CanceledError' ||
+      error?.name === 'AbortError' ||
+      error?.code === 'ERR_CANCELED' ||
+      error?.message?.toLowerCase().includes('canceled') ||
+      error?.message?.toLowerCase().includes('aborted')
+    
+    // Track API errors (except for auth, feedback endpoints, and cancellation errors)
+    if (!isLoginRequest && !isRegisterRequest && !isFeedbackRequest && !isCancellationError) {
+      errorTracker.trackApiError(error, error.config?.url)
+    }
+
     if (error.response?.status === 401) {
       // Don't redirect if we're already on the login page or making a login request
-      const url = error.config?.url || ''
-      const isLoginRequest = url.includes('/auth/login') || url.includes('/api/auth/login')
-      const isRegisterRequest = url.includes('/auth/register') || url.includes('/api/auth/register')
       const isOnLoginPage = typeof window !== 'undefined' && window.location.pathname === '/login'
       
       // Only redirect if it's not a login/register request and we're not already on login page

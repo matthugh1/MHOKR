@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import api from '@/lib/api'
+import { identify, reset } from '@/lib/analytics'
 
 interface User {
   id: string
@@ -62,6 +63,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkAuth()
   }, [])
 
+  // Identify user in analytics when user data is loaded
+  useEffect(() => {
+    if (user && typeof window !== 'undefined') {
+      identify(user.id, {
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      })
+    }
+  }, [user])
+
   const checkAuth = async () => {
     const token = localStorage.getItem('access_token')
     if (!token) {
@@ -83,7 +95,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await api.post('/auth/login', { email, password })
       localStorage.setItem('access_token', response.data.accessToken)
-      setUser(response.data.user)
+      const userData = response.data.user
+      setUser(userData)
+      
+      // Identify user in analytics
+      if (typeof window !== 'undefined') {
+        identify(userData.id, {
+          email: userData.email,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+        })
+      }
+      
       router.push('/dashboard')
     } catch (error: any) {
       // Re-throw with better error message
@@ -95,11 +118,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (data: RegisterData) => {
     const response = await api.post('/auth/register', data)
     localStorage.setItem('access_token', response.data.accessToken)
-    setUser(response.data.user)
+    const userData = response.data.user
+    setUser(userData)
+    
+    // Identify user in analytics
+    if (typeof window !== 'undefined') {
+      identify(userData.id, {
+        email: userData.email,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+      })
+    }
+    
     router.push('/dashboard')
   }
 
   const logout = () => {
+    // Reset analytics before clearing user data
+    if (typeof window !== 'undefined') {
+      reset()
+    }
+    
     localStorage.removeItem('access_token')
     localStorage.removeItem('impersonation_data')
     setUser(null)

@@ -232,6 +232,15 @@ app.use('/api/okr', createProxyMiddleware({
   },
 }));
 
+app.use('/api/feedback', createProxyMiddleware({
+  target: services.core,
+  changeOrigin: true,
+  pathRewrite: { '^/api/feedback': '/feedback' },
+  onProxyReq: (_proxyReq, req) => {
+    logger.info(`Proxying to Core API: ${req.method} ${req.path}`);
+  },
+}));
+
 // AI Service routes
 app.use('/api/ai', createProxyMiddleware({
   target: services.ai,

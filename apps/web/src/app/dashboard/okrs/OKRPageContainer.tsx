@@ -303,6 +303,11 @@ export function OKRPageContainer({
     }
   }, [currentOrganization?.id, selectedCycleId, selectedStatus, currentPage, filterWorkspaceId, filterTeamId, filterOwnerId, searchQuery, selectedTimeframeKey, selectedScope, myOkrsOnly, selectedVisibility, selectedOwnerIdProp, selectedPillarIdProp, user?.id])
   
+  // Reset to page 1 when filters change (but not when currentPage changes)
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [filterWorkspaceId, filterTeamId, filterOwnerId, searchQuery, selectedTimeframeKey, selectedScope, myOkrsOnly, selectedVisibility, selectedOwnerIdProp, selectedPillarIdProp, selectedCycleId, selectedStatus])
+  
   useEffect(() => {
     console.log('[OKR PAGE CONTAINER] useEffect triggered:', {
       hasOrgId: !!currentOrganization?.id,
@@ -389,10 +394,40 @@ export function OKRPageContainer({
     return filtered
   }, [objectivesViewModel, filterWorkspaceId, filterTeamId, filterOwnerId, filterOverdue, searchQuery, selectedTimeframeKey, overdueCheckIns])
   
-  const totalPages = Math.ceil(totalCount / pageSize)
+  // When hierarchyView=true, backend returns all objectives, so we need client-side pagination
+  // Otherwise, use server-side pagination count
+  const useHierarchyView = true // This matches the value used in loadOKRs
+  const effectiveTotalCount = useHierarchyView ? filteredOKRs.length : totalCount
+  const totalPages = Math.ceil(effectiveTotalCount / pageSize)
+  
+  // Debug logging to help diagnose pagination visibility issues
+  useEffect(() => {
+    console.log('[OKR PAGINATION DEBUG]', {
+      filteredOKRsLength: filteredOKRs.length,
+      totalCount,
+      effectiveTotalCount,
+      totalPages,
+      currentPage,
+      pageSize,
+      shouldShowPagination: totalPages > 1,
+      useHierarchyView,
+    })
+  }, [filteredOKRs.length, totalCount, effectiveTotalCount, totalPages, currentPage, pageSize, useHierarchyView])
+  
+  // Apply client-side pagination when hierarchyView is enabled
+  const paginatedFilteredOKRs = useMemo(() => {
+    if (!useHierarchyView) {
+      // Server-side pagination: backend already paginated, use all filtered results
+      return filteredOKRs
+    }
+    // Client-side pagination: slice filteredOKRs based on currentPage
+    const startIndex = (currentPage - 1) * pageSize
+    const endIndex = startIndex + pageSize
+    return filteredOKRs.slice(startIndex, endIndex)
+  }, [filteredOKRs, currentPage, pageSize, useHierarchyView])
   
   const preparedObjectives = useMemo(() => {
-    return filteredOKRs.map((okr: any) => {
+    return paginatedFilteredOKRs.map((okr: any) => {
       // Backend provides canEdit/canDelete flags, use them directly
       const canEdit = okr.canEdit !== undefined ? okr.canEdit : false
       const canDelete = okr.canDelete !== undefined ? okr.canDelete : false
@@ -474,7 +509,7 @@ export function OKRPageContainer({
         objectiveForHook,
       }
     })
-  }, [filteredOKRs, availableUsers, activeCycles, overdueCheckIns, tenantPermissions])
+  }, [paginatedFilteredOKRs, availableUsers, activeCycles, overdueCheckIns, tenantPermissions])
   
   if (loading) {
     return <div className="text-center py-12 text-slate-500">Loading OKRs...</div>
@@ -539,8 +574,31 @@ export function OKRPageContainer({
     )
   }
   
+  // Debug panel - always render to help diagnose
+  const debugPanel = (
+    <div className="mb-4 p-4 bg-yellow-100 border-2 border-yellow-500 rounded-lg text-sm font-mono shadow-lg z-50 relative">
+      <strong className="text-yellow-900 text-base">🔍 Pagination Debug Info:</strong>
+      <div className="mt-2 space-y-1 text-yellow-900">
+        <div><strong>loading:</strong> {loading ? 'YES' : 'NO'}</div>
+        <div><strong>permissionError:</strong> {permissionError || 'none'}</div>
+        <div><strong>filteredOKRs.length:</strong> {filteredOKRs.length}</div>
+        <div><strong>totalCount (backend):</strong> {totalCount}</div>
+        <div><strong>effectiveTotalCount:</strong> {effectiveTotalCount}</div>
+        <div><strong>pageSize:</strong> {pageSize}</div>
+        <div><strong>totalPages:</strong> {totalPages}</div>
+        <div><strong>currentPage:</strong> {currentPage}</div>
+        <div className="mt-2 p-2 bg-yellow-200 rounded font-bold text-yellow-900">
+          Should show pagination? {totalPages > 1 ? '✅ YES' : '❌ NO'}
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div aria-busy={loading}>
+      {/* Always show debug panel at the top */}
+      {debugPanel}
+      
       {loading && (
         <div className="space-y-4 md:space-y-6">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -557,6 +615,7 @@ export function OKRPageContainer({
       
       {!loading && !permissionError && (
         <>
+          
           <OKRListVirtualised
             objectives={preparedObjectives}
             expandedObjectiveId={expandedObjectiveId}
@@ -565,10 +624,11 @@ export function OKRPageContainer({
             availableUsers={availableUsers}
           />
           
+          {/* Show pagination if there are multiple pages */}
           {totalPages > 1 && (
             <nav className="mt-6 flex items-center justify-between gap-4 border-t border-neutral-200 pt-4 text-sm text-neutral-700" aria-label="Pagination">
               <div className="text-neutral-600" role="status">
-                Showing {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, totalCount)} of {totalCount} objectives
+                Showing {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, effectiveTotalCount)} of {effectiveTotalCount} objectives
               </div>
               <div className="flex items-center gap-4">
                 <button

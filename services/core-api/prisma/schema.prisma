@@ -38,6 +38,7 @@ model Organization {
   activities                     Activity[] // Activities belonging to this organization
   userLayouts                    UserLayout[] // User layouts belonging to this organization
   shareLinks                     ShareLink[]          @relation("ShareLinkTenant")
+  feedback                       Feedback[]           @relation("FeedbackTenant")
   createdAt                      DateTime             @default(now())
   updatedAt                      DateTime             @updatedAt
 
@@ -49,8 +50,8 @@ model Workspace {
   name              String
   tenantId          String
   tenant            Organization     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  ownerId           String?          // Workspace owner (replaces WORKSPACE_LEAD role)
-  owner              User?            @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerId           String? // Workspace owner (replaces WORKSPACE_LEAD role)
+  owner             User?            @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   parentWorkspaceId String?
   parentWorkspace   Workspace?       @relation("WorkspaceHierarchy", fields: [parentWorkspaceId], references: [id], onDelete: SetNull)
   childWorkspaces   Workspace[]      @relation("WorkspaceHierarchy")
@@ -71,7 +72,7 @@ model Team {
   name        String
   workspaceId String
   workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  ownerId     String?      // Team owner (replaces TEAM_LEAD role)
+  ownerId     String? // Team owner (replaces TEAM_LEAD role)
   owner       User?        @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   objectives  Objective[]
   keyResults  KeyResult[]
@@ -127,6 +128,7 @@ model User {
   shareLinksCreated          ShareLink[]             @relation("ShareLinkCreator")
   ownedWorkspaces            Workspace[]             @relation("WorkspaceOwner")
   ownedTeams                 Team[]                  @relation("TeamOwner")
+  feedback                   Feedback[]              @relation("FeedbackUser")
   createdAt                  DateTime                @default(now())
   updatedAt                  DateTime                @updatedAt
 
@@ -310,60 +312,60 @@ model Objective {
 }
 
 model KeyResult {
-  id              String                    @id @default(cuid())
-  title           String
-  description     String?                   @db.Text
-  ownerId         String
-  owner           User                     @relation("KeyResultPrimaryOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  tenantId        String // Tenant scoping: KR belongs to one organization
-  tenant          Organization              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  teamId          String? // Optional team assignment (inherited from parent Objective if not set)
-  team            Team?                     @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  createdBy       String? // User who created this key result
-  creator         User?                     @relation("KeyResultCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  id                String                    @id @default(cuid())
+  title             String
+  description       String?                   @db.Text
+  ownerId           String
+  owner             User                      @relation("KeyResultPrimaryOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  tenantId          String // Tenant scoping: KR belongs to one organization
+  tenant            Organization              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  teamId            String? // Optional team assignment (inherited from parent Objective if not set)
+  team              Team?                     @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  createdBy         String? // User who created this key result
+  creator           User?                     @relation("KeyResultCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   // Nested KR support: a Key Result can be a child of another Key Result (Viva Goals pattern)
   parentKeyResultId String? // Parent KR for nested hierarchy
-  parentKeyResult   KeyResult?              @relation("KeyResultHierarchy", fields: [parentKeyResultId], references: [id], onDelete: SetNull)
-  childKeyResults   KeyResult[]             @relation("KeyResultHierarchy")
+  parentKeyResult   KeyResult?                @relation("KeyResultHierarchy", fields: [parentKeyResultId], references: [id], onDelete: SetNull)
+  childKeyResults   KeyResult[]               @relation("KeyResultHierarchy")
   // Weight for progress aggregation (when this KR is a child of another KR)
-  weight          Float                     @default(1.0)
-  metricType      MetricType
-  startValue      Float
-  targetValue     Float
-  currentValue    Float
-  unit            String?
-  status          OKRStatus                 @default(ON_TRACK)
-  progress        Float                     @default(0)
-  goalType        GoalType?                 @default(ASPIRATIONAL) // Aspirational vs Committed goal
-  visibilityLevel VisibilityLevel           @default(PUBLIC_TENANT) // Visibility level for access control
-  isPublished     Boolean                   @default(false) // DEPRECATED: Use state field instead
-  state           KeyResultState            @default(DRAFT) // Combined state (publish + completion)
-  checkInCadence  CheckInCadence? // Optional check-in cadence for overdue tracking
-  cycleId         String? // Optional link to OKR cycle/quarter (inherited from parent Objective but can be set directly)
-  cycle           Cycle?                    @relation(fields: [cycleId], references: [id], onDelete: SetNull)
-  startDate       DateTime?
-  endDate         DateTime?
-  positionX       Float?
-  positionY       Float?
-  objectives      ObjectiveKeyResult[]
-  tags            KeyResultTag[]
-  contributors    KeyResultContributor[]
-  owners          KeyResultOwner[]          @relation("KeyResultOwners") // Multiple owners (in addition to primary ownerId)
-  phasedTargets   PhasedTarget[]            @relation("KeyResultPhasedTargets") // Milestones/phased targets
-  checkIns        CheckIn[]
-  integrations    KRIntegration[]
-  statusSnapshots KeyResultStatusSnapshot[]
+  weight            Float                     @default(1.0)
+  metricType        MetricType
+  startValue        Float
+  targetValue       Float
+  currentValue      Float
+  unit              String?
+  status            OKRStatus                 @default(ON_TRACK)
+  progress          Float                     @default(0)
+  goalType          GoalType?                 @default(ASPIRATIONAL) // Aspirational vs Committed goal
+  visibilityLevel   VisibilityLevel           @default(PUBLIC_TENANT) // Visibility level for access control
+  isPublished       Boolean                   @default(false) // DEPRECATED: Use state field instead
+  state             KeyResultState            @default(DRAFT) // Combined state (publish + completion)
+  checkInCadence    CheckInCadence? // Optional check-in cadence for overdue tracking
+  cycleId           String? // Optional link to OKR cycle/quarter (inherited from parent Objective but can be set directly)
+  cycle             Cycle?                    @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  startDate         DateTime?
+  endDate           DateTime?
+  positionX         Float?
+  positionY         Float?
+  objectives        ObjectiveKeyResult[]
+  tags              KeyResultTag[]
+  contributors      KeyResultContributor[]
+  owners            KeyResultOwner[]          @relation("KeyResultOwners") // Multiple owners (in addition to primary ownerId)
+  phasedTargets     PhasedTarget[]            @relation("KeyResultPhasedTargets") // Milestones/phased targets
+  checkIns          CheckIn[]
+  integrations      KRIntegration[]
+  statusSnapshots   KeyResultStatusSnapshot[]
   // Import tracking fields
-  externalId      String? // External ID from import source (e.g., Viva Goals)
-  source          String? // Import source identifier (e.g., "VIVA_GOALS")
-  importedAt      DateTime? // Timestamp when imported
-  importedBy      String? // User who performed the import
-  importer        User?                     @relation("KeyResultImporter", fields: [importedBy], references: [id], onDelete: SetNull)
+  externalId        String? // External ID from import source (e.g., Viva Goals)
+  source            String? // Import source identifier (e.g., "VIVA_GOALS")
+  importedAt        DateTime? // Timestamp when imported
+  importedBy        String? // User who performed the import
+  importer          User?                     @relation("KeyResultImporter", fields: [importedBy], references: [id], onDelete: SetNull)
   // Metadata JSON field for storing additional Viva Goals data
   // This will be migrated to dedicated fields as features are implemented
-  metadata        Json? // Store phased targets, permissions, delegation, etc. until features are implemented
-  createdAt       DateTime                  @default(now())
-  updatedAt       DateTime                  @updatedAt
+  metadata          Json? // Store phased targets, permissions, delegation, etc. until features are implemented
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
 
   @@unique([tenantId, source, externalId])
   @@index([ownerId])
@@ -843,6 +845,32 @@ model ShareLink {
 enum ShareEntityType {
   OBJECTIVE
   KEY_RESULT
+}
+
+// ==========================================
+// Feedback Model
+// ==========================================
+
+model Feedback {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation("FeedbackUser", fields: [userId], references: [id], onDelete: Cascade)
+  tenantId  String?
+  tenant    Organization? @relation("FeedbackTenant", fields: [tenantId], references: [id], onDelete: SetNull)
+  message   String        @db.Text
+  pageUrl   String
+  userAgent String?
+  errors    Json? // Array of captured errors
+  metadata  Json? // Additional context (screen size, etc.)
+  resolved  Boolean       @default(false) // Whether the feedback has been resolved
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([createdAt])
+  @@index([resolved])
+  @@map("feedback")
 }
 
 // ==========================================
