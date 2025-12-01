@@ -1,9 +1,0 @@
-<step title="Incoming Request" date="2025-11-27T14:59:13.990" instance="9b608e" url="/api/deployments/latest?deployer=GITHUB_ZIP_DEPLOY&amp;time=2025-11-27_14-59-07Z" method="GET" type="request" pid="833,1,24" Host="okr-nexus-core-api.scm.azurewebsites.net" User-Agent="GITHUBACTIONS_DeployWebAppToAzure_a69cc60085c8f0c82895477c8710d137b67d38ff877eb2ce3035e775273430d3" Authorization="Bas..." Content-Type="application/json; charset=utf-8" Cookie="ARRAffinity=9b608e27fea511ce9e949618e8f8725d1f0c94df27b00c7441bf73f0438ef289;Path=/;HttpOnly;Secure;Domain=okr-nexus-core-api.scm.azurewebsites.net; ARRAffinitySameSite=9b608e27fea511ce9e949618e8f8725d1f0c94df27b00c7441bf73f0438ef289;Path=/;HttpOnly;SameSite=None;Secure;Domain=okr-nexus-core-api.scm.azurewebsites.net" Content-Length="0" X-ARR-LOG-ID="7e4e5b3a-19c3-46ee-8acf-57835deee167" CLIENT-IP="172.200.23.71:13505" X-SITE-DEPLOYMENT-ID="okr-nexus-core-api" WAS-DEFAULT-HOSTNAME="okr-nexus-core-api.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/deployments/latest?deployer=GITHUB_ZIP_DEPLOY&amp;time=2025-11-27_14-59-07Z" X-Client-IP="172.200.23.71" X-Client-Port="13505" >
-  <step title="Cleanup Xml Logs" date="2025-11-27T14:59:13.994" /><!-- duration: 4ms -->
-  <step title="DeploymentService.GetResult" date="2025-11-27T14:59:14.004" >
-    <step title="DeploymentService.GetLatestDeployment" date="2025-11-27T14:59:14.007" >
-      <step title="DeploymentManager.GetResults" date="2025-11-27T14:59:14.013" /><!-- duration: 197ms -->
-    </step><!-- duration: 216ms -->
-  </step><!-- duration: 221ms -->
-  <step title="Outgoing response" date="2025-11-27T14:59:14.228" type="response" statusCode="202" statusText="Accepted" /><!-- duration: 4ms -->
-</step><!-- duration: 249ms -->

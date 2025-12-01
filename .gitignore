@@ -63,6 +63,7 @@ secrets/
 *.log
 logs/
 tmp/
+temp_logs/
 .temp/
 *.tmp
 *.temp

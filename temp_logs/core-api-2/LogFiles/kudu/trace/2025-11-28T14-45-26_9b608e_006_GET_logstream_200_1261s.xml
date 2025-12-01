@@ -1,6 +1,0 @@
-<step title="Incoming Request" date="2025-11-28T14:45:26.909" instance="9b608e" url="/logstream" method="GET" type="request" pid="833,1,22" Host="okr-nexus-core-api.scm.azurewebsites.net" User-Agent="AZURECLI/2.78.0 (HOMEBREW)" Accept-Encoding="identity" Authorization="Bas..." x-ms-client-request-id="b9a9cf28-cc68-11f0-a9cf-c2cda32ecd7a" X-ARR-LOG-ID="b9a9cf28-cc68-11f0-a9cf-c2cda32ecd7a" CLIENT-IP="82.28.211.162:51567" X-SITE-DEPLOYMENT-ID="okr-nexus-core-api" WAS-DEFAULT-HOSTNAME="okr-nexus-core-api.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/logstream" X-Client-IP="82.28.211.162" X-Client-Port="51567" >
-  <step title="Cleanup Xml Logs" date="2025-11-28T14:45:26.919" /><!-- duration: 19ms -->
-  <step title="LogStreamHandlerMiddleware.Invoke" date="2025-11-28T14:45:27.080" /><!-- duration: 197ms -->
-  <step title="Error occurred" date="2025-11-28T15:06:27.526" type="error" text="LogStreamManager: ProcessRequest end" /><!-- duration: 88ms -->
-  <step title="Outgoing response" date="2025-11-28T15:06:27.725" type="response" statusCode="200" statusText="OK" /><!-- duration: 3ms -->
-</step><!-- duration: 1260837ms -->
