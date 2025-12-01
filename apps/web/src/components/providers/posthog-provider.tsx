@@ -62,7 +62,7 @@ if (typeof window !== 'undefined') {
         persistence: 'localStorage+cookie',
         // Retry configuration
         request_batching: true,
-        batch_size: 10,
+
         // Better error handling
         loaded: (posthogInstance) => {
           if (process.env.NODE_ENV === 'development') {
