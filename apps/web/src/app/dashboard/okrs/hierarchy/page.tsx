@@ -394,7 +394,7 @@ function OKRHierarchyPageContent() {
   })
   // Disable API calls when creation modal is open to prevent Network Errors
   const isCreationModeActive = newObjectiveModalOpen || sidePanelTab === 'create'
-  
+
   const { treeData, loading, error, refetch, loadChildren, loadingNodeIds, pagination } = useHierarchyOKRs({
     tenantId: currentOrganization?.id || null,
     cycleId: selectedCycleId,
@@ -1009,8 +1009,8 @@ function OKRHierarchyPageContent() {
                           isCreationModeActive
                             ? "cursor-not-allowed opacity-50"
                             : selectedScope === 'my'
-                            ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
-                            : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                              ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
+                              : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
                         )}
                         onClick={() => handleScopeChange('my')}
                         aria-pressed={selectedScope === 'my'}
@@ -1027,8 +1027,8 @@ function OKRHierarchyPageContent() {
                           isCreationModeActive
                             ? "cursor-not-allowed opacity-50"
                             : selectedScope === 'team-workspace'
-                            ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
-                            : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                              ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
+                              : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
                         )}
                         onClick={() => handleScopeChange('team-workspace')}
                         aria-pressed={selectedScope === 'team-workspace'}
@@ -1045,8 +1045,8 @@ function OKRHierarchyPageContent() {
                           isCreationModeActive
                             ? "cursor-not-allowed opacity-50"
                             : selectedScope === 'tenant'
-                            ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
-                            : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                              ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
+                              : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
                         )}
                         onClick={() => handleScopeChange('tenant')}
                         aria-pressed={selectedScope === 'tenant'}
@@ -1099,8 +1099,8 @@ function OKRHierarchyPageContent() {
                       isCreationModeActive
                         ? "cursor-not-allowed"
                         : selectedStatus === null
-                        ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
-                        : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
+                          ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
+                          : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
                     )}
                     onClick={() => handleStatusChange(null)}
                     aria-label="Show all statuses"
@@ -1116,8 +1116,8 @@ function OKRHierarchyPageContent() {
                       isCreationModeActive
                         ? "cursor-not-allowed"
                         : selectedStatus === 'ON_TRACK'
-                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                        : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                          : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
                     )}
                     onClick={() => handleStatusChange('ON_TRACK')}
                     aria-label="Filter by status: On track"
@@ -1133,8 +1133,8 @@ function OKRHierarchyPageContent() {
                       isCreationModeActive
                         ? "cursor-not-allowed"
                         : selectedStatus === 'AT_RISK'
-                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                        : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                          : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
                     )}
                     onClick={() => handleStatusChange('AT_RISK')}
                     aria-label="Filter by status: At risk"
@@ -1150,8 +1150,8 @@ function OKRHierarchyPageContent() {
                       isCreationModeActive
                         ? "cursor-not-allowed"
                         : selectedStatus === 'OFF_TRACK' || selectedStatus === 'BLOCKED'
-                        ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                        : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
+                          ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                          : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
                     )}
                     onClick={() => handleStatusChange(selectedStatus === 'OFF_TRACK' || selectedStatus === 'BLOCKED' ? null : 'OFF_TRACK')}
                     aria-label="Filter by status: Off track"
@@ -1167,8 +1167,8 @@ function OKRHierarchyPageContent() {
                       isCreationModeActive
                         ? "cursor-not-allowed"
                         : selectedStatus === 'BLOCKED'
-                        ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                        : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
+                          ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                          : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
                     )}
                     onClick={() => handleStatusChange(selectedStatus === 'BLOCKED' ? null : 'BLOCKED')}
                     aria-label="Filter by status: Blocked"
@@ -1184,8 +1184,8 @@ function OKRHierarchyPageContent() {
                       isCreationModeActive
                         ? "cursor-not-allowed"
                         : selectedStatus === 'COMPLETED'
-                        ? "bg-emerald-600/20 text-emerald-300 border border-emerald-600/30"
-                        : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
+                          ? "bg-emerald-600/20 text-emerald-300 border border-emerald-600/30"
+                          : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
                     )}
                     onClick={() => handleStatusChange(selectedStatus === 'COMPLETED' ? null : 'COMPLETED')}
                     aria-label="Filter by status: Completed"
@@ -1214,11 +1214,6 @@ function OKRHierarchyPageContent() {
                   </div>
                 </div>
 
-                {/* Debug Info - TEMPORARY */}
-                <div className="px-4 py-2 bg-slate-800 text-xs text-slate-400 border-b border-slate-700 flex-slate-700 flex-shrink-0">
-                  DEBUG: tenantId={currentOrganization?.id || 'null'} | cycleId={selectedCycleId || 'null'} | loading={String(loading)} | error={error || 'none'} | dataCount={data.length} | treeRoots={treeData?.roots?.length || 0}
-                </div>
-
                 {/* Content area with scrollable tree and pagination */}
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
                   {/* Scrollable Tree Content - Takes available space, scrolls when needed */}
@@ -1244,65 +1239,51 @@ function OKRHierarchyPageContent() {
                     )}
                   </div>
 
-                  {/* Debug Panel - Always visible, fixed at bottom */}
-                  <div key="debug-panel" className="absolute bottom-12 left-0 right-0 p-2 bg-yellow-900 border-t-2 border-yellow-500 text-xs font-mono z-50" style={{ flexShrink: 0 }}>
-                    <strong className="text-yellow-200 text-xs">🔍 Debug (ALWAYS VISIBLE):</strong>
-                    <div className="mt-1 space-y-0.5 text-yellow-300 text-xs">
-                      <div>pagination exists: {pagination ? 'YES' : 'NO'}</div>
-                      <div>totalCount={pagination?.totalCount ?? 'undefined'} | pageSize={pagination?.pageSize ?? 'undefined'} | currentPage={pagination?.currentPage ?? 'undefined'} | totalPages={pagination?.totalPages ?? 'undefined'}</div>
-                      <div>treeData exists: {treeData ? 'YES' : 'NO'} | roots: {treeData?.roots?.length ?? 0}</div>
-                      <div>data.length: {data.length}</div>
-                      <div className="font-bold text-yellow-100">
-                        Show pagination? {pagination?.totalPages > 1 ? '✅ YES' : '❌ NO'}
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Pagination Controls - Always visible at bottom, fixed position */}
                   <nav key="pagination-nav" className="absolute bottom-0 left-0 right-0 border-t-2 border-indigo-500 bg-slate-900 px-6 py-3 flex flex-wrap items-center justify-between gap-4 text-sm text-slate-400 z-10 shadow-lg" aria-label="Pagination">
-                  <div className="text-slate-500 font-medium" role="status">
-                    {loading ? (
-                      <span>Loading...</span>
-                    ) : error ? (
-                      <span className="text-rose-500">{error}</span>
-                    ) : pagination?.totalCount > 0 ? (
-                      <>
-                        Showing {(pagination.currentPage - 1) * pagination.pageSize + 1} - {Math.min(pagination.currentPage * pagination.pageSize, pagination.totalCount)} of {pagination.totalCount} root objectives
-                        {pagination.totalPages > 1 && ` (Page ${pagination.currentPage} of ${pagination.totalPages})`}
-                      </>
-                    ) : (
-                      <>No objectives found (pagination: {pagination ? 'exists' : 'undefined'})</>
-                    )}
-                  </div>
-                  {!error && pagination && pagination.totalPages > 1 && (
-                    <div className="flex items-center gap-4">
-                      <button
-                        className={cn(
-                          "rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-300",
-                          "focus:ring-offset-2 focus:ring-offset-slate-900"
-                        )}
-                        disabled={loading || pagination.currentPage <= 1}
-                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                        aria-label="Previous page"
-                      >
-                        ‹ Previous
-                      </button>
-                      <div className="tabular-nums text-slate-400" aria-current="page">
-                        Page {pagination.currentPage} of {Math.max(1, pagination.totalPages)}
-                      </div>
-                      <button
-                        className={cn(
-                          "rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-300",
-                          "focus:ring-offset-2 focus:ring-offset-slate-900"
-                        )}
-                        disabled={loading || pagination.currentPage >= pagination.totalPages}
-                        onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
-                        aria-label="Next page"
-                      >
-                        Next ›
-                      </button>
+                    <div className="text-slate-500 font-medium" role="status">
+                      {loading ? (
+                        <span>Loading...</span>
+                      ) : error ? (
+                        <span className="text-rose-500">{error}</span>
+                      ) : pagination?.totalCount > 0 ? (
+                        <>
+                          Showing {(pagination.currentPage - 1) * pagination.pageSize + 1} - {Math.min(pagination.currentPage * pagination.pageSize, pagination.totalCount)} of {pagination.totalCount} root objectives
+                          {pagination.totalPages > 1 && ` (Page ${pagination.currentPage} of ${pagination.totalPages})`}
+                        </>
+                      ) : (
+                        <>No objectives found</>
+                      )}
                     </div>
-                  )}
+                    {!error && pagination && pagination.totalPages > 1 && (
+                      <div className="flex items-center gap-4">
+                        <button
+                          className={cn(
+                            "rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-300",
+                            "focus:ring-offset-2 focus:ring-offset-slate-900"
+                          )}
+                          disabled={loading || pagination.currentPage <= 1}
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          aria-label="Previous page"
+                        >
+                          ‹ Previous
+                        </button>
+                        <div className="tabular-nums text-slate-400" aria-current="page">
+                          Page {pagination.currentPage} of {Math.max(1, pagination.totalPages)}
+                        </div>
+                        <button
+                          className={cn(
+                            "rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-300",
+                            "focus:ring-offset-2 focus:ring-offset-slate-900"
+                          )}
+                          disabled={loading || pagination.currentPage >= pagination.totalPages}
+                          onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
+                          aria-label="Next page"
+                        >
+                          Next ›
+                        </button>
+                      </div>
+                    )}
                   </nav>
                 </div>
               </div>
