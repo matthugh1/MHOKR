@@ -74,3 +74,4 @@ echo -e "Run: az containerapp update --name ${APP_NAME_PREFIX}-web --resource-gr
 
 
 
+

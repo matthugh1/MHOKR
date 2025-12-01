@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<deployment>
+  <id>53725ad8-3ed6-4e6c-b012-85e4bfb83ce0</id>
+  <author>N/A</author>
+  <deployer>GITHUB_ZIP_DEPLOY</deployer>
+  <authorEmail>N/A</authorEmail>
+  <message>{"type":"deployment","sha":"454a3a44f6f27432f8420cffcaf301cf8129413d","repoName":"matthugh1/MHOKR","actor":"matthugh1","slotName":"production","commitMessage":"fix(core-api): Configure bcrypt as external with CommonJS externalsType"}</message>
+  <progress></progress>
+  <status>Success</status>
+  <statusText></statusText>
+  <lastSuccessEndTime>2025-11-27T15:13:20.0115422Z</lastSuccessEndTime>
+  <receivedTime>2025-11-27T15:13:17.2542085Z</receivedTime>
+  <startTime>2025-11-27T15:13:18.6365836Z</startTime>
+  <endTime>2025-11-27T15:13:20.0115422Z</endTime>
+  <complete>True</complete>
+  <is_temp>False</is_temp>
+  <is_readonly>True</is_readonly>
+  <buildSummary />
+</deployment>

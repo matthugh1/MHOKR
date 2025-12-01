@@ -47,10 +47,33 @@ build_nestjs_service() {
     # This handles workspace dependencies correctly
     pnpm --filter "$PACKAGE_NAME" --prod deploy "$TEMP_DIR"
     
+    # SAFETY FIX: Explicitly install missing transitive dependencies that are causing runtime errors
+    # This ensures they are present in the top-level node_modules
+    echo "  Applying dependency safety fix..."
+    pushd "$TEMP_DIR" > /dev/null
+    
+    # Remove workspace dependencies from package.json to avoid npm errors
+    # We use node to safely edit package.json
+    node -e "
+      const fs = require('fs');
+      const pkg = require('./package.json');
+      if (pkg.dependencies) {
+        delete pkg.dependencies['@okr-nexus/types'];
+        delete pkg.dependencies['@okr-nexus/utils'];
+      }
+      if (pkg.devDependencies) {
+        delete pkg.devDependencies['@okr-nexus/types'];
+        delete pkg.devDependencies['@okr-nexus/utils'];
+      }
+      fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2));
+    "
+    
+    # Install missing dependencies
+    npm install tslib@latest uid@latest iterare@latest lodash@latest fast-safe-stringify@latest path-to-regexp@latest class-transformer@latest class-validator@latest reflect-metadata@latest rxjs@latest --save-prod --no-package-lock
+    popd > /dev/null
+    
     # Copy the built dist folder from the source to the deployment package
     # (pnpm deploy might not copy dist if it's not in the files list, or if we just built it)
-    # Usually pnpm deploy copies the package as is, but we want the built artifacts.
-    # The safest way is to copy 'dist' from the service directory.
     cp -r "services/$SERVICE_NAME/dist" "$TEMP_DIR/"
     
     # Copy Prisma files for core-api

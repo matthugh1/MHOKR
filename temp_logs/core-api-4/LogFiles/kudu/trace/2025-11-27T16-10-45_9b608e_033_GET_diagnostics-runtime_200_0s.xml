@@ -1,0 +1,5 @@
+<step title="Incoming Request" date="2025-11-27T16:10:45.027" instance="9b608e" url="/diagnostics/runtime" method="GET" type="request" pid="833,1,15" Host="okr-nexus-core-api.scm.azurewebsites.net" User-Agent="GITHUBACTIONS_DeployWebAppToAzure_a69cc60085c8f0c82895477c8710d137b67d38ff877eb2ce3035e775273430d3" Authorization="Bas..." Content-Type="application/json; charset=utf-8" Content-Length="0" X-ARR-LOG-ID="c8bb1255-c5a9-4eb6-9b56-83e6c99fb4f2" CLIENT-IP="172.184.209.180:13312" X-SITE-DEPLOYMENT-ID="okr-nexus-core-api" WAS-DEFAULT-HOSTNAME="okr-nexus-core-api.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/diagnostics/runtime" X-Client-IP="172.184.209.180" X-Client-Port="13312" >
+  <step title="Cleanup Xml Logs" date="2025-11-27T16:10:45.037" /><!-- duration: 13ms -->
+  <step title="RuntimeController.GetRuntimeVersions" date="2025-11-27T16:10:45.115" /><!-- duration: 28ms -->
+  <step title="Outgoing response" date="2025-11-27T16:10:45.174" type="response" statusCode="200" statusText="OK" /><!-- duration: 34ms -->
+</step><!-- duration: 183ms -->

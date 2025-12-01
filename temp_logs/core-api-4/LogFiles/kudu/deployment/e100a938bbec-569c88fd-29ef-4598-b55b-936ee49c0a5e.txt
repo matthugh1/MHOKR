@@ -1,0 +1,11 @@
+2025-12-01T14:08:49  Fetching changes.
+2025-12-01T14:08:49    Starting  LocalZipHandler
+2025-12-01T14:08:56  Updating submodules.
+2025-12-01T14:08:56  Preparing deployment for commit id '4f39e864-9'.
+2025-12-01T14:08:56  PreDeployment: context.CleanOutputPath False
+2025-12-01T14:08:57  PreDeployment: context.OutputPath /home/site/wwwroot
+2025-12-01T14:08:57  Skipping build. Project type: Run-From-Zip
+2025-12-01T14:08:57  Skipping post build. Project type: Run-From-Zip
+2025-12-01T14:08:57  Triggering container recycle for OneDeploy by adding/updating restartTrigger.txt to the site root path
+2025-12-01T14:08:57  Updating /home/data/SitePackages/packagename.txt with deployment 20251201140830.zip
+2025-12-01T14:08:57  Deployment successful. deployer = OneDeploy deploymentPath = OneDeploy

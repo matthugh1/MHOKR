@@ -163,3 +163,4 @@ echo -e "\n${GREEN}File location: $SCRIPT_DIR/.env${NC}\n"
 
 
 
+

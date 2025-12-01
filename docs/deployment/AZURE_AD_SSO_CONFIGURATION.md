@@ -231,3 +231,4 @@ To enable debug logging for Azure AD authentication, check the `loggingLevel` in
 - Login Page: `apps/web/src/app/login/page.tsx`
 - Callback Page: `apps/web/src/app/auth/callback/page.tsx`
 
+

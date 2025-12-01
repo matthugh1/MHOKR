@@ -16,16 +16,38 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 # Service configurations
-declare -A SERVICES
-SERVICES[core-api]="3001|node dist/main.js"
-SERVICES[ai-service]="3002|node dist/main.js"
-SERVICES[integration-service]="3003|node dist/main.js"
-SERVICES[api-gateway]="3000|node dist/index.js"
+# Function to get service config
+get_service_config() {
+    local SERVICE_NAME=$1
+    case $SERVICE_NAME in
+        "core-api")
+            echo "3001|node dist/main.js"
+            ;;
+        "ai-service")
+            echo "3002|node dist/main.js"
+            ;;
+        "integration-service")
+            echo "3003|node dist/main.js"
+            ;;
+        "api-gateway")
+            echo "3000|node dist/index.js"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
 
 # Function to deploy a service
 deploy_service() {
     local SERVICE_NAME=$1
-    local CONFIG="${SERVICES[$SERVICE_NAME]}"
+    local CONFIG=$(get_service_config "$SERVICE_NAME")
+    
+    if [ -z "$CONFIG" ]; then
+        echo -e "${RED}Unknown service: $SERVICE_NAME${NC}"
+        return 1
+    fi
+
     local PORT=$(echo "$CONFIG" | cut -d'|' -f1)
     local STARTUP_CMD=$(echo "$CONFIG" | cut -d'|' -f2)
     local APP_NAME="${APP_NAME_PREFIX}-${SERVICE_NAME}"
@@ -96,22 +118,19 @@ deploy_service() {
 
 # Check if specific service was requested
 if [ -n "$1" ]; then
-    if [ -z "${SERVICES[$1]}" ]; then
-        echo -e "${RED}Unknown service: $1${NC}"
-        echo "Available services: ${!SERVICES[*]}"
-        exit 1
-    fi
     deploy_service "$1"
 else
     # Deploy all backend services
     echo -e "${YELLOW}Deploying all backend services...${NC}"
     
+    # Order matters: Core API first, then others, then Gateway
     for SERVICE in core-api ai-service integration-service api-gateway; do
         deploy_service "$SERVICE"
     done
 fi
 
 echo -e "\n${GREEN}Backend deployment complete!${NC}"
+
 
 
 

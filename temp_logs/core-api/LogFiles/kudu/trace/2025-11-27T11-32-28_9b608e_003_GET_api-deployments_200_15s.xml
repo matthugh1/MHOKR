@@ -1,0 +1,10 @@
+<step title="Incoming Request" date="2025-11-27T11:32:28.745" instance="9b608e" url="/api/deployments?warmup=true" method="GET" type="request" pid="834,1,17" Accept="*/*" Host="okr-nexus-core-api.scm.azurewebsites.net" User-Agent="AZURECLI/2.78.0 (HOMEBREW)" Accept-Encoding="gzip, deflate" Authorization="Bea..." Cookie="ARRAffinity=9b608e27fea511ce9e949618e8f8725d1f0c94df27b00c7441bf73f0438ef289; ARRAffinitySameSite=9b608e27fea511ce9e949618e8f8725d1f0c94df27b00c7441bf73f0438ef289" x-ms-client-request-id="bd1f5b08-cb84-11f0-a3b9-c2cda32ecd7a" X-ARR-LOG-ID="bd1f5b08-cb84-11f0-a3b9-c2cda32ecd7a" CLIENT-IP="193.69.112.242:32014" X-SITE-DEPLOYMENT-ID="okr-nexus-core-api" WAS-DEFAULT-HOSTNAME="okr-nexus-core-api.scm.azurewebsites.net" X-Forwarded-Proto="https" X-AppService-Proto="https" X-Forwarded-TlsVersion="1.3" X-WAWS-Unencoded-URL="/api/deployments?warmup=true" X-Client-IP="193.69.112.242" X-Client-Port="32014" >
+  <step title="Cleanup Xml Logs" date="2025-11-27T11:32:28.814" /><!-- duration: 30ms -->
+  <step title="DeploymentService.GetCurrentEtag" date="2025-11-27T11:32:29.079" >
+    <step title="Current Etag: &quot;f721d257322f0a4e&quot;, Cached Etag: " date="2025-11-27T11:32:30.547" /><!-- duration: 113ms -->
+  </step><!-- duration: 1630ms -->
+  <step title="DeploymentService.GetDeployResults" date="2025-11-27T11:32:30.748" >
+    <step title="DeploymentManager.GetResults" date="2025-11-27T11:32:30.780" /><!-- duration: 4555ms -->
+  </step><!-- duration: 4955ms -->
+  <step title="Outgoing response" date="2025-11-27T11:32:43.376" type="response" statusCode="200" statusText="OK" /><!-- duration: 58ms -->
+</step><!-- duration: 14798ms -->
