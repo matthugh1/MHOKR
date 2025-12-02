@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Sparkles, ArrowRight, BarChart3, Target } from 'lucide-react'
+import { Sparkles, ArrowRight, BarChart3, Target, Search, Filter } from 'lucide-react'
 import Link from 'next/link'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
@@ -16,6 +16,16 @@ import { AttentionDrawer } from '@/components/okr/AttentionDrawer'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { IntelligenceSummary } from '@/components/dashboard/IntelligenceSummary'
+import { FocusSuggestion } from '@/components/dashboard/FocusSuggestion'
+import { TodoItemCard } from '@/components/dashboard/TodoItemCard'
+import { QuickActionsPanel } from '@/components/dashboard/QuickActionsPanel'
+import { QuickCheckInForm } from '@/components/dashboard/QuickCheckInForm'
+import { ActionFeed } from '@/components/dashboard/ActionFeed'
+import { QuickActionButton } from '@/components/dashboard/QuickActionButton'
+import { useToast } from '@/hooks/use-toast'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { AlertCircle, Clock, TrendingDown } from 'lucide-react'
 import api from '@/lib/api'
@@ -34,6 +44,53 @@ interface Objective {
     status: string
     progress: number
   }>
+}
+
+interface TodoItem {
+  type: 'CHECK_IN' | 'TASK' | 'KEY_RESULT' | 'OBJECTIVE' | 'INITIATIVE'
+  id: string
+  title: string
+  reason: string
+  priority: number
+  dueDate: string | null
+  status: string
+  metadata: {
+    objectiveId?: string
+    objectiveTitle?: string
+    keyResultId?: string
+    keyResultTitle?: string
+    initiativeId?: string
+    daysOverdue?: number
+    daysSinceUpdate?: number
+    [key: string]: any
+  }
+}
+
+interface IntelligenceData {
+  overdueCount: number
+  dueThisWeekCount: number
+  atRiskCount: number
+  staleCount: number
+  blockedCount: number
+  focusSuggestion: string | null
+  patterns: Array<{
+    type: string
+    message: string
+    severity: 'low' | 'medium' | 'high'
+  }>
+  workloadDistribution: {
+    byType: Record<string, number>
+    byStatus: Record<string, number>
+  }
+}
+
+interface QuickActionsData {
+  canCheckInBulk: boolean
+  overdueCheckInCount: number
+  canCompleteTasksToday: boolean
+  tasksDueTodayCount: number
+  canUpdateAtRiskItems: boolean
+  atRiskItemsCount: number
 }
 
 interface OKROverviewResponse {
@@ -58,6 +115,16 @@ export default function DashboardPage() {
   const [myOkrsLoading, setMyOkrsLoading] = useState(false)
   const [canCreateObjective, setCanCreateObjective] = useState(false)
   const [canPublishOKR, setCanPublishOKR] = useState(false)
+  const [myTodos, setMyTodos] = useState<TodoItem[]>([])
+  const [intelligence, setIntelligence] = useState<IntelligenceData | null>(null)
+  const [quickActions, setQuickActions] = useState<QuickActionsData | null>(null)
+  const [recentActivity, setRecentActivity] = useState<any[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterType, setFilterType] = useState<string>('all')
+  const [checkInFormOpen, setCheckInFormOpen] = useState(false)
+  const [selectedCheckInKr, setSelectedCheckInKr] = useState<{ id: string; title: string } | null>(null)
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
+  const { toast } = useToast()
 
   // Determine user roles and scopes
   const userRoles = useMemo(() => {
@@ -97,20 +164,43 @@ export default function DashboardPage() {
     }
   }, [permissions, currentOrganization?.id, isSuperuser])
 
-  // Fetch My OKRs for any user who might have personal OKRs
+  // Fetch My Todos and Intelligence data
   useEffect(() => {
-    const fetchMyOKRs = async () => {
+    const fetchMyWork = async () => {
       if (!currentOrganization?.id || !user?.id) {
         setMyOkrs([])
+        setMyTodos([])
+        setIntelligence(null)
+        setQuickActions(null)
         return
       }
 
       try {
         setMyOkrsLoading(true)
-        // Use /me/summary for personal OKRs
+        // Use /me/summary for personal work items
         const response = await api.get('/me/summary')
         const summary = response.data || {}
+        
+        // Debug logging - log the full response structure
+        console.log('[Dashboard] Full API response:', JSON.stringify(response.data, null, 2))
+        console.log('[Dashboard] Response keys:', Object.keys(summary))
+        console.log('[Dashboard] myTodos type:', typeof summary.myTodos, 'isArray:', Array.isArray(summary.myTodos), 'value:', summary.myTodos)
+        console.log('[Dashboard] intelligence type:', typeof summary.intelligence, 'value:', summary.intelligence)
+        
         const ownedObjectives = summary.ownedObjectives || []
+        const todos = summary.myTodos || []
+        const intelligenceData = summary.intelligence || null
+        const activity = summary.recentActivity || []
+        
+        setRecentActivity(activity)
+        
+        // Debug logging
+        console.log('[Dashboard] Summary response:', {
+          ownedObjectivesCount: ownedObjectives.length,
+          todosCount: todos.length,
+          hasIntelligence: !!intelligenceData,
+          todos: todos.slice(0, 5), // Log first 5 todos
+        })
 
         // Transform to match Objective interface
         const objectives: Objective[] = ownedObjectives.map((obj: any) => ({
@@ -122,6 +212,22 @@ export default function DashboardPage() {
         }))
 
         setMyOkrs(objectives)
+        setMyTodos(todos)
+        setIntelligence(intelligenceData)
+
+        // Compute quick actions from todos data (no separate API call needed)
+        const overdueCheckIns = todos.filter(t => t.type === 'CHECK_IN' && t.reason.includes('Overdue'))
+        const tasksDueToday = todos.filter(t => t.type === 'TASK' && t.reason.includes('Due today'))
+        const atRiskItems = todos.filter(t => t.reason.includes('At Risk') || t.reason.includes('Off Track'))
+        
+        setQuickActions({
+          canCheckInBulk: overdueCheckIns.length > 0,
+          overdueCheckInCount: overdueCheckIns.length,
+          canCompleteTasksToday: tasksDueToday.length > 0,
+          tasksDueTodayCount: tasksDueToday.length,
+          canUpdateAtRiskItems: atRiskItems.length > 0,
+          atRiskItemsCount: atRiskItems.length,
+        })
 
         // Check permissions for creating/publishing
         const overviewResponse = await api.get<OKROverviewResponse>(
@@ -131,14 +237,77 @@ export default function DashboardPage() {
         setCanCreateObjective(overviewResponse.data.canCreateObjective || false)
         setCanPublishOKR(overviewResponse.data.canPublishOKR || false)
       } catch (error) {
+        console.error('Failed to fetch my work:', error)
+        console.error('Error details:', error)
+        // Log the full error for debugging
+        if (error instanceof Error) {
+          console.error('Error message:', error.message)
+          console.error('Error stack:', error.stack)
+        }
         setMyOkrs([])
+        setMyTodos([])
+        setIntelligence(null)
       } finally {
         setMyOkrsLoading(false)
       }
     }
 
-    fetchMyOKRs()
+    fetchMyWork()
   }, [currentOrganization?.id, user?.id])
+
+  // Transform recent activity into feed items
+  const feedItems = useMemo(() => {
+    return recentActivity.slice(0, 20).map((activity: any) => ({
+      id: activity.id || `activity-${Math.random()}`,
+      type: activity.action === 'CHECK_IN' ? 'checkin' as const :
+            activity.action === 'UPDATED' && activity.summary?.includes('status') ? 'status_update' as const :
+            activity.action === 'CREATED' ? 'created' as const :
+            'progress_update' as const,
+      title: activity.summary || activity.action,
+      description: activity.actorName ? `by ${activity.actorName}` : undefined,
+      timestamp: activity.timestamp || new Date(),
+      entityType: activity.entityType || 'OBJECTIVE' as const,
+      entityId: activity.entityId || '',
+      entityTitle: activity.entityTitle || '',
+      status: activity.status,
+      progress: activity.progress,
+      user: activity.actorName ? { id: activity.actorId || '', name: activity.actorName } : undefined,
+    }))
+  }, [recentActivity])
+
+  // Helper function to handle todo actions
+  const handleTodoAction = async (todo: TodoItem) => {
+    const actionKey = `${todo.type}-${todo.id}`
+    setActionLoading(prev => ({ ...prev, [actionKey]: true }))
+    
+    try {
+      if (todo.type === 'CHECK_IN') {
+        setSelectedCheckInKr({ id: todo.metadata.keyResultId || todo.id, title: todo.title })
+        setCheckInFormOpen(true)
+      } else if (todo.type === 'TASK' && todo.status !== 'COMPLETED') {
+        // Complete task
+        await api.patch(`/tasks/${todo.id}`, { status: 'COMPLETED' })
+        toast({ title: 'Task completed', description: `"${todo.title}" has been marked as complete.` })
+        // Refresh todos
+        const refreshResponse = await api.get('/me/summary')
+        setMyTodos(refreshResponse.data.myTodos || [])
+      } else if (todo.type === 'OBJECTIVE' || todo.type === 'KEY_RESULT') {
+        // Navigate to edit
+        const url = todo.type === 'OBJECTIVE' 
+          ? `/dashboard/okrs/hierarchy?objectiveId=${todo.id}`
+          : `/dashboard/okrs/hierarchy?krId=${todo.id}`
+        window.location.href = url
+      }
+    } catch (error: any) {
+      toast({ 
+        variant: 'destructive',
+        title: 'Action failed', 
+        description: error.response?.data?.message || error.message || 'Failed to perform action'
+      })
+    } finally {
+      setActionLoading(prev => ({ ...prev, [actionKey]: false }))
+    }
+  }
 
   // Team and workspace OKRs are shown as summary sections that link to filtered views
   // The actual OKR list is fetched on the OKRs page with appropriate filters
@@ -255,16 +424,17 @@ export default function DashboardPage() {
         <PageContainer variant="dashboard" withGradient>
           <div className="mb-8">
             <PageHeader
-              title="My Dashboard"
+              title="My Working Page"
               subtitle={userRoles.isSuperuser
                 ? 'System-wide overview with read-only access.'
                 : userRoles.isAdmin
-                  ? 'Organisation-wide OKR performance and cross-workspace insights.'
+                  ? 'Your outstanding work items, OKRs, and intelligence insights.'
                   : userRoles.isManager
-                    ? 'Your OKRs, team performance, and cycle overview.'
-                    : 'Your OKRs and progress tracking.'}
+                    ? 'Your todos, OKRs, team performance, and cycle overview.'
+                    : 'Your todos, OKRs, and progress tracking.'}
               badges={[
                 { label: 'AI-assisted', tone: 'neutral' },
+                { label: `${myTodos.length} todos`, tone: myTodos.length > 0 ? 'warning' : 'neutral' },
               ]}
             />
           </div>
@@ -291,12 +461,355 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {loading ? (
+          {loading || myOkrsLoading ? (
             <div className="text-center py-12">
               <p className="text-muted-foreground">Loading dashboard...</p>
             </div>
           ) : (
             <>
+              {/* Intelligence Summary Bar */}
+              {intelligence && (
+                <motion.section
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="mb-6"
+                >
+                  <IntelligenceSummary
+                    overdueCount={intelligence.overdueCount}
+                    dueThisWeekCount={intelligence.dueThisWeekCount}
+                    atRiskCount={intelligence.atRiskCount}
+                    staleCount={intelligence.staleCount}
+                    blockedCount={intelligence.blockedCount}
+                  />
+                </motion.section>
+              )}
+
+              {/* Focus Suggestion */}
+              {intelligence?.focusSuggestion && (
+                <motion.section
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: 0.1 }}
+                  className="mb-6"
+                >
+                  <FocusSuggestion
+                    suggestion={intelligence.focusSuggestion}
+                    onFocus={() => {
+                      // Filter to focus items
+                      if (intelligence.overdueCount > 0) {
+                        setFilterType('overdue')
+                      } else if (intelligence.blockedCount >= 3) {
+                        setFilterType('blocked')
+                      } else if (intelligence.atRiskCount >= 3) {
+                        setFilterType('at-risk')
+                      }
+                    }}
+                  />
+                </motion.section>
+              )}
+
+              {/* Main Content: My Todos with Right Feed Panel */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
+                <div className="lg:col-span-2">
+                  <motion.section
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.2 }}
+                  >
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle>My Todos</CardTitle>
+                            <CardDescription>
+                              All outstanding work items that need your attention
+                            </CardDescription>
+                          </div>
+                        </div>
+                        
+                        {/* Search and Filter */}
+                        <div className="flex items-center gap-2 mt-4">
+                          <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                              placeholder="Search todos..."
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              className="pl-9"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant={filterType === 'all' ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => setFilterType('all')}
+                            >
+                              All
+                            </Button>
+                            <Button
+                              variant={filterType === 'overdue' ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => setFilterType('overdue')}
+                            >
+                              Overdue
+                            </Button>
+                            <Button
+                              variant={filterType === 'due-today' ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => setFilterType('due-today')}
+                            >
+                              Due Today
+                            </Button>
+                            <Button
+                              variant={filterType === 'at-risk' ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => setFilterType('at-risk')}
+                            >
+                              At Risk
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        {myTodos.length === 0 ? (
+                          <div className="text-center py-12">
+                            <p className="text-muted-foreground mb-2">No todos at this time.</p>
+                            {myOkrs.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">
+                                You don't have any Objectives, Key Results, Initiatives, or Tasks yet.
+                              </p>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">
+                                All your work items are up to date!
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <Tabs defaultValue="focus-now" className="w-full">
+                            <TabsList className="grid w-full grid-cols-3">
+                              <TabsTrigger value="focus-now">Focus Now</TabsTrigger>
+                              <TabsTrigger value="due-soon">Due Soon</TabsTrigger>
+                              <TabsTrigger value="all">All My Work</TabsTrigger>
+                            </TabsList>
+                            
+                            <TabsContent value="focus-now" className="mt-4">
+                              <div className="space-y-4">
+                                {myTodos
+                                  .filter(todo => {
+                                    const matchesSearch = !searchQuery || 
+                                      todo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                      todo.reason.toLowerCase().includes(searchQuery.toLowerCase())
+                                    const matchesFilter = filterType === 'all' ||
+                                      (filterType === 'overdue' && todo.reason.includes('Overdue')) ||
+                                      (filterType === 'due-today' && todo.reason.includes('Due today')) ||
+                                      (filterType === 'at-risk' && (todo.reason.includes('At Risk') || todo.reason.includes('Off Track')))
+                                    return matchesSearch && matchesFilter && todo.priority <= 3
+                                  })
+                                  .map((todo) => (
+                                    <TodoItemCard
+                                      key={`${todo.type}-${todo.id}`}
+                                      todo={todo}
+                                      onAction={handleTodoAction}
+                                      loading={actionLoading[`${todo.type}-${todo.id}`]}
+                                    />
+                                  ))}
+                                {myTodos.filter(todo => {
+                                  const matchesSearch = !searchQuery || 
+                                    todo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                    todo.reason.toLowerCase().includes(searchQuery.toLowerCase())
+                                  const matchesFilter = filterType === 'all' ||
+                                    (filterType === 'overdue' && todo.reason.includes('Overdue')) ||
+                                    (filterType === 'due-today' && todo.reason.includes('Due today')) ||
+                                    (filterType === 'at-risk' && (todo.reason.includes('At Risk') || todo.reason.includes('Off Track')))
+                                  return matchesSearch && matchesFilter && todo.priority <= 3
+                                }).length === 0 && (
+                                  <div className="text-center py-8 text-muted-foreground">
+                                    No high-priority items to focus on
+                                  </div>
+                                )}
+                              </div>
+                            </TabsContent>
+                            
+                            <TabsContent value="due-soon" className="mt-4">
+                              <div className="space-y-4">
+                                {myTodos
+                                  .filter(todo => {
+                                    const matchesSearch = !searchQuery || 
+                                      todo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                      todo.reason.toLowerCase().includes(searchQuery.toLowerCase())
+                                    const matchesFilter = filterType === 'all' ||
+                                      (filterType === 'overdue' && todo.reason.includes('Overdue')) ||
+                                      (filterType === 'due-today' && todo.reason.includes('Due today')) ||
+                                      (filterType === 'at-risk' && (todo.reason.includes('At Risk') || todo.reason.includes('Off Track')))
+                                    return matchesSearch && matchesFilter && todo.dueDate && 
+                                      new Date(todo.dueDate) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                                  })
+                                  .map((todo) => (
+                                    <TodoItemCard
+                                      key={`${todo.type}-${todo.id}`}
+                                      todo={todo}
+                                      onAction={handleTodoAction}
+                                      loading={actionLoading[`${todo.type}-${todo.id}`]}
+                                    />
+                                  ))}
+                                {myTodos.filter(todo => {
+                                  const matchesSearch = !searchQuery || 
+                                    todo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                    todo.reason.toLowerCase().includes(searchQuery.toLowerCase())
+                                  const matchesFilter = filterType === 'all' ||
+                                    (filterType === 'overdue' && todo.reason.includes('Overdue')) ||
+                                    (filterType === 'due-today' && todo.reason.includes('Due today')) ||
+                                    (filterType === 'at-risk' && (todo.reason.includes('At Risk') || todo.reason.includes('Off Track')))
+                                  return matchesSearch && matchesFilter && todo.dueDate && 
+                                    new Date(todo.dueDate) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                                }).length === 0 && (
+                                  <div className="text-center py-8 text-muted-foreground">
+                                    No items due soon
+                                  </div>
+                                )}
+                              </div>
+                            </TabsContent>
+                            
+                            <TabsContent value="all" className="mt-4">
+                              <div className="space-y-4">
+                                {myTodos
+                                  .filter(todo => {
+                                    const matchesSearch = !searchQuery || 
+                                      todo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                      todo.reason.toLowerCase().includes(searchQuery.toLowerCase())
+                                    const matchesFilter = filterType === 'all' ||
+                                      (filterType === 'overdue' && todo.reason.includes('Overdue')) ||
+                                      (filterType === 'due-today' && todo.reason.includes('Due today')) ||
+                                      (filterType === 'at-risk' && (todo.reason.includes('At Risk') || todo.reason.includes('Off Track')))
+                                    return matchesSearch && matchesFilter
+                                  })
+                                  .map((todo) => (
+                                    <TodoItemCard
+                                      key={`${todo.type}-${todo.id}`}
+                                      todo={todo}
+                                      onAction={handleTodoAction}
+                                      loading={actionLoading[`${todo.type}-${todo.id}`]}
+                                    />
+                                  ))}
+                                {myTodos.filter(todo => {
+                                  const matchesSearch = !searchQuery || 
+                                    todo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                    todo.reason.toLowerCase().includes(searchQuery.toLowerCase())
+                                  const matchesFilter = filterType === 'all' ||
+                                    (filterType === 'overdue' && todo.reason.includes('Overdue')) ||
+                                    (filterType === 'due-today' && todo.reason.includes('Due today')) ||
+                                    (filterType === 'at-risk' && (todo.reason.includes('At Risk') || todo.reason.includes('Off Track')))
+                                  return matchesSearch && matchesFilter
+                                }).length === 0 && (
+                                  <div className="text-center py-8 text-muted-foreground">
+                                    No todos match your filters
+                                  </div>
+                                )}
+                              </div>
+                            </TabsContent>
+                          </Tabs>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </motion.section>
+                </div>
+
+                {/* Right Feed Panel */}
+                <div className="lg:col-span-1 space-y-6">
+                  {/* Quick Actions */}
+                  {quickActions && (
+                    <motion.section
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: 0.3 }}
+                    >
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg">Quick Actions</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          {quickActions.canCheckInBulk && (
+                            <QuickActionButton
+                              label={`Check in ${quickActions.overdueCheckInCount} overdue KR${quickActions.overdueCheckInCount !== 1 ? 's' : ''}`}
+                              onClick={async () => {
+                                const overdueCheckIn = myTodos.find(t => t.type === 'CHECK_IN' && t.reason.includes('Overdue'))
+                                if (overdueCheckIn) {
+                                  setSelectedCheckInKr({ 
+                                    id: overdueCheckIn.metadata.keyResultId || overdueCheckIn.id, 
+                                    title: overdueCheckIn.title 
+                                  })
+                                  setCheckInFormOpen(true)
+                                }
+                              }}
+                              icon={<Zap className="w-4 h-4" />}
+                              variant="default"
+                            />
+                          )}
+                          
+                          {quickActions.canCompleteTasksToday && (
+                            <QuickActionButton
+                              label={`Complete ${quickActions.tasksDueTodayCount} task${quickActions.tasksDueTodayCount !== 1 ? 's' : ''} due today`}
+                              onClick={async () => {
+                                const tasksDueToday = myTodos.filter(t => t.type === 'TASK' && t.reason.includes('Due today'))
+                                // TODO: Implement bulk task completion
+                                console.log('Bulk complete tasks:', tasksDueToday)
+                              }}
+                              icon={<CheckSquare className="w-4 h-4" />}
+                              variant="outline"
+                            />
+                          )}
+                          
+                          {quickActions.canUpdateAtRiskItems && (
+                            <QuickActionButton
+                              label={`Update ${quickActions.atRiskItemsCount} at-risk item${quickActions.atRiskItemsCount !== 1 ? 's' : ''}`}
+                              onClick={async () => {
+                                const atRiskItems = myTodos.filter(t => t.reason.includes('At Risk') || t.reason.includes('Off Track'))
+                                // TODO: Implement bulk status update
+                                console.log('Update at-risk items:', atRiskItems)
+                              }}
+                              icon={<AlertCircle className="w-4 h-4" />}
+                              variant="outline"
+                            />
+                          )}
+                          
+                          {!quickActions.canCheckInBulk && !quickActions.canCompleteTasksToday && !quickActions.canUpdateAtRiskItems && (
+                            <p className="text-sm text-muted-foreground text-center py-4">
+                              No quick actions available
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </motion.section>
+                  )}
+
+                  {/* Activity Feed */}
+                  <motion.section
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: 0.4 }}
+                    className="h-full"
+                  >
+                    <ActionFeed
+                      items={feedItems}
+                      onItemClick={(item) => {
+                        // Navigate to the item
+                        if (item.entityType === 'OBJECTIVE') {
+                          window.location.href = `/dashboard/okrs/hierarchy?objectiveId=${item.entityId}`
+                        } else if (item.entityType === 'KEY_RESULT') {
+                          window.location.href = `/dashboard/okrs/hierarchy?krId=${item.entityId}`
+                        } else if (item.entityType === 'TASK') {
+                          window.location.href = `/dashboard/okrs/hierarchy?taskId=${item.entityId}`
+                        } else if (item.entityType === 'INITIATIVE') {
+                          window.location.href = `/dashboard/okrs/hierarchy?initiativeId=${item.entityId}`
+                        }
+                      }}
+                      className="h-full"
+                    />
+                  </motion.section>
+                </div>
+              </div>
+
               {/* SECTION 1: My OKRs - Always first if user has personal OKRs */}
               {myOkrsCount > 0 && (
                 <motion.section
@@ -315,7 +828,7 @@ export default function DashboardPage() {
                           </CardDescription>
                         </div>
                         {!userRoles.isSuperuser && canCreateObjective && (
-                          <Link href="/dashboard/okrs?action=create">
+                          <Link href="/dashboard/okrs/hierarchy?action=create">
                             <Button variant="outline" size="sm">
                               Create OKR
                             </Button>
@@ -347,7 +860,7 @@ export default function DashboardPage() {
                             </div>
                           </div>
                           {myOkrs.length > 0 && (
-                            <Link href="/dashboard/okrs?ownerId=self">
+                            <Link href="/dashboard/okrs/hierarchy?ownerId=self">
                               <Button variant="ghost" size="sm" className="w-full">
                                 View all my OKRs
                                 <ArrowRight className="w-3 h-3 ml-2" />
@@ -403,7 +916,7 @@ export default function DashboardPage() {
                           </p>
                         )}
                       </div>
-                      <Link href="/dashboard/okrs">
+                      <Link href="/dashboard/okrs/hierarchy">
                         <Button variant="ghost" size="sm" className="w-full">
                           View team and workspace OKRs
                           <ArrowRight className="w-3 h-3 ml-2" />
@@ -508,9 +1021,9 @@ export default function DashboardPage() {
                                 className="text-xs h-6 mt-2"
                                 onClick={() => {
                                   if (item.keyResultId) {
-                                    window.location.href = `/dashboard/okrs?krId=${item.keyResultId}`
+                                    window.location.href = `/dashboard/okrs/hierarchy?krId=${item.keyResultId}`
                                   } else {
-                                    window.location.href = `/dashboard/okrs?objectiveId=${item.objectiveId}`
+                                    window.location.href = `/dashboard/okrs/hierarchy?objectiveId=${item.objectiveId}`
                                   }
                                 }}
                               >
@@ -555,13 +1068,40 @@ export default function DashboardPage() {
             onClose={() => setAttentionDrawerOpen(false)}
             cycleId={activeCycleId}
             onNavigateToObjective={(objectiveId) => {
-              window.location.href = `/dashboard/okrs?objectiveId=${objectiveId}`
+              window.location.href = `/dashboard/okrs/hierarchy?objectiveId=${objectiveId}`
             }}
             onNavigateToKeyResult={(krId) => {
-              window.location.href = `/dashboard/okrs?krId=${krId}`
+              window.location.href = `/dashboard/okrs/hierarchy?krId=${krId}`
             }}
             canRequestCheckIn={!userRoles.isSuperuser && permissions.canEditOKR({ ownerId: user?.id || '', tenantId: currentOrganization?.id || undefined })}
           />
+
+          {/* Quick Check-In Form */}
+          {selectedCheckInKr && (
+            <QuickCheckInForm
+              keyResultId={selectedCheckInKr.id}
+              keyResultTitle={selectedCheckInKr.title}
+              isOpen={checkInFormOpen}
+              onClose={() => {
+                setCheckInFormOpen(false)
+                setSelectedCheckInKr(null)
+              }}
+              onSuccess={() => {
+                // Refresh todos after successful check-in
+                const fetchMyWork = async () => {
+                  try {
+                    const response = await api.get('/me/summary')
+                    const summary = response.data || {}
+                    setMyTodos(summary.myTodos || [])
+                    setIntelligence(summary.intelligence || null)
+                  } catch (error) {
+                    console.error('Failed to refresh todos:', error)
+                  }
+                }
+                fetchMyWork()
+              }}
+            />
+          )}
         </PageContainer>
       </DashboardLayout>
     </ProtectedRoute>

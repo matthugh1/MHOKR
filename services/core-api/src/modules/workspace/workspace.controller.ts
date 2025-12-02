@@ -13,7 +13,7 @@ export class WorkspaceController {
   constructor(private readonly workspaceService: WorkspaceService) {}
 
   @Get()
-  @RequireAction('manage_workspaces')
+  @RequireAction('view_okr') // Allow view_okr for read access, manage_workspaces for write operations
   @ApiOperation({ summary: 'Get all workspaces for user or organization (tenant-isolated)' })
   async getAll(@Query('tenantId') tenantId: string | undefined, @Req() req: AuthenticatedRequest) {
     if (tenantId) {
@@ -30,7 +30,7 @@ export class WorkspaceController {
   }
 
   @Get(':id')
-  @RequireAction('manage_workspaces')
+  @RequireAction('view_okr') // Allow view_okr for read access, manage_workspaces for write operations
   @ApiOperation({ summary: 'Get workspace by ID (tenant-isolated)' })
   async getById(@Param('id') id: string, @Req() req: any) {
     return this.workspaceService.findById(id, req.user.tenantId);

@@ -22,6 +22,7 @@ interface MetadataSectionProps {
     cycleName?: string | null
     startDate?: string | null
     endDate?: string | null
+    dueDate?: string | null
     createdAt?: string | null
     updatedAt?: string | null
     lastReviewedAt?: string | null
@@ -43,7 +44,7 @@ interface MetadataSectionProps {
       color?: string | null
     } | null
   } | null
-  type: 'objective' | 'keyResult'
+  type: 'objective' | 'keyResult' | 'initiative'
 }
 
 const formatDate = (dateString: string | null | undefined): string => {
@@ -128,7 +129,7 @@ export function MetadataSection({ detail, type, hideTitle = false }: MetadataSec
 
   // Check if there's any content to display
   const hasCycle = detail.cycle || detail.cycleName
-  const hasDates = detail.startDate || detail.endDate || detail.createdAt || detail.updatedAt || detail.lastReviewedAt
+  const hasDates = detail.startDate || detail.endDate || detail.dueDate || detail.createdAt || detail.updatedAt || detail.lastReviewedAt
   const hasStatusVisibility = detail.goalType || detail.visibilityLevel || detail.isPublished !== undefined || detail.state
   const hasContext = detail.workspace || detail.team || detail.pillar
 
@@ -184,6 +185,12 @@ export function MetadataSection({ detail, type, hideTitle = false }: MetadataSec
                 <div className="space-y-1">
                   <div className="text-slate-400 font-medium">End Date</div>
                   <div className="text-slate-200">{formatDate(detail.endDate)}</div>
+                </div>
+              )}
+              {detail.dueDate && type === 'initiative' && (
+                <div className="space-y-1">
+                  <div className="text-slate-400 font-medium">Due Date</div>
+                  <div className="text-slate-200">{formatDate(detail.dueDate)}</div>
                 </div>
               )}
               {detail.createdAt && (

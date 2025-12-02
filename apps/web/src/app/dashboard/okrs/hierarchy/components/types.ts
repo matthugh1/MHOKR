@@ -3,13 +3,14 @@
  */
 
 export type OKRStatus = 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'COMPLETED' | 'CANCELLED'
-export type OKRType = 'objective' | 'keyResult'
+export type InitiativeStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'BLOCKED'
+export type OKRType = 'objective' | 'keyResult' | 'initiative'
 
 export interface HierarchyOKRNode {
   id: string
   type: OKRType
   title: string
-  status: OKRStatus
+  status: OKRStatus | InitiativeStatus
   progress: number
   ownerId: string
   owner?: {
@@ -34,7 +35,11 @@ export interface HierarchyOKRNode {
   startValue?: number | null
   unit?: string | null
   keyResultId?: string // For key results nested under objectives
-  objectiveId?: string // For key results
+  objectiveId?: string // For key results and initiatives
+  // Initiative-specific fields
+  initiativeId?: string // For initiatives
+  dueDate?: string | null
+  description?: string | null
 }
 
 export interface SelectedItem {

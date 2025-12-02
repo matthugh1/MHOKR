@@ -11,7 +11,7 @@ import { HierarchyOKRNode } from '../components/types'
 
 interface OKRDetail {
   id: string
-  type: 'objective' | 'keyResult'
+  type: 'objective' | 'keyResult' | 'initiative'
   title: string
   description?: string | null
   status: string
@@ -34,6 +34,7 @@ interface OKRDetail {
   } | null
   startDate?: string | null
   endDate?: string | null
+  dueDate?: string | null
   goalType?: 'ASPIRATIONAL' | 'COMMITTED' | null
   visibilityLevel?: string | null
   isPublished?: boolean | null
@@ -243,6 +244,72 @@ export function useOKRDetail(
                 color: data.pillar.color,
               }
             : null,
+        }
+
+        setDetail(transformed)
+      } else if (node.type === 'initiative') {
+        const response = await api.get(`/initiatives/${node.id}`)
+        const data = response.data
+
+        // Fetch tags and contributors separately
+        const [tagsResponse, contributorsResponse] = await Promise.all([
+          api.get(`/initiatives/${node.id}/tags`).catch(() => ({ data: [] })),
+          api.get(`/initiatives/${node.id}/contributors`).catch(() => ({ data: [] })),
+        ])
+
+        const transformed: OKRDetail = {
+          id: data.id,
+          type: 'initiative',
+          title: data.title,
+          description: data.description,
+          status: data.status,
+          progress: data.progress ?? 0,
+          ownerId: data.ownerId || '',
+          owner: data.owner
+            ? {
+                id: data.owner.id,
+                name: data.owner.name,
+                email: data.owner.email,
+              }
+            : undefined,
+          cycleId: data.cycleId,
+          cycleName: data.cycle?.name,
+          cycle: data.cycle
+            ? {
+                id: data.cycle.id,
+                name: data.cycle.name,
+                status: data.cycle.status,
+                startDate: data.cycle.startDate ? (typeof data.cycle.startDate === 'string' ? data.cycle.startDate : data.cycle.startDate.toISOString()) : '',
+                endDate: data.cycle.endDate ? (typeof data.cycle.endDate === 'string' ? data.cycle.endDate : data.cycle.endDate.toISOString()) : '',
+              }
+            : null,
+          startDate: data.startDate ? (typeof data.startDate === 'string' ? data.startDate : data.startDate.toISOString()) : null,
+          endDate: data.endDate ? (typeof data.endDate === 'string' ? data.endDate : data.endDate.toISOString()) : null,
+          dueDate: data.dueDate ? (typeof data.dueDate === 'string' ? data.dueDate : data.dueDate.toISOString()) : null,
+          goalType: data.goalType,
+          createdAt: data.createdAt ? (typeof data.createdAt === 'string' ? data.createdAt : data.createdAt.toISOString()) : null,
+          updatedAt: data.updatedAt ? (typeof data.updatedAt === 'string' ? data.updatedAt : data.updatedAt.toISOString()) : null,
+          teamId: data.teamId,
+          team: data.team
+            ? {
+                id: data.team.id,
+                name: data.team.name,
+              }
+            : null,
+          tags: tagsResponse.data?.map((tag: any) => ({
+            id: tag.tag?.id || tag.id,
+            name: tag.tag?.name || tag.name,
+            color: tag.tag?.color || tag.color,
+          })) || [],
+          contributors: contributorsResponse.data?.map((contrib: any) => ({
+            id: contrib.id,
+            user: {
+              id: contrib.user.id,
+              name: contrib.user.name,
+              email: contrib.user.email,
+            },
+            role: contrib.role,
+          })) || [],
         }
 
         setDetail(transformed)

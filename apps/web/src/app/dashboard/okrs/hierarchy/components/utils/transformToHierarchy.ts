@@ -68,6 +68,22 @@ interface APIObjective {
       } | null
     }
   }>
+  initiatives?: Array<{
+    id: string
+    title: string
+    status: string
+    progress: number
+    ownerId: string
+    owner?: {
+      id: string
+      name: string
+      email?: string | null
+    } | null
+    objectiveId?: string | null
+    keyResultId?: string | null
+    description?: string | null
+    dueDate?: string | null
+  }>
 }
 
 /**
@@ -109,9 +125,28 @@ export function transformToHierarchy(objectives: APIObjective[]): HierarchyTreeD
 
     allNodes.set(objectiveId, node)
 
+    // Debug: Log first objective's structure
+    if (objectives.indexOf(obj) === 0) {
+      console.log('[transformToHierarchy] First objective structure:', {
+        id: objectiveId,
+        title: obj.title,
+        hasKeyResults: !!obj.keyResults,
+        keyResultsLength: obj.keyResults?.length || 0,
+        keyResultsSample: obj.keyResults?.[0] ? {
+          keys: Object.keys(obj.keyResults[0]),
+          hasKeyResult: !!obj.keyResults[0].keyResult,
+          hasKeyResultId: !!obj.keyResults[0].keyResultId,
+          hasId: !!obj.keyResults[0].id,
+          hasTitle: !!obj.keyResults[0].title,
+          sample: obj.keyResults[0],
+        } : null,
+      })
+    }
+
     // Add key results as children
     if (obj.keyResults && obj.keyResults.length > 0) {
-      obj.keyResults.forEach((kr) => {
+      console.log(`[transformToHierarchy] Processing ${obj.keyResults.length} Key Results for objective ${objectiveId}`)
+      obj.keyResults.forEach((kr, idx) => {
         // Handle both direct KR format and nested keyResult format
         const krData = kr.keyResult || kr
         const krId = krData.id || kr.keyResultId || kr.id || `kr-${objectiveId}-${krData.title || kr.title}`
@@ -120,6 +155,16 @@ export function transformToHierarchy(objectives: APIObjective[]): HierarchyTreeD
         const krProgress = krData.progress ?? kr.progress ?? 0
         const krOwnerId = krData.ownerId || kr.ownerId
         const krOwner = krData.owner || kr.owner || null
+
+        if (idx === 0) {
+          console.log(`[transformToHierarchy] First KR sample:`, {
+            krId,
+            krTitle,
+            krStatus,
+            krDataKeys: Object.keys(krData),
+            krKeys: Object.keys(kr),
+          })
+        }
 
         const krNode: HierarchyOKRNode = {
           id: krId,
@@ -143,6 +188,109 @@ export function transformToHierarchy(objectives: APIObjective[]): HierarchyTreeD
         allNodes.set(krId, krNode)
         node.children.push(krNode)
       })
+      console.log(`[transformToHierarchy] Added ${node.children.length} Key Results to objective ${objectiveId}`)
+    } else {
+      console.log(`[transformToHierarchy] No Key Results found for objective ${objectiveId}`)
+    }
+
+    // Add initiatives as children - can be linked to objective or key results
+    console.log(`[transformToHierarchy] Checking initiatives for objective ${objectiveId}:`, {
+      hasInitiatives: !!obj.initiatives,
+      initiativesType: typeof obj.initiatives,
+      isArray: Array.isArray(obj.initiatives),
+      length: obj.initiatives?.length || 0,
+      sample: obj.initiatives?.[0] ? {
+        keys: Object.keys(obj.initiatives[0]),
+        id: obj.initiatives[0].id,
+        title: obj.initiatives[0].title,
+        objectiveId: obj.initiatives[0].objectiveId,
+        keyResultId: obj.initiatives[0].keyResultId,
+      } : null,
+    })
+    
+    if (obj.initiatives && obj.initiatives.length > 0) {
+      console.log(`[transformToHierarchy] Processing ${obj.initiatives.length} Initiatives for objective ${objectiveId}`)
+      
+      // First, collect initiatives linked to Key Results
+      const initiativesByKR = new Map<string, typeof obj.initiatives>()
+      const objectiveInitiatives: typeof obj.initiatives = []
+      
+      obj.initiatives.forEach((initiative) => {
+        if (initiative.keyResultId) {
+          // Initiative is linked to a Key Result
+          if (!initiativesByKR.has(initiative.keyResultId)) {
+            initiativesByKR.set(initiative.keyResultId, [])
+          }
+          initiativesByKR.get(initiative.keyResultId)!.push(initiative)
+        } else {
+          // Initiative is linked to the objective
+          objectiveInitiatives.push(initiative)
+        }
+      })
+
+      // Add initiatives linked to Key Results as children of those KRs
+      initiativesByKR.forEach((initiatives, krId) => {
+        const krNode = allNodes.get(krId)
+        if (krNode) {
+          initiatives.forEach((initiative) => {
+            const initiativeId = initiative.id
+            if (!initiativeId) {
+              console.warn('[transformToHierarchy] Initiative missing ID:', initiative)
+              return
+            }
+
+            const initiativeNode: HierarchyOKRNode = {
+              id: initiativeId,
+              type: 'initiative',
+              title: initiative.title,
+              status: initiative.status as HierarchyOKRNode['status'],
+              progress: initiative.progress ?? 0,
+              ownerId: initiative.ownerId,
+              owner: initiative.owner || undefined,
+              parentId: krId,
+              expanded: false,
+              children: [],
+              keyResultId: krId,
+              objectiveId: objectiveId,
+              initiativeId: initiativeId,
+            }
+
+            allNodes.set(initiativeId, initiativeNode)
+            krNode.children.push(initiativeNode)
+          })
+        }
+      })
+
+      // Add initiatives linked directly to the objective
+      objectiveInitiatives.forEach((initiative) => {
+        const initiativeId = initiative.id
+        if (!initiativeId) {
+          console.warn('[transformToHierarchy] Initiative missing ID:', initiative)
+          return
+        }
+
+        const initiativeNode: HierarchyOKRNode = {
+          id: initiativeId,
+          type: 'initiative',
+          title: initiative.title,
+          status: initiative.status as HierarchyOKRNode['status'],
+          progress: initiative.progress ?? 0,
+          ownerId: initiative.ownerId,
+          owner: initiative.owner || undefined,
+          parentId: objectiveId,
+          expanded: false,
+          children: [],
+          objectiveId: objectiveId,
+          initiativeId: initiativeId,
+        }
+
+        allNodes.set(initiativeId, initiativeNode)
+        node.children.push(initiativeNode)
+      })
+      
+      console.log(`[transformToHierarchy] Added ${objectiveInitiatives.length} Initiatives to objective ${objectiveId}, ${initiativesByKR.size} KRs have initiatives`)
+    } else {
+      console.log(`[transformToHierarchy] No Initiatives found for objective ${objectiveId}`)
     }
   })
 

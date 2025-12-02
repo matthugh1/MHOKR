@@ -24,6 +24,8 @@ interface InitiativesSectionProps {
     }>
   } | null
   onInitiativeClick?: (initiativeId: string) => void
+  onCreateInitiative?: () => void
+  canCreate?: boolean
 }
 
 const getStatusBadge = (status: string) => {
@@ -67,20 +69,56 @@ const formatDueDate = (dateString: string | null | undefined): { text: string; i
   }
 }
 
-export function InitiativesSection({ detail, onInitiativeClick, hideTitle = false }: InitiativesSectionProps) {
-  if (!detail || !detail.initiatives || detail.initiatives.length === 0) {
+import { Button } from '@/components/ui/button'
+import { Plus } from 'lucide-react'
+
+export function InitiativesSection({ detail, onInitiativeClick, onCreateInitiative, canCreate = false, hideTitle = false }: InitiativesSectionProps) {
+  const initiatives = detail?.initiatives || []
+  const hasInitiatives = initiatives.length > 0
+
+  // Show section if there are initiatives OR if user can create
+  if (!hasInitiatives && !canCreate) {
     return null
   }
-
-  const initiatives = detail.initiatives
 
   return (
     <div className="space-y-4">
       {!hideTitle && (
-        <h4 className="text-sm font-semibold text-white flex items-center gap-2">
-          <Rocket size={16} className="text-slate-500" />
-          Initiatives ({initiatives.length})
-        </h4>
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+            <Rocket size={16} className="text-slate-500" />
+            Initiatives ({initiatives.length})
+          </h4>
+          {canCreate && onCreateInitiative && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onCreateInitiative}
+              className="h-7 px-2 text-xs text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+            >
+              <Plus size={14} className="mr-1" />
+              Add Initiative
+            </Button>
+          )}
+        </div>
+      )}
+
+      {!hasInitiatives && canCreate && (
+        <div className="bg-slate-800/50 rounded-lg border border-slate-800 p-6 text-center">
+          <Rocket size={24} className="text-slate-500 mx-auto mb-2" />
+          <p className="text-sm text-slate-400 mb-3">No initiatives yet</p>
+          {onCreateInitiative && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onCreateInitiative}
+              className="bg-slate-800 border-slate-700 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+            >
+              <Plus size={14} className="mr-1" />
+              Create Initiative
+            </Button>
+          )}
+        </div>
       )}
 
       <div className="space-y-2">

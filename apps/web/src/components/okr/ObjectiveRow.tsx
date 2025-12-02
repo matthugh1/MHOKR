@@ -35,6 +35,10 @@ import { KeyResultStatusTrendChart } from "./KeyResultStatusTrendChart"
 import { InitiativeStatusTrendChart } from "./InitiativeStatusTrendChart"
 import { ProgressSlider } from "./ProgressSlider"
 import { InlineHistoryPreview } from "./InlineHistoryPreview"
+// TEMPORARILY DISABLED - Task feature
+// import { TaskList } from "./TaskList"
+// import { getTasks } from "@/lib/tasks-api"
+import { Task } from "@okr-nexus/types"
 
 export interface ObjectiveRowProps {
   objective: {
@@ -104,6 +108,9 @@ export interface ObjectiveRowProps {
   onAddInitiativeToKr?: (krId: string) => void
   onAddCheckIn?: (krId: string) => void
   onEditKeyResult?: (krId: string) => void
+  onAddTask?: (keyResultId?: string, initiativeId?: string, parentName?: string) => void
+  onEditTask?: (task: any) => void
+  onDeleteTask?: (taskId: string) => void
   canEdit: boolean
   canDelete: boolean
   canEditKeyResult?: (krId: string) => boolean
@@ -470,6 +477,9 @@ export function ObjectiveRow({
   onAddInitiativeToKr,
   onAddCheckIn,
   onEditKeyResult,
+  onAddTask,
+  onEditTask,
+  onDeleteTask,
   canEdit,
   canDelete,
   canEditKeyResult,
@@ -489,6 +499,9 @@ export function ObjectiveRow({
   const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [expandedKeyResults, setExpandedKeyResults] = useState<Set<string>>(new Set())
   const [expandedInitiatives, setExpandedInitiatives] = useState<Set<string>>(new Set())
+  const [tasksByKeyResult, setTasksByKeyResult] = useState<Record<string, Task[]>>({})
+  const [tasksByInitiative, setTasksByInitiative] = useState<Record<string, Task[]>>({})
+  const [loadingTasks, setLoadingTasks] = useState<Set<string>>(new Set())
   const menuRef = useRef<HTMLDivElement>(null)
   const addMenuRef = useRef<HTMLDivElement>(null)
   
@@ -506,6 +519,69 @@ export function ObjectiveRow({
   useEffect(() => {
     setOptimisticObjective(objective)
   }, [objective])
+
+  // Fetch tasks for key results and initiatives when expanded (only if onAddTask handler is provided)
+  // TEMPORARILY DISABLED to debug rendering issue
+  // TODO: Re-enable once Key Results/Initiatives rendering is fixed
+  /*
+  const hasFetchedTasksRef = useRef<string | null>(null)
+  
+  useEffect(() => {
+    if (!isExpanded || !onAddTask) {
+      hasFetchedTasksRef.current = null
+      return
+    }
+
+    const objectiveId = optimisticObjective.id
+    if (hasFetchedTasksRef.current === objectiveId) return
+    
+    const krIds = (optimisticObjective.keyResults || []).map((kr: any) => kr.id)
+    const initIds = (optimisticObjective.initiatives || []).map((init: any) => init.id)
+    
+    if (krIds.length === 0 && initIds.length === 0) return
+    
+    hasFetchedTasksRef.current = objectiveId
+    
+    // Fetch tasks asynchronously
+    setTimeout(() => {
+      krIds.forEach(async (krId: string) => {
+        if (!tasksByKeyResult[krId] && !loadingTasks.has(`kr-${krId}`)) {
+          setLoadingTasks(prev => new Set(prev).add(`kr-${krId}`))
+          try {
+            const tasks = await getTasks(krId, undefined)
+            setTasksByKeyResult(prev => ({ ...prev, [krId]: tasks }))
+          } catch (err) {
+            console.debug(`Failed to fetch tasks for KR ${krId}:`, err)
+          } finally {
+            setLoadingTasks(prev => {
+              const next = new Set(prev)
+              next.delete(`kr-${krId}`)
+              return next
+            })
+          }
+        }
+      })
+
+      initIds.forEach(async (initId: string) => {
+        if (!tasksByInitiative[initId] && !loadingTasks.has(`init-${initId}`)) {
+          setLoadingTasks(prev => new Set(prev).add(`init-${initId}`))
+          try {
+            const tasks = await getTasks(undefined, initId)
+            setTasksByInitiative(prev => ({ ...prev, [initId]: tasks }))
+          } catch (err) {
+            console.debug(`Failed to fetch tasks for Initiative ${initId}:`, err)
+          } finally {
+            setLoadingTasks(prev => {
+              const next = new Set(prev)
+              next.delete(`init-${initId}`)
+              return next
+            })
+          }
+        }
+      })
+    }, 100)
+  }, [isExpanded, onAddTask, optimisticObjective.id])
+  */
   
   const statusBadge = getStatusBadge(optimisticObjective.status)
   // Note: publishStateBadge removed - using InlinePublishEditor instead
@@ -1595,6 +1671,11 @@ export function ObjectiveRow({
             style={{ overflow: 'visible' }} // Ensure content is not clipped during animation
             className="bg-neutral-50/80 border-t border-neutral-200 px-4 py-4 rounded-b-xl"
           >
+            {/* Debug: Check if expanded section is rendering */}
+            <div className="mb-2 p-2 bg-yellow-100 text-xs">
+              DEBUG: Expanded section is rendering. Key Results: {keyResults.length}, Initiatives: {initiatives.length}
+            </div>
+            
             {/* Objective Progress Trend Chart */}
             {keyResults.length > 0 && (
               <div className="mb-4 pb-4 border-b border-neutral-200">
@@ -1606,7 +1687,7 @@ export function ObjectiveRow({
             <div className="mb-4">
               <h4 className="text-[13px] font-medium text-neutral-700 mb-2 flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-violet-600" />
-                Key Results
+                Key Results ({keyResults.length})
               </h4>
               {keyResults.length > 0 ? (
                 <div className="space-y-3">
@@ -2174,6 +2255,25 @@ export function ObjectiveRow({
                                                             <div className="pt-2 border-t border-emerald-200">
                                                               <InitiativeStatusTrendChart initiativeId={init.id} />
                                                             </div>
+
+                                                            {/* Tasks for this Initiative - TEMPORARILY DISABLED */}
+                                                            {false && onAddTask && (tasksByInitiative[init.id]?.length > 0 || canEdit) && (
+                                                              <div className="pt-2 border-t border-emerald-200">
+                                                                <TaskList
+                                                                  tasks={tasksByInitiative[init.id] || []}
+                                                                  initiativeId={init.id}
+                                                                  onAddTask={onAddTask}
+                                                                  onEditTask={onEditTask}
+                                                                  onDeleteTask={onDeleteTask}
+                                                                  canEdit={canEdit}
+                                                                  ownerNames={availableUsers.reduce((acc, u) => {
+                                                                    acc[u.id] = u.name
+                                                                    return acc
+                                                                  }, {} as Record<string, string>)}
+                                                                  hideTitle={false}
+                                                                />
+                                                              </div>
+                                                            )}
                                                           </div>
                                                         </motion.div>
                                                       )}
@@ -2428,6 +2528,25 @@ export function ObjectiveRow({
                                     <KeyResultTrendChart keyResultId={kr.id} />
                                     <KeyResultStatusTrendChart keyResultId={kr.id} />
                                   </div>
+
+                                  {/* Tasks for this Key Result - TEMPORARILY DISABLED */}
+                                  {false && onAddTask && (tasksByKeyResult[kr.id]?.length > 0 || (canEdit && canEditKeyResult && canEditKeyResult(kr.id))) && (
+                                    <div className="pt-3 border-t border-neutral-200">
+                                      <TaskList
+                                        tasks={tasksByKeyResult[kr.id] || []}
+                                        keyResultId={kr.id}
+                                        onAddTask={onAddTask}
+                                        onEditTask={onEditTask}
+                                        onDeleteTask={onDeleteTask}
+                                        canEdit={canEdit && canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                        ownerNames={availableUsers.reduce((acc, u) => {
+                                          acc[u.id] = u.name
+                                          return acc
+                                        }, {} as Record<string, string>)}
+                                        hideTitle={false}
+                                      />
+                                    </div>
+                                  )}
                                 </div>
                               </motion.div>
                             )}

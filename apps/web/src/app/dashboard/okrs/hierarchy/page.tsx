@@ -28,7 +28,8 @@ import {
   BarChart3,
   Search,
   X,
-  Eye
+  Eye,
+  Rocket
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn, formatNumber, decodeHtmlEntities, clampProgress } from '@/lib/utils'
@@ -53,7 +54,7 @@ import { ProgressBreakdownSection } from './components/ProgressBreakdownSection'
 import api from '@/lib/api'
 
 // Map backend status to UI status
-const mapStatus = (status: string): 'on-track' | 'at-risk' | 'off-track' => {
+const mapStatus = (status: string): 'on-track' | 'at-risk' | 'off-track' | 'not-started' | 'in-progress' | 'blocked' | 'completed' => {
   switch (status) {
     case 'ON_TRACK':
       return 'on-track'
@@ -62,9 +63,16 @@ const mapStatus = (status: string): 'on-track' | 'at-risk' | 'off-track' => {
     case 'OFF_TRACK':
       return 'off-track'
     case 'COMPLETED':
-      return 'on-track'
+      return 'completed'
     case 'CANCELLED':
       return 'off-track'
+    // Initiative statuses
+    case 'NOT_STARTED':
+      return 'not-started'
+    case 'IN_PROGRESS':
+      return 'in-progress'
+    case 'BLOCKED':
+      return 'blocked'
     default:
       return 'on-track'
   }
@@ -74,7 +82,7 @@ const mapStatus = (status: string): 'on-track' | 'at-risk' | 'off-track' => {
 const convertNodeToItem = (node: HierarchyOKRNode, expandedIds: Set<string>): any => {
   return {
     id: node.id,
-    type: node.type === 'objective' ? 'objective' : 'kr',
+    type: node.type, // Keep original type: 'objective' | 'keyResult' | 'initiative'
     level: node.parentId ? 'team' : 'company', // Simplified level detection
     title: node.title,
     owner: node.owner?.name || 'Unassigned',
@@ -142,11 +150,11 @@ const ProgressBar = ({ value, status }: ProgressBarProps) => {
 
 interface OKRItem {
   id: string
-  type: 'objective' | 'kr'
+  type: 'objective' | 'kr' | 'initiative'
   level?: 'company' | 'team'
   title: string
   owner: string
-  status: 'on-track' | 'at-risk' | 'off-track'
+  status: 'on-track' | 'at-risk' | 'off-track' | 'not-started' | 'in-progress' | 'blocked' | 'completed'
   progress: number
   expanded?: boolean
   children?: OKRItem[]
@@ -283,12 +291,29 @@ function OKRHierarchyPageContent() {
 
   // Filter states from URL
   const selectedCycleIdFromUrl = searchParams.get('cycleId')
+  
+  // Sort state
+  const [sortBy, setSortBy] = useState<'title-asc' | 'title-desc' | 'none'>('none')
+  const allCyclesFromUrl = searchParams.get('allCycles') === 'true' // Track explicit "All cycles" selection
   const selectedStatus = searchParams.get('status') as string | null
   const selectedScope = (searchParams.get('scope') as 'my' | 'team-workspace' | 'tenant') || 'tenant'
-  const searchQuery = searchParams.get('search') || ''
+  const searchQueryFromUrl = searchParams.get('search') || ''
+  
+  // Local search input state (for debouncing)
+  const [searchInput, setSearchInput] = useState(searchQueryFromUrl)
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQueryFromUrl)
 
-  // Local state
-  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(selectedCycleIdFromUrl)
+  // Local state - initialize from URL, or null if not in URL
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(selectedCycleIdFromUrl || null)
+  
+  // Debug: Log when selectedCycleId changes
+  useEffect(() => {
+    console.log('[HierarchyPage] selectedCycleId changed:', {
+      selectedCycleId,
+      selectedCycleIdFromUrl,
+      match: selectedCycleId === selectedCycleIdFromUrl,
+    })
+  }, [selectedCycleId, selectedCycleIdFromUrl])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const [checkInValue, setCheckInValue] = useState<string>('')
@@ -331,6 +356,9 @@ function OKRHierarchyPageContent() {
   // Track cycle initialization to set default active cycle
   const cycleInitializedRef = useRef(false)
   const lastOrgIdRef = useRef<string | null>(null)
+  const [cyclesLoaded, setCyclesLoaded] = useState(false)
+  // Track if user explicitly selected "All cycles" to prevent auto-default
+  const allCyclesSelectedRef = useRef(false)
 
   // Load cycles early (needed for cycle selector and default selection)
   useEffect(() => {
@@ -340,68 +368,184 @@ function OKRHierarchyPageContent() {
         const cycles = response.data || []
         setActiveCycles(cycles)
 
-        // Set default active cycle on first load if no cycle is selected
-        if (!cycleInitializedRef.current && !selectedCycleIdFromUrl && cycles.length > 0) {
+        console.log('[HierarchyPage] Cycles loaded:', {
+          cyclesCount: cycles.length,
+          selectedCycleIdFromUrl,
+          selectedCycleId,
+          cycleInitialized: cycleInitializedRef.current,
+          allCyclesSelected: allCyclesSelectedRef.current,
+          cycles: cycles.map((c: any) => ({ id: c.id, name: c.name, status: c.status })),
+        })
+
+        // On initial page load only: set default cycle in dropdown if none is selected
+        // This sets both the state (for dropdown display) and URL (for persistence)
+        // BUT: Don't set default if user explicitly selected "All cycles" (check URL param or ref)
+        const shouldSetDefault = !cycleInitializedRef.current && !selectedCycleIdFromUrl && cycles.length > 0 && !allCyclesSelectedRef.current && !allCyclesFromUrl
+        
+        if (shouldSetDefault) {
           const activeCycle = cycles.find((c: any) => c.status === 'ACTIVE') || cycles[0]
           if (activeCycle) {
+            console.log('[HierarchyPage] Setting default cycle on initial load:', {
+              cycleId: activeCycle.id,
+              cycleName: activeCycle.name,
+              wasNull: !selectedCycleId,
+            })
+            // Update state immediately (dropdown will show this)
             setSelectedCycleId(activeCycle.id)
-            // Update URL to reflect default cycle
+            // Update URL to persist selection
             const params = new URLSearchParams(searchParams.toString())
             params.set('cycleId', activeCycle.id)
-            router.push(`/dashboard/okrs/hierarchy?${params.toString()}`)
+            router.replace(`/dashboard/okrs/hierarchy?${params.toString()}`, { scroll: false })
             cycleInitializedRef.current = true
           }
+        } else if (selectedCycleIdFromUrl && selectedCycleIdFromUrl !== selectedCycleId) {
+          // Sync state from URL if URL changed externally (e.g., browser back/forward)
+          console.log('[HierarchyPage] Syncing cycleId from URL:', selectedCycleIdFromUrl)
+          setSelectedCycleId(selectedCycleIdFromUrl)
+          // If a cycleId is in URL, user didn't select "All cycles"
+          allCyclesSelectedRef.current = false
+        } else if (!selectedCycleIdFromUrl && !selectedCycleId && cycles.length > 0 && cycleInitializedRef.current && !allCyclesSelectedRef.current && !allCyclesFromUrl) {
+          // Fallback: if somehow we have cycles but no cycleId set, set it now
+          // BUT: Don't do this if user explicitly selected "All cycles" (check URL param or ref)
+          const activeCycle = cycles.find((c: any) => c.status === 'ACTIVE') || cycles[0]
+          if (activeCycle) {
+            console.log('[HierarchyPage] Setting default cycle (fallback):', activeCycle.id, activeCycle.name)
+            setSelectedCycleId(activeCycle.id)
+            const params = new URLSearchParams(searchParams.toString())
+            params.set('cycleId', activeCycle.id)
+            router.replace(`/dashboard/okrs/hierarchy?${params.toString()}`, { scroll: false })
+          }
+        } else if (!selectedCycleIdFromUrl && (allCyclesSelectedRef.current || allCyclesFromUrl)) {
+          // User explicitly selected "All cycles" - ensure state reflects this
+          console.log('[HierarchyPage] Maintaining "All cycles" selection', { allCyclesSelectedRef: allCyclesSelectedRef.current, allCyclesFromUrl })
+          setSelectedCycleId(null)
+          // Ensure ref is set
+          allCyclesSelectedRef.current = true
         }
+        
+        // Mark cycles as loaded (even if empty, we've checked)
+        setCyclesLoaded(true)
       } catch (error: any) {
         console.error('Failed to load cycles:', error)
         setActiveCycles([])
+        // Still mark as loaded so we don't block forever
+        setCyclesLoaded(true)
       }
     }
 
     // Reset cycle initialization when organization changes
     if (currentOrganization?.id !== lastOrgIdRef.current) {
       cycleInitializedRef.current = false
+      // Only reset allCyclesSelectedRef if URL doesn't have allCycles=true
+      if (!allCyclesFromUrl) {
+        allCyclesSelectedRef.current = false
+      }
       lastOrgIdRef.current = currentOrganization?.id || null
+      setCyclesLoaded(false)
     }
 
     if (currentOrganization?.id) {
       loadCycles()
+    } else {
+      setCyclesLoaded(false)
     }
-  }, [currentOrganization?.id, selectedCycleIdFromUrl, searchParams, router])
+  }, [currentOrganization?.id, selectedCycleIdFromUrl, searchParams, router, selectedCycleId, allCyclesFromUrl])
 
-  // Sync cycleId from URL when it changes externally
+  // Sync cycleId from URL when it changes externally (e.g., from dropdown selection)
+  // BUT: Don't sync if user explicitly selected "All cycles"
   useEffect(() => {
     if (selectedCycleIdFromUrl !== selectedCycleId) {
+      // If user explicitly selected "All cycles" (check URL param or ref), don't override it
+      if (!selectedCycleIdFromUrl && (allCyclesSelectedRef.current || allCyclesFromUrl)) {
+        // User selected "All cycles" - keep it null
+        console.log('[HierarchyPage] Sync effect: Preserving "All cycles" selection')
+        return
+      }
+      // If URL has a cycleId, clear the "all cycles" flag
+      if (selectedCycleIdFromUrl) {
+        allCyclesSelectedRef.current = false
+      }
       setSelectedCycleId(selectedCycleIdFromUrl)
     }
-  }, [selectedCycleIdFromUrl])
+  }, [selectedCycleIdFromUrl, selectedCycleId, allCyclesFromUrl])
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 20
+  const scrollableContainerRef = useRef<HTMLDivElement>(null)
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchInput)
+    }, 500) // 500ms debounce delay
+
+    return () => clearTimeout(timer)
+  }, [searchInput])
+
+  // Sync debounced search to URL
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (debouncedSearchQuery) {
+      params.set('search', debouncedSearchQuery)
+    } else {
+      params.delete('search')
+    }
+    router.replace(`/dashboard/okrs/hierarchy?${params.toString()}`, { scroll: false })
+  }, [debouncedSearchQuery, searchParams, router])
+
+  // Sync URL search to local input when URL changes externally
+  useEffect(() => {
+    if (searchQueryFromUrl !== searchInput) {
+      setSearchInput(searchQueryFromUrl)
+      setDebouncedSearchQuery(searchQueryFromUrl)
+    }
+  }, [searchQueryFromUrl])
 
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [selectedCycleId, selectedStatus, selectedScope, searchQuery, currentOrganization?.id])
+  }, [selectedCycleId, selectedStatus, selectedScope, debouncedSearchQuery, currentOrganization?.id])
+
+  // Scroll to top when page changes
+  useEffect(() => {
+    if (scrollableContainerRef.current) {
+      scrollableContainerRef.current.scrollTop = 0
+    }
+  }, [currentPage])
 
   // Fetch OKR data
+  // Disable API calls when creation modal is open to prevent Network Errors
+  const isCreationModeActive = newObjectiveModalOpen || sidePanelTab === 'create'
+  
+  // Wait for cycles to load AND ensure we have a cycleId (either from URL or default)
+  // OR if user explicitly selected "All Cycles", allow fetching without cycleId
+  const hasCycleId = !!selectedCycleId || !!selectedCycleIdFromUrl
+  const allCyclesSelected = allCyclesFromUrl || allCyclesSelectedRef.current
+  const canFetchOKRs = !!currentOrganization?.id && cyclesLoaded && (hasCycleId || allCyclesSelected || activeCycles.length === 0) && !isCreationModeActive
+  
   console.log('[HierarchyPage] Calling useHierarchyOKRs with:', {
     tenantId: currentOrganization?.id,
     cycleId: selectedCycleId,
+    selectedCycleIdFromUrl,
+    allCyclesSelected,
     scope: selectedScope,
-    enabled: !!currentOrganization?.id
+    searchQuery: debouncedSearchQuery,
+    cyclesLoaded,
+    hasCycleId,
+    activeCyclesCount: activeCycles.length,
+    canFetchOKRs,
+    enabled: canFetchOKRs
   })
-  // Disable API calls when creation modal is open to prevent Network Errors
-  const isCreationModeActive = newObjectiveModalOpen || sidePanelTab === 'create'
 
-  const { treeData, loading, error, refetch, loadChildren, loadingNodeIds, pagination } = useHierarchyOKRs({
+  const { treeData, loading, error, refetch, loadChildren, clearLoadedNode, loadingNodeIds, pagination } = useHierarchyOKRs({
     tenantId: currentOrganization?.id || null,
-    cycleId: selectedCycleId,
+    cycleId: selectedCycleId, // Use selectedCycleId from dropdown/state
     status: selectedStatus,
     scope: selectedScope,
-    searchQuery,
-    enabled: !!currentOrganization?.id && !isCreationModeActive, // Disable when creating OKR
+    searchQuery: debouncedSearchQuery || undefined, // Send search to backend to search all OKRs
+    sortBy: sortBy !== 'none' ? sortBy : undefined, // Send sortBy to backend
+    enabled: canFetchOKRs,
     page: currentPage,
     pageSize,
   })
@@ -458,19 +602,28 @@ function OKRHierarchyPageContent() {
     }
   }, [sidePanelTab, loadUsersLazy, loadWorkspacesLazy, loadTeamsLazy])
 
+  // Search is now handled by the backend API - it searches across all OKRs, not just the current page
+  // The backend returns only matching OKRs, so we use treeData directly
+  const filterTree = treeData
+
   // Convert tree data to test page format
+  // Sorting is now handled by the backend, so we just convert the data
   const data = useMemo(() => {
     console.log('[HierarchyPage] Computing data from treeData', {
-      hasTrreeData: !!treeData,
-      rootsCount: treeData?.roots?.length || 0,
+      hasTrreeData: !!filterTree,
+      rootsCount: filterTree?.roots?.length || 0,
       loading,
       error,
       tenantId: currentOrganization?.id,
-      cycleId: selectedCycleId
+      cycleId: selectedCycleId,
+      searchQuery: debouncedSearchQuery,
+      sortBy
     })
-    if (!treeData) return []
-    return treeData.roots.map(root => convertNodeToItem(root, expandedIds))
-  }, [treeData, expandedIds, loading, error, currentOrganization?.id, selectedCycleId])
+    if (!filterTree) return []
+    
+    // Backend handles sorting, so we just convert the data
+    return filterTree.roots.map(root => convertNodeToItem(root, expandedIds))
+  }, [filterTree, expandedIds, loading, error, currentOrganization?.id, selectedCycleId, debouncedSearchQuery, sortBy])
 
   // Find selected item in tree
   const selectedItem = useMemo(() => {
@@ -514,9 +667,16 @@ function OKRHierarchyPageContent() {
     if (!isCurrentlyExpanded) {
       // Expanding - check if we need to load children
       const node = treeData?.allNodes.get(id)
-      if (node && node.type === 'objective' && node.children.length === 0) {
-        // This objective has no children loaded yet, fetch them
-        await loadChildren(id)
+      if (node && node.type === 'objective') {
+        // Check if we've already loaded sub-objectives (children of type 'objective')
+        const hasSubObjectives = node.children.some(child => child.type === 'objective')
+        // If no sub-objectives loaded yet, fetch them (Key Results might already be there)
+        if (!hasSubObjectives) {
+          console.log('[HierarchyPage] Loading children for objective:', id, 'Current children:', node.children.length)
+          await loadChildren(id)
+        } else {
+          console.log('[HierarchyPage] Sub-objectives already loaded for:', id, 'Sub-objectives count:', node.children.filter(c => c.type === 'objective').length)
+        }
       }
     }
 
@@ -592,6 +752,12 @@ function OKRHierarchyPageContent() {
           title: 'Key Result updated',
           description: `"${data.title}" has been updated.`,
         })
+      } else if (node.type === 'initiative') {
+        await api.patch(`/initiatives/${node.id}`, data)
+        toast({
+          title: 'Initiative updated',
+          description: `"${data.title}" has been updated.`,
+        })
       }
       await refetch()
       refetchDetail()
@@ -662,19 +828,35 @@ function OKRHierarchyPageContent() {
     }
   }, [createMode, selectedItem, currentOrganization, refetch, refetchDetail, toast])
 
-  // Handle cycle change
+  // Handle cycle change - dropdown is the source of truth
   const handleCycleChange = useCallback((opt: { key: string; label: string }) => {
     // Prevent filter changes during OKR creation to avoid Network Errors
     if (isCreationModeActive) {
       return
     }
+    // Update state immediately (dropdown is source of truth)
+    const newCycleId = opt.key && opt.key !== 'all' && opt.key !== 'unassigned' ? opt.key : null
+    
+    // Track if user explicitly selected "All cycles" BEFORE updating state/URL
+    if (opt.key === 'all' || opt.key === 'unassigned') {
+      allCyclesSelectedRef.current = true
+      cycleInitializedRef.current = true // Mark as initialized to prevent default cycle logic
+    } else {
+      allCyclesSelectedRef.current = false
+    }
+    
+    setSelectedCycleId(newCycleId)
+    
+    // Update URL to reflect selection - use replace to avoid adding to history
     const params = new URLSearchParams(searchParams.toString())
-    if (opt.key && opt.key !== 'all' && opt.key !== 'unassigned') {
-      params.set('cycleId', opt.key)
+    if (newCycleId) {
+      params.set('cycleId', newCycleId)
+      params.delete('allCycles') // Remove allCycles param when a specific cycle is selected
     } else {
       params.delete('cycleId')
+      params.set('allCycles', 'true') // Set flag to track "All cycles" selection
     }
-    router.push(`/dashboard/okrs/hierarchy?${params.toString()}`)
+    router.replace(`/dashboard/okrs/hierarchy?${params.toString()}`, { scroll: false })
   }, [searchParams, router, isCreationModeActive])
 
   // Handle status change
@@ -713,10 +895,74 @@ function OKRHierarchyPageContent() {
     if (isCreationModeActive) {
       return
     }
+    // Note: We keep expandedIds - will reload children for expanded nodes after tree data updates
     const params = new URLSearchParams(searchParams.toString())
     params.set('scope', scope)
     router.push(`/dashboard/okrs/hierarchy?${params.toString()}`)
   }, [searchParams, router, isCreationModeActive])
+
+  // Track previous filter values to detect changes
+  const prevFiltersRef = useRef({ scope: selectedScope, cycleId: selectedCycleId, status: selectedStatus })
+  
+  // Reload children for expanded nodes when scope/cycle/status changes and tree data updates
+  useEffect(() => {
+    // Wait for loading to complete and tree data to be available
+    if (!treeData || expandedIds.size === 0 || loading) {
+      return
+    }
+
+    // Check if filters actually changed
+    const filtersChanged = 
+      prevFiltersRef.current.scope !== selectedScope ||
+      prevFiltersRef.current.cycleId !== selectedCycleId ||
+      prevFiltersRef.current.status !== selectedStatus
+
+    if (!filtersChanged) {
+      return
+    }
+
+    console.log('[HierarchyPage] Filters changed, reloading children for expanded nodes', {
+      prevScope: prevFiltersRef.current.scope,
+      newScope: selectedScope,
+      prevCycleId: prevFiltersRef.current.cycleId,
+      newCycleId: selectedCycleId,
+      expandedIds: Array.from(expandedIds)
+    })
+
+    // Update previous filters
+    prevFiltersRef.current = { scope: selectedScope, cycleId: selectedCycleId, status: selectedStatus }
+
+    // Small delay to ensure tree data is fully updated
+    const timeoutId = setTimeout(() => {
+      // For each expanded node, clear it from cache and reload children
+      const reloadPromises: Promise<void>[] = []
+      expandedIds.forEach((nodeId) => {
+        const node = treeData.allNodes.get(nodeId)
+        if (node && node.type === 'objective') {
+          console.log('[HierarchyPage] Reloading children for expanded node after filter change:', {
+            nodeId,
+            nodeTitle: node.title,
+            currentChildrenCount: node.children.length,
+            hasSubObjectives: node.children.some(child => child.type === 'objective')
+          })
+          // Clear from cache first, then force reload
+          clearLoadedNode(nodeId)
+          reloadPromises.push(loadChildren(nodeId, true))
+        } else if (!node) {
+          console.warn('[HierarchyPage] Expanded node not found in tree:', nodeId)
+        }
+      })
+      
+      // Execute all reloads in parallel
+      if (reloadPromises.length > 0) {
+        Promise.all(reloadPromises).catch(err => {
+          console.error('[HierarchyPage] Error reloading children after filter change:', err)
+        })
+      }
+    }, 100) // Small delay to ensure tree data is fully updated
+
+    return () => clearTimeout(timeoutId)
+  }, [treeData, selectedScope, selectedCycleId, selectedStatus, expandedIds, loadChildren, loading])
 
   const availableScopes: Array<'my' | 'team-workspace' | 'tenant'> = ['my', 'team-workspace', 'tenant']
 
@@ -765,12 +1011,14 @@ function OKRHierarchyPageContent() {
   }, [cycleSelectorOpen])
 
   // Render a single row in the cascade
-  const renderRow = (item: OKRItem, depth = 0) => {
+  const renderRow = (item: OKRItem, depth = 0, parentPath: string = '') => {
     const isSelected = selectedId === item.id
     const paddingLeft = `${depth * 24 + 16}px`
+    // Create unique key by combining item ID with parent path to avoid duplicates
+    const uniqueKey = `${parentPath}-${item.id}`
 
     return (
-      <div key={item.id}>
+      <div key={uniqueKey}>
         <div
           onClick={() => setSelectedId(item.id)}
           className={`
@@ -811,8 +1059,20 @@ function OKRHierarchyPageContent() {
             )}
 
             {/* Type Icon */}
-            <div className={`p-1.5 rounded-md ${item.type === 'objective' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-700/50 text-slate-400'}`}>
-              {item.type === 'objective' ? <Target size={16} /> : <TrendingUp size={16} />}
+            <div className={`p-1.5 rounded-md ${
+              item.type === 'objective' 
+                ? 'bg-indigo-500/20 text-indigo-400' 
+                : item.type === 'initiative'
+                ? 'bg-emerald-500/20 text-emerald-400'
+                : 'bg-slate-700/50 text-slate-400'
+            }`}>
+              {item.type === 'objective' ? (
+                <Target size={16} />
+              ) : item.type === 'initiative' ? (
+                <Rocket size={16} />
+              ) : (
+                <TrendingUp size={16} />
+              )}
             </div>
 
             {/* Title & Owner */}
@@ -853,7 +1113,7 @@ function OKRHierarchyPageContent() {
               className="absolute w-px bg-slate-800 h-full transition-opacity duration-200"
               style={{ left: `${depth * 24 + 27}px` }}
             />
-            {item.children.map(child => renderRow(child, depth + 1))}
+            {item.children.map((child, index) => renderRow(child, depth + 1, `${uniqueKey}-${index}`))}
           </div>
         )}
       </div>
@@ -863,30 +1123,32 @@ function OKRHierarchyPageContent() {
   return (
     <ProtectedRoute>
       <DashboardLayout>
-        <div className="flex flex-col h-[calc(100vh)] bg-slate-950 text-slate-200 font-sans overflow-hidden">
+        <div className="flex flex-col flex-1 bg-slate-950 text-slate-200 font-sans overflow-hidden min-h-0 h-full max-h-full">
           {/* Main Content Area */}
-          <div className="flex-1 flex flex-col min-w-0 w-full">
+          <div className="flex-1 flex flex-col min-w-0 w-full min-h-0 overflow-hidden">
             {/* Top Header */}
-            <header className="border-b border-slate-800 bg-slate-900/50">
-              <div className="h-16 flex items-center justify-between px-6">
-                <div className="flex items-center gap-4">
-                  <h2 className="text-lg font-semibold text-white">Objectives & Key Results</h2>
-                  <div className="h-4 w-px bg-slate-700"></div>
-                  <div className="relative" ref={cycleSelectorRef}>
-                    <button
-                      onClick={() => !isCreationModeActive && setCycleSelectorOpen(!cycleSelectorOpen)}
-                      disabled={isCreationModeActive}
-                      className={cn(
-                        "flex items-center gap-2 text-sm px-3 py-1.5 rounded-md transition",
-                        isCreationModeActive
-                          ? "text-slate-500 bg-slate-800/50 cursor-not-allowed"
-                          : "text-slate-300 bg-slate-800 hover:bg-slate-700"
-                      )}
-                      title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
-                    >
-                      <span>{selectedTimeframeLabel}</span>
-                      <ChevronDown size={14} className={cn("transition-transform", cycleSelectorOpen && "rotate-180")} />
-                    </button>
+            <header className="flex-shrink-0 border-b border-slate-800 bg-slate-900/50">
+              <div className="px-6 py-3 space-y-3">
+                {/* Top Row: Title, Cycle, Scope Filters, New Objective */}
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <h2 className="text-lg font-semibold text-white whitespace-nowrap">Objectives & Key Results</h2>
+                    <div className="h-4 w-px bg-slate-700"></div>
+                    <div className="relative" ref={cycleSelectorRef}>
+                      <button
+                        onClick={() => !isCreationModeActive && setCycleSelectorOpen(!cycleSelectorOpen)}
+                        disabled={isCreationModeActive}
+                        className={cn(
+                          "flex items-center gap-2 text-sm px-3 py-1.5 rounded-md transition",
+                          isCreationModeActive
+                            ? "text-slate-500 bg-slate-800/50 cursor-not-allowed"
+                            : "text-slate-300 bg-slate-800 hover:bg-slate-700"
+                        )}
+                        title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
+                      >
+                        <span>{selectedTimeframeLabel}</span>
+                        <ChevronDown size={14} className={cn("transition-transform", cycleSelectorOpen && "rotate-180")} />
+                      </button>
                     {cycleSelectorOpen && (
                       <div className="absolute z-50 mt-2 w-72 rounded-lg border border-slate-700 bg-slate-900 shadow-xl p-3">
                         {/* Current & Upcoming */}
@@ -975,26 +1237,8 @@ function OKRHierarchyPageContent() {
                       </div>
                     )}
                   </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => {
-                      setCreateMode('objective')
-                      setSidePanelTab('create')
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg shadow-indigo-900/20 flex items-center gap-2"
-                  >
-                    <Zap size={16} />
-                    New Objective
-                  </button>
-                </div>
-              </div>
-
-              {/* Filter Bar */}
-              <div className="px-6 py-3 border-t border-slate-800/50 space-y-3">
-                {/* Row 1: Scope Toggle and Search */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  {/* Scope Toggle */}
+                  
+                  {/* Scope Toggle - Now next to cycle dropdown */}
                   <div className={cn(
                     "flex items-center gap-1 rounded-lg border p-1",
                     isCreationModeActive
@@ -1056,15 +1300,32 @@ function OKRHierarchyPageContent() {
                       </button>
                     )}
                   </div>
-
-                  {/* Search Input */}
-                  <div className="flex-1 relative min-w-[200px] max-w-md">
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      setCreateMode('objective')
+                      setSidePanelTab('create')
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg shadow-indigo-900/20 flex items-center gap-2"
+                  >
+                    <Zap size={16} />
+                    New Objective
+                  </button>
+                </div>
+                </div>
+                
+                {/* Bottom Row: Search and Status Filters */}
+                <div className="flex items-center gap-3 flex-wrap">
+                {/* Search Input */}
+                <div className="flex-1 relative min-w-[200px] max-w-md">
                     <Search className={cn(
                       "absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4",
                       isCreationModeActive ? "text-slate-600" : "text-slate-400"
                     )} />
                     <Input
-                      placeholder="Search OKRs..."
+                      placeholder="Search Objectives, Key Results, Initiatives..."
                       disabled={isCreationModeActive}
                       className={cn(
                         "pl-10 h-9 border text-white placeholder:text-slate-500",
@@ -1072,22 +1333,44 @@ function OKRHierarchyPageContent() {
                           ? "bg-slate-800/30 border-slate-800 cursor-not-allowed opacity-50"
                           : "bg-slate-800/50 border-slate-700 focus:border-indigo-500"
                       )}
-                      value={searchQuery}
-                      onChange={(e) => handleSearchChange(e.target.value)}
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
                       title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
                     />
-                    {searchQuery && !isCreationModeActive && (
+                    {searchInput && !isCreationModeActive && (
                       <button
-                        onClick={() => handleSearchChange('')}
+                        onClick={() => {
+                          setSearchInput('')
+                          setDebouncedSearchQuery('')
+                        }}
                         className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-200"
                       >
                         <X size={14} />
                       </button>
                     )}
                   </div>
-                </div>
-
-                {/* Row 2: Status Filter Chips */}
+                  
+                  {/* Sort Dropdown */}
+                  <div className="relative">
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as 'title-asc' | 'title-desc' | 'none')}
+                      disabled={isCreationModeActive}
+                      className={cn(
+                        "h-9 px-3 pr-8 rounded-md text-sm border transition",
+                        isCreationModeActive
+                          ? "bg-slate-800/30 border-slate-800 cursor-not-allowed opacity-50 text-slate-500"
+                          : "bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      )}
+                      title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
+                    >
+                      <option value="none">Sort by...</option>
+                      <option value="title-asc">Title (A-Z)</option>
+                      <option value="title-desc">Title (Z-A)</option>
+                    </select>
+                  </div>
+                
+                {/* Status Filter Chips */}
                 <div className={cn(
                   "flex items-center gap-2 flex-wrap",
                   isCreationModeActive && "opacity-50"
@@ -1195,6 +1478,7 @@ function OKRHierarchyPageContent() {
                     Completed
                   </button>
                 </div>
+                </div>
               </div>
             </header>
 
@@ -1215,9 +1499,12 @@ function OKRHierarchyPageContent() {
                 </div>
 
                 {/* Content area with scrollable tree and pagination */}
-                <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                   {/* Scrollable Tree Content - Takes available space, scrolls when needed */}
-                  <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0" style={{ paddingBottom: '140px' }}>
+                  <div 
+                    ref={scrollableContainerRef} 
+                    className="flex-1 overflow-y-auto overflow-x-hidden min-h-0"
+                  >
                     {loading ? (
                       <div className="flex items-center justify-center py-12">
                         <div className="text-slate-500">Loading OKRs...</div>
@@ -1239,8 +1526,8 @@ function OKRHierarchyPageContent() {
                     )}
                   </div>
 
-                  {/* Pagination Controls - Always visible at bottom, fixed position */}
-                  <nav key="pagination-nav" className="absolute bottom-0 left-0 right-0 border-t-2 border-indigo-500 bg-slate-900 px-6 py-3 flex flex-wrap items-center justify-between gap-4 text-sm text-slate-400 z-10 shadow-lg" aria-label="Pagination">
+                  {/* Pagination Controls - Fixed at bottom, always visible */}
+                  <nav key="pagination-nav" className="flex-shrink-0 border-t-2 border-indigo-500 bg-slate-900 px-6 py-3 flex flex-wrap items-center justify-between gap-4 text-sm text-slate-400 z-20 shadow-lg" aria-label="Pagination">
                     <div className="text-slate-500 font-medium" role="status">
                       {loading ? (
                         <span>Loading...</span>
@@ -1255,33 +1542,39 @@ function OKRHierarchyPageContent() {
                         <>No objectives found</>
                       )}
                     </div>
-                    {!error && pagination && pagination.totalPages > 1 && (
+                    {!error && pagination && (
                       <div className="flex items-center gap-4">
-                        <button
-                          className={cn(
-                            "rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-300",
-                            "focus:ring-offset-2 focus:ring-offset-slate-900"
-                          )}
-                          disabled={loading || pagination.currentPage <= 1}
-                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                          aria-label="Previous page"
-                        >
-                          ‹ Previous
-                        </button>
-                        <div className="tabular-nums text-slate-400" aria-current="page">
-                          Page {pagination.currentPage} of {Math.max(1, pagination.totalPages)}
-                        </div>
-                        <button
-                          className={cn(
-                            "rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-300",
-                            "focus:ring-offset-2 focus:ring-offset-slate-900"
-                          )}
-                          disabled={loading || pagination.currentPage >= pagination.totalPages}
-                          onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
-                          aria-label="Next page"
-                        >
-                          Next ›
-                        </button>
+                        {pagination.totalPages > 1 ? (
+                          <>
+                            <button
+                              className={cn(
+                                "rounded-md border-2 border-indigo-400 bg-indigo-500/20 px-4 py-2 text-sm font-semibold shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-500/30 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white",
+                                "focus:ring-offset-2 focus:ring-offset-slate-900"
+                              )}
+                              disabled={loading || pagination.currentPage <= 1}
+                              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                              aria-label="Previous page"
+                            >
+                              ‹ Previous
+                            </button>
+                            <div className="tabular-nums text-slate-300 font-bold text-base" aria-current="page">
+                              Page {pagination.currentPage} of {Math.max(1, pagination.totalPages)}
+                            </div>
+                            <button
+                              className={cn(
+                                "rounded-md border-2 border-indigo-400 bg-indigo-500/20 px-4 py-2 text-sm font-semibold shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-indigo-500/30 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-white",
+                                "focus:ring-offset-2 focus:ring-offset-slate-900"
+                              )}
+                              disabled={loading || pagination.currentPage >= pagination.totalPages}
+                              onClick={() => setCurrentPage(p => Math.min(pagination.totalPages, p + 1))}
+                              aria-label="Next page"
+                            >
+                              Next ›
+                            </button>
+                          </>
+                        ) : (
+                          <div className="text-slate-500 text-xs">All objectives shown</div>
+                        )}
                       </div>
                     )}
                   </nav>
@@ -1509,7 +1802,7 @@ function OKRHierarchyPageContent() {
                                 )}
 
                                 {/* SECTION 4: Progress Breakdown */}
-                                {!detailLoading && okrDetail && (
+                                {!detailLoading && okrDetail && selectedItem.type !== 'initiative' && (
                                   <CollapsibleSection sectionId="progress" title="Progress Breakdown" icon={BarChart3}>
                                     <ProgressBreakdownSection
                                       detail={{
@@ -1531,6 +1824,19 @@ function OKRHierarchyPageContent() {
                                       }}
                                       hideTitle
                                     />
+                                  </CollapsibleSection>
+                                )}
+
+                                {/* SECTION 4a: Simple Progress for Initiatives */}
+                                {!detailLoading && okrDetail && selectedItem.type === 'initiative' && (
+                                  <CollapsibleSection sectionId="progress" title="Progress" icon={BarChart3}>
+                                    <div className="bg-slate-800/50 rounded-lg border border-slate-800 p-5">
+                                      <div className="flex items-center justify-between mb-4">
+                                        <span className="text-sm text-slate-400">Progress</span>
+                                        <span className="text-2xl font-semibold text-white">{Math.round(clampProgress(okrDetail.progress || 0))}%</span>
+                                      </div>
+                                      <ProgressBar value={clampProgress(okrDetail.progress || 0)} status={selectedItem.status} />
+                                    </div>
                                   </CollapsibleSection>
                                 )}
 

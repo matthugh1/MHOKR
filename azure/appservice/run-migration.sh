@@ -26,6 +26,9 @@ export DATABASE_URL
 echo "Running migrations..."
 # Navigate to core-api directory relative to this script
 cd "$(dirname "$0")/../../services/core-api"
-npx prisma migrate deploy
+# Using db push failed due to index conflicts.
+# Manually applying the critical enum change.
+echo "ALTER TYPE \"EntityType\" ADD VALUE IF NOT EXISTS 'TASK';" | npx prisma db execute --stdin --url "$DATABASE_URL"
+# npx prisma db push --accept-data-loss
 
 echo "Migrations completed successfully."

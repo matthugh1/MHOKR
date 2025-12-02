@@ -79,6 +79,10 @@ interface OKRHierarchyListProps {
     onOpenContextualAddMenu?: (objectiveId: string) => void
     onContextualAddKeyResult?: (objectiveId: string, objectiveTitle: string) => void
     onContextualAddInitiative?: (objectiveId: string, objectiveTitle: string) => void
+    // Task handlers
+    onAddTask?: (keyResultId?: string, initiativeId?: string, parentName?: string) => void
+    onEditTask?: (task: any) => void
+    onDeleteTask?: (taskId: string) => void
   }
   availableUsers?: Array<{ id: string; name: string; email?: string }>
 }
@@ -442,6 +446,14 @@ export function OKRHierarchyList({
           onContextualAddInitiative={(objectiveId, objectiveTitle) => {
             onAction.onContextualAddInitiative?.(objectiveId, objectiveTitle)
           }}
+          onAddTask={(keyResultId, initiativeId, parentName) => {
+            const kr = keyResultId ? objective.keyResults?.find((k) => k.id === keyResultId) : null
+            const init = initiativeId ? objective.initiatives?.find((i) => i.id === initiativeId) : null
+            const name = kr?.title || init?.title || parentName || 'Task'
+            onAction.onAddTask?.(keyResultId, initiativeId, name)
+          }}
+          onEditTask={onAction.onEditTask}
+          onDeleteTask={onAction.onDeleteTask}
           availableUsers={availableUsers}
           hierarchyLevel={node.level}
           hasChildren={hasChildren}

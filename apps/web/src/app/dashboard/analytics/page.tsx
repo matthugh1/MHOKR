@@ -449,7 +449,7 @@ export default function AnalyticsPage() {
                   subtitle={totalObjectives > 0 ? `${atRiskCount} objective${atRiskCount !== 1 ? 's' : ''}` : undefined}
                 />
                 {overdue.length > 0 ? (
-                  <Link href="/dashboard/okrs?filter=overdue">
+                  <Link href="/dashboard/okrs/hierarchy?filter=overdue">
                     <div className="cursor-pointer hover:shadow-md transition-shadow">
                       <StatCard
                         title="Overdue Check-ins"
@@ -597,7 +597,7 @@ export default function AnalyticsPage() {
                                 if (activeCycles.length > 0) {
                                   params.append('filterCycleId', activeCycles[0].id)
                                 }
-                                return `/dashboard/okrs?${params.toString()}`
+                                return `/dashboard/okrs/hierarchy?${params.toString()}`
                               }
 
                               return (
@@ -705,7 +705,7 @@ export default function AnalyticsPage() {
                           {atRiskItems.length} item{atRiskItems.length !== 1 ? 's' : ''} at risk
                         </div>
                         <Link
-                          href={`/dashboard/okrs?filterStatus=AT_RISK,OFF_TRACK,BLOCKED${activeCycles.length > 0 ? `&filterCycleId=${activeCycles[0].id}` : ''}`}
+                          href={`/dashboard/okrs/hierarchy?filterStatus=AT_RISK,OFF_TRACK,BLOCKED${activeCycles.length > 0 ? `&filterCycleId=${activeCycles[0].id}` : ''}`}
                           className="text-xs text-violet-600 hover:text-violet-700 hover:underline"
                         >
                           View all →
@@ -716,7 +716,7 @@ export default function AnalyticsPage() {
                           const params = new URLSearchParams()
                           if (item.entityType === 'KEY_RESULT' && item.dimensionRefs.objectiveId) {
                             // Link to objective detail page
-                            return `/dashboard/okrs?objectiveId=${item.dimensionRefs.objectiveId}`
+                            return `/dashboard/okrs/hierarchy?objectiveId=${item.dimensionRefs.objectiveId}`
                           }
                           params.append('filterStatus', item.status)
                           if (item.dimensionRefs.teamId) {
@@ -728,7 +728,7 @@ export default function AnalyticsPage() {
                           if (item.dimensionRefs.cycleId) {
                             params.append('filterCycleId', item.dimensionRefs.cycleId)
                           }
-                          return `/dashboard/okrs?${params.toString()}`
+                          return `/dashboard/okrs/hierarchy?${params.toString()}`
                         }
 
                         return (

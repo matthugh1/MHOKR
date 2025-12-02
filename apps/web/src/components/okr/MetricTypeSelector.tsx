@@ -49,30 +49,48 @@ export function MetricTypeSelector({
   const selectedInfo = value && METRIC_TYPE_INFO[value as MetricType]
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <Label htmlFor={id}>{label}</Label>
-        {showTooltip && selectedInfo && (
+        <Label htmlFor={id} className="text-sm font-medium text-slate-200">{label}</Label>
+        {showTooltip && (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Info className="h-3.5 w-3.5 text-neutral-400 cursor-help" />
+                <button
+                  type="button"
+                  className="inline-flex items-center p-0 border-0 bg-transparent cursor-help hover:text-slate-300 transition-colors"
+                  aria-label="Metric type information"
+                >
+                  <Info className="h-3.5 w-3.5 text-slate-400" />
+                </button>
               </TooltipTrigger>
-              <TooltipContent className="max-w-xs">
-                <div className="space-y-2">
-                  <p className="font-medium">{selectedInfo.label}</p>
-                  <p className="text-sm">{selectedInfo.description}</p>
-                  {selectedInfo.examples.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-neutral-200">
-                      <p className="text-xs font-medium mb-1">Examples:</p>
-                      <ul className="text-xs space-y-1">
-                        {selectedInfo.examples.map((example, idx) => (
-                          <li key={idx} className="text-neutral-300">• {example}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
+              <TooltipContent className="max-w-xs bg-slate-800 border-slate-700">
+                {selectedInfo ? (
+                  <div className="space-y-2">
+                    <p className="font-medium text-white">{selectedInfo.label}</p>
+                    <p className="text-sm text-slate-300">{selectedInfo.description}</p>
+                    {selectedInfo.examples.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-slate-700">
+                        <p className="text-xs font-medium mb-1 text-slate-300">Examples:</p>
+                        <ul className="text-xs space-y-1">
+                          {selectedInfo.examples.map((example, idx) => (
+                            <li key={idx} className="text-slate-400">• {example}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="font-medium text-white mb-2">Metric Types:</p>
+                    {Object.entries(METRIC_TYPE_INFO).map(([type, info]) => (
+                      <div key={type} className="mb-2">
+                        <p className="text-sm font-medium text-white">{info.label}</p>
+                        <p className="text-xs text-slate-300">{info.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -83,16 +101,13 @@ export function MetricTypeSelector({
         onValueChange={(val: string) => onValueChange(val as MetricType)}
         disabled={disabled}
       >
-        <SelectTrigger id={id} className="h-9">
+        <SelectTrigger id={id} className="h-10 bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700 focus:border-indigo-500 focus:ring-indigo-500">
           <SelectValue placeholder="Select metric type" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="bg-slate-800 border-slate-700 text-white">
           {Object.entries(METRIC_TYPE_INFO).map(([type, info]) => (
-            <SelectItem key={type} value={type}>
-              <div className="flex flex-col">
-                <span>{info.label}</span>
-                <span className="text-xs text-neutral-500">{info.description}</span>
-              </div>
+            <SelectItem key={type} value={type} className="text-white focus:bg-slate-700">
+              {info.label}
             </SelectItem>
           ))}
         </SelectContent>

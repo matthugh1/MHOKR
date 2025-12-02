@@ -373,49 +373,64 @@ export class InitiativeService {
     });
 
     // Log activity for creation with full entity snapshot
-    await this.activityService.createActivity({
-      entityType: 'INITIATIVE',
-      entityId: created.id,
-      userId: userId,
-      tenantId: created.tenantId,
-      action: 'CREATED',
-      metadata: {
-        before: null, // No before state for creation
-        after: {
-          id: created.id,
-          title: created.title,
-          description: created.description,
-          keyResultId: created.keyResultId,
-          objectiveId: created.objectiveId,
-          tenantId: created.tenantId,
-          cycleId: created.cycleId,
-          ownerId: created.ownerId,
-          teamId: created.teamId,
-          createdBy: created.createdBy,
-          status: created.status,
-          progress: created.progress,
-          goalType: created.goalType,
-          startDate: created.startDate,
-          endDate: created.endDate,
-          dueDate: created.dueDate,
-          positionX: created.positionX,
-          positionY: created.positionY,
-          createdAt: created.createdAt,
-          updatedAt: created.updatedAt,
+    // Check if activityService has createActivity method (may be missing in import scripts)
+    if (this.activityService && typeof this.activityService.createActivity === 'function') {
+      await this.activityService.createActivity({
+        entityType: 'INITIATIVE',
+        entityId: created.id,
+        userId: userId,
+        tenantId: created.tenantId,
+        action: 'CREATED',
+        metadata: {
+          before: null, // No before state for creation
+          after: {
+            id: created.id,
+            title: created.title,
+            description: created.description,
+            keyResultId: created.keyResultId,
+            objectiveId: created.objectiveId,
+            tenantId: created.tenantId,
+            cycleId: created.cycleId,
+            ownerId: created.ownerId,
+            teamId: created.teamId,
+            createdBy: created.createdBy,
+            status: created.status,
+            progress: created.progress,
+            goalType: created.goalType,
+            startDate: created.startDate,
+            endDate: created.endDate,
+            dueDate: created.dueDate,
+            positionX: created.positionX,
+            positionY: created.positionY,
+            createdAt: created.createdAt,
+            updatedAt: created.updatedAt,
+          },
         },
-      },
-    }).catch(err => {
-      // Log error but don't fail the request
-      this.logger.error('Failed to log activity for initiative creation', { error: err });
-    });
+      }).catch(err => {
+        // Log error but don't fail the request
+        this.logger.error('Failed to log activity for initiative creation', { error: err });
+      });
+    } else {
+      // ActivityService not available (e.g., during import) - skip activity logging
+      this.logger.debug('Skipping activity logging for initiative creation (activityService not available)');
+    }
 
-    await this.auditLogService.record({
-      action: 'CREATE_INITIATIVE',
-      actorUserId: userId,
-      targetId: created.id,
-      targetType: AuditTargetType.OKR,
-      tenantId: objective?.tenantId || undefined,
-    });
+    // Check if auditLogService has record method (may be missing in import scripts)
+    if (this.auditLogService && typeof this.auditLogService.record === 'function') {
+      await this.auditLogService.record({
+        action: 'CREATE_INITIATIVE',
+        actorUserId: userId,
+        targetId: created.id,
+        targetType: AuditTargetType.OKR,
+        tenantId: objective?.tenantId || undefined,
+      }).catch(err => {
+        // Log error but don't fail the request
+        this.logger.error('Failed to log audit entry for initiative creation', { error: err });
+      });
+    } else {
+      // AuditLogService not available (e.g., during import) - skip audit logging
+      this.logger.debug('Skipping audit logging for initiative creation (auditLogService not available)');
+    }
 
     return created;
   }
@@ -640,13 +655,22 @@ export class InitiativeService {
       this.logger.error('Failed to log activity for initiative update', { error: err });
     });
 
-    await this.auditLogService.record({
-      action: 'UPDATE_INITIATIVE',
-      actorUserId: userId,
-      targetId: id,
-      targetType: AuditTargetType.OKR,
-      tenantId: existing.objective?.tenantId || undefined,
-    });
+    // Check if auditLogService has record method (may be missing in import scripts)
+    if (this.auditLogService && typeof this.auditLogService.record === 'function') {
+      await this.auditLogService.record({
+        action: 'UPDATE_INITIATIVE',
+        actorUserId: userId,
+        targetId: id,
+        targetType: AuditTargetType.OKR,
+        tenantId: existing.objective?.tenantId || undefined,
+      }).catch(err => {
+        // Log error but don't fail the request
+        this.logger.error('Failed to log audit entry for initiative update', { error: err });
+      });
+    } else {
+      // AuditLogService not available (e.g., during import) - skip audit logging
+      this.logger.debug('Skipping audit logging for initiative update (auditLogService not available)');
+    }
 
     return updated;
   }
@@ -705,19 +729,28 @@ export class InitiativeService {
         this.logger.error('Failed to log activity for initiative deletion', { error: err });
       });
 
-      await this.auditLogService.record({
-        action: 'initiative_deleted',
-        actorUserId: userId,
-        targetId: id,
-        targetType: AuditTargetType.OKR,
-        tenantId: initiative.objective?.tenantId || undefined,
-        metadata: {
-          title: initiative.title,
-          ownerId: initiative.ownerId,
-          objectiveId: initiative.objectiveId,
-          keyResultId: initiative.keyResultId,
-        },
-      });
+      // Check if auditLogService has record method (may be missing in import scripts)
+      if (this.auditLogService && typeof this.auditLogService.record === 'function') {
+        await this.auditLogService.record({
+          action: 'initiative_deleted',
+          actorUserId: userId,
+          targetId: id,
+          targetType: AuditTargetType.OKR,
+          tenantId: initiative.objective?.tenantId || undefined,
+          metadata: {
+            title: initiative.title,
+            ownerId: initiative.ownerId,
+            objectiveId: initiative.objectiveId,
+            keyResultId: initiative.keyResultId,
+          },
+        }).catch(err => {
+          // Log error but don't fail the request
+          this.logger.error('Failed to log audit entry for initiative deletion', { error: err });
+        });
+      } else {
+        // AuditLogService not available (e.g., during import) - skip audit logging
+        this.logger.debug('Skipping audit logging for initiative deletion (auditLogService not available)');
+      }
 
       // Delete initiative
       return await this.prisma.initiative.delete({

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -141,17 +141,26 @@ export function SidePanelEditObjective({
   // Load objective data when node changes
   useEffect(() => {
     if (selectedNode && selectedNode.type === 'objective') {
+      console.log('[SidePanelEditObjective] Loading node data:', {
+        id: selectedNode.id,
+        teamId: selectedNode.teamId,
+        workspaceId: selectedNode.workspaceId,
+        level: selectedNode.teamId ? 'team' : selectedNode.workspaceId ? 'workspace' : 'company'
+      })
       setTitle(selectedNode.title || "")
       setOwnerId(selectedNode.ownerId || "")
       setWorkspaceId(selectedNode.workspaceId || "")
-      setTeamId(selectedNode.teamId || "")
       // Set type based on workspaceId/teamId - default to current type
       if (selectedNode.teamId) {
         setLevel('team')
+        setTeamId(selectedNode.teamId) // Set teamId after setting level to 'team'
+        console.log('[SidePanelEditObjective] Set team level with teamId:', selectedNode.teamId)
       } else if (selectedNode.workspaceId) {
         setLevel('workspace')
+        setTeamId("") // Clear teamId for workspace level
       } else {
         setLevel('company')
+        setTeamId("") // Clear teamId for company level
       }
       // Use cycleId directly from selectedNode - ensure it's set correctly
       if (selectedNode.cycleId) {
@@ -194,16 +203,33 @@ export function SidePanelEditObjective({
     }
   }, [selectedNode?.id])
 
-  // Reset workspace/team when level/type changes
+  // Reset workspace/team when level/type changes (but only if level actually changed, not on initial load)
+  // Use a ref to track if this is the initial load
+  const isInitialLoadRef = useRef(true)
   useEffect(() => {
-    const effectiveLevel = level || currentType
-    if (effectiveLevel === 'company') {
-      setWorkspaceId("")
-      setTeamId("")
-    } else if (effectiveLevel === 'workspace') {
-      setTeamId("")
+    if (isInitialLoadRef.current) {
+      // Skip reset on initial load
+      isInitialLoadRef.current = false
+      return
+    }
+    
+    // Only reset if level is explicitly set and different from current type
+    if (level && level !== currentType) {
+      console.log('[SidePanelEditObjective] Level changed, resetting workspace/team:', { level, currentType })
+      const effectiveLevel = level
+      if (effectiveLevel === 'company') {
+        setWorkspaceId("")
+        setTeamId("")
+      } else if (effectiveLevel === 'workspace') {
+        setTeamId("")
+      }
     }
   }, [level, currentType])
+  
+  // Reset initial load flag when selectedNode changes
+  useEffect(() => {
+    isInitialLoadRef.current = true
+  }, [selectedNode?.id])
 
   // Load owners
   useEffect(() => {
@@ -530,9 +556,17 @@ export function SidePanelEditObjective({
                         'truncate',
                         teamId ? 'text-white' : 'text-slate-400'
                       )}>
-                        {teamId
-                          ? availableTeams.find((t) => t.id === teamId)?.name || 'Select team'
-                          : 'Select team'}
+                        {(() => {
+                          if (!teamId) return 'Select team'
+                          const foundTeam = availableTeams.find((t) => t.id === teamId)
+                          if (foundTeam) return foundTeam.name
+                          console.warn('[SidePanelEditObjective] Team not found in availableTeams:', {
+                            teamId,
+                            availableTeamIds: availableTeams.map(t => t.id),
+                            selectedNodeTeamId: selectedNode?.teamId
+                          })
+                          return `Team ID: ${teamId} (not in list)`
+                        })()}
                       </span>
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-70" />
                     </Button>

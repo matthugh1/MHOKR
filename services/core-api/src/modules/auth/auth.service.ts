@@ -127,6 +127,11 @@ export class AuthService {
   }
 
   async login(email: string, password: string) {
+    // Validate inputs
+    if (!email || !password) {
+      throw new UnauthorizedException('Email and password are required');
+    }
+    
     // Normalize email to lowercase for case-insensitive login
     const normalizedEmail = email.toLowerCase().trim();
 

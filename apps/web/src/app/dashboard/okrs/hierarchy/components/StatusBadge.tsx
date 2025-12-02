@@ -3,15 +3,15 @@
  * Adapted from test page design with backend status mapping
  */
 
-import { OKRStatus } from './types'
+import { OKRStatus, InitiativeStatus } from './types'
 import { cn } from '@/lib/utils'
 
 interface StatusBadgeProps {
-  status: OKRStatus
+  status: OKRStatus | InitiativeStatus
   className?: string
 }
 
-const statusConfig = {
+const okrStatusConfig = {
   'ON_TRACK': {
     className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
     dotColor: 'bg-emerald-400',
@@ -39,8 +39,37 @@ const statusConfig = {
   },
 }
 
+const initiativeStatusConfig = {
+  'NOT_STARTED': {
+    className: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    dotColor: 'bg-amber-400',
+    label: 'Not Started',
+  },
+  'IN_PROGRESS': {
+    className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    dotColor: 'bg-emerald-400',
+    label: 'In Progress',
+  },
+  'COMPLETED': {
+    className: 'bg-emerald-600/10 text-emerald-400 border-emerald-600/20',
+    dotColor: 'bg-emerald-400',
+    label: 'Completed',
+  },
+  'BLOCKED': {
+    className: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+    dotColor: 'bg-rose-400',
+    label: 'Blocked',
+  },
+}
+
 export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const config = statusConfig[status] || statusConfig['ON_TRACK']
+  // Check if it's an initiative status
+  const isInitiativeStatus = ['NOT_STARTED', 'IN_PROGRESS', 'BLOCKED'].includes(status) && 
+    !['ON_TRACK', 'AT_RISK', 'OFF_TRACK', 'CANCELLED'].includes(status as string)
+  
+  const config = isInitiativeStatus 
+    ? (initiativeStatusConfig[status as InitiativeStatus] || initiativeStatusConfig['NOT_STARTED'])
+    : (okrStatusConfig[status as OKRStatus] || okrStatusConfig['ON_TRACK'])
 
   return (
     <span

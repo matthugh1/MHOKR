@@ -76,6 +76,7 @@ export class OkrOverviewController {
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
   @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Items per page (default: 20, max: 50)' })
   @ApiQuery({ name: 'hierarchyView', required: false, type: Boolean, description: 'If true, fetch complete hierarchy (all root objectives + descendants, ignores pagination)' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search query to filter objectives and key results by title' })
   @ApiResponse({
     status: 200,
     description: 'Paginated list of objectives with key results and initiatives',
@@ -103,9 +104,16 @@ export class OkrOverviewController {
     @Query('page') page: string | undefined,
     @Query('pageSize') pageSize: string | undefined,
     @Query('hierarchyView') hierarchyView: string | undefined,
+    @Query('search') search: string | undefined,
+    @Query('sortBy') sortBy: string | undefined,
     @Req() req: AuthenticatedRequest,
   ) {
     try {
+      // Log search parameter for debugging
+      if (search) {
+        this.logger.debug(`[OkrOverview] Search parameter received: "${search}"`);
+      }
+      
       // Require tenantId query parameter
       if (!tenantId) {
         throw new BadRequestException('tenantId is required');
@@ -144,7 +152,7 @@ export class OkrOverviewController {
       }
 
       // Build where clause for objectives (tenant isolation already enforced)
-      const where: any = { tenantId };
+      let where: any = { tenantId };
 
       // Apply parentId filter
       if (parentId !== undefined) {
@@ -152,6 +160,7 @@ export class OkrOverviewController {
           where.parentId = null;
         } else {
           where.parentId = parentId;
+          this.logger.debug(`[OkrOverview] Filtering by parentId: ${parentId}`);
         }
       }
 
@@ -268,6 +277,112 @@ export class OkrOverviewController {
         }
       }
 
+      // Apply search filter - search in objective title and description, and related key results
+      if (search && search.trim()) {
+        const searchTerm = search.trim();
+        this.logger.debug(`[OkrOverview] Applying search filter: "${searchTerm}"`);
+        
+        // Split search term into words for better matching
+        // Filter out very short words (1-2 chars) unless it's a single word search
+        const words = searchTerm.split(/\s+/).filter(w => w.length > 0);
+        const searchWords = words.length > 1 ? words.filter(w => w.length > 2) : words;
+        
+        // Build search conditions
+        // Strategy: Match if the objective contains ALL search words somewhere in title/description
+        // OR if any related key result contains ALL search words
+        const searchConditions: any[] = [];
+        
+        if (searchWords.length === 0) {
+          // Fallback to original phrase if no valid words
+          searchConditions.push(
+            { title: { contains: searchTerm, mode: 'insensitive' } },
+            { description: { contains: searchTerm, mode: 'insensitive' } }
+          );
+        } else if (searchWords.length === 1) {
+          // Single word - simple OR match
+          const word = searchWords[0];
+          searchConditions.push(
+            { title: { contains: word, mode: 'insensitive' } },
+            { description: { contains: word, mode: 'insensitive' } },
+            {
+              keyResults: {
+                some: {
+                  keyResult: {
+                    OR: [
+                      { title: { contains: word, mode: 'insensitive' } },
+                      { description: { contains: word, mode: 'insensitive' } },
+                    ],
+                  },
+                },
+              },
+            }
+          );
+        } else {
+          // Multiple words - use AND logic: objective must contain ALL words
+          // Each word can be in title OR description, but all words must be present
+          const wordConditions = searchWords.map(word => ({
+            OR: [
+              { title: { contains: word, mode: 'insensitive' } },
+              { description: { contains: word, mode: 'insensitive' } },
+            ],
+          }));
+          
+          // Objective matches if it contains all words
+          searchConditions.push({ AND: wordConditions });
+          
+          // Also match if any key result contains all words
+          searchConditions.push({
+            keyResults: {
+              some: {
+                keyResult: {
+                  AND: searchWords.map(word => ({
+                    OR: [
+                      { title: { contains: word, mode: 'insensitive' } },
+                      { description: { contains: word, mode: 'insensitive' } },
+                    ],
+                  })),
+                },
+              },
+            },
+          });
+        }
+
+        // Restructure where clause to ensure search is properly combined with other filters
+        // Extract base filters (tenantId, cycleId, etc.) and combine with search using AND
+        const baseFilters: any = {};
+        const scopeOR = where.OR;
+        
+        // Copy all non-OR, non-AND fields to baseFilters
+        Object.keys(where).forEach(key => {
+          if (key !== 'OR' && key !== 'AND') {
+            baseFilters[key] = where[key];
+          }
+        });
+        
+        // Build the final where clause structure
+        if (scopeOR) {
+          // We have scope OR conditions - combine with search using AND
+          where = {
+            ...baseFilters,
+            AND: [
+              { OR: scopeOR },
+              { OR: searchConditions },
+            ],
+          };
+        } else {
+          // No scope OR - combine base filters with search OR
+          // Prisma will AND all top-level fields, so this works correctly
+          where = {
+            ...baseFilters,
+            OR: searchConditions,
+          };
+        }
+        
+        this.logger.debug(`[OkrOverview] Search words: ${JSON.stringify(searchWords)}`);
+        this.logger.debug(`[OkrOverview] Base filters:`, JSON.stringify(baseFilters, null, 2));
+        this.logger.debug(`[OkrOverview] Final where clause:`, JSON.stringify(where, null, 2));
+      }
+
       // CRITICAL: Set AsyncLocalStorage context to the query param tenantId
       // This ensures RLS filters by the requested organization, not just the JWT tenantId
       // The user's access to this tenantId has already been validated by RBACGuard
@@ -282,11 +397,13 @@ export class OkrOverviewController {
           if (isHierarchyView) {
             // Hierarchy view: Fetch all root objectives + all their descendants
             // Step 1: Fetch all root objectives (parentId is null)
+            const rootWhere = {
+              ...where,
+              parentId: null,
+            };
+            this.logger.debug(`[OkrOverview] Root objectives query where clause:`, JSON.stringify(rootWhere, null, 2));
             const rootObjectives = await this.prisma.objective.findMany({
-              where: {
-                ...where,
-                parentId: null,
-              },
+              where: rootWhere,
               include: {
                 keyResults: {
                   select: {
@@ -584,7 +701,9 @@ export class OkrOverviewController {
               requesterOrgId: userOrganizationId,
             });
 
-            // Removed debug logging for visibility checks - use structured logging service in production
+            if (parentId && parentId !== 'null') {
+              this.logger.debug(`[OkrOverview] Visibility check for child objective ${objective.id} (${objective.title.substring(0, 40)}...): ${canSee ? 'VISIBLE' : 'HIDDEN'}`);
+            }
 
             if (canSee) {
               visibleObjectives.push(objective);
@@ -594,6 +713,10 @@ export class OkrOverviewController {
             // If visibility check fails, exclude the objective (fail closed for security)
             continue;
           }
+        }
+        
+        if (parentId && parentId !== 'null') {
+          this.logger.debug(`[OkrOverview] Parent ${parentId}: Found ${allObjectives.length} total objectives, ${visibleObjectives.length} visible after filtering`);
         }
 
         // Calculate total count AFTER visibility filtering
@@ -610,18 +733,33 @@ export class OkrOverviewController {
           });
         }
 
+        // Apply sorting to visible objectives (before pagination)
+        let sortedObjectives = visibleObjectives;
+        if (sortBy) {
+          if (sortBy === 'title-asc') {
+            sortedObjectives = [...visibleObjectives].sort((a, b) => 
+              a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+            );
+          } else if (sortBy === 'title-desc') {
+            sortedObjectives = [...visibleObjectives].sort((a, b) => 
+              b.title.localeCompare(a.title, undefined, { sensitivity: 'base' })
+            );
+          }
+          // Add more sort options here if needed
+        }
+
         // Removed debug logging - use structured logging service in production
 
-        // Apply pagination to filtered results (skip if hierarchy view)
+        // Apply pagination to sorted results (skip if hierarchy view)
         let paginatedObjectives;
         if (isHierarchyView) {
           // Hierarchy view: Return all visible objectives (complete hierarchy)
-          paginatedObjectives = visibleObjectives;
+          paginatedObjectives = sortedObjectives;
         } else {
           // Regular view: Apply pagination
           const skip = (pageNum - 1) * pageSizeNum;
           const take = pageSizeNum;
-          paginatedObjectives = visibleObjectives.slice(skip, skip + take);
+          paginatedObjectives = sortedObjectives.slice(skip, skip + take);
         }
 
         // Fetch all initiatives for these objectives' Key Results
@@ -697,8 +835,13 @@ export class OkrOverviewController {
 
             // Filter key results by visibility and add canCheckIn flag
             const visibleKeyResults = [];
+            this.logger.debug(`Processing ${o.keyResults.length} Key Results for objective ${o.id}`);
             for (const okr of o.keyResults) {
               const kr = okr.keyResult;
+              if (!kr) {
+                this.logger.warn(`Key Result junction entry ${okr.id} has no keyResult relation`);
+                continue;
+              }
 
               const canSeeKr = await this.visibilityService.canUserSeeKeyResult({
                 keyResult: {
@@ -716,6 +859,7 @@ export class OkrOverviewController {
               });
 
               if (!canSeeKr) {
+                this.logger.debug(`Key Result ${kr.id} (${kr.title}) filtered out by visibility check for user ${requesterUserId}`);
                 continue;
               }
 

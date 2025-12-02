@@ -1346,6 +1346,484 @@ export class OkrReportingService {
   }
 
   /**
+   * Get Initiatives owned by a specific user.
+   * 
+   * Tenant isolation:
+   * - If userOrganizationId === null (superuser): returns all Initiatives owned by userId across all orgs
+   * - Else if userOrganizationId is a non-empty string: return only Initiatives owned by userId in that org
+   * - Else (undefined/falsy): return []
+   * 
+   * @param userId - The user ID to filter by (ownerId)
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @returns Array of Initiatives with id, title, status, dueDate, objectiveId, keyResultId
+   */
+  async getUserOwnedInitiatives(userId: string, userOrganizationId: string | null | undefined): Promise<Array<{
+    id: string;
+    title: string;
+    status: string;
+    dueDate: Date | null;
+    objectiveId: string | null;
+    keyResultId: string | null;
+    updatedAt: Date;
+  }>> {
+    // Tenant isolation: if user has no org, return empty
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      return [];
+    }
+
+    const where: any = {
+      ownerId: userId,
+    };
+
+    // Tenant isolation: use OkrTenantGuard to build where clause
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (orgFilter) {
+      where.tenantId = orgFilter.tenantId;
+    }
+    // Superuser (null): no org filter, see all orgs
+
+    const initiatives = await this.prisma.initiative.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        dueDate: true,
+        objectiveId: true,
+        keyResultId: true,
+        updatedAt: true,
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+
+    return initiatives;
+  }
+
+  /**
+   * Get Tasks owned by a specific user.
+   * 
+   * Tenant isolation:
+   * - If userOrganizationId === null (superuser): returns all Tasks owned by userId across all orgs
+   * - Else if userOrganizationId is a non-empty string: return only Tasks owned by userId in that org
+   * - Else (undefined/falsy): return []
+   * 
+   * @param userId - The user ID to filter by (ownerId)
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @returns Array of Tasks with id, title, status, dueDate, keyResultId, initiativeId
+   */
+  async getUserOwnedTasks(userId: string, userOrganizationId: string | null | undefined): Promise<Array<{
+    id: string;
+    title: string;
+    status: string;
+    dueDate: Date | null;
+    keyResultId: string | null;
+    initiativeId: string | null;
+    updatedAt: Date;
+  }>> {
+    // Tenant isolation: if user has no org, return empty
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      return [];
+    }
+
+    const where: any = {
+      ownerId: userId,
+    };
+
+    // Tenant isolation: use OkrTenantGuard to build where clause
+    const orgFilter = OkrTenantGuard.buildTenantWhereClause(userOrganizationId);
+    if (orgFilter) {
+      where.tenantId = orgFilter.tenantId;
+    }
+    // Superuser (null): no org filter, see all orgs
+
+    const tasks = await this.prisma.task.findMany({
+      where,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        dueDate: true,
+        keyResultId: true,
+        initiativeId: true,
+        updatedAt: true,
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+
+    return tasks;
+  }
+
+  /**
+   * Get unified view of all outstanding work items (todos) for a user.
+   * 
+   * Aggregates overdue check-ins, tasks needing completion, at-risk items,
+   * stale items, and blocked initiatives into a single prioritized list.
+   * 
+   * Tenant isolation:
+   * - If userOrganizationId === null (superuser): returns todos across all orgs
+   * - Else if userOrganizationId is a non-empty string: return only todos in that org
+   * - Else (undefined/falsy): return []
+   * 
+   * @param userId - The user ID to filter by
+   * @param userOrganizationId - null for superuser (all orgs), string for specific org, undefined/falsy for no access
+   * @returns Array of todo items with type, id, title, reason, priority, and metadata
+   */
+  async getMyTodos(userId: string, userOrganizationId: string | null | undefined): Promise<Array<{
+    type: 'CHECK_IN' | 'TASK' | 'KEY_RESULT' | 'OBJECTIVE' | 'INITIATIVE';
+    id: string;
+    title: string;
+    reason: string; // Why it's a todo (e.g., "Overdue by 3 days", "Due tomorrow", "No update in 15 days")
+    priority: number; // Lower = higher priority
+    dueDate: Date | null;
+    status: string;
+    metadata: {
+      objectiveId?: string;
+      objectiveTitle?: string;
+      keyResultId?: string;
+      keyResultTitle?: string;
+      initiativeId?: string;
+      daysOverdue?: number;
+      daysSinceUpdate?: number;
+      [key: string]: any;
+    };
+  }>> {
+    // Tenant isolation: if user has no org, return empty
+    if (userOrganizationId === undefined || userOrganizationId === '') {
+      this.logger.warn(`[getMyTodos] No organization ID for user ${userId}`);
+      return [];
+    }
+
+    this.logger.debug(`[getMyTodos] Starting for user ${userId}, org ${userOrganizationId}`);
+
+    const now = new Date();
+    const todos: Array<{
+      type: 'CHECK_IN' | 'TASK' | 'KEY_RESULT' | 'OBJECTIVE' | 'INITIATIVE';
+      id: string;
+      title: string;
+      reason: string;
+      priority: number;
+      dueDate: Date | null;
+      status: string;
+      metadata: any;
+    }> = [];
+
+    // 1. Get overdue check-ins (highest priority)
+    const overdueCheckIns = await this.getOverdueCheckIns(userOrganizationId, userId, { ownerId: userId });
+    for (const checkIn of overdueCheckIns) {
+      todos.push({
+        type: 'CHECK_IN',
+        id: checkIn.krId,
+        title: checkIn.krTitle,
+        reason: checkIn.status === 'OVERDUE' 
+          ? `Overdue check-in by ${checkIn.daysOverdue} day${checkIn.daysOverdue !== 1 ? 's' : ''}`
+          : 'Check-in due',
+        priority: checkIn.status === 'OVERDUE' ? 1 : 2,
+        dueDate: checkIn.lastCheckInAt ? new Date(checkIn.lastCheckInAt.getTime() + (checkIn.daysOverdue * 24 * 60 * 60 * 1000)) : null,
+        status: checkIn.status,
+        metadata: {
+          keyResultId: checkIn.krId,
+          keyResultTitle: checkIn.krTitle,
+          objectiveId: checkIn.objectiveId,
+          objectiveTitle: checkIn.objectiveTitle,
+          daysOverdue: checkIn.daysOverdue,
+          cadence: checkIn.cadence,
+        },
+      });
+    }
+
+    // 2. Get tasks due today/tomorrow or incomplete
+    const tasks = await this.getUserOwnedTasks(userId, userOrganizationId);
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const nextWeek = new Date(today);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+
+    for (const task of tasks) {
+      // Skip completed tasks
+      if (task.status === 'COMPLETED') {
+        continue;
+      }
+
+      const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+      let reason = '';
+      let priority = 10;
+
+      if (dueDate) {
+        const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+        
+        if (daysUntilDue < 0) {
+          reason = `Overdue by ${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) !== 1 ? 's' : ''}`;
+          priority = 2; // High priority for overdue tasks
+        } else if (daysUntilDue === 0) {
+          reason = 'Due today';
+          priority = 3;
+        } else if (daysUntilDue === 1) {
+          reason = 'Due tomorrow';
+          priority = 4;
+        } else if (daysUntilDue <= 7) {
+          reason = `Due in ${daysUntilDue} days`;
+          priority = 6;
+        } else {
+          reason = `Due ${dueDate.toLocaleDateString()}`;
+          priority = 8;
+        }
+      } else if (task.status === 'BLOCKED') {
+        reason = 'Blocked';
+        priority = 5;
+      } else if (task.status === 'NOT_STARTED') {
+        reason = 'Not started';
+        priority = 9;
+      } else {
+        reason = 'In progress';
+        priority = 10;
+      }
+
+      todos.push({
+        type: 'TASK',
+        id: task.id,
+        title: task.title,
+        reason,
+        priority,
+        dueDate,
+        status: task.status,
+        metadata: {
+          keyResultId: task.keyResultId,
+          initiativeId: task.initiativeId,
+        },
+      });
+    }
+
+    // 3. Get at-risk KRs/Objectives
+    const objectives = await this.getUserOwnedObjectives(userId, userOrganizationId);
+    const keyResults = await this.getUserOwnedKeyResults(userId, userOrganizationId);
+
+    // Debug logging
+    this.logger.debug(`[getMyTodos] Found ${objectives.length} objectives, ${keyResults.length} key results`);
+
+    for (const obj of objectives) {
+      // Debug: log status values
+      if (obj.status === 'AT_RISK' || obj.status === 'OFF_TRACK') {
+        this.logger.debug(`[getMyTodos] Adding AT_RISK/OFF_TRACK objective: ${obj.title} (status: ${obj.status})`);
+        todos.push({
+          type: 'OBJECTIVE',
+          id: obj.id,
+          title: obj.title,
+          reason: `Status: ${obj.status === 'AT_RISK' ? 'At Risk' : 'Off Track'}`,
+          priority: 3,
+          dueDate: null,
+          status: obj.status,
+          metadata: {
+            objectiveId: obj.id,
+            progress: obj.progress,
+            cycleStatus: obj.cycleStatus,
+          },
+        });
+      }
+    }
+
+    for (const kr of keyResults) {
+      // Skip if already added as overdue check-in
+      const alreadyAdded = todos.some(t => t.type === 'CHECK_IN' && t.metadata.keyResultId === kr.id)
+      if (alreadyAdded) {
+        continue
+      }
+      
+      if (kr.status === 'AT_RISK' || kr.status === 'OFF_TRACK') {
+        todos.push({
+          type: 'KEY_RESULT',
+          id: kr.id,
+          title: kr.title,
+          reason: `Status: ${kr.status === 'AT_RISK' ? 'At Risk' : 'Off Track'}`,
+          priority: 3,
+          dueDate: null,
+          status: kr.status,
+          metadata: {
+            keyResultId: kr.id,
+            objectiveId: kr.objectiveId,
+            objectiveTitle: kr.objectiveTitle,
+            progress: kr.progress,
+          },
+        });
+      }
+    }
+
+    // 4. Get items with no updates in 14+ days
+    const fourteenDaysAgo = new Date(now.getTime() - (14 * 24 * 60 * 60 * 1000));
+    
+    for (const obj of objectives) {
+      // Skip if already added as at-risk
+      if (obj.status === 'AT_RISK' || obj.status === 'OFF_TRACK' || obj.status === 'COMPLETED' || obj.status === 'CANCELLED') {
+        continue;
+      }
+      
+      // We'd need updatedAt in the query - for now, skip this check
+      // TODO: Add updatedAt to getUserOwnedObjectives return type
+    }
+
+    for (const kr of keyResults) {
+      // Skip if already added as at-risk or overdue check-in
+      const alreadyAdded = todos.some(t => 
+        (t.type === 'CHECK_IN' && t.metadata.keyResultId === kr.id) ||
+        (t.type === 'KEY_RESULT' && t.id === kr.id)
+      )
+      if (alreadyAdded || kr.status === 'COMPLETED' || kr.status === 'CANCELLED') {
+        continue;
+      }
+      
+      if (kr.lastCheckInAt && kr.lastCheckInAt < fourteenDaysAgo) {
+        const daysSinceUpdate = Math.floor((now.getTime() - kr.lastCheckInAt.getTime()) / (24 * 60 * 60 * 1000));
+        todos.push({
+          type: 'KEY_RESULT',
+          id: kr.id,
+          title: kr.title,
+          reason: `No update in ${daysSinceUpdate} days`,
+          priority: 4,
+          dueDate: null,
+          status: kr.status,
+          metadata: {
+            keyResultId: kr.id,
+            objectiveId: kr.objectiveId,
+            objectiveTitle: kr.objectiveTitle,
+            daysSinceUpdate,
+            lastCheckInAt: kr.lastCheckInAt,
+          },
+        });
+      }
+    }
+
+    // 5. Get blocked initiatives
+    const initiatives = await this.getUserOwnedInitiatives(userId, userOrganizationId);
+    for (const initiative of initiatives) {
+      if (initiative.status === 'BLOCKED') {
+        todos.push({
+          type: 'INITIATIVE',
+          id: initiative.id,
+          title: initiative.title,
+          reason: 'Blocked',
+          priority: 5,
+          dueDate: initiative.dueDate,
+          status: initiative.status,
+          metadata: {
+            initiativeId: initiative.id,
+            objectiveId: initiative.objectiveId,
+            keyResultId: initiative.keyResultId,
+          },
+        });
+      }
+    }
+
+    // If no todos found, add all owned items as "All My Work" items (lower priority)
+    // This ensures users always see their work even if nothing needs immediate attention
+    if (todos.length === 0) {
+      // Add all objectives
+      for (const obj of objectives) {
+        if (obj.status !== 'COMPLETED' && obj.status !== 'CANCELLED') {
+          todos.push({
+            type: 'OBJECTIVE',
+            id: obj.id,
+            title: obj.title,
+            reason: `Status: ${obj.status}`,
+            priority: 10,
+            dueDate: null,
+            status: obj.status,
+            metadata: {
+              objectiveId: obj.id,
+              progress: obj.progress,
+              cycleStatus: obj.cycleStatus,
+            },
+          });
+        }
+      }
+      
+      // Add all key results
+      for (const kr of keyResults) {
+        if (kr.status !== 'COMPLETED' && kr.status !== 'CANCELLED') {
+          todos.push({
+            type: 'KEY_RESULT',
+            id: kr.id,
+            title: kr.title,
+            reason: `Status: ${kr.status}`,
+            priority: 10,
+            dueDate: null,
+            status: kr.status,
+            metadata: {
+              keyResultId: kr.id,
+              objectiveId: kr.objectiveId,
+              objectiveTitle: kr.objectiveTitle,
+              progress: kr.progress,
+            },
+          });
+        }
+      }
+      
+      // Add all initiatives
+      for (const initiative of initiatives) {
+        if (initiative.status !== 'COMPLETED') {
+          todos.push({
+            type: 'INITIATIVE',
+            id: initiative.id,
+            title: initiative.title,
+            reason: `Status: ${initiative.status}`,
+            priority: 10,
+            dueDate: initiative.dueDate,
+            status: initiative.status,
+            metadata: {
+              initiativeId: initiative.id,
+              objectiveId: initiative.objectiveId,
+              keyResultId: initiative.keyResultId,
+            },
+          });
+        }
+      }
+      
+      // Add all incomplete tasks
+      for (const task of tasks) {
+        if (task.status !== 'COMPLETED') {
+          todos.push({
+            type: 'TASK',
+            id: task.id,
+            title: task.title,
+            reason: `Status: ${task.status}`,
+            priority: 10,
+            dueDate: task.dueDate,
+            status: task.status,
+            metadata: {
+              keyResultId: task.keyResultId,
+              initiativeId: task.initiativeId,
+            },
+          });
+        }
+      }
+    }
+
+    // Sort by priority (lower = higher priority), then by due date
+    todos.sort((a, b) => {
+      if (a.priority !== b.priority) {
+        return a.priority - b.priority;
+      }
+      if (a.dueDate && b.dueDate) {
+        return a.dueDate.getTime() - b.dueDate.getTime();
+      }
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      return 0;
+    });
+
+    // Debug logging
+    this.logger.debug(`[getMyTodos] Returning ${todos.length} todos for user ${userId}`);
+    if (todos.length === 0) {
+      this.logger.warn(`[getMyTodos] No todos found despite ${objectives.length} objectives and ${keyResults.length} key results`);
+    }
+
+    return todos;
+  }
+
+  /**
    * Get time-series trend data for a Key Result.
    * 
    * Returns all check-ins for the KR ordered by timestamp (ASC) with value and confidence.

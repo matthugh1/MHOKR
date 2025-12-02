@@ -47,6 +47,9 @@ export function SearchableUserSelect({
 
   // Deduplicate users by ID to prevent duplicate key errors
   const uniqueUsers = React.useMemo(() => {
+    if (!availableUsers || !Array.isArray(availableUsers)) {
+      return []
+    }
     const seen = new Set<string>()
     return availableUsers.filter((user) => {
       if (seen.has(user.id)) {
@@ -64,7 +67,7 @@ export function SearchableUserSelect({
     if (open) {
 
     }
-  }, [open, disabled, uniqueUsers.length, availableUsers.length])
+  }, [open, disabled, uniqueUsers.length, availableUsers?.length || 0])
 
   return (
     <Popover open={open && !disabled} onOpenChange={(newOpen: boolean) => {

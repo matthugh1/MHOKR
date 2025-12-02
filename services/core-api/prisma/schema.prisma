@@ -27,6 +27,7 @@ model Organization {
   objectives                     Objective[] // Organization-level OKRs
   keyResults                     KeyResult[] // Key Results belonging to this organization
   initiatives                    Initiative[] // Initiatives belonging to this organization
+  tasks                          Task[] // Tasks belonging to this organization
   strategicPillars               StrategicPillar[] // Strategic pillars/themes for this organization
   cycles                         Cycle[] // OKR cycles/quarters for this organization
   tags                           Tag[] // Tags for this organization
@@ -109,6 +110,9 @@ model User {
   createdKeyResults          KeyResult[]             @relation("KeyResultCreator")
   importedKeyResults         KeyResult[]             @relation("KeyResultImporter")
   createdInitiatives         Initiative[]            @relation("InitiativeCreator")
+  importedInitiatives        Initiative[]            @relation("InitiativeImporter")
+  ownedTasks                 Task[]                  @relation("TaskOwner")
+  createdTasks               Task[]                  @relation("TaskCreator")
   objectiveContributions     ObjectiveContributor[]  @relation("ObjectiveContributor")
   keyResultContributions     KeyResultContributor[]  @relation("KeyResultContributor")
   initiativeContributions    InitiativeContributor[] @relation("InitiativeContributor")
@@ -355,6 +359,7 @@ model KeyResult {
   checkIns          CheckIn[]
   integrations      KRIntegration[]
   statusSnapshots   KeyResultStatusSnapshot[]
+  tasks             Task[]
   // Import tracking fields
   externalId        String? // External ID from import source (e.g., Viva Goals)
   source            String? // Import source identifier (e.g., "VIVA_GOALS")
@@ -637,6 +642,7 @@ model Initiative {
   contributors    InitiativeContributor[]
   status          InitiativeStatus
   statusSnapshots InitiativeStatusSnapshot[]
+  tasks           Task[]
   progress        Float? // Progress percentage (0-100, nullable for manual tracking)
   goalType        GoalType?                  @default(ASPIRATIONAL) // Aspirational vs Committed goal
   startDate       DateTime?
@@ -644,9 +650,15 @@ model Initiative {
   dueDate         DateTime?
   positionX       Float?
   positionY       Float?
+  externalId      String? // External ID from import source (e.g., Viva Goals)
+  source          String? // Import source identifier (e.g., "VIVA_GOALS")
+  importedAt      DateTime? // Timestamp when imported
+  importedBy      String? // User who performed the import
+  importer        User?                      @relation("InitiativeImporter", fields: [importedBy], references: [id], onDelete: SetNull)
   createdAt       DateTime                   @default(now())
   updatedAt       DateTime                   @updatedAt
 
+  @@unique([tenantId, source, externalId])
   @@index([keyResultId])
   @@index([objectiveId])
   @@index([ownerId])
@@ -656,7 +668,36 @@ model Initiative {
   @@index([cycleId])
   @@index([goalType])
   @@index([progress])
+  @@index([source, externalId])
   @@map("initiatives")
+}
+
+model Task {
+  id           String           @id @default(cuid())
+  title        String
+  description  String?          @db.Text
+  ownerId      String
+  owner        User             @relation("TaskOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  keyResultId  String?
+  keyResult    KeyResult?       @relation(fields: [keyResultId], references: [id], onDelete: SetNull)
+  initiativeId String?
+  initiative   Initiative?      @relation(fields: [initiativeId], references: [id], onDelete: SetNull)
+  tenantId     String // Tenant scoping: task belongs to one organization
+  tenant       Organization     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy    String? // User who created this task
+  creator      User?            @relation("TaskCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  status       InitiativeStatus @default(NOT_STARTED)
+  dueDate      DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([tenantId])
+  @@index([ownerId])
+  @@index([keyResultId])
+  @@index([initiativeId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("tasks")
 }
 
 enum OKRStatus {
@@ -1017,6 +1058,7 @@ enum EntityType {
   INITIATIVE
   CHECK_IN
   PILLAR
+  TASK
 }
 
 enum ActivityAction {

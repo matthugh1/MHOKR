@@ -84,7 +84,7 @@ export interface VivaGoalsCheckIn {
 export interface VivaGoalsObjective {
   ID: number;
   Title: string;
-  Type: 'Objective' | 'Key result';
+  Type: 'Objective' | 'Key result' | 'Deliverable';
   'Created By'?: {
     ID: number;
     Name: string;
@@ -159,7 +159,7 @@ export interface VivaGoalsObjective {
 export interface ParsedVivaGoalsJSONRow {
   externalId: string;
   title: string;
-  type: 'Objective' | 'Key result';
+  type: 'Objective' | 'Key result' | 'Deliverable';
   creator?: {
     id: number;
     name: string;
@@ -350,7 +350,7 @@ export class VivaGoalsJSONParserService {
     return {
       externalId: String(obj.ID),
       title: obj.Title,
-      type: obj.Type === 'Key result' ? 'Key result' : 'Objective',
+      type: obj.Type === 'Key result' ? 'Key result' : obj.Type === 'Deliverable' ? 'Deliverable' : 'Objective',
       creator: obj['Created By'] ? {
         id: obj['Created By'].ID,
         name: obj['Created By'].Name,

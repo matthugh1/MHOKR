@@ -4,11 +4,12 @@ import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { SidePanelCreateObjective } from './SidePanelCreateObjective'
 import { SidePanelCreateKeyResult } from './SidePanelCreateKeyResult'
-import { Target, TrendingUp } from 'lucide-react'
+import { SidePanelCreateInitiative } from './SidePanelCreateInitiative'
+import { Target, TrendingUp, Rocket } from 'lucide-react'
 
 interface SidePanelCreateFormProps {
-  mode: 'objective' | 'kr' | null
-  onModeChange: (mode: 'objective' | 'kr' | null) => void
+  mode: 'objective' | 'kr' | 'initiative' | null
+  onModeChange: (mode: 'objective' | 'kr' | 'initiative' | null) => void
   onSuccess: (data: any) => Promise<{ id: string }> | void | Promise<void>
   onCancel: () => void
   availableUsers?: Array<{ id: string; name: string; email?: string }>
@@ -17,6 +18,8 @@ interface SidePanelCreateFormProps {
   availableTeams?: Array<{ id: string; name: string; workspaceId?: string }>
   parentObjectiveId?: string
   parentObjectiveTitle?: string
+  parentKeyResultId?: string
+  parentKeyResultTitle?: string
   defaultCycleId?: string
   defaultWorkspaceId?: string
   defaultTeamId?: string
@@ -34,6 +37,8 @@ export function SidePanelCreateForm({
   availableTeams = [],
   parentObjectiveId,
   parentObjectiveTitle,
+  parentKeyResultId,
+  parentKeyResultTitle,
   defaultCycleId,
   defaultWorkspaceId,
   defaultTeamId,
@@ -72,6 +77,19 @@ export function SidePanelCreateForm({
             <div className="flex-1">
               <div className="text-sm font-semibold text-white mb-1">Create Key Result</div>
               <div className="text-xs text-slate-400">Create a new key result for an objective</div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => onModeChange('initiative')}
+            className="flex items-center gap-4 p-4 rounded-lg border border-slate-800 bg-slate-800/50 hover:bg-slate-800 hover:border-slate-700 transition-all text-left group"
+          >
+            <div className="p-3 rounded-lg bg-emerald-500/20 text-emerald-400 group-hover:bg-emerald-500/30 transition-colors">
+              <Rocket size={20} />
+            </div>
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-white mb-1">Create Initiative</div>
+              <div className="text-xs text-slate-400">Create a new initiative for an objective or key result</div>
             </div>
           </button>
         </div>
@@ -124,6 +142,25 @@ export function SidePanelCreateForm({
         availableCycles={availableCycles.map(c => ({ id: c.id, name: c.name, status: 'ACTIVE' }))}
         availableTeams={availableTeams}
         parentObjectiveId={parentObjectiveId}
+        parentObjectiveTitle={parentObjectiveTitle}
+        currentOrganization={currentOrganization}
+      />
+    )
+  }
+
+  if (mode === 'initiative') {
+    return (
+      <SidePanelCreateInitiative
+        onSave={async (data) => {
+          await onSuccess(data)
+        }}
+        onCancel={() => onModeChange(null)}
+        availableUsers={availableUsers}
+        availableTeams={availableTeams}
+        parentObjectiveId={parentObjectiveId}
+        parentObjectiveTitle={parentObjectiveTitle}
+        parentKeyResultId={parentKeyResultId}
+        parentKeyResultTitle={parentKeyResultTitle}
         currentOrganization={currentOrganization}
       />
     )

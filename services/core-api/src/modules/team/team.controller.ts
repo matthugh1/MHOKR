@@ -13,14 +13,14 @@ export class TeamController {
   constructor(private readonly teamService: TeamService) {}
 
   @Get()
-  @RequireAction('manage_teams')
+  @RequireAction('view_okr') // Allow view_okr for read access, manage_teams for write operations
   @ApiOperation({ summary: 'Get all teams, optionally filtered by workspace (tenant-isolated)' })
   async getAll(@Query('workspaceId') workspaceId: string | undefined, @Req() req: AuthenticatedRequest) {
     return this.teamService.findAll(req.user.tenantId, workspaceId);
   }
 
   @Get(':id')
-  @RequireAction('manage_teams')
+  @RequireAction('view_okr') // Allow view_okr for read access, manage_teams for write operations
   @ApiOperation({ summary: 'Get team by ID (tenant-isolated)' })
   async getById(@Param('id') id: string, @Req() req: any) {
     return this.teamService.findById(id, req.user.tenantId);

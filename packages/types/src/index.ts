@@ -137,6 +137,19 @@ export interface Initiative {
   updatedAt: Date;
 }
 
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  ownerId: string;
+  keyResultId?: string;
+  initiativeId?: string;
+  status: InitiativeStatus;
+  dueDate?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // ==========================================
 // Tracking & Activity Types
 // ==========================================
@@ -156,6 +169,7 @@ export enum EntityType {
   OBJECTIVE = 'OBJECTIVE',
   KEY_RESULT = 'KEY_RESULT',
   INITIATIVE = 'INITIATIVE',
+  TASK = 'TASK',
   CHECK_IN = 'CHECK_IN',
 }
 

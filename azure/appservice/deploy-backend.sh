@@ -83,6 +83,20 @@ deploy_service() {
             NODE_ENV="production" \
             SCM_DO_BUILD_DURING_DEPLOYMENT="false" \
         --output none
+
+    # Special configuration for core-api
+    if [ "$SERVICE_NAME" == "core-api" ]; then
+        # We need to get the hostname first if we don't know it yet, but usually it is <app-name>.azurewebsites.net
+        # However, custom domains might apply. For now, assume default.
+        # Actually, let's fetch it or construct it.
+        local APP_URL="${APP_NAME}.azurewebsites.net"
+        echo "  Setting AZURE_REDIRECT_URL for core-api..."
+        az webapp config appsettings set \
+            --name "$APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --settings AZURE_REDIRECT_URL="https://${APP_URL}/auth/azure/callback" \
+            --output none
+    fi
     
     # Set startup command
     echo "  Setting startup command..."

@@ -1,4 +1,4 @@
-import {
+  import {
   Injectable,
   BadRequestException,
   Logger,
@@ -12,7 +12,8 @@ import { OkrTenantGuard } from './tenant-guard';
 import { ObjectiveOwnerService } from './objective-owner.service';
 import { KeyResultOwnerService } from './key-result-owner.service';
 import { PhasedTargetService } from './phased-target.service';
-import { OKRStatus, MetricType, GoalType, PhasedTargetInterval } from '@prisma/client';
+import { InitiativeService } from './initiative.service';
+import { OKRStatus, MetricType, GoalType, PhasedTargetInterval, InitiativeStatus } from '@prisma/client';
 
 export interface ImportResult {
   success: boolean;
@@ -20,6 +21,8 @@ export interface ImportResult {
   objectivesUpdated: number;
   keyResultsCreated: number;
   keyResultsUpdated: number;
+  initiativesCreated: number;
+  initiativesUpdated: number;
   errors: ImportError[];
   warnings: string[];
 }
@@ -44,6 +47,7 @@ export class OkrImportService {
     private objectiveOwnerService: ObjectiveOwnerService,
     private keyResultOwnerService: KeyResultOwnerService,
     private phasedTargetService: PhasedTargetService,
+    private initiativeService: InitiativeService,
   ) { }
 
   /**
@@ -68,20 +72,16 @@ export class OkrImportService {
       objectivesUpdated: 0,
       keyResultsCreated: 0,
       keyResultsUpdated: 0,
+      initiativesCreated: 0,
+      initiativesUpdated: 0,
       errors: [],
       warnings: [],
     };
 
-    // Separate Objectives and Key Results
+    // Separate Objectives, Key Results, and Deliverables
     const objectives = parsedRows.filter(r => r.objectType === 'Objective');
     const keyResults = parsedRows.filter(r => r.objectType === 'Key result');
     const deliverables = parsedRows.filter(r => r.objectType === 'Deliverable');
-
-    if (deliverables.length > 0) {
-      result.warnings.push(
-        `Skipped ${deliverables.length} Deliverable(s) - Deliverables are not supported`,
-      );
-    }
 
     // Build external ID to internal ID mapping for parent lookups
     const externalIdToInternalId = new Map<string, string>();
@@ -98,12 +98,14 @@ export class OkrImportService {
       sortedObjectives.push(...objectives);
     }
 
-    // Process Objectives in topological order (parents before children)
-    for (let i = 0; i < sortedObjectives.length; i++) {
-      const row = sortedObjectives[i];
+    // Phase 1: Import all Objectives WITHOUT parent relationships
+    // This ensures all objectives exist before we try to link them
+    for (let i = 0; i < objectives.length; i++) {
+      const row = objectives[i];
       try {
         const wasUpdate = await this.isObjectiveExisting(row.externalId, tenantId);
-        const objective = await this.importObjective(row, tenantId, userId, externalIdToInternalId);
+        // Pass skipParentResolution=true to import without parent relationships
+        const objective = await this.importObjective(row, tenantId, userId, externalIdToInternalId, true);
         if (objective) {
           externalIdToInternalId.set(row.externalId, objective.id);
           if (wasUpdate) {
@@ -124,6 +126,53 @@ export class OkrImportService {
         this.logger.error(`Error importing objective ${row.externalId}: ${error}`);
       }
     }
+
+    // Phase 2: Update all Objectives to establish parent relationships
+    // Now that all objectives exist, we can safely link them
+    this.logger.log(`Establishing parent-child relationships for ${objectives.length} objectives...`);
+    let relationshipsEstablished = 0;
+    for (const row of objectives) {
+      if (row.parentExternalId) {
+        try {
+          const childObjectiveId = externalIdToInternalId.get(row.externalId);
+          const parentObjectiveId = externalIdToInternalId.get(row.parentExternalId);
+          
+          if (childObjectiveId && parentObjectiveId) {
+            // Both exist - establish relationship
+            await this.prisma.objective.update({
+              where: { id: childObjectiveId },
+              data: { parentId: parentObjectiveId },
+            });
+            relationshipsEstablished++;
+          } else if (childObjectiveId && !parentObjectiveId) {
+            // Parent might exist in database from previous import
+            const parent = await this.prisma.objective.findFirst({
+              where: {
+                tenantId,
+                source: this.SOURCE,
+                externalId: row.parentExternalId,
+              },
+            });
+            if (parent) {
+              await this.prisma.objective.update({
+                where: { id: childObjectiveId },
+                data: { parentId: parent.id },
+              });
+              relationshipsEstablished++;
+            } else {
+              this.logger.warn(
+                `Parent objective with externalId ${row.parentExternalId} not found for "${row.title}" - skipping parent relationship`,
+              );
+            }
+          }
+        } catch (error) {
+          this.logger.warn(
+            `Failed to establish parent relationship for objective "${row.title}": ${(error as Error).message}`,
+          );
+        }
+      }
+    }
+    this.logger.log(`Established ${relationshipsEstablished} parent-child relationships`);
 
     // Topologically sort Key Results to ensure parent KRs are imported before child KRs
     const sortedKeyResults = this.topologicalSortKeyResults(keyResults, objectives);
@@ -169,6 +218,40 @@ export class OkrImportService {
       }
     }
 
+    // Process Deliverables as Initiatives (after objectives and key results are imported)
+    if (deliverables.length > 0) {
+      for (let i = 0; i < deliverables.length; i++) {
+        try {
+          const row = deliverables[i];
+          const wasUpdate = await this.isInitiativeExisting(row.externalId, tenantId);
+          const initiative = await this.importInitiative(
+            row,
+            tenantId,
+            userId,
+            externalIdToInternalId,
+          );
+          if (initiative) {
+            externalIdToInternalId.set(row.externalId, initiative.id);
+            if (wasUpdate) {
+              result.initiativesUpdated++;
+            } else {
+              result.initiativesCreated++;
+            }
+          }
+        } catch (error) {
+          result.success = false;
+          const originalIndex = deliverables.findIndex(d => d.externalId === deliverables[i].externalId);
+          result.errors.push({
+            row: objectives.length + keyResults.length + (originalIndex >= 0 ? originalIndex : i) + 2,
+            externalId: deliverables[i].externalId,
+            title: deliverables[i].title,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          this.logger.error(`Error importing deliverable/initiative ${deliverables[i].externalId}: ${error}`);
+        }
+      }
+    }
+
     return result;
   }
 
@@ -199,34 +282,28 @@ export class OkrImportService {
       objectivesUpdated: 0,
       keyResultsCreated: 0,
       keyResultsUpdated: 0,
+      initiativesCreated: 0,
+      initiativesUpdated: 0,
       errors: [],
       warnings: [],
     };
 
-    // Separate Objectives and Key Results
+    // Separate Objectives, Key Results, and Deliverables
     const objectives = csvFormatRows.filter(r => r.objectType === 'Objective');
     const keyResults = csvFormatRows.filter(r => r.objectType === 'Key result');
+    const deliverables = csvFormatRows.filter(r => r.objectType === 'Deliverable');
 
-    // Build external ID to internal ID mapping for parent lookups
+    // Build external ID to internal ID mapping for parent lookups (used for deliverables too)
     const externalIdToInternalId = new Map<string, string>();
 
-    // Topologically sort Objectives to ensure parents are imported before children
-    const sortedObjectives = this.topologicalSortObjectives(objectives);
-
-    if (sortedObjectives.length !== objectives.length) {
-      result.warnings.push(
-        `Some objectives could not be sorted (circular dependencies or missing parents) - importing in original order`,
-      );
-      sortedObjectives.length = 0;
-      sortedObjectives.push(...objectives);
-    }
-
-    // Process Objectives in topological order
-    for (let i = 0; i < sortedObjectives.length; i++) {
-      const row = sortedObjectives[i];
+    // Phase 1: Import all Objectives WITHOUT parent relationships
+    // This ensures all objectives exist before we try to link them
+    for (let i = 0; i < objectives.length; i++) {
+      const row = objectives[i];
       try {
         const wasUpdate = await this.isObjectiveExisting(row.externalId, tenantId);
-        const objective = await this.importObjective(row, tenantId, userId, externalIdToInternalId);
+        // Pass skipParentResolution=true to import without parent relationships
+        const objective = await this.importObjective(row, tenantId, userId, externalIdToInternalId, true);
         if (objective) {
           externalIdToInternalId.set(row.externalId, objective.id);
           if (wasUpdate) {
@@ -247,6 +324,53 @@ export class OkrImportService {
         this.logger.error(`Error importing objective ${row.externalId}: ${error}`);
       }
     }
+
+    // Phase 2: Update all Objectives to establish parent relationships
+    // Now that all objectives exist, we can safely link them
+    this.logger.log(`Establishing parent-child relationships for ${objectives.length} objectives...`);
+    let relationshipsEstablished = 0;
+    for (const row of objectives) {
+      if (row.parentExternalId) {
+        try {
+          const childObjectiveId = externalIdToInternalId.get(row.externalId);
+          const parentObjectiveId = externalIdToInternalId.get(row.parentExternalId);
+          
+          if (childObjectiveId && parentObjectiveId) {
+            // Both exist - establish relationship
+            await this.prisma.objective.update({
+              where: { id: childObjectiveId },
+              data: { parentId: parentObjectiveId },
+            });
+            relationshipsEstablished++;
+          } else if (childObjectiveId && !parentObjectiveId) {
+            // Parent might exist in database from previous import
+            const parent = await this.prisma.objective.findFirst({
+              where: {
+                tenantId,
+                source: this.SOURCE,
+                externalId: row.parentExternalId,
+              },
+            });
+            if (parent) {
+              await this.prisma.objective.update({
+                where: { id: childObjectiveId },
+                data: { parentId: parent.id },
+              });
+              relationshipsEstablished++;
+            } else {
+              this.logger.warn(
+                `Parent objective with externalId ${row.parentExternalId} not found for "${row.title}" - skipping parent relationship`,
+              );
+            }
+          }
+        } catch (error) {
+          this.logger.warn(
+            `Failed to establish parent relationship for objective "${row.title}": ${(error as Error).message}`,
+          );
+        }
+      }
+    }
+    this.logger.log(`Established ${relationshipsEstablished} parent-child relationships`);
 
     // Topologically sort Key Results to ensure parent KRs are imported before child KRs
     const sortedKeyResults = this.topologicalSortKeyResults(keyResults, objectives);
@@ -289,6 +413,40 @@ export class OkrImportService {
           error: error instanceof Error ? error.message : String(error),
         });
         this.logger.error(`Error importing key result ${sortedKeyResults[i].externalId}: ${error}`);
+      }
+    }
+
+    // Process Deliverables as Initiatives (after objectives and key results are imported)
+    if (deliverables.length > 0) {
+      for (let i = 0; i < deliverables.length; i++) {
+        try {
+          const row = deliverables[i];
+          const wasUpdate = await this.isInitiativeExisting(row.externalId, tenantId);
+          const initiative = await this.importInitiative(
+            row,
+            tenantId,
+            userId,
+            externalIdToInternalId,
+          );
+          if (initiative) {
+            externalIdToInternalId.set(row.externalId, initiative.id);
+            if (wasUpdate) {
+              result.initiativesUpdated++;
+            } else {
+              result.initiativesCreated++;
+            }
+          }
+        } catch (error) {
+          result.success = false;
+          const originalIndex = deliverables.findIndex(d => d.externalId === deliverables[i].externalId);
+          result.errors.push({
+            row: objectives.length + keyResults.length + (originalIndex >= 0 ? originalIndex : i) + 1,
+            externalId: deliverables[i].externalId,
+            title: deliverables[i].title,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          this.logger.error(`Error importing deliverable/initiative ${deliverables[i].externalId}: ${error}`);
+        }
       }
     }
 
@@ -344,7 +502,7 @@ export class OkrImportService {
       metricName: jsonRow.metricName ?? null,
       unit: jsonRow.unit ?? null,
       target: jsonRow.target ?? null,
-      objectType: jsonRow.type === 'Key result' ? 'Key result' : 'Objective',
+      objectType: jsonRow.type === 'Key result' ? 'Key result' : jsonRow.type === 'Deliverable' ? 'Deliverable' : 'Objective',
       goalType: jsonRow.goalType || 'Aspirational',
       start: jsonRow.start ?? null,
       createdAt: jsonRow.createdAt ?? null,
@@ -542,12 +700,14 @@ export class OkrImportService {
 
   /**
    * Import a single Objective
+   * @param skipParentResolution - If true, skip parent resolution and set parentId to null
    */
   private async importObjective(
     row: ParsedVivaGoalsRow,
     tenantId: string,
     userId: string,
     externalIdToInternalId: Map<string, string>,
+    skipParentResolution: boolean = false,
   ): Promise<any> {
     // Check if already imported (deduplication)
     const existing = await this.prisma.objective.findUnique({
@@ -572,9 +732,9 @@ export class OkrImportService {
     }
 
     // Resolve parent Objective if Aligned To is set
-    // First check current batch, then database
+    // Skip parent resolution if skipParentResolution=true (for two-phase import)
     let parentId: string | null = null;
-    if (row.parentExternalId) {
+    if (!skipParentResolution && row.parentExternalId) {
       // Check if parent was imported in current batch
       if (externalIdToInternalId.has(row.parentExternalId)) {
         parentId = externalIdToInternalId.get(row.parentExternalId)!;
@@ -590,11 +750,10 @@ export class OkrImportService {
         if (parent) {
           parentId = parent.id;
         } else {
-          // Parent not found - this shouldn't happen if topological sort worked correctly
-          this.logger.warn(
-            `Parent objective with externalId ${row.parentExternalId} not found for "${row.title}" - may need to import parent first`,
+          // Parent not found - will be resolved in Phase 2
+          this.logger.debug(
+            `Parent objective with externalId ${row.parentExternalId} not found for "${row.title}" - will resolve in Phase 2`,
           );
-          // Don't throw error - allow import to continue without parent link
         }
       }
     }
@@ -1068,6 +1227,182 @@ export class OkrImportService {
     }
 
     return keyResult;
+  }
+
+  /**
+   * Check if initiative already exists
+   */
+  private async isInitiativeExisting(
+    externalId: string,
+    tenantId: string,
+  ): Promise<boolean> {
+    const existing = await this.prisma.initiative.findFirst({
+      where: {
+        tenantId,
+        source: this.SOURCE,
+        externalId,
+      },
+    });
+    return !!existing;
+  }
+
+  /**
+   * Import a single Deliverable as an Initiative
+   */
+  private async importInitiative(
+    row: ParsedVivaGoalsRow,
+    tenantId: string,
+    userId: string,
+    externalIdToInternalId: Map<string, string>,
+  ): Promise<any> {
+    // Check if already imported
+    const existing = await this.prisma.initiative.findFirst({
+      where: {
+        tenantId,
+        source: this.SOURCE,
+        externalId: row.externalId,
+      },
+    });
+
+    // Resolve owner
+    const ownerId = await this.resolveUserNameToUserId(
+      row.owners[0] || row.creator || null,
+      tenantId,
+    );
+    if (!ownerId) {
+      throw new BadRequestException(
+        `Could not resolve owner for initiative "${row.title}"`,
+      );
+    }
+
+    // Resolve parent - can be either an Objective or a Key Result
+    let objectiveId: string | null = null;
+    let keyResultId: string | null = null;
+
+    if (row.parentExternalId) {
+      // Check if parent is in the mapping (from current batch)
+      if (externalIdToInternalId.has(row.parentExternalId)) {
+        const parentInternalId = externalIdToInternalId.get(row.parentExternalId)!;
+
+        // Check if it's an Objective
+        const parentObjective = await this.prisma.objective.findUnique({
+          where: { id: parentInternalId },
+        });
+
+        if (parentObjective) {
+          objectiveId = parentInternalId;
+        } else {
+          // Must be a Key Result
+          const parentKeyResult = await this.prisma.keyResult.findUnique({
+            where: { id: parentInternalId },
+          });
+          if (parentKeyResult) {
+            keyResultId = parentInternalId;
+          }
+        }
+      } else {
+        // Try to find by externalId in existing data
+        const parentObjective = await this.prisma.objective.findFirst({
+          where: {
+            tenantId,
+            source: this.SOURCE,
+            externalId: row.parentExternalId,
+          },
+        });
+
+        if (parentObjective) {
+          objectiveId = parentObjective.id;
+        } else {
+          const parentKeyResult = await this.prisma.keyResult.findFirst({
+            where: {
+              tenantId,
+              source: this.SOURCE,
+              externalId: row.parentExternalId,
+            },
+          });
+          if (parentKeyResult) {
+            keyResultId = parentKeyResult.id;
+          }
+        }
+      }
+    }
+
+    // Map status from Viva Goals to InitiativeStatus
+    const statusMap: Record<string, InitiativeStatus> = {
+      'On Track': 'IN_PROGRESS',
+      'At Risk': 'IN_PROGRESS',
+      'Off Track': 'BLOCKED',
+      'Completed': 'COMPLETED',
+      'Not Started': 'NOT_STARTED',
+      'IN_PROGRESS': 'IN_PROGRESS',
+      'COMPLETED': 'COMPLETED',
+      'BLOCKED': 'BLOCKED',
+      'NOT_STARTED': 'NOT_STARTED',
+    };
+    const status = statusMap[row.status || 'Not Started'] || 'NOT_STARTED';
+
+    // Map goal type
+    const goalType = row.goalType === 'Committed Goal' ? GoalType.COMMITTED : GoalType.ASPIRATIONAL;
+
+    // Resolve cycle from parent if available
+    let cycleId: string | null = null;
+    if (objectiveId) {
+      const objective = await this.prisma.objective.findUnique({
+        where: { id: objectiveId },
+        select: { cycleId: true },
+      });
+      cycleId = objective?.cycleId || null;
+    } else if (keyResultId) {
+      // Get cycle from key result's objective
+      const keyResult = await this.prisma.keyResult.findUnique({
+        where: { id: keyResultId },
+        include: {
+          objectives: {
+            take: 1,
+            select: { objective: { select: { cycleId: true } } },
+          },
+        },
+      });
+      cycleId = keyResult?.objectives[0]?.objective?.cycleId || null;
+    }
+
+    // Resolve team
+    let teamId: string | null = null;
+    if (row.team) {
+      teamId = await this.resolveTeamNameToTeamId(row.team, tenantId);
+    }
+
+    const initiativeData: any = {
+      title: row.title,
+      description: row.description || null,
+      ownerId,
+      tenantId,
+      status,
+      goalType,
+      source: this.SOURCE,
+      externalId: row.externalId,
+      objectiveId: objectiveId || null,
+      keyResultId: keyResultId || null,
+      cycleId,
+      teamId,
+      progress: row.progressPercent !== null && row.progressPercent !== undefined ? row.progressPercent : null,
+      startDate: row.startDate ? new Date(row.startDate) : null,
+      endDate: row.endDate ? new Date(row.endDate) : null,
+      createdBy: userId,
+    };
+
+    if (existing) {
+      // Update existing initiative
+      const updated = await this.prisma.initiative.update({
+        where: { id: existing.id },
+        data: initiativeData,
+      });
+      return updated;
+    } else {
+      // Create new initiative
+      const created = await this.initiativeService.create(initiativeData, userId, tenantId);
+      return created;
+    }
   }
 
   /**

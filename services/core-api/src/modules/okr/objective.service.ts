@@ -1022,15 +1022,24 @@ export class ObjectiveService {
   }
 
   async update(id: string, data: any, userId: string, userTenantId: string | null) {
-    // Verify objective exists and user has permission (already checked in controller)
-    // Get full entity snapshot BEFORE update for audit logging
-    const objectiveBefore = await this.prisma.objective.findUnique({
-      where: { id },
-    });
+    try {
+      // Sanitize data: convert empty strings to null/undefined for enum fields
+      if (data.status === '' || data.status === null) {
+        delete data.status; // Don't update status if empty/null
+      }
+      if (data.state === '' || data.state === null) {
+        delete data.state; // Don't update state if empty/null
+      }
+      
+      // Verify objective exists and user has permission (already checked in controller)
+      // Get full entity snapshot BEFORE update for audit logging
+      const objectiveBefore = await this.prisma.objective.findUnique({
+        where: { id },
+      });
 
-    if (!objectiveBefore) {
-      throw new NotFoundException(`Objective with ID ${id} not found`);
-    }
+      if (!objectiveBefore) {
+        throw new NotFoundException(`Objective with ID ${id} not found`);
+      }
 
     // Extract key fields for governance checks
     const objective = {
@@ -1123,6 +1132,53 @@ export class ObjectiveService {
         // Also enforce tenant isolation using OkrTenantGuard
         if (pillar.tenantId && userTenantId !== null) {
           OkrTenantGuard.assertSameTenant(pillar.tenantId, userTenantId);
+        }
+      }
+    }
+
+    // Validate teamId if provided
+    if (data.teamId !== undefined) {
+      if (data.teamId === null || data.teamId === '') {
+        // Allow clearing teamId
+        data.teamId = null;
+      } else {
+        try {
+          // Query team - RLS will filter based on tenant context
+          const team = await this.prisma.team.findUnique({
+            where: { id: data.teamId },
+            select: { id: true, workspaceId: true },
+          });
+
+          if (!team) {
+            throw new NotFoundException(`Team with ID ${data.teamId} not found or does not belong to your organization`);
+          }
+
+          // Verify team belongs to same tenant (via workspace)
+          if (team.workspaceId) {
+            const workspace = await this.prisma.workspace.findUnique({
+              where: { id: team.workspaceId },
+              select: { tenantId: true },
+            });
+            if (!workspace) {
+              throw new BadRequestException(`Workspace ${team.workspaceId} not found`);
+            }
+            if (objectiveBefore.tenantId && workspace.tenantId !== objectiveBefore.tenantId) {
+              throw new BadRequestException('Team does not belong to the specified tenant');
+            }
+          }
+
+          // Verify team belongs to the workspace (if workspace is specified)
+          const workspaceIdToCheck = data.workspaceId !== undefined ? data.workspaceId : objectiveBefore.workspaceId;
+          if (workspaceIdToCheck && team.workspaceId !== workspaceIdToCheck) {
+            throw new BadRequestException('Team does not belong to the specified workspace');
+          }
+        } catch (error: any) {
+          // Re-throw known exceptions, log unexpected errors
+          if (error instanceof NotFoundException || error instanceof BadRequestException) {
+            throw error;
+          }
+          this.logger.error(`Error validating teamId ${data.teamId}:`, error);
+          throw new BadRequestException(`Failed to validate team: ${error.message || 'Unknown error'}`);
         }
       }
     }
@@ -1332,6 +1388,24 @@ export class ObjectiveService {
     }
 
     return updatedObjective;
+    } catch (error: any) {
+      // Log the error with context
+      this.logger.error(`Error updating objective ${id}:`, {
+        error: error.message,
+        stack: error.stack,
+        data: JSON.stringify(data),
+        userId,
+        userTenantId,
+      });
+      // Re-throw known exceptions
+      if (error instanceof NotFoundException || 
+          error instanceof BadRequestException || 
+          error instanceof ForbiddenException) {
+        throw error;
+      }
+      // Wrap unexpected errors
+      throw new BadRequestException(`Failed to update objective: ${error.message || 'Unknown error'}`);
+    }
   }
 
   async delete(id: string, userId: string, userTenantId: string | null) {

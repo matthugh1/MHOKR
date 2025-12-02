@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+// Use require() for PrismaClient - pnpm runtimes
+const { PrismaClient } = require('@prisma/client');
 import * as bcrypt from 'bcrypt';
 import * as readline from 'readline';
 

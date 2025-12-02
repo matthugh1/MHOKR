@@ -14,7 +14,9 @@
  *   ts-node scripts/truncate-and-reimport.ts --tenant=puzzel
  */
 
-import { PrismaClient } from '@prisma/client';
+// Use require() for PrismaClient - pnpm's module structure makes @prisma/client 
+// unresolvable via TypeScript import, but require() works at runtime
+const { PrismaClient } = require('@prisma/client');
 import * as readline from 'readline';
 import { execSync } from 'child_process';
 import * as path from 'path';
@@ -57,10 +59,10 @@ async function truncateAllTables() {
     }
 
     console.log(`📋 Found ${tables.length} tables to truncate:`);
-    tables.forEach((t) => console.log(`   - ${t.tablename}`));
+    tables.forEach((t: { tablename: string }) => console.log(`   - ${t.tablename}`));
 
     // Build TRUNCATE command with CASCADE to handle foreign keys
-    const tableNames = tables.map((t) => `"${t.tablename}"`).join(', ');
+    const tableNames = tables.map((t: { tablename: string }) => `"${t.tablename}"`).join(', ');
     
     console.log('\n🗑️  Truncating all tables...');
     await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${tableNames} RESTART IDENTITY CASCADE;`);

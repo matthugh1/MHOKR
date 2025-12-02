@@ -4,6 +4,7 @@ import React from 'react'
 import { HierarchyOKRNode } from './types'
 import { SidePanelEditObjective } from './SidePanelEditObjective'
 import { SidePanelEditKeyResult } from './SidePanelEditKeyResult'
+import { SidePanelEditInitiative } from './SidePanelEditInitiative'
 
 interface SidePanelEditFormProps {
   selectedNode: HierarchyOKRNode | null
@@ -57,6 +58,20 @@ export function SidePanelEditForm({
         availableUsers={availableUsers}
         availableTeams={availableTeams}
         activeCycles={availableCycles.map(c => ({ id: c.id, name: c.name, status: 'ACTIVE' }))}
+        currentOrganization={currentOrganization}
+      />
+    )
+  }
+
+  if (selectedNode.type === 'initiative') {
+    return (
+      <SidePanelEditInitiative
+        selectedNode={selectedNode}
+        onSave={onSave}
+        onCancel={onCancel}
+        availableUsers={availableUsers}
+        availableTeams={availableTeams}
+        availableCycles={availableCycles}
         currentOrganization={currentOrganization}
       />
     )

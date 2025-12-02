@@ -149,7 +149,18 @@ export class ObjectiveController {
     }
     
     // TODO [phase7-hardening]: Frontend - show warning modal when attempting to edit published OKR
-    return this.objectiveService.update(id, data, req.user.id, req.user.tenantId);
+    try {
+      return await this.objectiveService.update(id, data, req.user.id, req.user.tenantId);
+    } catch (error: any) {
+      // Log the error for debugging
+      console.error('Error updating objective:', error);
+      console.error('Objective ID:', id);
+      console.error('Update data:', JSON.stringify(data, null, 2));
+      console.error('User ID:', req.user.id);
+      console.error('User tenant ID:', req.user.tenantId);
+      // Re-throw the error so it's properly handled by NestJS exception filters
+      throw error;
+    }
   }
 
   @Delete(':id')

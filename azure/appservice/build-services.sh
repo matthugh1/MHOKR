@@ -68,8 +68,14 @@ build_nestjs_service() {
       fs.writeFileSync('./package.json', JSON.stringify(pkg, null, 2));
     "
     
-    # Install missing dependencies
-    npm install tslib@latest uid@latest iterare@latest lodash@latest fast-safe-stringify@latest path-to-regexp@latest class-transformer@latest class-validator@latest reflect-metadata@latest rxjs@latest --save-prod --no-package-lock
+    # Remove any lockfiles AND node_modules to force a clean flat install
+    rm -rf node_modules package-lock.json pnpm-lock.yaml yarn.lock
+
+    # Install ALL dependencies using npm to ensure a flat, standard structure
+    # We explicitly add js-yaml and others to ensure they are present
+    # Use --ignore-scripts to prevent postinstall failures (we run prisma generate manually)
+    npm install --production --no-package-lock --ignore-scripts
+    npm install js-yaml@latest tslib@latest uid@latest iterare@latest lodash@latest fast-safe-stringify@latest path-to-regexp@latest class-transformer@latest class-validator@latest reflect-metadata@latest rxjs@latest --save-prod --no-package-lock --ignore-scripts
     popd > /dev/null
     
     # Copy the built dist folder from the source to the deployment package
@@ -81,8 +87,25 @@ build_nestjs_service() {
         cp -r "services/$SERVICE_NAME/prisma" "$TEMP_DIR/"
         
         # Generate Prisma client in the package
-        # Run prisma from the core-api context (where it is installed) but targeting the temp dir schema
-        pnpm --filter "@okr-nexus/core-api" exec prisma generate --schema="$TEMP_DIR/prisma/schema.prisma"
+        # We must install prisma CLI locally to ensure it generates into the local node_modules
+        echo "  Generating Prisma Client..."
+        pushd "$TEMP_DIR" > /dev/null
+        
+        # Force output path in schema.prisma to ensure it goes to local node_modules
+        # We insert 'output' property into the generator block
+        sed -i '' 's/provider *= "prisma-client-js"/provider = "prisma-client-js"\n  output = "..\/node_modules\/.prisma\/client"/' prisma/schema.prisma || sed -i 's/provider *= "prisma-client-js"/provider = "prisma-client-js"\n  output = "..\/node_modules\/.prisma\/client"/' prisma/schema.prisma
+
+        npm install prisma --no-save
+        npx prisma generate
+        
+        # Debug: Check if .prisma exists
+        echo "  Checking generated client..."
+        ls -la node_modules/.prisma || echo "  .prisma not found!"
+        ls -la node_modules/@prisma/client || echo "  @prisma/client not found!"
+
+        # We keep prisma CLI to avoid any cleanup issues
+        # npm uninstall prisma
+        popd > /dev/null
     fi
     
     # Create ZIP

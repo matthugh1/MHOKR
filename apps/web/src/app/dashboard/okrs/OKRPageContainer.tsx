@@ -52,6 +52,10 @@ interface OKRPageContainerProps {
     onOpenContextualAddMenu?: (objectiveId: string) => void
     onContextualAddKeyResult?: (objectiveId: string, objectiveTitle: string) => void
     onContextualAddInitiative?: (objectiveId: string, objectiveTitle: string) => void
+    // Task handlers
+    onAddTask?: (keyResultId?: string, initiativeId?: string, parentName?: string) => void
+    onEditTask?: (task: any) => void
+    onDeleteTask?: (taskId: string) => void
   }
   expandedObjectiveId: string | null
   onToggleObjective: (id: string) => void
@@ -511,6 +515,17 @@ export function OKRPageContainer({
     })
   }, [paginatedFilteredOKRs, availableUsers, activeCycles, overdueCheckIns, tenantPermissions])
   
+  // Log to console to verify this component is rendering
+  // IMPORTANT: This hook must be called before any early returns to follow Rules of Hooks
+  useEffect(() => {
+    console.log('🔴 OKRPageContainer RENDERED - Changes should be visible!', {
+      totalPages,
+      effectiveTotalCount,
+      currentPage,
+      filteredOKRsLength: filteredOKRs.length,
+    })
+  }, [totalPages, effectiveTotalCount, currentPage, filteredOKRs.length])
+  
   if (loading) {
     return <div className="text-center py-12 text-slate-500">Loading OKRs...</div>
   }
@@ -588,14 +603,22 @@ export function OKRPageContainer({
         <div><strong>totalPages:</strong> {totalPages}</div>
         <div><strong>currentPage:</strong> {currentPage}</div>
         <div className="mt-2 p-2 bg-yellow-200 rounded font-bold text-yellow-900">
-          Should show pagination? {totalPages > 1 ? '✅ YES' : '❌ NO'}
+          Should show pagination? {totalPages > 1 ? '✅ YES' : '❌ NO (but showing anyway for debug)'}
+        </div>
+        <div className="mt-2 p-2 bg-red-200 rounded font-bold text-red-900">
+          Container height: calc(100vh - 400px)
         </div>
       </div>
     </div>
   )
 
   return (
-    <div aria-busy={loading}>
+    <div aria-busy={loading} className="flex flex-col h-full">
+      {/* VERY OBVIOUS TEST - RED BANNER */}
+      <div className="bg-red-500 text-white p-4 text-center font-bold text-xl border-4 border-yellow-400 z-50 relative">
+        🔴 PAGINATION TEST - IF YOU SEE THIS, CHANGES ARE WORKING 🔴
+        <div className="text-sm mt-2">Total Pages: {totalPages} | Current Page: {currentPage} | Total Objectives: {effectiveTotalCount}</div>
+      </div>
       {/* Always show debug panel at the top */}
       {debugPanel}
       
@@ -614,52 +637,52 @@ export function OKRPageContainer({
       )}
       
       {!loading && !permissionError && (
-        <>
+        <div className="flex flex-col flex-1 min-h-0 relative">
+          {/* Scrollable list area - takes available space */}
+          <div className="flex-1 min-h-0 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 500px)' }}>
+            <OKRListVirtualised
+              objectives={preparedObjectives}
+              expandedObjectiveId={expandedObjectiveId}
+              onToggleObjective={onToggleObjective}
+              onAction={onAction}
+              availableUsers={availableUsers}
+            />
+          </div>
           
-          <OKRListVirtualised
-            objectives={preparedObjectives}
-            expandedObjectiveId={expandedObjectiveId}
-            onToggleObjective={onToggleObjective}
-            onAction={onAction}
-            availableUsers={availableUsers}
-          />
-          
-          {/* Show pagination if there are multiple pages */}
-          {totalPages > 1 && (
-            <nav className="mt-6 flex items-center justify-between gap-4 border-t border-neutral-200 pt-4 text-sm text-neutral-700" aria-label="Pagination">
-              <div className="text-neutral-600" role="status">
-                Showing {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, effectiveTotalCount)} of {effectiveTotalCount} objectives
+          {/* Pagination - fixed at bottom, always visible for debugging */}
+          <nav className="sticky bottom-0 left-0 right-0 flex-shrink-0 border-t-2 border-blue-500 bg-blue-50 py-4 px-4 flex items-center justify-between gap-4 text-sm text-neutral-700 shadow-lg z-20" aria-label="Pagination">
+            <div className="text-neutral-600 font-semibold" role="status">
+              Showing {(currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, effectiveTotalCount)} of {effectiveTotalCount} objectives
+            </div>
+            <div className="flex items-center gap-4">
+              <button
+                className={cn(
+                  "rounded-md border-2 border-blue-400 bg-white px-4 py-2 text-sm font-semibold shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500",
+                  "focus:ring-offset-2"
+                )}
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                aria-label="Previous page"
+              >
+                ‹ Previous
+              </button>
+              <div className="tabular-nums text-neutral-700 font-bold text-base" aria-current="page">
+                Page {currentPage} of {totalPages}
               </div>
-              <div className="flex items-center gap-4">
-                <button
-                  className={cn(
-                    "rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-ring",
-                    "focus:ring-offset-2"
-                  )}
-                  disabled={currentPage <= 1}
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  aria-label="Previous page"
-                >
-                  ‹ Previous
-                </button>
-                <div className="tabular-nums text-neutral-600" aria-current="page">
-                  Page {currentPage} of {totalPages}
-                </div>
-                <button
-                  className={cn(
-                    "rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm shadow-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-ring",
-                    "focus:ring-offset-2"
-                  )}
-                  disabled={currentPage >= totalPages}
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  aria-label="Next page"
-                >
-                  Next ›
-                </button>
-              </div>
-            </nav>
-          )}
-        </>
+              <button
+                className={cn(
+                  "rounded-md border-2 border-blue-400 bg-white px-4 py-2 text-sm font-semibold shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500",
+                  "focus:ring-offset-2"
+                )}
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                aria-label="Next page"
+              >
+                Next ›
+              </button>
+            </div>
+          </nav>
+        </div>
       )}
     </div>
   )

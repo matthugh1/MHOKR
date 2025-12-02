@@ -16,7 +16,9 @@
  *   ts-node scripts/import-viva-goals-json.ts --tenant=<tenant-slug> --import-dir=./import
  */
 
-import { PrismaClient } from '@prisma/client';
+// Use require() for PrismaClient - pnpm's module structure makes @prisma/client 
+// unresolvable via TypeScript import, but require() works at runtime
+const { PrismaClient } = require('@prisma/client');
 import * as fs from 'fs';
 import * as path from 'path';
 import * as bcrypt from 'bcrypt';
@@ -28,6 +30,7 @@ import { CycleGeneratorService } from '../../services/core-api/src/modules/okr/c
 import { ObjectiveOwnerService } from '../../services/core-api/src/modules/okr/objective-owner.service';
 import { KeyResultOwnerService } from '../../services/core-api/src/modules/okr/key-result-owner.service';
 import { PhasedTargetService } from '../../services/core-api/src/modules/okr/phased-target.service';
+import { InitiativeService } from '../../services/core-api/src/modules/okr/initiative.service';
 
 // Create a simple PrismaService wrapper for use outside NestJS
 class SimplePrismaService extends PrismaClient {
@@ -173,6 +176,13 @@ async function main() {
     const objectiveOwnerService = new ObjectiveOwnerService(prismaService as any);
     const keyResultOwnerService = new KeyResultOwnerService(prismaService as any);
     const phasedTargetService = new PhasedTargetService(prismaService as any);
+    const initiativeService = new InitiativeService(
+      prismaService as any,
+      {} as any, // RBACService - not needed for import
+      {} as any, // AuditLogService - not needed for import
+      {} as any, // ActivityService - not needed for import
+      {} as any, // OkrStateTransitionService - not needed for import
+    );
     const importService = new OkrImportService(
       prismaService as any,
       csvParser,
@@ -181,6 +191,7 @@ async function main() {
       objectiveOwnerService,
       keyResultOwnerService,
       phasedTargetService,
+      initiativeService,
     );
 
     // Step 1: Import Users
@@ -383,7 +394,7 @@ async function importUsers(dir: string, tenantId: string, stats: ImportStats, dr
       } else {
         if (!dryRun) {
           // Create user and assign default TENANT_VIEWER role in a transaction
-          await prisma.$transaction(async (tx) => {
+          await prisma.$transaction(async (tx: any) => {
             const user = await tx.user.create({
               data: {
                 email: vgUser.Email,
@@ -700,10 +711,10 @@ async function truncateAllTables() {
     }
 
     console.log(`📋 Found ${tables.length} tables to truncate:`);
-    tables.forEach((t) => console.log(`   - ${t.tablename}`));
+    tables.forEach((t: any) => console.log(`   - ${t.tablename}`));
 
     // Build TRUNCATE command with CASCADE to handle foreign keys
-    const tableNames = tables.map((t) => `"${t.tablename}"`).join(', ');
+    const tableNames = tables.map((t: any) => `"${t.tablename}"`).join(', ');
     
     console.log('\n🗑️  Truncating all tables...');
     await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${tableNames} RESTART IDENTITY CASCADE;`);

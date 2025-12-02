@@ -5,8 +5,8 @@
 'use client'
 
 import React, { memo } from 'react'
-import { ChevronRight, ChevronDown, Target, TrendingUp } from 'lucide-react'
-import { HierarchyOKRNode, OKRType } from './types'
+import { ChevronRight, ChevronDown, Target, TrendingUp, Rocket } from 'lucide-react'
+import { HierarchyOKRNode, OKRType, InitiativeStatus } from './types'
 import { StatusBadge } from './StatusBadge'
 import { ProgressBar } from './ProgressBar'
 import { HierarchyConnector } from './HierarchyConnector'
@@ -108,10 +108,18 @@ export const CascadeTreeNode = memo(function CascadeTreeNode({
               'p-1.5 rounded-md flex-shrink-0',
               node.type === 'objective'
                 ? 'bg-indigo-500/20 text-indigo-400'
+                : node.type === 'initiative'
+                ? 'bg-emerald-500/20 text-emerald-400'
                 : 'bg-slate-700/50 text-slate-400'
             )}
           >
-            {node.type === 'objective' ? <Target size={16} /> : <TrendingUp size={16} />}
+            {node.type === 'objective' ? (
+              <Target size={16} />
+            ) : node.type === 'initiative' ? (
+              <Rocket size={16} />
+            ) : (
+              <TrendingUp size={16} />
+            )}
           </div>
 
           {/* Title & Owner */}
@@ -136,7 +144,11 @@ export const CascadeTreeNode = memo(function CascadeTreeNode({
 
           {/* Status & Progress */}
           <div className="w-48 flex flex-col gap-1 items-end flex-shrink-0">
-            <StatusBadge status={node.status} />
+            {node.type === 'initiative' ? (
+              <StatusBadge status={node.status as InitiativeStatus} />
+            ) : (
+              <StatusBadge status={node.status} />
+            )}
             <div className="w-24 flex items-center gap-2">
               <ProgressBar value={node.progress} status={node.status} />
               <span className="text-xs text-slate-400 w-6 text-right">{node.progress}%</span>
