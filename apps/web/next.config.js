@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: 'standalone', // Enable standalone output for Docker deployment
+  // Only use standalone output in production builds (for Docker)
+  // In development, this causes issues with static file serving
+  ...(process.env.NODE_ENV === 'production' && { output: 'standalone' }),
   transpilePackages: ['@okr-nexus/types', '@okr-nexus/utils'],
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,

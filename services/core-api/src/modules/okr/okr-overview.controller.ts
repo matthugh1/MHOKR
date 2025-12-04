@@ -77,6 +77,7 @@ export class OkrOverviewController {
   @ApiQuery({ name: 'pageSize', required: false, type: Number, description: 'Items per page (default: 20, max: 50)' })
   @ApiQuery({ name: 'hierarchyView', required: false, type: Boolean, description: 'If true, fetch complete hierarchy (all root objectives + descendants, ignores pagination)' })
   @ApiQuery({ name: 'search', required: false, type: String, description: 'Search query to filter objectives and key results by title' })
+  @ApiQuery({ name: 'includeKeyResults', required: false, type: Boolean, description: 'If false, exclude key results from response (for lazy loading). Default: true' })
   @ApiResponse({
     status: 200,
     description: 'Paginated list of objectives with key results and initiatives',
@@ -106,6 +107,7 @@ export class OkrOverviewController {
     @Query('hierarchyView') hierarchyView: string | undefined,
     @Query('search') search: string | undefined,
     @Query('sortBy') sortBy: string | undefined,
+    @Query('includeKeyResults') includeKeyResults: string | undefined,
     @Req() req: AuthenticatedRequest,
   ) {
     try {
@@ -764,7 +766,7 @@ export class OkrOverviewController {
 
         // Fetch all initiatives for these objectives' Key Results
         const keyResultIds = paginatedObjectives.flatMap(o =>
-          o.keyResults.map(okr => okr.keyResult.id)
+          (o.keyResults || []).map(okr => okr.keyResult.id)
         );
 
         // Fetch initiatives linked to Key Results
@@ -835,8 +837,10 @@ export class OkrOverviewController {
 
             // Filter key results by visibility and add canCheckIn flag
             const visibleKeyResults = [];
-            this.logger.debug(`Processing ${o.keyResults.length} Key Results for objective ${o.id}`);
-            for (const okr of o.keyResults) {
+            // Phase 3.4: Handle case where keyResults are not included (lazy loading)
+            const keyResultsToProcess = o.keyResults || [];
+            this.logger.debug(`Processing ${keyResultsToProcess.length} Key Results for objective ${o.id}`);
+            for (const okr of keyResultsToProcess) {
               const kr = okr.keyResult;
               if (!kr) {
                 this.logger.warn(`Key Result junction entry ${okr.id} has no keyResult relation`);
@@ -1361,5 +1365,196 @@ export class OkrOverviewController {
     );
 
     return result;
+  }
+
+  // Phase 3.4: Lazy Loading - Fetch key results for multiple objectives
+  @Get('key-results/by-objectives')
+  @RequireAction('view_okr')
+  @ApiOperation({ summary: 'Get key results for multiple objectives (lazy loading)', description: 'Fetches key results for specified objective IDs. Used for lazy loading when objectives are expanded.' })
+  @ApiQuery({ name: 'objectiveIds', required: true, type: String, description: 'Comma-separated list of objective IDs' })
+  @ApiQuery({ name: 'tenantId', required: true, description: 'Organization ID for tenant filtering' })
+  @ApiResponse({ status: 200, description: 'Key results grouped by objective ID' })
+  @ApiResponse({ status: 400, description: 'Bad request - invalid parameters' })
+  @ApiResponse({ status: 403, description: 'Forbidden - user lacks view_okr permission' })
+  async getKeyResultsByObjectives(
+    @Query('objectiveIds') objectiveIds: string | undefined,
+    @Query('tenantId') tenantId: string | undefined,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    try {
+      if (!objectiveIds || !tenantId) {
+        throw new BadRequestException('objectiveIds and tenantId are required');
+      }
+
+      const userOrganizationId = req.user.tenantId;
+      if (userOrganizationId === undefined) {
+        throw new BadRequestException('You do not have access to this organisation. No organization assigned.');
+      }
+
+      if (userOrganizationId !== null && userOrganizationId !== tenantId) {
+        throw new BadRequestException('You do not have access to this organisation');
+      }
+
+      const requesterUserId = req.user.id;
+      const objectiveIdArray = objectiveIds.split(',').filter(id => id.trim().length > 0);
+
+      if (objectiveIdArray.length === 0) {
+        return { keyResultsByObjective: {} };
+      }
+
+      // CRITICAL: Set AsyncLocalStorage context to the query param tenantId
+      // This ensures RLS filters by the requested organization, not just the JWT tenantId
+      // The user's access to this tenantId has already been validated above
+      return await withTenantContextAsync(tenantId, async () => {
+        // Fetch objectives with their key results
+        // NOTE: Tenant context is now set to the query param tenantId
+        // This ensures RLS session variables are set correctly before the query executes
+        const objectives = await this.prisma.objective.findMany({
+          where: {
+            id: { in: objectiveIdArray },
+            tenantId,
+          },
+          select: {
+            id: true,
+            tenantId: true,
+            ownerId: true,
+            visibilityLevel: true,
+            keyResults: {
+              select: {
+                id: true,
+                weight: true,
+                keyResult: {
+                  select: {
+                    id: true,
+                    title: true,
+                    status: true,
+                    progress: true,
+                    startValue: true,
+                    targetValue: true,
+                    currentValue: true,
+                    unit: true,
+                    ownerId: true,
+                    visibilityLevel: true,
+                    owner: {
+                      select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        // Pre-fetch organizations for visibility checks
+        const tenantIds = [...new Set(objectives.map(o => o.tenantId).filter(Boolean) as string[])];
+        const organizationsMap = await this.visibilityService.batchGetOrganizations(tenantIds);
+        const userContext = await this.rbacService.buildUserContext(requesterUserId);
+
+        // Group key results by objective ID and apply visibility filtering
+        const keyResultsByObjective: Record<string, any[]> = {};
+
+        for (const objective of objectives) {
+          const organization = organizationsMap?.get(objective.tenantId);
+          const visibleKeyResults = [];
+
+          for (const okr of objective.keyResults) {
+            const kr = okr.keyResult;
+            if (!kr) continue;
+
+            const canSeeKr = await this.visibilityService.canUserSeeKeyResult({
+              keyResult: {
+                id: kr.id,
+                ownerId: kr.ownerId,
+              },
+              parentObjective: {
+                id: objective.id,
+                ownerId: objective.ownerId || '',
+                tenantId: objective.tenantId || '',
+                visibilityLevel: objective.visibilityLevel,
+              },
+              requesterUserId,
+              requesterOrgId: userOrganizationId,
+              organization,
+              userContext,
+            });
+
+            if (canSeeKr) {
+              // Check canCheckIn permission
+              let canCheckIn = false;
+              try {
+                const krResourceContext = {
+                  tenantId: objective.tenantId,
+                  workspaceId: null,
+                  teamId: null,
+                };
+                canCheckIn = await this.rbacService.canPerformAction(
+                  requesterUserId,
+                  'edit_okr',
+                  krResourceContext,
+                );
+              } catch (error) {
+                // If RBAC check fails, canCheckIn remains false
+              }
+
+              // Fetch initiatives for this key result
+              // NOTE: This query also runs within tenant context, ensuring RLS is enforced
+              const krInitiatives = await this.prisma.initiative.findMany({
+                where: {
+                  keyResultId: kr.id,
+                },
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  dueDate: true,
+                  keyResultId: true,
+                },
+              });
+
+              visibleKeyResults.push({
+                id: kr.id,
+                title: kr.title,
+                status: kr.status,
+                progress: kr.progress,
+                canCheckIn,
+                startValue: kr.startValue,
+                targetValue: kr.targetValue,
+                currentValue: kr.currentValue,
+                unit: kr.unit,
+                ownerId: kr.ownerId,
+                owner: kr.owner
+                  ? {
+                      id: kr.owner.id,
+                      name: kr.owner.name,
+                      email: kr.owner.email,
+                    }
+                  : null,
+                initiatives: krInitiatives.map((i) => ({
+                  id: i.id,
+                  title: i.title,
+                  status: i.status,
+                  dueDate: i.dueDate,
+                  keyResultId: i.keyResultId,
+                })),
+              });
+            }
+          }
+
+          keyResultsByObjective[objective.id] = visibleKeyResults;
+        }
+
+        return { keyResultsByObjective };
+      });
+    } catch (error: any) {
+      this.logger.error('Error in getKeyResultsByObjectives', {
+        error: error.message,
+        stack: error.stack,
+      });
+      throw error;
+    }
   }
 }

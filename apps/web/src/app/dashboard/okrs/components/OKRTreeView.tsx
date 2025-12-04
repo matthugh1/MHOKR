@@ -23,6 +23,7 @@ interface OKRTreeViewProps {
   onAddSubObjective?: (parentId: string, parentTitle: string) => void
   onExpand?: (nodeId: string) => void
   onCollapse?: (nodeId: string) => void
+  loadingKeyResults?: Set<string> // Phase 3.4: Track which objectives are loading key results
 }
 
 type ExpandedState = Set<string>
@@ -38,6 +39,7 @@ export function OKRTreeView({
   onAddSubObjective,
   onExpand,
   onCollapse,
+  loadingKeyResults = new Set(),
 }: OKRTreeViewProps) {
   const { rootNodes, getNodePath } = useOKRTree(objectives)
   const [expanded, setExpanded] = useState<ExpandedState>(new Set())
@@ -50,9 +52,11 @@ export function OKRTreeView({
     const initialExpanded = new Set<string>()
     rootNodes.forEach(obj => {
       initialExpanded.add(obj.id)
+      // Phase 3.4: Trigger key result loading for initially expanded root objectives
+      onExpand?.(obj.id)
     })
     setExpanded(initialExpanded)
-  }, [rootNodes])
+  }, [rootNodes, onExpand])
 
   // Get breadcrumb path for selected node
   const breadcrumbPath = useMemo(() => {
@@ -63,7 +67,7 @@ export function OKRTreeView({
   // Track analytics events
   const trackExpand = (nodeId: string) => {
     // Telemetry: Use track() function from analytics.ts instead of console.log
-    onExpand?.(nodeId)
+    // Note: onExpand is called separately in handleToggle for lazy loading
   }
 
   const trackCollapse = (nodeId: string) => {
@@ -80,6 +84,8 @@ export function OKRTreeView({
       } else {
         next.add(nodeId)
         trackExpand(nodeId)
+        // Phase 3.4: Trigger key result loading when objective is expanded
+        onExpand?.(nodeId)
       }
       return next
     })
@@ -193,9 +199,12 @@ export function OKRTreeView({
     level: number
   ): React.ReactNode => {
     const isExpanded = expanded.has(obj.id)
+    const isLoadingKRs = loadingKeyResults.has(obj.id)
+    // Phase 3.4: Check if key results exist (may be undefined initially due to lazy loading)
     const hasKRs = obj.keyResults && obj.keyResults.length > 0
     const hasInitiatives = obj.initiatives && obj.initiatives.length > 0
-    const hasChildren = hasKRs || hasInitiatives || (obj.children && obj.children.length > 0)
+    // Phase 3.4: Show expand indicator if we're loading key results or if there are children
+    const hasChildren = isLoadingKRs || hasKRs || hasInitiatives || (obj.children && obj.children.length > 0)
     const isSelected = selectedNodeId === obj.id && selectedNodeType === 'objective'
     const isFocused = focusedNodeId === obj.id
 
@@ -223,8 +232,14 @@ export function OKRTreeView({
         
         {isExpanded && (
           <div role="group">
+            {/* Phase 3.4: Show loading indicator while key results are being fetched */}
+            {isLoadingKRs && (
+              <div className="pl-8 py-2 text-sm text-neutral-500 italic">
+                Loading key results...
+              </div>
+            )}
             {/* Key Results */}
-            {obj.keyResults?.map(kr => {
+            {!isLoadingKRs && obj.keyResults && obj.keyResults.length > 0 && obj.keyResults.map(kr => {
               const krIsExpanded = expanded.has(kr.id)
               const krHasInitiatives = kr.initiatives && kr.initiatives.length > 0
               const krIsSelected = selectedNodeId === kr.id && selectedNodeType === 'keyResult'

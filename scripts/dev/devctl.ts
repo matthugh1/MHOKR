@@ -205,6 +205,89 @@ function getServiceConfigs(pm: 'pnpm' | 'npm'): ServiceConfig[] {
 }
 
 // ============================================================================
+// Port Management
+// ============================================================================
+
+async function killProcessOnPort(port: number): Promise<boolean> {
+  try {
+    // Use lsof/netstat to find processes using the port
+    const platform = process.platform;
+    
+    if (platform === 'win32') {
+      // Windows: use netstat to find PID, then taskkill
+      const netstatOutput = execSync(`netstat -ano | findstr :${port}`, {
+        encoding: 'utf-8',
+        stdio: 'pipe',
+      });
+      
+      const lines = netstatOutput.trim().split('\n');
+      const pids = new Set<string>();
+      
+      for (const line of lines) {
+        const match = line.match(/\s+(\d+)$/);
+        if (match) {
+          pids.add(match[1]);
+        }
+      }
+      
+      for (const pid of pids) {
+        try {
+          execSync(`taskkill /F /PID ${pid}`, { stdio: 'ignore' });
+        } catch {
+          // Process might already be dead
+        }
+      }
+      
+      return pids.size > 0;
+    } else {
+      // macOS/Linux: use lsof
+      try {
+        const output = execSync(`lsof -ti :${port}`, {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+        });
+        
+        const pids = output.trim().split('\n').filter(Boolean);
+        
+        for (const pid of pids) {
+          try {
+            execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
+          } catch {
+            // Process might already be dead
+          }
+        }
+        
+        return pids.length > 0;
+      } catch {
+        // No process found on port (lsof exits with non-zero)
+        return false;
+      }
+    }
+  } catch (error: any) {
+    // If lsof/netstat isn't available or fails, return false
+    return false;
+  }
+}
+
+async function ensurePortsAvailable(configs: ServiceConfig[]): Promise<void> {
+  const portsToCheck = configs.map((c) => c.port);
+  const killedProcesses: number[] = [];
+  
+  for (const port of portsToCheck) {
+    const killed = await killProcessOnPort(port);
+    if (killed) {
+      killedProcesses.push(port);
+    }
+  }
+  
+  if (killedProcesses.length > 0) {
+    console.log(colorize.warn(`\n⚠️  Killed processes on ports: ${killedProcesses.join(', ')}\n`));
+    // Give ports a moment to be released
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+}
+
+// ============================================================================
 // Docker Management
 // ============================================================================
 
@@ -418,10 +501,13 @@ class DevOrchestrator {
     // Set up SIGINT handler immediately so Ctrl+C works from the start
     this.setupSigintHandler();
 
+    // Kill any processes using the ports we need
+    const targets = serviceId ? [serviceId] : (['api', 'web'] as ServiceId[]);
+    const configsToCheck = this.configs.filter((c) => targets.includes(c.id));
+    await ensurePortsAvailable(configsToCheck);
+
     // Ensure Docker services are running before starting app services
     await ensureDockerServices();
-
-    const targets = serviceId ? [serviceId] : (['api', 'web'] as ServiceId[]);
 
     console.log(colorize.dim(`\n📦 Package manager: ${this.pm}`));
     console.log(colorize.dim(`🚀 Starting services...\n`));
@@ -522,6 +608,10 @@ class DevOrchestrator {
         }
       }
     }
+
+    // Also kill any processes on the ports (in case process references were lost)
+    const configsToCheck = this.configs.filter((c) => targets.includes(c.id));
+    await ensurePortsAvailable(configsToCheck);
 
     if (this.healthInterval) {
       clearInterval(this.healthInterval);
