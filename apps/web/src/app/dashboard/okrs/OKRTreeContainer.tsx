@@ -5,7 +5,7 @@
 
 'use client'
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useWorkspace } from '@/contexts/workspace.context'
 import { useAuth } from '@/contexts/auth.context'
@@ -99,8 +99,20 @@ export function OKRTreeContainer({
   const [loadedKeyResults, setLoadedKeyResults] = useState<Set<string>>(new Set())
   const [loadingKeyResults, setLoadingKeyResults] = useState<Set<string>>(new Set())
   
+  // Bug 1 Fix: AbortController to cancel in-flight key result requests when filters change
+  const keyResultsAbortControllerRef = useRef<AbortController | null>(null)
+  
   const loadOKRs = useCallback(async () => {
     if (!currentOrganization?.id || !user?.id) return
+    
+    // Bug 1 Fix: Abort any in-flight key result requests from previous filter state
+    // This prevents stale data from old filters from corrupting the tracking sets
+    if (keyResultsAbortControllerRef.current) {
+      keyResultsAbortControllerRef.current.abort()
+    }
+    // Create a new AbortController for the new filter state
+    keyResultsAbortControllerRef.current = new AbortController()
+    
     try {
       setLoading(true)
       setPermissionError(null)
@@ -137,6 +149,12 @@ export function OKRTreeContainer({
       ) : []
       
       setObjectivesPage(mapped)
+      
+      // Bug 1 Fix: Reset key result tracking when filters change
+      // When filter parameters change, we fetch a new set of objectives.
+      // We must reset the tracking sets to avoid stale data from previous filters.
+      setLoadedKeyResults(new Set())
+      setLoadingKeyResults(new Set())
     } catch (error: any) {
       console.error('[OKR TREE CONTAINER] Failed to load OKRs', error)
       if (error.response?.status === 403) {
@@ -147,6 +165,9 @@ export function OKRTreeContainer({
         setPermissionError('Failed to load OKRs. Please try again later.')
       }
       setObjectivesPage([])
+      // Bug 1 Fix: Also reset tracking when error occurs
+      setLoadedKeyResults(new Set())
+      setLoadingKeyResults(new Set())
     } finally {
       setLoading(false)
     }
@@ -155,6 +176,13 @@ export function OKRTreeContainer({
   // Phase 3.4: Lazy Loading - Fetch key results for expanded objectives
   const loadKeyResultsForObjectives = useCallback(async (objectiveIds: string[]) => {
     if (!currentOrganization?.id || objectiveIds.length === 0) return
+    
+    // Bug 1 Fix: Check if the current filter state has changed (request was aborted)
+    const abortSignal = keyResultsAbortControllerRef.current?.signal
+    if (abortSignal?.aborted) {
+      // Filters have changed, don't proceed with this request
+      return
+    }
     
     // Filter out objectives that are already loaded or currently loading
     const idsToLoad = objectiveIds.filter(id => 
@@ -177,14 +205,35 @@ export function OKRTreeContainer({
         objectiveIds: idsToLoad.join(','),
       })
       
-      const response = await api.get(`/okr/key-results/by-objectives?${params.toString()}`)
+      // Bug 1 Fix: Pass abort signal to cancel request if filters change
+      const response = await api.get(`/okr/key-results/by-objectives?${params.toString()}`, {
+        signal: abortSignal,
+      })
+      
+      // Bug 1 Fix: Check if request was aborted before processing results
+      if (abortSignal?.aborted) {
+        // Filters changed during request, ignore results
+        return
+      }
+      
       const { keyResultsByObjective } = response.data || {}
       
-      // Update objectives with loaded key results
+      // Track which objectives actually received data
+      const successfullyLoadedIds = new Set<string>()
+      
+      // Bug 2 Fix: Track which objectives were requested but didn't receive data
+      // These should be marked as "loaded" with empty key results to prevent infinite retry loops
+      const requestedButMissingIds = new Set<string>(idsToLoad)
+      
+      // Update objectives with loaded key results (recursively for nested children)
       // Phase 3.4: Transform lazy-loaded key results to match expected format
-      setObjectivesPage(prev => prev.map(obj => {
+      const updateObjectiveWithKeyResults = (obj: any): any => {
         const keyResults = keyResultsByObjective[obj.id]
         if (keyResults) {
+          // Mark this objective as successfully loaded
+          successfullyLoadedIds.add(obj.id)
+          requestedButMissingIds.delete(obj.id)
+          
           // Transform lazy-loaded key results to junction table format expected by mapping function
           // The mapping function expects: { keyResult: {...}, weight: number }
           const transformedKeyResults = keyResults.map((kr: any) => ({
@@ -211,20 +260,54 @@ export function OKRTreeContainer({
           const updatedObj = {
             ...obj,
             keyResults: transformedKeyResults,
+            // Recursively update children if they exist
+            children: obj.children ? obj.children.map((child: any) => updateObjectiveWithKeyResults(child)) : obj.children,
           }
           // Re-map using the same function used for initial load
           return mapObjectiveDataForTree(updatedObj, availableUsers, activeCycles, overdueCheckIns)
         }
+        // Even if this objective doesn't have key results, recursively update its children
+        if (obj.children && obj.children.length > 0) {
+          return {
+            ...obj,
+            children: obj.children.map((child: any) => updateObjectiveWithKeyResults(child)),
+          }
+        }
         return obj
-      }))
+      }
       
-      // Mark as loaded
+      setObjectivesPage(prev => prev.map(obj => updateObjectiveWithKeyResults(obj)))
+      
+      // Bug 1 Fix: Check again if request was aborted before updating tracking sets
+      if (abortSignal?.aborted) {
+        // Filters changed during state update, ignore results
+        return
+      }
+      
+      // Mark objectives as loaded: both those that received data and those that didn't
+      // Bug 2 Fix: Objectives that don't receive data are marked as "loaded" with empty key results
+      // This prevents infinite retry loops while still allowing them to be refreshed if needed
       setLoadedKeyResults(prev => {
         const next = new Set(prev)
-        idsToLoad.forEach(id => next.add(id))
+        // Add objectives that successfully received data
+        successfullyLoadedIds.forEach(id => next.add(id))
+        // Add objectives that were requested but didn't receive data (mark as loaded with empty results)
+        requestedButMissingIds.forEach(id => next.add(id))
         return next
       })
     } catch (error: any) {
+      // Bug 1 Fix: Don't handle errors if request was aborted (filters changed)
+      const isAborted = 
+        error?.name === 'CanceledError' ||
+        error?.name === 'AbortError' ||
+        error?.code === 'ERR_CANCELED' ||
+        abortSignal?.aborted
+      
+      if (isAborted) {
+        // Request was cancelled due to filter change, this is expected
+        return
+      }
+      
       console.error('[OKR TREE CONTAINER] Failed to load key results', error)
       toast({
         title: 'Failed to load key results',
@@ -232,12 +315,14 @@ export function OKRTreeContainer({
         variant: 'destructive',
       })
     } finally {
-      // Remove from loading set
-      setLoadingKeyResults(prev => {
-        const next = new Set(prev)
-        idsToLoad.forEach(id => next.delete(id))
-        return next
-      })
+      // Bug 1 Fix: Only remove from loading set if request wasn't aborted
+      if (!abortSignal?.aborted) {
+        setLoadingKeyResults(prev => {
+          const next = new Set(prev)
+          idsToLoad.forEach(id => next.delete(id))
+          return next
+        })
+      }
     }
   }, [currentOrganization?.id, loadedKeyResults, loadingKeyResults, toast, availableUsers, activeCycles, overdueCheckIns])
   
@@ -256,6 +341,13 @@ export function OKRTreeContainer({
     } else {
       // If we don't have org/user yet, stay in loading state
       setLoading(true)
+    }
+    
+    // Bug 1 Fix: Cleanup - abort any pending key result requests on unmount
+    return () => {
+      if (keyResultsAbortControllerRef.current) {
+        keyResultsAbortControllerRef.current.abort()
+      }
     }
   }, [currentOrganization?.id, user?.id, loadOKRs])
   
