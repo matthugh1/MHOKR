@@ -9,6 +9,7 @@ import { OkrTenantGuard } from './tenant-guard';
 import { OkrGovernanceService } from './okr-governance.service';
 import { AuditLogService } from '../audit/audit-log.service';
 import { OkrStateTransitionService } from './okr-state-transition.service';
+import { OkrCacheService } from './okr-cache.service';
 
 /**
  * Key Result Service
@@ -28,6 +29,7 @@ export class KeyResultService {
     private okrGovernanceService: OkrGovernanceService,
     private auditLogService: AuditLogService,
     private stateTransitionService: OkrStateTransitionService,
+    private cacheService: OkrCacheService,
   ) {}
 
   async findAll(
@@ -578,6 +580,14 @@ export class KeyResultService {
       await this.okrProgressService.refreshObjectiveProgressAndStatusCascade(objectiveId);
     }
 
+    // Phase 3 Optimization: Invalidate cache for this tenant after key result creation
+    if (createdKr.tenantId) {
+      this.cacheService.invalidateTenant(createdKr.tenantId)
+        .catch(error => {
+          this.logger.warn(`Failed to invalidate cache after key result creation: ${(error as Error).message}`);
+        });
+    }
+
     return createdKr;
   }
 
@@ -874,6 +884,14 @@ export class KeyResultService {
       await this.okrProgressService.refreshObjectiveStatusForKeyResult(id);
     }
 
+    // Phase 3 Optimization: Invalidate cache for this tenant after key result update
+    if (updatedKr.tenantId) {
+      this.cacheService.invalidateTenant(updatedKr.tenantId)
+        .catch(error => {
+          this.logger.warn(`Failed to invalidate cache after key result update: ${(error as Error).message}`);
+        });
+    }
+
     return updatedKr;
   }
 
@@ -1009,6 +1027,14 @@ export class KeyResultService {
       // Trigger progress and status roll-up for parent Objectives after deletion
       for (const objKr of parentObjectives) {
         await this.okrProgressService.refreshObjectiveProgressAndStatusCascade(objKr.objectiveId);
+      }
+
+      // Phase 3 Optimization: Invalidate cache for this tenant after key result deletion
+      if (keyResult.tenantId) {
+        this.cacheService.invalidateTenant(keyResult.tenantId)
+          .catch(error => {
+            this.logger.warn(`Failed to invalidate cache after key result deletion: ${(error as Error).message}`);
+          });
       }
 
       return { id };

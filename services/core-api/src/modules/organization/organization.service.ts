@@ -238,7 +238,7 @@ export class OrganizationService {
     return created;
   }
 
-  async update(id: string, data: { name?: string; slug?: string }, userOrganizationId: string | null | undefined, actorUserId: string) {
+  async update(id: string, data: { name?: string; slug?: string; execOnlyWhitelist?: any; metadata?: any }, userOrganizationId: string | null | undefined, actorUserId: string) {
     // Check if user is superuser from database (source of truth)
     const user = await this.prisma.user.findUnique({
       where: { id: actorUserId },
@@ -272,6 +272,20 @@ export class OrganizationService {
         workspaces: true,
       },
     });
+
+    // Invalidate organization cache if visibility-related fields were updated
+    // Use exported function to avoid circular dependency
+    if (data.execOnlyWhitelist !== undefined || data.metadata !== undefined) {
+      try {
+        // Import the cache invalidation function (not the service class) to avoid circular dependency
+        const { invalidateOrganizationCache } = await import('../okr/okr-visibility.service');
+        invalidateOrganizationCache(id);
+        this.logger.debug(`Invalidated organization cache for ${id} due to visibility-related field update`);
+      } catch (error) {
+        // Log but don't fail if cache invalidation fails
+        this.logger.warn(`Failed to invalidate organization cache for ${id}: ${(error as Error).message}`);
+      }
+    }
 
     await this.auditLogService.record({
       action: 'UPDATE_ORG',

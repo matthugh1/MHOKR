@@ -36,12 +36,14 @@ import { ObjectiveOwnerService } from './objective-owner.service';
 import { KeyResultOwnerService } from './key-result-owner.service';
 import { PhasedTargetService } from './phased-target.service';
 import { IntelligenceService } from './intelligence.service';
+import { OkrCacheService } from './okr-cache.service';
 import { RBACModule } from '../rbac/rbac.module';
 import { ActivityModule } from '../activity/activity.module';
 import { AuditModule } from '../audit/audit.module';
+import { RedisModule } from '../../common/redis/redis.module';
 
 @Module({
-  imports: [forwardRef(() => RBACModule), forwardRef(() => ActivityModule), AuditModule],
+  imports: [forwardRef(() => RBACModule), forwardRef(() => ActivityModule), AuditModule, RedisModule],
   controllers: [ObjectiveController, KeyResultController, InitiativeController, TaskController, PillarController, MeController, OkrReportingController, OkrOverviewController, CheckInRequestController, OkrInsightsController, OkrCycleController, PhasedTargetController],
   providers: [
     ObjectiveService,
@@ -67,12 +69,13 @@ import { AuditModule } from '../audit/audit.module';
     ObjectiveOwnerService,
     KeyResultOwnerService,
     PhasedTargetService,
+    OkrCacheService,
     {
       provide: NOTIFICATION_PORT_TOKEN,
       useClass: LoggingNotificationAdapter, // Default: logging adapter; replace with EmailNotificationAdapter in production
     },
   ],
-  exports: [ObjectiveService, KeyResultService, InitiativeService, TaskService, OkrProgressService, OkrGovernanceService, OkrReportingService, OkrVisibilityService, OkrInsightsService, CheckInRequestService, OkrCycleService, CycleGeneratorService, OkrStateTransitionService, CheckInReminderService, ObjectiveOwnerService, KeyResultOwnerService, PhasedTargetService],
+  exports: [ObjectiveService, KeyResultService, InitiativeService, TaskService, OkrProgressService, OkrGovernanceService, OkrReportingService, OkrVisibilityService, OkrInsightsService, CheckInRequestService, OkrCycleService, CycleGeneratorService, OkrStateTransitionService, CheckInReminderService, ObjectiveOwnerService, KeyResultOwnerService, PhasedTargetService, OkrCacheService],
 })
 export class OkrModule {}
 

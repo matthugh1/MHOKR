@@ -313,6 +313,8 @@ model Objective {
   @@index([tenantId, status])
   @@index([tenantId, cycleId, status])
   @@index([tenantId, ownerId])
+  @@index([tenantId, parentId]) // For hierarchy queries
+  @@index([tenantId, visibilityLevel]) // For visibility filtering
   @@map("objectives")
 }
 

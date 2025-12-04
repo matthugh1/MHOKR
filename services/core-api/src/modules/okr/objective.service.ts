@@ -9,6 +9,7 @@ import { OkrGovernanceService } from './okr-governance.service';
 import { AuditLogService } from '../audit/audit-log.service';
 import { OkrStateTransitionService } from './okr-state-transition.service';
 import { ObjectiveOwnerService } from './objective-owner.service';
+import { OkrCacheService } from './okr-cache.service';
 import { calculateProgress } from '@okr-nexus/utils';
 
 /**
@@ -30,6 +31,7 @@ export class ObjectiveService {
     private auditLogService: AuditLogService,
     private stateTransitionService: OkrStateTransitionService,
     private objectiveOwnerService: ObjectiveOwnerService,
+    private cacheService: OkrCacheService,
   ) {}
 
   async findAll(
@@ -662,6 +664,14 @@ export class ObjectiveService {
     // If Objective has a parent, trigger progress and status roll-up for parent
     if (data.parentId) {
       await this.okrProgressService.refreshObjectiveProgressAndStatusCascade(data.parentId);
+    }
+
+    // Phase 3 Optimization: Invalidate cache for this tenant after creation
+    if (createdObjective.tenantId) {
+      this.cacheService.invalidateTenant(createdObjective.tenantId)
+        .catch(error => {
+          this.logger.warn(`Failed to invalidate cache after objective creation: ${(error as Error).message}`);
+        });
     }
 
     return createdObjective;
@@ -1387,6 +1397,14 @@ export class ObjectiveService {
       await this.okrProgressService.recalculateObjectiveStatus(updatedObjective.parentId);
     }
 
+    // Phase 3 Optimization: Invalidate cache for this tenant after update
+    if (updatedObjective.tenantId) {
+      this.cacheService.invalidateTenant(updatedObjective.tenantId)
+        .catch(error => {
+          this.logger.warn(`Failed to invalidate cache after objective update: ${(error as Error).message}`);
+        });
+    }
+
     return updatedObjective;
     } catch (error: any) {
       // Log the error with context
@@ -1504,6 +1522,14 @@ export class ObjectiveService {
       // Trigger progress and status roll-up for parent Objective after deletion
       if (parentId) {
         await this.okrProgressService.refreshObjectiveProgressAndStatusCascade(parentId);
+      }
+
+      // Phase 3 Optimization: Invalidate cache for this tenant
+      if (objective.tenantId) {
+        this.cacheService.invalidateTenant(objective.tenantId)
+          .catch(error => {
+            this.logger.warn(`Failed to invalidate cache after objective deletion: ${(error as Error).message}`);
+          });
       }
 
       return { id };

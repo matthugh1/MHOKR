@@ -95,62 +95,44 @@ export function OKRTreeContainer({
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 20
   
+  // Phase 3.4: Lazy Loading - Track which objectives have loaded key results
+  const [loadedKeyResults, setLoadedKeyResults] = useState<Set<string>>(new Set())
+  const [loadingKeyResults, setLoadingKeyResults] = useState<Set<string>>(new Set())
+  
   const loadOKRs = useCallback(async () => {
     if (!currentOrganization?.id || !user?.id) return
     try {
       setLoading(true)
       setPermissionError(null)
       
-      // Fetch all objectives using pagination (max pageSize is 50)
-      const maxPageSize = 50
-      let allObjectives: any[] = []
-      let currentPage = 1
-      let hasMore = true
+      // Phase 3.4: Lazy Loading - Fetch objectives without key results initially
+      // Key results will be loaded on-demand when objectives are expanded
+      // This reduces initial payload size significantly
+      const params = new URLSearchParams({
+        tenantId: currentOrganization.id,
+        hierarchyView: 'true', // Fetch complete hierarchy in one request
+        includeKeyResults: 'false', // Phase 3.4: Lazy load key results
+      })
       
-      while (hasMore) {
-        const params = new URLSearchParams({
-          tenantId: currentOrganization.id,
-          page: currentPage.toString(),
-          pageSize: maxPageSize.toString(),
-        })
-        
-        if (selectedCycleId) {
-          params.set('cycleId', selectedCycleId)
-        }
-        
-        if (selectedStatus) {
-          params.set('status', selectedStatus)
-        }
-        
-        // Apply scope-based filtering (backend handles RBAC/visibility)
-        // Note: Backend visibility filtering handles scope-based access control
-        // We don't need to add explicit scope params - backend RBAC enforces visibility
-        if (selectedScope === 'my' && user?.id) {
-          // My scope: backend visibility filtering handles this
-        } else if (selectedScope === 'team-workspace') {
-          // Team/Workspace scope: backend visibility filtering handles this
-        } else if (selectedScope === 'tenant') {
-          // Tenant scope: backend visibility filtering handles this
-        }
-        
-        const response = await api.get(`/okr/overview?${params.toString()}`)
-        
-        const envelope = response.data || {}
-        const objectives = envelope.objectives || []
-        
-        if (objectives.length === 0) {
-          hasMore = false
-        } else {
-          allObjectives = [...allObjectives, ...objectives]
-          // Check if there are more pages
-          const totalCount = envelope.totalCount || 0
-          const fetchedCount = allObjectives.length
-          hasMore = fetchedCount < totalCount
-          currentPage++
-        }
+      if (selectedCycleId) {
+        params.set('cycleId', selectedCycleId)
       }
       
-      const mapped = Array.isArray(allObjectives) ? allObjectives.map((obj: any) => 
+      if (selectedStatus) {
+        params.set('status', selectedStatus)
+      }
+      
+      // Pass scope to backend for proper filtering
+      if (selectedScope) {
+        params.set('scope', selectedScope)
+      }
+      
+      const response = await api.get(`/okr/overview?${params.toString()}`)
+      
+      const envelope = response.data || {}
+      const objectives = envelope.objectives || []
+      
+      const mapped = Array.isArray(objectives) ? objectives.map((obj: any) => 
         mapObjectiveDataForTree(obj, availableUsers, activeCycles, overdueCheckIns)
       ) : []
       
@@ -169,6 +151,103 @@ export function OKRTreeContainer({
       setLoading(false)
     }
   }, [currentOrganization?.id, user?.id, selectedCycleId, selectedStatus, selectedScope, filterWorkspaceId, filterTeamId, filterOwnerId, searchQuery, selectedTimeframeKey])
+  
+  // Phase 3.4: Lazy Loading - Fetch key results for expanded objectives
+  const loadKeyResultsForObjectives = useCallback(async (objectiveIds: string[]) => {
+    if (!currentOrganization?.id || objectiveIds.length === 0) return
+    
+    // Filter out objectives that are already loaded or currently loading
+    const idsToLoad = objectiveIds.filter(id => 
+      !loadedKeyResults.has(id) && !loadingKeyResults.has(id)
+    )
+    
+    if (idsToLoad.length === 0) return
+    
+    try {
+      // Mark as loading
+      setLoadingKeyResults(prev => {
+        const next = new Set(prev)
+        idsToLoad.forEach(id => next.add(id))
+        return next
+      })
+      
+      // Fetch key results from backend
+      const params = new URLSearchParams({
+        tenantId: currentOrganization.id,
+        objectiveIds: idsToLoad.join(','),
+      })
+      
+      const response = await api.get(`/okr/key-results/by-objectives?${params.toString()}`)
+      const { keyResultsByObjective } = response.data || {}
+      
+      // Update objectives with loaded key results
+      // Phase 3.4: Transform lazy-loaded key results to match expected format
+      setObjectivesPage(prev => prev.map(obj => {
+        const keyResults = keyResultsByObjective[obj.id]
+        if (keyResults) {
+          // Transform lazy-loaded key results to junction table format expected by mapping function
+          // The mapping function expects: { keyResult: {...}, weight: number }
+          const transformedKeyResults = keyResults.map((kr: any) => ({
+            id: kr.id, // Junction table ID (we'll use KR ID as fallback)
+            weight: 1.0, // Default weight (could be enhanced to fetch actual weights)
+            keyResult: {
+              ...kr,
+              // Ensure all required fields are present
+              id: kr.id,
+              title: kr.title,
+              status: kr.status,
+              progress: kr.progress,
+              startValue: kr.startValue,
+              targetValue: kr.targetValue,
+              currentValue: kr.currentValue,
+              unit: kr.unit,
+              ownerId: kr.ownerId,
+              owner: kr.owner,
+              initiatives: kr.initiatives || [],
+            },
+          }))
+          
+          // Re-map the entire objective with new key results to ensure consistency
+          const updatedObj = {
+            ...obj,
+            keyResults: transformedKeyResults,
+          }
+          // Re-map using the same function used for initial load
+          return mapObjectiveDataForTree(updatedObj, availableUsers, activeCycles, overdueCheckIns)
+        }
+        return obj
+      }))
+      
+      // Mark as loaded
+      setLoadedKeyResults(prev => {
+        const next = new Set(prev)
+        idsToLoad.forEach(id => next.add(id))
+        return next
+      })
+    } catch (error: any) {
+      console.error('[OKR TREE CONTAINER] Failed to load key results', error)
+      toast({
+        title: 'Failed to load key results',
+        description: 'Some key results could not be loaded. Please try expanding again.',
+        variant: 'destructive',
+      })
+    } finally {
+      // Remove from loading set
+      setLoadingKeyResults(prev => {
+        const next = new Set(prev)
+        idsToLoad.forEach(id => next.delete(id))
+        return next
+      })
+    }
+  }, [currentOrganization?.id, loadedKeyResults, loadingKeyResults, toast, availableUsers, activeCycles, overdueCheckIns])
+  
+  // Handle objective expansion - trigger key result loading
+  const handleObjectiveExpand = useCallback((objectiveId: string) => {
+    // Check if key results are already loaded
+    if (!loadedKeyResults.has(objectiveId) && !loadingKeyResults.has(objectiveId)) {
+      loadKeyResultsForObjectives([objectiveId])
+    }
+  }, [loadedKeyResults, loadingKeyResults, loadKeyResultsForObjectives])
   
   useEffect(() => {
     // Wait for both organization and user to be ready before loading
@@ -382,6 +461,8 @@ export function OKRTreeContainer({
           // In a full implementation, we'd have a dedicated sub-objective creation handler
           console.warn('[OKRTreeContainer] Sub-objective creation not yet implemented')
         } : undefined}
+        onExpand={handleObjectiveExpand}
+        loadingKeyResults={loadingKeyResults}
       />
       
       {/* Pagination controls */}
