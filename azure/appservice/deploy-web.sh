@@ -88,7 +88,8 @@ az webapp deploy \
     --resource-group "$RESOURCE_GROUP" \
     --src-path "$ZIP_FILE" \
     --type zip \
-    --async false
+    --async false \
+    --timeout 1800
 
 # Get URL
 URL=$(az webapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query defaultHostName -o tsv)

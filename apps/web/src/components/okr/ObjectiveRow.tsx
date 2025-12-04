@@ -151,7 +151,7 @@ const getStatusBadge = (status: string) => {
 const getPublishStateBadge = (publishState?: string, isPublished?: boolean) => {
   // Use publishState if available, otherwise derive from isPublished
   const state = publishState || (isPublished ? 'PUBLISHED' : 'DRAFT')
-  
+
   switch (state) {
     case 'PUBLISHED':
       return { tone: 'neutral' as const, label: 'Published' }
@@ -197,9 +197,9 @@ const formatDueDate = (dateString?: string) => {
     const now = new Date()
     const diffTime = date.getTime() - now.getTime()
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    
+
     const formattedDate = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-    
+
     if (diffDays < 0) {
       return { text: `${formattedDate} • Overdue`, isOverdue: true }
     } else if (diffDays === 0) {
@@ -222,7 +222,7 @@ const formatLastCheckIn = (dateString?: string | null) => {
     const diffTime = now.getTime() - date.getTime()
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
     const diffHours = Math.floor(diffTime / (1000 * 60 * 60))
-    
+
     if (diffDays === 0) {
       if (diffHours < 1) return { text: 'Just now', isRecent: true }
       return { text: `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`, isRecent: true }
@@ -241,11 +241,11 @@ const formatLastCheckIn = (dateString?: string | null) => {
 
 const formatNextCheckIn = (cadence?: string, lastCheckIn?: string | null) => {
   if (!cadence || cadence === 'NONE') return null
-  
+
   // Match backend: check-in-due-calculator.ts uses these values
   let daysBetween = 7
   const graceDays = 2 // Match backend grace period
-  
+
   switch (cadence) {
     case 'WEEKLY':
       daysBetween = 7
@@ -259,19 +259,19 @@ const formatNextCheckIn = (cadence?: string, lastCheckIn?: string | null) => {
     default:
       return null
   }
-  
+
   const now = new Date()
   const lastCheckInDate = lastCheckIn ? new Date(lastCheckIn) : null
-  const nextCheckInDate = lastCheckInDate 
+  const nextCheckInDate = lastCheckInDate
     ? new Date(lastCheckInDate.getTime() + daysBetween * 24 * 60 * 60 * 1000)
     : new Date(now.getTime() + daysBetween * 24 * 60 * 60 * 1000)
-  
+
   const diffTime = nextCheckInDate.getTime() - now.getTime()
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-  
+
   // Calculate overdue threshold: cadence + grace period (matches backend logic)
   const overdueThreshold = daysBetween + graceDays
-  
+
   // Determine status: overdue if past cadence + grace, due if past cadence but within grace
   if (diffDays < -graceDays) {
     // Overdue: past the grace period
@@ -297,7 +297,7 @@ const formatLastUpdated = (dateString?: string) => {
     const now = new Date()
     const diffTime = now.getTime() - date.getTime()
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-    
+
     if (diffDays === 0) return 'Today'
     if (diffDays === 1) return 'Yesterday'
     if (diffDays < 7) return `${diffDays} days ago`
@@ -326,7 +326,7 @@ const groupInitiativesByStatus = (initiatives: Array<{
     BLOCKED: [] as typeof initiatives,
     UNKNOWN: [] as typeof initiatives,
   }
-  
+
   initiatives.forEach(init => {
     const status = init.status || 'NOT_STARTED'
     if (status === 'COMPLETED') {
@@ -341,7 +341,7 @@ const groupInitiativesByStatus = (initiatives: Array<{
       groups.UNKNOWN.push(init)
     }
   })
-  
+
   // Sort each group by due date (overdue first, then by date)
   const sortByDueDate = (a: typeof initiatives[0], b: typeof initiatives[0]) => {
     if (!a.dueDate && !b.dueDate) return 0
@@ -356,13 +356,13 @@ const groupInitiativesByStatus = (initiatives: Array<{
     if (!aOverdue && bOverdue) return 1
     return aDate.getTime() - bDate.getTime()
   }
-  
+
   groups.COMPLETED.sort(sortByDueDate)
   groups.IN_PROGRESS.sort(sortByDueDate)
   groups.NOT_STARTED.sort(sortByDueDate)
   groups.BLOCKED.sort(sortByDueDate)
   groups.UNKNOWN.sort(sortByDueDate)
-  
+
   return groups
 }
 
@@ -391,19 +391,19 @@ const formatProgressLabel = (kr: {
   if (kr.currentValue === undefined || kr.targetValue === undefined) {
     return 'Progress not tracked'
   }
-  
+
   const current = kr.currentValue
   const target = kr.targetValue
   const progress = kr.progress !== undefined ? Math.round(clampProgress(kr.progress)) : undefined
   const unit = kr.unit || ''
-  
+
   // Calculate progress if not provided
   let calculatedProgress: number | undefined = progress
   if (calculatedProgress === undefined && target !== 0) {
     // Simple calculation: (current / target) * 100
     calculatedProgress = Math.round((current / target) * 100)
   }
-  
+
   // Format based on unit type
   if (unit.toLowerCase() === 'percentage') {
     // For percentage units, show: Current: 80% / Target: 90% (89% complete)
@@ -433,10 +433,10 @@ const formatProgressLabel = (kr: {
 
 const getCyclePill = (cycleLabel: string, cycleStatus: string) => {
   const baseClasses = "px-2 py-1 rounded-full text-[11px] font-medium leading-none"
-  
+
   // Strip "(draft)" from cycle label to avoid confusion with objective publish status
   const cleanCycleLabel = cycleLabel.replace(/\s*\(draft\)/i, '').trim()
-  
+
   if (cycleStatus === "DRAFT") {
     return {
       text: cleanCycleLabel,
@@ -504,17 +504,17 @@ export function ObjectiveRow({
   const [loadingTasks, setLoadingTasks] = useState<Set<string>>(new Set())
   const menuRef = useRef<HTMLDivElement>(null)
   const addMenuRef = useRef<HTMLDivElement>(null)
-  
+
   // Hooks for inline editing
   const { user } = useAuth()
   const permissions = usePermissions()
   const tenantPermissions = useTenantPermissions()
   const { currentOrganization } = useWorkspace()
   const { toast } = useToast()
-  
+
   // Optimistic state for inline edits
   const [optimisticObjective, setOptimisticObjective] = useState(objective)
-  
+
   // Sync optimistic state when objective prop changes (from parent refresh)
   useEffect(() => {
     setOptimisticObjective(objective)
@@ -582,10 +582,10 @@ export function ObjectiveRow({
     }, 100)
   }, [isExpanded, onAddTask, optimisticObjective.id])
   */
-  
+
   const statusBadge = getStatusBadge(optimisticObjective.status)
   // Note: publishStateBadge removed - using InlinePublishEditor instead
-  
+
   // Deduplicate arrays by ID to prevent duplicate key warnings
   // Directly use array references - React will handle memoization
   const keyResults = React.useMemo(() => {
@@ -600,15 +600,15 @@ export function ObjectiveRow({
       return true
     })
   }, [optimisticObjective.keyResults])
-  
+
   // Deduplicate and organize initiatives
   const initiatives = React.useMemo(() => {
-    const initiativesArray = Array.isArray(optimisticObjective.initiatives) 
-      ? optimisticObjective.initiatives 
+    const initiativesArray = Array.isArray(optimisticObjective.initiatives)
+      ? optimisticObjective.initiatives
       : []
     const seen = new Set<string>()
     // Prioritize KR-linked initiatives (they have more context)
-    
+
     const krInitiatives: Array<{
       id: string
       title: string
@@ -625,7 +625,7 @@ export function ObjectiveRow({
       keyResultId?: string
       keyResultTitle?: string
     }> = []
-    
+
     // Separate initiatives by source
     initiativesArray.forEach(init => {
       if (init.keyResultId) {
@@ -634,7 +634,7 @@ export function ObjectiveRow({
         objectiveInitiatives.push(init)
       }
     })
-    
+
     // Add KR initiatives first (with context), then objective-only initiatives
     const deduplicated: Array<{
       id: string
@@ -644,7 +644,7 @@ export function ObjectiveRow({
       keyResultId?: string
       keyResultTitle?: string
     }> = []
-    
+
     // Add KR-linked initiatives first
     krInitiatives.forEach(init => {
       if (!seen.has(init.id)) {
@@ -652,7 +652,7 @@ export function ObjectiveRow({
         deduplicated.push(init)
       }
     })
-    
+
     // Add objective-only initiatives (skip if already seen from KR)
     objectiveInitiatives.forEach(init => {
       if (!seen.has(init.id)) {
@@ -660,12 +660,12 @@ export function ObjectiveRow({
         deduplicated.push(init)
       }
     })
-    
+
     return deduplicated
   }, [optimisticObjective.initiatives])
-  
+
   const overdueCount = optimisticObjective.overdueCountForObjective ?? 0
-  
+
   // Build objective context for permission checks
   const objectiveForHook = {
     id: optimisticObjective.id,
@@ -678,38 +678,38 @@ export function ObjectiveRow({
     cycle: optimisticObjective.cycleStatus ? { id: '', status: optimisticObjective.cycleStatus } : null,
     cycleStatus: optimisticObjective.cycleStatus,
   }
-  
+
   // Get lock info for tooltips
   const lockInfo = tenantPermissions.getLockInfoForObjective(objectiveForHook)
-  
+
   // Check if can edit (superusers have full access)
   const canEditInline = canEdit
-  
+
   // Check if user can publish/unpublish
   const canPublish = useMemo(() => {
-    return permissions.isTenantAdminOrOwner(objectiveForHook.tenantId || undefined) || 
+    return permissions.isTenantAdminOrOwner(objectiveForHook.tenantId || undefined) ||
       (objectiveForHook.workspaceId && canEditInline)
   }, [permissions, objectiveForHook.tenantId, objectiveForHook.workspaceId, canEditInline])
-  
+
   const canUnpublish = useMemo(() => {
     return permissions.isTenantAdminOrOwner(objectiveForHook.tenantId || undefined) || canEditInline
   }, [permissions, objectiveForHook.tenantId, canEditInline])
-  
+
   // Mutation handlers
   const handleUpdateObjectiveTitle = async (newTitle: string) => {
     // Optimistic update
     setOptimisticObjective(prev => ({ ...prev, title: newTitle }))
-    
+
     try {
       const response = await api.patch(`/objectives/${optimisticObjective.id}`, { title: newTitle })
-      
+
       // Update from server response
       setOptimisticObjective(prev => ({ ...prev, title: response.data.title }))
       onUpdate?.()
     } catch (error: any) {
       // Revert on error
       setOptimisticObjective(prev => ({ ...prev, title: objective.title }))
-      
+
       const errorInfo = mapErrorToMessage(error)
       // Map error variant to toast variant (toast doesn't support 'warning')
       let toastVariant: 'default' | 'destructive' = 'default'
@@ -721,25 +721,25 @@ export function ObjectiveRow({
         description: errorInfo.message,
         variant: toastVariant,
       })
-      
+
       throw error
     }
   }
-  
+
   const handleUpdateObjectiveOwner = async (userId: string) => {
     const newOwner = availableUsers.find(u => u.id === userId) || optimisticObjective.owner
-    
+
     // Optimistic update
     setOptimisticObjective(prev => ({
       ...prev,
       owner: { id: newOwner.id, name: newOwner.name, email: newOwner.email || null },
     }))
-    
+
     try {
       const response = await api.patch(`/objectives/${optimisticObjective.id}`, { ownerId: userId })
-      
+
       const updatedOwner = availableUsers.find(u => u.id === response.data.ownerId) || newOwner
-      
+
       // Update from server response
       setOptimisticObjective(prev => ({
         ...prev,
@@ -749,7 +749,7 @@ export function ObjectiveRow({
     } catch (error: any) {
       // Revert on error
       setOptimisticObjective(prev => ({ ...prev, owner: objective.owner }))
-      
+
       const errorInfo = mapErrorToMessage(error)
       // Map error variant to toast variant (toast doesn't support 'warning')
       let toastVariant: 'default' | 'destructive' = 'default'
@@ -761,25 +761,25 @@ export function ObjectiveRow({
         description: errorInfo.message,
         variant: toastVariant,
       })
-      
+
       throw error
     }
   }
-  
+
   const handleUpdateObjectiveStatus = async (status: 'ON_TRACK' | 'AT_RISK' | 'OFF_TRACK' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED' | 'NOT_STARTED') => {
     // Optimistic update
     setOptimisticObjective(prev => ({ ...prev, status }))
-    
+
     try {
       const response = await api.patch(`/objectives/${optimisticObjective.id}`, { status })
-      
+
       // Update from server response
       setOptimisticObjective(prev => ({ ...prev, status: response.data.status }))
       onUpdate?.()
     } catch (error: any) {
       // Revert on error
       setOptimisticObjective(prev => ({ ...prev, status: objective.status }))
-      
+
       const errorInfo = mapErrorToMessage(error)
       // Map error variant to toast variant (toast doesn't support 'warning')
       let toastVariant: 'default' | 'destructive' = 'default'
@@ -791,45 +791,45 @@ export function ObjectiveRow({
         description: errorInfo.message,
         variant: toastVariant,
       })
-      
+
       throw error
     }
   }
-  
+
   const handleUpdateObjectivePublishStatus = async (isPublished: boolean) => {
     // Optimistic update
-    setOptimisticObjective(prev => ({ 
-      ...prev, 
+    setOptimisticObjective(prev => ({
+      ...prev,
       isPublished,
       publishState: isPublished ? 'PUBLISHED' : 'DRAFT'
     }))
-    
+
     try {
       const response = await api.patch(`/objectives/${optimisticObjective.id}`, { isPublished })
-      
+
       // Update from server response
-      setOptimisticObjective(prev => ({ 
-        ...prev, 
+      setOptimisticObjective(prev => ({
+        ...prev,
         isPublished: response.data.isPublished ?? isPublished,
         publishState: (response.data.isPublished ?? isPublished) ? 'PUBLISHED' : 'DRAFT'
       }))
-      
+
       toast({
         title: isPublished ? 'Objective published' : 'Objective unpublished',
-        description: isPublished 
+        description: isPublished
           ? 'This objective is now published and locked for editing.'
           : 'This objective is now in draft mode and can be edited.',
       })
-      
+
       onUpdate?.()
     } catch (error: any) {
       // Revert on error
-      setOptimisticObjective(prev => ({ 
-        ...prev, 
+      setOptimisticObjective(prev => ({
+        ...prev,
         isPublished: objective.isPublished,
         publishState: objective.publishState || (objective.isPublished ? 'PUBLISHED' : 'DRAFT')
       }))
-      
+
       const errorInfo = mapErrorToMessage(error)
       let toastVariant: 'default' | 'destructive' = 'default'
       if (errorInfo.variant === 'destructive') {
@@ -840,11 +840,11 @@ export function ObjectiveRow({
         description: errorInfo.message,
         variant: toastVariant,
       })
-      
+
       throw error
     }
   }
-  
+
   // Key Result mutation handlers
   const handleUpdateKeyResultTitle = async (krId: string, newTitle: string) => {
     // Optimistic update
@@ -852,10 +852,10 @@ export function ObjectiveRow({
       ...prev,
       keyResults: prev.keyResults?.map(kr => kr.id === krId ? { ...kr, title: newTitle } : kr),
     }))
-    
+
     try {
       const response = await api.patch(`/key-results/${krId}`, { title: newTitle })
-      
+
       // Update from server response
       setOptimisticObjective(prev => ({
         ...prev,
@@ -871,7 +871,7 @@ export function ObjectiveRow({
           keyResults: prev.keyResults?.map(kr => kr.id === krId ? originalKr : kr),
         }))
       }
-      
+
       const errorInfo = mapErrorToMessage(error)
       // Map error variant to toast variant (toast doesn't support 'warning')
       let toastVariant: 'default' | 'destructive' = 'default'
@@ -883,15 +883,15 @@ export function ObjectiveRow({
         description: errorInfo.message,
         variant: toastVariant,
       })
-      
+
       throw error
     }
   }
-  
+
   const handleUpdateKeyResultOwner = async (krId: string, userId: string) => {
     try {
       const response = await api.patch(`/key-results/${krId}`, { ownerId: userId })
-      
+
       // Update from server response - need to refresh KR ownerId
       setOptimisticObjective(prev => ({
         ...prev,
@@ -910,21 +910,21 @@ export function ObjectiveRow({
         description: errorInfo.message,
         variant: toastVariant,
       })
-      
+
       throw error
     }
   }
-  
+
   const handleUpdateKeyResultCurrent = async (krId: string, value: number | undefined) => {
     // Optimistic update
     setOptimisticObjective(prev => ({
       ...prev,
       keyResults: prev.keyResults?.map(kr => kr.id === krId ? { ...kr, currentValue: value } : kr),
     }))
-    
+
     try {
       const response = await api.patch(`/key-results/${krId}`, { currentValue: value })
-      
+
       // Update from server response
       setOptimisticObjective(prev => ({
         ...prev,
@@ -940,30 +940,30 @@ export function ObjectiveRow({
           keyResults: prev.keyResults?.map(kr => kr.id === krId ? originalKr : kr),
         }))
       }
-      
+
       const errorInfo = mapErrorToMessage(error)
       // Map error variant to toast variant (toast doesn't support 'warning')
       let toastVariant: 'default' | 'destructive' = 'default'
       if (errorInfo.variant === 'destructive') {
         toastVariant = 'destructive'
       }
-      
+
       // Check for permission errors specifically
       const errorMessage = error.response?.data?.message || errorInfo.message
       const isPermissionError = error.response?.status === 403
-      
+
       toast({
         title: 'Could not save',
-        description: isPermissionError 
+        description: isPermissionError
           ? 'You don\'t have permission to perform this action.'
           : errorMessage,
         variant: toastVariant,
       })
-      
+
       throw error
     }
   }
-  
+
   // Calculate currentValue from progress percentage
   // Assumes INCREASE metric type (most common)
   const calculateCurrentValueFromProgress = (
@@ -973,7 +973,7 @@ export function ObjectiveRow({
   ): number | undefined => {
     if (startValue === undefined || targetValue === undefined) return undefined
     if (targetValue === startValue) return startValue
-    
+
     // For INCREASE: progress = ((current - start) / (target - start)) * 100
     // So: current = start + (progress / 100) * (target - start)
     return startValue + (progress / 100) * (targetValue - startValue)
@@ -1025,10 +1025,10 @@ export function ObjectiveRow({
       ...prev,
       keyResults: prev.keyResults?.map(kr => kr.id === krId ? { ...kr, targetValue: value } : kr),
     }))
-    
+
     try {
       const response = await api.patch(`/key-results/${krId}`, { targetValue: value })
-      
+
       // Update from server response
       setOptimisticObjective(prev => ({
         ...prev,
@@ -1044,7 +1044,7 @@ export function ObjectiveRow({
           keyResults: prev.keyResults?.map(kr => kr.id === krId ? originalKr : kr),
         }))
       }
-      
+
       const errorInfo = mapErrorToMessage(error)
       // Map error variant to toast variant (toast doesn't support 'warning')
       let toastVariant: 'default' | 'destructive' = 'default'
@@ -1056,11 +1056,11 @@ export function ObjectiveRow({
         description: errorInfo.message,
         variant: toastVariant,
       })
-      
+
       throw error
     }
   }
-  
+
   // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1080,12 +1080,12 @@ export function ObjectiveRow({
   // Keyboard navigation for KR and Initiative expansion
   useEffect(() => {
     if (!isExpanded) return
-    
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only handle if within this objective row
       const rowElement = menuRef.current?.closest('section')
       if (!rowElement || !rowElement.contains(document.activeElement)) return
-      
+
       // Arrow down: expand next KR or initiative
       if (e.key === 'ArrowDown' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault()
@@ -1100,7 +1100,7 @@ export function ObjectiveRow({
           }
         }
       }
-      
+
       // Arrow up: collapse previous KR
       if (e.key === 'ArrowUp' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault()
@@ -1115,21 +1115,21 @@ export function ObjectiveRow({
           }
         }
       }
-      
+
       // 'E' key: expand all KRs
       if (e.key === 'e' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault()
         const allKrIds = keyResults.map(kr => kr.id)
         setExpandedKeyResults(new Set(allKrIds))
       }
-      
+
       // 'C' key: collapse all KRs
       if (e.key === 'c' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault()
         setExpandedKeyResults(new Set())
       }
     }
-    
+
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isExpanded, keyResults, expandedKeyResults, onEditKeyResult, canEditKeyResult])
@@ -1175,7 +1175,7 @@ export function ObjectiveRow({
       // Only trigger if the row or its children have focus
       const isFocused = rowElement.contains(document.activeElement)
       if (!isFocused) return
-      
+
       if ((e.key === 'a' || e.key === 'A') && (e.altKey || e.metaKey)) {
         e.preventDefault()
         e.stopPropagation()
@@ -1187,7 +1187,7 @@ export function ObjectiveRow({
         })
       }
     }
-    
+
     // Add to window to catch keyboard events
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
@@ -1238,7 +1238,7 @@ export function ObjectiveRow({
   )
 
   return (
-    <section 
+    <section
       className="border border-border rounded-xl bg-primary/10 shadow-sm hover:shadow-md transition-all duration-200"
       aria-expanded={isExpanded}
       style={{ overflow: 'visible' }}
@@ -1273,118 +1273,118 @@ export function ObjectiveRow({
                 />
               </div>
             </div>
-              
-              {/* Badges row - Essential items only, secondary items in tooltip */}
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* Essential: Status chip - Progress state - Inline Editor */}
-                <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
-                  <InlineStatusEditor
-                    currentStatus={optimisticObjective.status}
-                    onSave={handleUpdateObjectiveStatus}
-                    canEdit={canEditInline}
-                    lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                    ariaLabel="Edit objective status"
-                    resource={objectiveForHook}
-                    disabled={false}
-                    renderBadge={(status, label, tone) => (
-                      <OkrBadge tone={tone === 'success' ? 'good' : tone === 'warning' ? 'warn' : 'bad'}>
-                        {label}
-                      </OkrBadge>
-                    )}
-                  />
-                  {/* Show tooltip if status is auto-calculated from Key Results */}
-                  {keyResults.length > 0 && (
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3 w-3 text-muted-foreground cursor-help" aria-label="Status information" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">Status calculated from Key Results</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+
+            {/* Badges row - Essential items only, secondary items in tooltip */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Essential: Status chip - Progress state - Inline Editor */}
+              <div onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
+                <InlineStatusEditor
+                  currentStatus={optimisticObjective.status}
+                  onSave={handleUpdateObjectiveStatus}
+                  canEdit={canEditInline}
+                  lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                  ariaLabel="Edit objective status"
+                  resource={objectiveForHook}
+                  disabled={false}
+                  renderBadge={(status, label, tone) => (
+                    <OkrBadge tone={tone === 'success' ? 'good' : tone === 'warning' ? 'warn' : 'bad'}>
+                      {label}
+                    </OkrBadge>
                   )}
-                </div>
-                
-                {/* Essential: Publish State chip - Governance state - Inline Editor */}
-                <div onClick={(e) => e.stopPropagation()}>
-                  <InlinePublishEditor
-                    currentIsPublished={optimisticObjective.isPublished}
-                    onSave={handleUpdateObjectivePublishStatus}
-                    canEdit={canEditInline}
-                    canPublish={!!canPublish}
-                    canUnpublish={!!canUnpublish}
-                    lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                    ariaLabel="Edit objective publish status"
-                    resource={objectiveForHook}
-                    disabled={false}
-                  />
-                </div>
-                
-                {/* Essential: Owner chip - Inline Editor */}
-                <div onClick={(e) => e.stopPropagation()}>
-                  <InlineOwnerEditor
-                    currentOwner={optimisticObjective.owner}
-                    availableUsers={availableUsers}
-                    onSave={handleUpdateObjectiveOwner}
-                    canEdit={canEditInline}
-                    lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                    ariaLabel="Edit objective owner"
-                    resource={objectiveForHook}
-                    disabled={false}
-                    size="sm"
-                  />
-                </div>
-                
-                {/* Cycle - Keep visible as it's contextually important */}
-                {optimisticObjective.cycleLabel && (
-                  <>
-                    <span className={cyclePill.className}>
-                      {cyclePill.text}
-                    </span>
-                    {cyclePill.activeChip && (
-                      <span className={cyclePill.activeChip.className}>
-                        {cyclePill.activeChip.text}
-                      </span>
-                    )}
-                  </>
-                )}
-                
-                {/* Secondary info - Grouped in popover (Pillar, Goal Type) */}
-                {(optimisticObjective.pillarId || optimisticObjective.goalType) && (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <button
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                        aria-label="View additional information"
-                      >
-                        <Info className="h-3 w-3" />
-                        <span className="hidden sm:inline">More</span>
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-56 p-3" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                      <div className="space-y-2 text-xs">
-                        {optimisticObjective.pillarId && (
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-muted-foreground min-w-[60px]">Pillar:</span>
-                            <PillarBadge pillarId={optimisticObjective.pillarId} />
-                          </div>
-                        )}
-                        {optimisticObjective.goalType && (
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-muted-foreground min-w-[60px]">Goal Type:</span>
-                            <Badge variant="outline" className="text-xs">
-                              {optimisticObjective.goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                />
+                {/* Show tooltip if status is auto-calculated from Key Results */}
+                {keyResults.length > 0 && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-muted-foreground cursor-help" aria-label="Status information" />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">Status calculated from Key Results</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </div>
+
+              {/* Essential: Publish State chip - Governance state - Inline Editor */}
+              <div onClick={(e) => e.stopPropagation()}>
+                <InlinePublishEditor
+                  currentIsPublished={optimisticObjective.isPublished}
+                  onSave={handleUpdateObjectivePublishStatus}
+                  canEdit={canEditInline}
+                  canPublish={!!canPublish}
+                  canUnpublish={!!canUnpublish}
+                  lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                  ariaLabel="Edit objective publish status"
+                  resource={objectiveForHook}
+                  disabled={false}
+                />
+              </div>
+
+              {/* Essential: Owner chip - Inline Editor */}
+              <div onClick={(e) => e.stopPropagation()}>
+                <InlineOwnerEditor
+                  currentOwner={optimisticObjective.owner}
+                  availableUsers={availableUsers}
+                  onSave={handleUpdateObjectiveOwner}
+                  canEdit={canEditInline}
+                  lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                  ariaLabel="Edit objective owner"
+                  resource={objectiveForHook}
+                  disabled={false}
+                  size="sm"
+                />
+              </div>
+
+              {/* Cycle - Keep visible as it's contextually important */}
+              {optimisticObjective.cycleLabel && (
+                <>
+                  <span className={cyclePill.className}>
+                    {cyclePill.text}
+                  </span>
+                  {cyclePill.activeChip && (
+                    <span className={cyclePill.activeChip.className}>
+                      {cyclePill.activeChip.text}
+                    </span>
+                  )}
+                </>
+              )}
+
+              {/* Secondary info - Grouped in popover (Pillar, Goal Type) */}
+              {(optimisticObjective.pillarId || optimisticObjective.goalType) && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                      aria-label="View additional information"
+                    >
+                      <Info className="h-3 w-3" />
+                      <span className="hidden sm:inline">More</span>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-56 p-3" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+                    <div className="space-y-2 text-xs">
+                      {optimisticObjective.pillarId && (
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-muted-foreground min-w-[60px]">Pillar:</span>
+                          <PillarBadge pillarId={optimisticObjective.pillarId} />
+                        </div>
+                      )}
+                      {optimisticObjective.goalType && (
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-muted-foreground min-w-[60px]">Goal Type:</span>
+                          <Badge variant="outline" className="text-xs">
+                            {optimisticObjective.goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
           </div>
 
           {/* Middle block: Progress bar and micro-metrics (hidden on mobile) */}
@@ -1419,7 +1419,7 @@ export function ObjectiveRow({
                       </TooltipTrigger>
                       <TooltipContent>
                         <p className="text-xs">
-                          {keyResults.length > 0 
+                          {keyResults.length > 0
                             ? 'Progress calculated from Key Results'
                             : 'Progress calculated from Child Objectives'}
                         </p>
@@ -1429,7 +1429,7 @@ export function ObjectiveRow({
                 </div>
               )}
             </div>
-            
+
             {/* Micro-metrics pills - Only show when there are issues (progressive disclosure) */}
             {(overdueCount > 0 || (objective.lowestConfidence === null && keyResults.length > 0)) && (
               <div className="flex items-center gap-2 text-[11px]">
@@ -1439,7 +1439,7 @@ export function ObjectiveRow({
                     {overdueCount} overdue check-in{overdueCount !== 1 ? 's' : ''}
                   </span>
                 )}
-                
+
                 {/* Update freshness pill - Only show if stale (no recent update) */}
                 {objective.lowestConfidence === null && keyResults.length > 0 && (
                   <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium leading-none whitespace-nowrap">
@@ -1448,7 +1448,7 @@ export function ObjectiveRow({
                 )}
               </div>
             )}
-            
+
             {/* Inline Insight Bar */}
             {isExpanded && (
               <div className="mt-2">
@@ -1490,7 +1490,7 @@ export function ObjectiveRow({
                 </TooltipProvider>
               </div>
             )}
-            
+
             {/* Primary Actions Group: Add items */}
             {(canCreateKeyResult || canCreateInitiative) && (
               <div className="relative" ref={addMenuRef} onClick={(e) => e.stopPropagation()}>
@@ -1508,7 +1508,7 @@ export function ObjectiveRow({
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
-                
+
                 {/* Add menu dropdown */}
                 {addMenuOpen && (
                   <div className="absolute right-0 top-full mt-1 rounded-md border border-border bg-popover shadow-lg text-popover-foreground text-[13px] z-50 min-w-[180px]">
@@ -1546,7 +1546,7 @@ export function ObjectiveRow({
                 )}
               </div>
             )}
-            
+
             {/* Fallback: Legacy + KR button (if contextual menu not available but onAddKeyResult provided) */}
             {canCreateKeyResult === false && canCreateInitiative === false && onAddKeyResult && (
               <div onClick={(e) => e.stopPropagation()}>
@@ -1561,7 +1561,7 @@ export function ObjectiveRow({
                 </Button>
               </div>
             )}
-            
+
             {/* Fallback: Legacy + Initiative button (if contextual menu not available but onAddInitiative provided) */}
             {canCreateKeyResult === false && canCreateInitiative === false && onAddInitiative && (
               <div onClick={(e) => e.stopPropagation()}>
@@ -1576,7 +1576,7 @@ export function ObjectiveRow({
                 </Button>
               </div>
             )}
-            
+
             {/* Secondary Actions Group: Edit and More menu */}
             <div className="flex items-center gap-1 border-l border-border pl-2">
               {/* Edit button - hidden if not permitted */}
@@ -1603,7 +1603,7 @@ export function ObjectiveRow({
                   />
                 </div>
               )}
-              
+
               {/* Menu button - only show if at least one action is available (history now has its own button) */}
               {typeof onDelete === 'function' && canDelete ? (
                 <div className="relative" ref={menuRef} onClick={(e) => e.stopPropagation()}>
@@ -1616,25 +1616,25 @@ export function ObjectiveRow({
                   >
                     <MoreVertical className="h-4 w-4" />
                   </Button>
-                
-                {/* Menu dropdown */}
-                {menuOpen && (
-                  <div className="absolute right-0 top-full mt-1 rounded-md border bg-white shadow-lg text-[13px] z-50 min-w-[160px]">
-                    {onDelete && canDelete && (
-                      <button
-                        className="w-full px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground rounded-md text-destructive"
-                        onClick={() => {
-                          onDelete(objective.id)
-                          setMenuOpen(false)
-                        }}
-                      >
-                        Delete Objective
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : null}
+
+                  {/* Menu dropdown */}
+                  {menuOpen && (
+                    <div className="absolute right-0 top-full mt-1 rounded-md border bg-white shadow-lg text-[13px] z-50 min-w-[160px]">
+                      {onDelete && canDelete && (
+                        <button
+                          className="w-full px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground rounded-md text-destructive"
+                          onClick={() => {
+                            onDelete(objective.id)
+                            setMenuOpen(false)
+                          }}
+                        >
+                          Delete Objective
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : null}
               {/* Why? inspector for blocked delete */}
               {typeof onDelete === 'function' && !canDelete && (
                 <div onClick={(e) => e.stopPropagation()}>
@@ -1646,7 +1646,7 @@ export function ObjectiveRow({
                 </div>
               )}
             </div>
-            
+
             {/* Chevron */}
             <motion.div
               animate={{ rotate: isExpanded ? 180 : 0 }}
@@ -1675,14 +1675,14 @@ export function ObjectiveRow({
             <div className="mb-2 p-2 bg-yellow-100 text-xs">
               DEBUG: Expanded section is rendering. Key Results: {keyResults.length}, Initiatives: {initiatives.length}
             </div>
-            
+
             {/* Objective Progress Trend Chart */}
             {keyResults.length > 0 && (
               <div className="mb-4 pb-4 border-b border-neutral-200">
                 <ObjectiveProgressTrendChart objectiveId={objective.id} />
               </div>
             )}
-            
+
             {/* Key Results block */}
             <div className="mb-4">
               <h4 className="text-[13px] font-medium text-neutral-700 mb-2 flex items-center gap-2">
@@ -1697,232 +1697,232 @@ export function ObjectiveRow({
                     const progressLabel = formatProgressLabel({ ...kr, progress: kr.progress })
                     const krProgressBarColor = getProgressBarColor(kr.status || 'ON_TRACK')
                     const isKrExpanded = expandedKeyResults.has(kr.id)
-                    
+
                     return (
+                      <div
+                        key={`kr-${kr.id}`}
+                        className="rounded-lg border border-neutral-200 bg-violet-50/40 overflow-hidden"
+                        data-kr-id={kr.id}
+                      >
+                        {/* Key Result collapsed header (always visible) */}
                         <div
-                          key={`kr-${kr.id}`}
-                          className="rounded-lg border border-neutral-200 bg-violet-50/40 overflow-hidden"
+                          className="p-3 cursor-pointer hover:bg-neutral-50 transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2"
+                          onClick={() => handleToggleKeyResult(kr.id)}
+                          onKeyDown={(e) => handleKeyResultKeyDown(e, kr.id)}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`${isKrExpanded ? 'Collapse' : 'Expand'} key result: ${kr.title}. Press Ctrl+E to edit all fields.`}
                           data-kr-id={kr.id}
                         >
-                          {/* Key Result collapsed header (always visible) */}
-                          <div
-                            className="p-3 cursor-pointer hover:bg-neutral-50 transition-colors focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2"
-                            onClick={() => handleToggleKeyResult(kr.id)}
-                            onKeyDown={(e) => handleKeyResultKeyDown(e, kr.id)}
-                            role="button"
-                            tabIndex={0}
-                            aria-label={`${isKrExpanded ? 'Collapse' : 'Expand'} key result: ${kr.title}. Press Ctrl+E to edit all fields.`}
-                            data-kr-id={kr.id}
-                          >
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex flex-col gap-2 flex-1 min-w-0">
-                                {/* Title - Inline Editor with Edit button */}
-                                <div className="flex items-center gap-2 group">
-                                  <BarChart3 className="h-3.5 w-3.5 text-violet-600 flex-shrink-0" />
-                                  <div onClick={(e) => e.stopPropagation()} className="flex-1 min-w-0">
-                                    <InlineTitleEditor
-                                      value={kr.title}
-                                      onSave={(newTitle) => handleUpdateKeyResultTitle(kr.id, newTitle)}
-                                      canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
-                                      lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                                      ariaLabel="Edit key result title"
-                                      resource={objectiveForHook}
-                                      disabled={false}
-                                      className="text-[13px] font-medium text-foreground"
-                                    />
-                                  </div>
-                                  {/* Edit button - visible when user can edit */}
-                                  {onEditKeyResult && canEditKeyResult && canEditKeyResult(kr.id) && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        onEditKeyResult(kr.id)
-                                      }}
-                                      className="opacity-60 hover:opacity-100 transition-opacity p-1 hover:bg-violet-100 rounded flex-shrink-0"
-                                      aria-label={`Edit all fields for key result: ${kr.title}`}
-                                      title="Edit all Key Result fields"
-                                    >
-                                      <Edit2 className="h-3.5 w-3.5 text-violet-600" />
-                                    </button>
-                                  )}
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex flex-col gap-2 flex-1 min-w-0">
+                              {/* Title - Inline Editor with Edit button */}
+                              <div className="flex items-center gap-2 group">
+                                <BarChart3 className="h-3.5 w-3.5 text-violet-600 flex-shrink-0" />
+                                <div onClick={(e) => e.stopPropagation()} className="flex-1 min-w-0">
+                                  <InlineTitleEditor
+                                    value={kr.title}
+                                    onSave={(newTitle) => handleUpdateKeyResultTitle(kr.id, newTitle)}
+                                    canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                    lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                    ariaLabel="Edit key result title"
+                                    resource={objectiveForHook}
+                                    disabled={false}
+                                    className="text-[13px] font-medium text-foreground"
+                                  />
                                 </div>
-                                
-                                {/* Badges row */}
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <OkrBadge tone={krStatusBadge.tone}>
-                                    {krStatusBadge.label}
+                                {/* Edit button - visible when user can edit */}
+                                {onEditKeyResult && canEditKeyResult && canEditKeyResult(kr.id) && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      onEditKeyResult(kr.id)
+                                    }}
+                                    className="opacity-60 hover:opacity-100 transition-opacity p-1 hover:bg-violet-100 rounded flex-shrink-0"
+                                    aria-label={`Edit all fields for key result: ${kr.title}`}
+                                    title="Edit all Key Result fields"
+                                  >
+                                    <Edit2 className="h-3.5 w-3.5 text-violet-600" />
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Badges row */}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <OkrBadge tone={krStatusBadge.tone}>
+                                  {krStatusBadge.label}
+                                </OkrBadge>
+                                {kr.goalType && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {kr.goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
+                                  </Badge>
+                                )}
+                                {kr.checkInCadence && kr.checkInCadence !== 'NONE' && (
+                                  <OkrBadge tone="neutral">
+                                    {cadenceLabel}
                                   </OkrBadge>
-                                  {kr.goalType && (
-                                    <Badge variant="outline" className="text-xs">
-                                      {kr.goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
-                                    </Badge>
-                                  )}
-                                  {kr.checkInCadence && kr.checkInCadence !== 'NONE' && (
-                                    <OkrBadge tone="neutral">
-                                      {cadenceLabel}
-                                    </OkrBadge>
-                                  )}
-                                  {kr.isOverdue && (
-                                    <OkrBadge tone="bad">
-                                      Overdue
-                                    </OkrBadge>
-                                  )}
-                                </div>
-                                
-                                {/* Progress bar */}
-                                {kr.progress !== undefined && (
-                                  <div className="w-full h-1 rounded-full bg-neutral-200 overflow-hidden">
-                                    <motion.div
-                                      className={cn("h-full rounded-full", krProgressBarColor)}
-                                      initial={false}
-                                      animate={{ width: `${Math.min(100, Math.max(0, kr.progress))}%` }}
-                                      transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                                    />
-                                  </div>
                                 )}
-                                
-                                {/* Progress label */}
-                                <div className="text-[12px] text-neutral-600">
-                                  {progressLabel}
-                                </div>
-                                
-                                {/* Weight Editor */}
-                                {canEdit && (
-                                  <div className="mt-1" onClick={(e) => e.stopPropagation()}>
-                                    <AlignmentWeightEditor
-                                      objectiveId={objective.id}
-                                      keyResultId={kr.id}
-                                      currentWeight={kr.weight ?? 1.0}
-                                      canEdit={canEdit}
-                                      size="sm"
-                                      onUpdate={() => {
-                                        // Weight update triggers backend progress recalculation
-                                        // The page will refresh on next data fetch
-                                      }}
-                                    />
-                                  </div>
+                                {kr.isOverdue && (
+                                  <OkrBadge tone="bad">
+                                    Overdue
+                                  </OkrBadge>
                                 )}
                               </div>
-                              
-                              {/* Right side: Actions and Chevron */}
-                              <div className="flex items-center gap-2 flex-shrink-0">
-                                {/* Quick Check-in Button - Prominent primary action */}
-                                {onAddCheckIn && canCheckInOnKeyResult && canCheckInOnKeyResult(kr.id) && (
-                                  <div onClick={(e) => e.stopPropagation()}>
-                                    <Button
-                                      variant={kr.isOverdue ? "default" : "default"}
-                                      size="sm"
-                                      className={cn(
-                                        "h-8 px-3 text-[12px] font-semibold whitespace-nowrap shadow-sm",
-                                        kr.isOverdue 
-                                          ? "bg-rose-500 hover:bg-rose-600 text-white" 
-                                          : "bg-violet-600 hover:bg-violet-700 text-white"
-                                      )}
-                                      onClick={() => onAddCheckIn(kr.id)}
-                                      aria-label={`Check in for ${kr.title}`}
-                                    >
-                                      {kr.isOverdue ? (
-                                        <>
-                                          <AlertCircle className="h-3.5 w-3.5 mr-1.5" />
-                                          Check in
-                                        </>
-                                      ) : (
-                                        <>
-                                          <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
-                                          Check in
-                                        </>
-                                      )}
-                                    </Button>
-                                  </div>
-                                )}
-                                
-                                {/* Chevron */}
-                                <motion.div
-                                  animate={{ rotate: isKrExpanded ? 180 : 0 }}
-                                  transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                                  className="ml-1"
-                                >
-                                  <ChevronDown className="h-4 w-4 text-neutral-400" />
-                                </motion.div>
+
+                              {/* Progress bar */}
+                              {kr.progress !== undefined && (
+                                <div className="w-full h-1 rounded-full bg-neutral-200 overflow-hidden">
+                                  <motion.div
+                                    className={cn("h-full rounded-full", krProgressBarColor)}
+                                    initial={false}
+                                    animate={{ width: `${Math.min(100, Math.max(0, kr.progress))}%` }}
+                                    transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                                  />
+                                </div>
+                              )}
+
+                              {/* Progress label */}
+                              <div className="text-[12px] text-neutral-600">
+                                {progressLabel}
                               </div>
+
+                              {/* Weight Editor */}
+                              {canEdit && (
+                                <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                                  <AlignmentWeightEditor
+                                    objectiveId={objective.id}
+                                    keyResultId={kr.id}
+                                    currentWeight={kr.weight ?? 1.0}
+                                    canEdit={canEdit}
+                                    size="sm"
+                                    onUpdate={() => {
+                                      // Weight update triggers backend progress recalculation
+                                      // The page will refresh on next data fetch
+                                    }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Right side: Actions and Chevron */}
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {/* Quick Check-in Button - Prominent primary action */}
+                              {onAddCheckIn && canCheckInOnKeyResult && canCheckInOnKeyResult(kr.id) && (
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <Button
+                                    variant={kr.isOverdue ? "default" : "default"}
+                                    size="sm"
+                                    className={cn(
+                                      "h-8 px-3 text-[12px] font-semibold whitespace-nowrap shadow-sm",
+                                      kr.isOverdue
+                                        ? "bg-rose-500 hover:bg-rose-600 text-white"
+                                        : "bg-violet-600 hover:bg-violet-700 text-white"
+                                    )}
+                                    onClick={() => onAddCheckIn(kr.id)}
+                                    aria-label={`Check in for ${kr.title}`}
+                                  >
+                                    {kr.isOverdue ? (
+                                      <>
+                                        <AlertCircle className="h-3.5 w-3.5 mr-1.5" />
+                                        Check in
+                                      </>
+                                    ) : (
+                                      <>
+                                        <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
+                                        Check in
+                                      </>
+                                    )}
+                                  </Button>
+                                </div>
+                              )}
+
+                              {/* Chevron */}
+                              <motion.div
+                                animate={{ rotate: isKrExpanded ? 180 : 0 }}
+                                transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                                className="ml-1"
+                              >
+                                <ChevronDown className="h-4 w-4 text-neutral-400" />
+                              </motion.div>
                             </div>
                           </div>
+                        </div>
 
-                          {/* Key Result expanded body */}
-                          <AnimatePresence>
-                            {isKrExpanded && (
-                              <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                                className="border-t border-neutral-200 bg-violet-50/20"
-                              >
-                                <div className="p-4 space-y-4">
-                                  {/* Quick Actions Bar - Check-in at top (Prominent) */}
-                                  {onAddCheckIn && canCheckInOnKeyResult && canCheckInOnKeyResult(kr.id) && (
-                                    <div className="flex items-center justify-between pb-4 border-b border-neutral-200 bg-violet-50/50 -mx-4 px-4 py-3 rounded-lg">
-                                      <div className="flex items-center gap-3 flex-1">
-                                        <Button
-                                          variant="default"
-                                          size="default"
-                                          className={cn(
-                                            "h-9 px-4 text-[13px] font-semibold shadow-md",
-                                            kr.isOverdue 
-                                              ? "bg-rose-500 hover:bg-rose-600 text-white" 
-                                              : "bg-violet-600 hover:bg-violet-700 text-white"
-                                          )}
-                                          onClick={() => onAddCheckIn(kr.id)}
-                                          aria-label={`Check in for ${kr.title}`}
-                                        >
-                                          {kr.isOverdue ? (
-                                            <>
-                                              <AlertCircle className="h-4 w-4 mr-2" />
-                                              Check in (Overdue)
-                                            </>
-                                          ) : (
-                                            <>
-                                              <CheckCircle className="h-4 w-4 mr-2" />
-                                              Check in
-                                            </>
-                                          )}
-                                        </Button>
-                                        {kr.lastCheckInDate && (
-                                          <span className="text-[11px] text-neutral-600 font-medium">
-                                            Last: {formatLastCheckIn(kr.lastCheckInDate)?.text || 'Unknown'}
-                                          </span>
+                        {/* Key Result expanded body */}
+                        <AnimatePresence>
+                          {isKrExpanded && (
+                            <motion.div
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                              className="border-t border-neutral-200 bg-violet-50/20"
+                            >
+                              <div className="p-4 space-y-4">
+                                {/* Quick Actions Bar - Check-in at top (Prominent) */}
+                                {onAddCheckIn && canCheckInOnKeyResult && canCheckInOnKeyResult(kr.id) && (
+                                  <div className="flex items-center justify-between pb-4 border-b border-neutral-200 bg-violet-50/50 -mx-4 px-4 py-3 rounded-lg">
+                                    <div className="flex items-center gap-3 flex-1">
+                                      <Button
+                                        variant="default"
+                                        size="default"
+                                        className={cn(
+                                          "h-9 px-4 text-[13px] font-semibold shadow-md",
+                                          kr.isOverdue
+                                            ? "bg-rose-500 hover:bg-rose-600 text-white"
+                                            : "bg-violet-600 hover:bg-violet-700 text-white"
                                         )}
-                                      </div>
-                                    </div>
-                                  )}
-                                  
-                                  {/* Metrics Section */}
-                                  <div className="space-y-3">
-                                    <div className="flex items-center justify-between">
-                                      <h5 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-600 flex items-center gap-2">
-                                        <span className="w-1 h-4 bg-violet-400 rounded-full"></span>
-                                        Metrics
-                                      </h5>
-                                      {onEditKeyResult && canEditKeyResult && canEditKeyResult(kr.id) && (
-                                        <div onClick={(e) => e.stopPropagation()}>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-7 px-2.5 text-[11px] font-medium text-violet-600 hover:text-violet-700 hover:bg-violet-50"
-                                            onClick={() => onEditKeyResult(kr.id)}
-                                            aria-label={`Edit all fields for key result: ${kr.title}`}
-                                            title="Edit all Key Result fields"
-                                          >
-                                            <Edit2 className="h-3.5 w-3.5 mr-1.5" />
-                                            Edit all
-                                          </Button>
-                                        </div>
+                                        onClick={() => onAddCheckIn(kr.id)}
+                                        aria-label={`Check in for ${kr.title}`}
+                                      >
+                                        {kr.isOverdue ? (
+                                          <>
+                                            <AlertCircle className="h-4 w-4 mr-2" />
+                                            Check in (Overdue)
+                                          </>
+                                        ) : (
+                                          <>
+                                            <CheckCircle className="h-4 w-4 mr-2" />
+                                            Check in
+                                          </>
+                                        )}
+                                      </Button>
+                                      {kr.lastCheckInDate && (
+                                        <span className="text-[11px] text-neutral-600 font-medium">
+                                          Last: {formatLastCheckIn(kr.lastCheckInDate)?.text || 'Unknown'}
+                                        </span>
                                       )}
                                     </div>
-                                    {/* Progress Slider - Always show (handles read-only case internally) */}
-                                    {kr.progress !== undefined && 
-                                     kr.startValue !== undefined && 
-                                     kr.targetValue !== undefined && (
+                                  </div>
+                                )}
+
+                                {/* Metrics Section */}
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <h5 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-600 flex items-center gap-2">
+                                      <span className="w-1 h-4 bg-violet-400 rounded-full"></span>
+                                      Metrics
+                                    </h5>
+                                    {onEditKeyResult && canEditKeyResult && canEditKeyResult(kr.id) && (
+                                      <div onClick={(e) => e.stopPropagation()}>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 px-2.5 text-[11px] font-medium text-violet-600 hover:text-violet-700 hover:bg-violet-50"
+                                          onClick={() => onEditKeyResult(kr.id)}
+                                          aria-label={`Edit all fields for key result: ${kr.title}`}
+                                          title="Edit all Key Result fields"
+                                        >
+                                          <Edit2 className="h-3.5 w-3.5 mr-1.5" />
+                                          Edit all
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {/* Progress Slider - Always show (handles read-only case internally) */}
+                                  {kr.progress !== undefined &&
+                                    kr.startValue !== undefined &&
+                                    kr.targetValue !== undefined && (
                                       <div className="pl-3" onClick={(e) => e.stopPropagation()}>
                                         <ProgressSlider
                                           progress={kr.progress}
@@ -1945,183 +1945,157 @@ export function ObjectiveRow({
                                         )}
                                       </div>
                                     )}
-                                    
-                                    {(kr.currentValue !== undefined || kr.targetValue !== undefined) && (
-                                      <div className="space-y-2 pl-3">
-                                        {/* Current and Target Values */}
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="text-[11px] text-neutral-500 font-medium">Current Value:</span>
-                                            <InlineNumericEditor
-                                              label="Current"
-                                              value={kr.currentValue}
-                                              onSave={(value) => handleUpdateKeyResultCurrent(kr.id, value)}
-                                              canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
-                                              lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                                              ariaLabel="Edit key result current value"
-                                              resource={objectiveForHook}
-                                              disabled={false}
-                                              unit={kr.unit || ''}
-                                              allowEmpty={false}
-                                            />
-                                          </div>
-                                          <span className="text-[12px] text-neutral-400">/</span>
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="text-[11px] text-neutral-500 font-medium">Target Value:</span>
-                                            <InlineNumericEditor
-                                              label="Target"
-                                              value={kr.targetValue}
-                                              onSave={(value) => handleUpdateKeyResultTarget(kr.id, value)}
-                                              canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
-                                              lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                                              ariaLabel="Edit key result target value"
-                                              resource={objectiveForHook}
-                                              disabled={false}
-                                              unit={kr.unit || ''}
-                                              allowEmpty={false}
-                                            />
-                                          </div>
+
+                                  {(kr.currentValue !== undefined || kr.targetValue !== undefined) && (
+                                    <div className="space-y-2 pl-3">
+                                      {/* Current and Target Values */}
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-[11px] text-neutral-500 font-medium">Current Value:</span>
+                                          <InlineNumericEditor
+                                            label="Current"
+                                            value={kr.currentValue}
+                                            onSave={(value) => handleUpdateKeyResultCurrent(kr.id, value)}
+                                            canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                            lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                            ariaLabel="Edit key result current value"
+                                            resource={objectiveForHook}
+                                            disabled={false}
+                                            unit={kr.unit || ''}
+                                            allowEmpty={false}
+                                          />
                                         </div>
-                                        {/* Progress Percentage - Single source of truth */}
-                                        {kr.progress !== undefined && (
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-[11px] text-neutral-500 font-medium">Progress:</span>
-                                            <span className="text-[12px] text-neutral-700 font-semibold flex items-center gap-1">
-                                              {Math.round(clampProgress(kr.progress))}%
-                                              {kr.status === 'ON_TRACK' && (
-                                                <span className="text-emerald-500" aria-label="On track">↑</span>
-                                              )}
-                                              {kr.status === 'AT_RISK' && (
-                                                <span className="text-amber-500" aria-label="At risk">→</span>
-                                              )}
-                                              {(kr.status === 'OFF_TRACK' || kr.status === 'BLOCKED') && (
-                                                <span className="text-rose-500" aria-label="Blocked or off track">↓</span>
-                                              )}
-                                            </span>
-                                          </div>
-                                        )}
+                                        <span className="text-[12px] text-neutral-400">/</span>
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-[11px] text-neutral-500 font-medium">Target Value:</span>
+                                          <InlineNumericEditor
+                                            label="Target"
+                                            value={kr.targetValue}
+                                            onSave={(value) => handleUpdateKeyResultTarget(kr.id, value)}
+                                            canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                            lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                            ariaLabel="Edit key result target value"
+                                            resource={objectiveForHook}
+                                            disabled={false}
+                                            unit={kr.unit || ''}
+                                            allowEmpty={false}
+                                          />
+                                        </div>
                                       </div>
-                                    )}
-                                    
-                                    {/* Owner */}
-                                    {kr.ownerId && (
-                                      <div className="flex items-center gap-1.5 pl-3">
-                                        <span className="text-[11px] text-neutral-500">Owner:</span>
-                                        <InlineOwnerEditor
-                                          currentOwner={availableUsers.find(u => u.id === kr.ownerId) || { id: kr.ownerId || '', name: 'Unknown' }}
-                                          availableUsers={availableUsers}
-                                          onSave={(userId) => handleUpdateKeyResultOwner(kr.id, userId)}
-                                          canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
-                                          lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
-                                          ariaLabel="Edit key result owner"
-                                          resource={objectiveForHook}
-                                          disabled={false}
-                                          size="sm"
-                                        />
-                                      </div>
-                                    )}
-                                    
-                                    {/* Check-in Information */}
-                                    {(kr.checkInCadence && kr.checkInCadence !== 'NONE') && (
-                                      <div className="flex flex-col gap-1.5 pl-3">
-                                        {kr.lastCheckInDate && (
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-[11px] text-neutral-500">Last check-in:</span>
-                                            <span className={cn(
-                                              "text-[11px] font-medium",
-                                              formatLastCheckIn(kr.lastCheckInDate)?.isRecent ? "text-emerald-600" : "text-neutral-600"
-                                            )}>
-                                              {formatLastCheckIn(kr.lastCheckInDate)?.text || 'Never'}
-                                            </span>
-                                          </div>
-                                        )}
-                                        {kr.nextCheckInDue && (
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-[11px] text-neutral-500">Next check-in:</span>
-                                            <span className={cn(
-                                              "text-[11px] font-medium",
-                                              formatNextCheckIn(kr.checkInCadence, kr.lastCheckInDate)?.isOverdue ? "text-rose-600" :
-                                              formatNextCheckIn(kr.checkInCadence, kr.lastCheckInDate)?.isDueSoon ? "text-amber-600" :
-                                              "text-neutral-600"
-                                            )}>
-                                              {formatNextCheckIn(kr.checkInCadence, kr.lastCheckInDate)?.text || 'Not scheduled'}
-                                            </span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                    
-                                    {/* History Preview */}
-                                    {onOpenHistory && (
-                                      <div onClick={(e) => e.stopPropagation()}>
-                                        <InlineHistoryPreview
-                                          entityType="KEY_RESULT"
-                                          entityId={kr.id}
-                                          availableUsers={availableUsers}
-                                          onViewFullHistory={() => {
-                                            onOpenHistory('KEY_RESULT', kr.id)
-                                          }}
-                                          limit={3}
-                                        />
-                                      </div>
-                                    )}
-                                    
-                                    {/* Edit all fields link */}
-                                    {onEditKeyResult && canEditKeyResult && canEditKeyResult(kr.id) && (
-                                      <div className="pl-3 pt-1">
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            onEditKeyResult(kr.id)
-                                          }}
-                                          className="text-xs text-violet-600 hover:text-violet-700 hover:underline font-medium transition-colors"
-                                          aria-label={`Edit all fields for key result: ${kr.title}`}
-                                        >
-                                          Edit all fields...
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                  
-                                  {/* Initiatives Section */}
-                                  {(() => {
-                                    const krInitiatives = initiatives.filter(init => init.keyResultId === kr.id)
-                                    const groupedInitiatives = groupInitiativesByStatus(krInitiatives)
-                                    const totalInitiatives = krInitiatives.length
-                                    
-                                    if (totalInitiatives === 0) {
-                                      return (
-                                        <div className="space-y-2">
-                                          <div className="flex items-center justify-between">
-                                            <h5 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-600 flex items-center gap-2">
-                                              <span className="w-1 h-4 bg-emerald-400 rounded-full"></span>
-                                              Initiatives
-                                            </h5>
-                                            {onAddInitiativeToKr && canEditKeyResult && canEditKeyResult(kr.id) && (
-                                              <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-6 px-2 text-[10px] font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                                                onClick={() => onAddInitiativeToKr(kr.id)}
-                                              >
-                                                + Add Initiative
-                                              </Button>
+                                      {/* Progress Percentage - Single source of truth */}
+                                      {kr.progress !== undefined && (
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[11px] text-neutral-500 font-medium">Progress:</span>
+                                          <span className="text-[12px] text-neutral-700 font-semibold flex items-center gap-1">
+                                            {Math.round(clampProgress(kr.progress))}%
+                                            {kr.status === 'ON_TRACK' && (
+                                              <span className="text-emerald-500" aria-label="On track">↑</span>
                                             )}
-                                          </div>
-                                          <div className="rounded-lg border border-dashed border-emerald-200 bg-emerald-50/30 p-3 text-center pl-3">
-                                            <p className="text-[12px] text-neutral-600 mb-1">No initiatives yet</p>
-                                            <p className="text-[10px] text-neutral-500">Initiatives are action items that support this key result</p>
-                                          </div>
+                                            {kr.status === 'AT_RISK' && (
+                                              <span className="text-amber-500" aria-label="At risk">→</span>
+                                            )}
+                                            {(kr.status === 'OFF_TRACK' || kr.status === 'BLOCKED') && (
+                                              <span className="text-rose-500" aria-label="Blocked or off track">↓</span>
+                                            )}
+                                          </span>
                                         </div>
-                                      )
-                                    }
-                                    
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Owner */}
+                                  {kr.ownerId && (
+                                    <div className="flex items-center gap-1.5 pl-3">
+                                      <span className="text-[11px] text-neutral-500">Owner:</span>
+                                      <InlineOwnerEditor
+                                        currentOwner={availableUsers.find(u => u.id === kr.ownerId) || { id: kr.ownerId || '', name: 'Unknown' }}
+                                        availableUsers={availableUsers}
+                                        onSave={(userId) => handleUpdateKeyResultOwner(kr.id, userId)}
+                                        canEdit={canEditKeyResult ? canEditKeyResult(kr.id) : false}
+                                        lockReason={lockInfo.isLocked ? lockInfo.message : undefined}
+                                        ariaLabel="Edit key result owner"
+                                        resource={objectiveForHook}
+                                        disabled={false}
+                                        size="sm"
+                                      />
+                                    </div>
+                                  )}
+
+                                  {/* Check-in Information */}
+                                  {(kr.checkInCadence && kr.checkInCadence !== 'NONE') && (
+                                    <div className="flex flex-col gap-1.5 pl-3">
+                                      {kr.lastCheckInDate && (
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[11px] text-neutral-500">Last check-in:</span>
+                                          <span className={cn(
+                                            "text-[11px] font-medium",
+                                            formatLastCheckIn(kr.lastCheckInDate)?.isRecent ? "text-emerald-600" : "text-neutral-600"
+                                          )}>
+                                            {formatLastCheckIn(kr.lastCheckInDate)?.text || 'Never'}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {kr.nextCheckInDue && (
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[11px] text-neutral-500">Next check-in:</span>
+                                          <span className={cn(
+                                            "text-[11px] font-medium",
+                                            formatNextCheckIn(kr.checkInCadence, kr.lastCheckInDate)?.isOverdue ? "text-rose-600" :
+                                              formatNextCheckIn(kr.checkInCadence, kr.lastCheckInDate)?.isDueSoon ? "text-amber-600" :
+                                                "text-neutral-600"
+                                          )}>
+                                            {formatNextCheckIn(kr.checkInCadence, kr.lastCheckInDate)?.text || 'Not scheduled'}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* History Preview */}
+                                  {onOpenHistory && (
+                                    <div onClick={(e) => e.stopPropagation()}>
+                                      <InlineHistoryPreview
+                                        entityType="KEY_RESULT"
+                                        entityId={kr.id}
+                                        availableUsers={availableUsers}
+                                        onViewFullHistory={() => {
+                                          onOpenHistory('KEY_RESULT', kr.id)
+                                        }}
+                                        limit={3}
+                                      />
+                                    </div>
+                                  )}
+
+                                  {/* Edit all fields link */}
+                                  {onEditKeyResult && canEditKeyResult && canEditKeyResult(kr.id) && (
+                                    <div className="pl-3 pt-1">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          onEditKeyResult(kr.id)
+                                        }}
+                                        className="text-xs text-violet-600 hover:text-violet-700 hover:underline font-medium transition-colors"
+                                        aria-label={`Edit all fields for key result: ${kr.title}`}
+                                      >
+                                        Edit all fields...
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Initiatives Section */}
+                                {(() => {
+                                  const krInitiatives = initiatives.filter(init => init.keyResultId === kr.id)
+                                  const groupedInitiatives = groupInitiativesByStatus(krInitiatives)
+                                  const totalInitiatives = krInitiatives.length
+
+                                  if (totalInitiatives === 0) {
                                     return (
-                                      <div className="space-y-3">
+                                      <div className="space-y-2">
                                         <div className="flex items-center justify-between">
                                           <h5 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-600 flex items-center gap-2">
                                             <span className="w-1 h-4 bg-emerald-400 rounded-full"></span>
-                                            Initiatives ({totalInitiatives})
+                                            Initiatives
                                           </h5>
                                           {onAddInitiativeToKr && canEditKeyResult && canEditKeyResult(kr.id) && (
                                             <Button
@@ -2134,301 +2108,83 @@ export function ObjectiveRow({
                                             </Button>
                                           )}
                                         </div>
-                                        
-                                        <div className="space-y-3 pl-3">
-                                          {/* In Progress Initiatives */}
-                                          {groupedInitiatives.IN_PROGRESS.length > 0 && (
-                                            <div className="space-y-2">
-                                              {groupedInitiatives.IN_PROGRESS.map((init) => {
-                                                const isInitExpanded = expandedInitiatives.has(init.id)
-                                                const initStatusBadge = getInitiativeStatusBadge(init.status)
-                                                const dueDateInfo = formatDueDate(init.dueDate)
-                                                const lastUpdated = formatLastUpdated(init.updatedAt)
-                                                
-                                                return (
-                                                  <div
-                                                    key={`init-${init.id}`}
-                                                    className="rounded-lg border-l-2 border-emerald-400 border border-neutral-200 bg-emerald-50/40 hover:bg-emerald-50/60 transition-all"
-                                                  >
-                                                    <div
-                                                      className="p-2.5 cursor-pointer"
-                                                      onClick={() => handleToggleInitiative(init.id)}
-                                                      onKeyDown={(e) => {
-                                                        if (e.key === 'Enter' || e.key === ' ') {
-                                                          e.preventDefault()
-                                                          handleToggleInitiative(init.id)
-                                                        }
-                                                      }}
-                                                      role="button"
-                                                      tabIndex={0}
-                                                      aria-label={`${isInitExpanded ? 'Collapse' : 'Expand'} initiative: ${init.title}`}
-                                                    >
-                                                      <div className="flex items-start justify-between gap-2">
-                                                        <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                                                          <div className="flex items-center gap-2">
-                                                            <Rocket className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-                                                            <div className="text-[12px] text-foreground font-medium">
-                                                              {init.title}
-                                                            </div>
-                                                            <OkrBadge tone={initStatusBadge.tone}>
-                                                              {initStatusBadge.label}
-                                                            </OkrBadge>
-                                                            {(init as any).goalType && (
-                                                              <Badge variant="outline" className="text-xs">
-                                                                {(init as any).goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
-                                                              </Badge>
-                                                            )}
-                                                            {(init as any).progress !== undefined && (init as any).progress !== null && (
-                                                              <Badge variant="secondary" className="text-xs">
-                                                                {(init as any).progress}%
-                                                              </Badge>
-                                                            )}
-                                                          </div>
-                                                          <div className="flex items-center gap-2 flex-wrap">
-                                                            {dueDateInfo && (
-                                                              <span className={cn(
-                                                                "text-[11px]",
-                                                                dueDateInfo.isOverdue ? "text-rose-600 font-medium" : "text-neutral-600"
-                                                              )}>
-                                                                {dueDateInfo.text}
-                                                              </span>
-                                                            )}
-                                                            {lastUpdated && (
-                                                              <span className="text-[10px] text-neutral-500">
-                                                                Updated {lastUpdated}
-                                                              </span>
-                                                            )}
-                                                          </div>
-                                                        </div>
-                                                        <motion.div
-                                                          animate={{ rotate: isInitExpanded ? 180 : 0 }}
-                                                          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                                                          className="flex-shrink-0"
-                                                        >
-                                                          <ChevronDown className="h-3.5 w-3.5 text-neutral-400" />
-                                                        </motion.div>
-                                                      </div>
-                                                    </div>
-                                                    
-                                                    {/* Expanded Initiative Details */}
-                                                    <AnimatePresence>
-                                                      {isInitExpanded && (
-                                                        <motion.div
-                                                          initial={{ opacity: 0, height: 0 }}
-                                                          animate={{ opacity: 1, height: 'auto' }}
-                                                          exit={{ opacity: 0, height: 0 }}
-                                                          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                                                          className="border-t border-emerald-100 bg-emerald-50/30 overflow-hidden"
-                                                        >
-                                                          <div className="p-3 pt-2 space-y-2">
-                                                            {init.keyResultTitle && (
-                                                              <div className="flex items-center gap-2">
-                                                                <span className="text-[10px] text-neutral-500">Supporting:</span>
-                                                                <span className="text-[11px] text-violet-700 font-medium">
-                                                                  {init.keyResultTitle}
-                                                                </span>
-                                                              </div>
-                                                            )}
-                                                            {init.description && (
-                                                              <div>
-                                                                <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500 mb-1">Description</div>
-                                                                <div className="text-[11px] text-neutral-700 whitespace-pre-wrap">{init.description}</div>
-                                                              </div>
-                                                            )}
-                                                            {init.ownerId && availableUsers.length > 0 && (
-                                                              <div className="flex items-center gap-2">
-                                                                <span className="text-[10px] text-neutral-500">Owner:</span>
-                                                                <span className="text-[11px] text-neutral-700">
-                                                                  {availableUsers.find(u => u.id === init.ownerId)?.name || 'Unknown'}
-                                                                </span>
-                                                              </div>
-                                                            )}
-                                                            {init.createdAt && (
-                                                              <div className="flex items-center gap-2">
-                                                                <span className="text-[10px] text-neutral-500">Created:</span>
-                                                                <span className="text-[11px] text-neutral-700">
-                                                                  {formatLastUpdated(init.createdAt)}
-                                                                </span>
-                                                              </div>
-                                                            )}
-                                                            {/* Status Trend Chart */}
-                                                            <div className="pt-2 border-t border-emerald-200">
-                                                              <InitiativeStatusTrendChart initiativeId={init.id} />
-                                                            </div>
+                                        <div className="rounded-lg border border-dashed border-emerald-200 bg-emerald-50/30 p-3 text-center pl-3">
+                                          <p className="text-[12px] text-neutral-600 mb-1">No initiatives yet</p>
+                                          <p className="text-[10px] text-neutral-500">Initiatives are action items that support this key result</p>
+                                        </div>
+                                      </div>
+                                    )
+                                  }
 
-                                                            {/* Tasks for this Initiative - TEMPORARILY DISABLED */}
-                                                            {false && onAddTask && (tasksByInitiative[init.id]?.length > 0 || canEdit) && (
-                                                              <div className="pt-2 border-t border-emerald-200">
-                                                                <TaskList
-                                                                  tasks={tasksByInitiative[init.id] || []}
-                                                                  initiativeId={init.id}
-                                                                  onAddTask={onAddTask}
-                                                                  onEditTask={onEditTask}
-                                                                  onDeleteTask={onDeleteTask}
-                                                                  canEdit={canEdit}
-                                                                  ownerNames={availableUsers.reduce((acc, u) => {
-                                                                    acc[u.id] = u.name
-                                                                    return acc
-                                                                  }, {} as Record<string, string>)}
-                                                                  hideTitle={false}
-                                                                />
-                                                              </div>
-                                                            )}
-                                                          </div>
-                                                        </motion.div>
-                                                      )}
-                                                    </AnimatePresence>
-                                                  </div>
-                                                )
-                                              })}
-                                            </div>
-                                          )}
-                                          
-                                          {/* Blocked Initiatives */}
-                                          {groupedInitiatives.BLOCKED.length > 0 && (
-                                            <div className="space-y-2">
-                                              {groupedInitiatives.BLOCKED.map((init) => {
-                                                const isInitExpanded = expandedInitiatives.has(init.id)
-                                                const initStatusBadge = getInitiativeStatusBadge(init.status)
-                                                const dueDateInfo = formatDueDate(init.dueDate)
-                                                const lastUpdated = formatLastUpdated(init.updatedAt)
-                                                
-                                                return (
+                                  return (
+                                    <div className="space-y-3">
+                                      <div className="flex items-center justify-between">
+                                        <h5 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-600 flex items-center gap-2">
+                                          <span className="w-1 h-4 bg-emerald-400 rounded-full"></span>
+                                          Initiatives ({totalInitiatives})
+                                        </h5>
+                                        {onAddInitiativeToKr && canEditKeyResult && canEditKeyResult(kr.id) && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 px-2 text-[10px] font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                            onClick={() => onAddInitiativeToKr(kr.id)}
+                                          >
+                                            + Add Initiative
+                                          </Button>
+                                        )}
+                                      </div>
+
+                                      <div className="space-y-3 pl-3">
+                                        {/* In Progress Initiatives */}
+                                        {groupedInitiatives.IN_PROGRESS.length > 0 && (
+                                          <div className="space-y-2">
+                                            {groupedInitiatives.IN_PROGRESS.map((init) => {
+                                              const isInitExpanded = expandedInitiatives.has(init.id)
+                                              const initStatusBadge = getInitiativeStatusBadge(init.status)
+                                              const dueDateInfo = formatDueDate(init.dueDate)
+                                              const lastUpdated = formatLastUpdated(init.updatedAt)
+
+                                              return (
+                                                <div
+                                                  key={`init-${init.id}`}
+                                                  className="rounded-lg border-l-2 border-emerald-400 border border-neutral-200 bg-emerald-50/40 hover:bg-emerald-50/60 transition-all"
+                                                >
                                                   <div
-                                                    key={`init-${init.id}`}
-                                                    className="rounded-lg border-l-2 border-rose-400 border border-neutral-200 bg-rose-50/40 hover:bg-rose-50/60 transition-all"
+                                                    className="p-2.5 cursor-pointer"
+                                                    onClick={() => handleToggleInitiative(init.id)}
+                                                    onKeyDown={(e) => {
+                                                      if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault()
+                                                        handleToggleInitiative(init.id)
+                                                      }
+                                                    }}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    aria-label={`${isInitExpanded ? 'Collapse' : 'Expand'} initiative: ${init.title}`}
                                                   >
-                                                    <div
-                                                      className="p-2.5 cursor-pointer"
-                                                      onClick={() => handleToggleInitiative(init.id)}
-                                                      onKeyDown={(e) => {
-                                                        if (e.key === 'Enter' || e.key === ' ') {
-                                                          e.preventDefault()
-                                                          handleToggleInitiative(init.id)
-                                                        }
-                                                      }}
-                                                      role="button"
-                                                      tabIndex={0}
-                                                      aria-label={`${isInitExpanded ? 'Collapse' : 'Expand'} initiative: ${init.title}`}
-                                                    >
-                                                      <div className="flex items-start justify-between gap-2">
-                                                        <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                                                          <div className="flex items-center gap-2">
-                                                            <Rocket className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-                                                            <div className="text-[12px] text-foreground font-medium">
-                                                              {init.title}
-                                                            </div>
-                                                            <OkrBadge tone={initStatusBadge.tone}>
-                                                              {initStatusBadge.label}
-                                                            </OkrBadge>
-                                                            {(init as any).goalType && (
-                                                              <Badge variant="outline" className="text-xs">
-                                                                {(init as any).goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
-                                                              </Badge>
-                                                            )}
-                                                            {(init as any).progress !== undefined && (init as any).progress !== null && (
-                                                              <Badge variant="secondary" className="text-xs">
-                                                                {(init as any).progress}%
-                                                              </Badge>
-                                                            )}
+                                                    <div className="flex items-start justify-between gap-2">
+                                                      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                          <Rocket className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                                                          <div className="text-[12px] text-foreground font-medium">
+                                                            {init.title}
                                                           </div>
-                                                          <div className="flex items-center gap-2 flex-wrap">
-                                                            {dueDateInfo && (
-                                                              <span className={cn(
-                                                                "text-[11px]",
-                                                                dueDateInfo.isOverdue ? "text-rose-600 font-medium" : "text-neutral-600"
-                                                              )}>
-                                                                {dueDateInfo.text}
-                                                              </span>
-                                                            )}
-                                                            {lastUpdated && (
-                                                              <span className="text-[10px] text-neutral-500">
-                                                                Updated {lastUpdated}
-                                                              </span>
-                                                            )}
-                                                          </div>
+                                                          <OkrBadge tone={initStatusBadge.tone}>
+                                                            {initStatusBadge.label}
+                                                          </OkrBadge>
+                                                          {(init as any).goalType && (
+                                                            <Badge variant="outline" className="text-xs">
+                                                              {(init as any).goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
+                                                            </Badge>
+                                                          )}
+                                                          {(init as any).progress !== undefined && (init as any).progress !== null && (
+                                                            <Badge variant="secondary" className="text-xs">
+                                                              {(init as any).progress}%
+                                                            </Badge>
+                                                          )}
                                                         </div>
-                                                        <motion.div
-                                                          animate={{ rotate: isInitExpanded ? 180 : 0 }}
-                                                          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                                                          className="flex-shrink-0"
-                                                        >
-                                                          <ChevronDown className="h-3.5 w-3.5 text-neutral-400" />
-                                                        </motion.div>
-                                                      </div>
-                                                    </div>
-                                                    
-                                                    <AnimatePresence>
-                                                      {isInitExpanded && (
-                                                        <motion.div
-                                                          initial={{ opacity: 0, height: 0 }}
-                                                          animate={{ opacity: 1, height: 'auto' }}
-                                                          exit={{ opacity: 0, height: 0 }}
-                                                          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                                                          className="border-t border-rose-100 bg-rose-50/30 overflow-hidden"
-                                                        >
-                                                          <div className="p-3 pt-2 space-y-2">
-                                                            {init.description && (
-                                                              <div>
-                                                                <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500 mb-1">Description</div>
-                                                                <div className="text-[11px] text-neutral-700 whitespace-pre-wrap">{init.description}</div>
-                                                              </div>
-                                                            )}
-                                                            {init.ownerId && availableUsers.length > 0 && (
-                                                              <div className="flex items-center gap-2">
-                                                                <span className="text-[10px] text-neutral-500">Owner:</span>
-                                                                <span className="text-[11px] text-neutral-700">
-                                                                  {availableUsers.find(u => u.id === init.ownerId)?.name || 'Unknown'}
-                                                                </span>
-                                                              </div>
-                                                            )}
-                                                          </div>
-                                                        </motion.div>
-                                                      )}
-                                                    </AnimatePresence>
-                                                  </div>
-                                                )
-                                              })}
-                                            </div>
-                                          )}
-                                          
-                                          {/* Not Started Initiatives */}
-                                          {groupedInitiatives.NOT_STARTED.length > 0 && (
-                                            <div className="space-y-2">
-                                              {groupedInitiatives.NOT_STARTED.map((init) => {
-                                                const isInitExpanded = expandedInitiatives.has(init.id)
-                                                const initStatusBadge = getInitiativeStatusBadge(init.status)
-                                                const dueDateInfo = formatDueDate(init.dueDate)
-                                                
-                                                return (
-                                                  <div
-                                                    key={`init-${init.id}`}
-                                                    className="rounded-lg border-l-2 border-amber-400 border border-neutral-200 bg-amber-50/40 hover:bg-amber-50/60 transition-all"
-                                                  >
-                                                    <div
-                                                      className="p-2.5 cursor-pointer"
-                                                      onClick={() => handleToggleInitiative(init.id)}
-                                                      onKeyDown={(e) => {
-                                                        if (e.key === 'Enter' || e.key === ' ') {
-                                                          e.preventDefault()
-                                                          handleToggleInitiative(init.id)
-                                                        }
-                                                      }}
-                                                      role="button"
-                                                      tabIndex={0}
-                                                      aria-label={`${isInitExpanded ? 'Collapse' : 'Expand'} initiative: ${init.title}`}
-                                                    >
-                                                      <div className="flex items-start justify-between gap-2">
-                                                        <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                                                          <div className="flex items-center gap-2">
-                                                            <Rocket className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
-                                                            <div className="text-[12px] text-foreground font-medium">
-                                                              {init.title}
-                                                            </div>
-                                                            <OkrBadge tone={initStatusBadge.tone}>
-                                                              {initStatusBadge.label}
-                                                            </OkrBadge>
-                                                          </div>
+                                                        <div className="flex items-center gap-2 flex-wrap">
                                                           {dueDateInfo && (
                                                             <span className={cn(
                                                               "text-[11px]",
@@ -2437,138 +2193,350 @@ export function ObjectiveRow({
                                                               {dueDateInfo.text}
                                                             </span>
                                                           )}
+                                                          {lastUpdated && (
+                                                            <span className="text-[10px] text-neutral-500">
+                                                              Updated {lastUpdated}
+                                                            </span>
+                                                          )}
                                                         </div>
-                                                        <motion.div
-                                                          animate={{ rotate: isInitExpanded ? 180 : 0 }}
-                                                          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-                                                          className="flex-shrink-0"
-                                                        >
-                                                          <ChevronDown className="h-3.5 w-3.5 text-neutral-400" />
-                                                        </motion.div>
                                                       </div>
-                                                    </div>
-                                                    
-                                                    <AnimatePresence>
-                                                      {isInitExpanded && (
-                                                        <motion.div
-                                                          initial={{ opacity: 0, height: 0 }}
-                                                          animate={{ opacity: 1, height: 'auto' }}
-                                                          exit={{ opacity: 0, height: 0 }}
-                                                          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                                                          className="border-t border-amber-100 bg-amber-50/30 overflow-hidden"
-                                                        >
-                                                          <div className="p-3 pt-2 space-y-2">
-                                                            {init.description && (
-                                                              <div>
-                                                                <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500 mb-1">Description</div>
-                                                                <div className="text-[11px] text-neutral-700 whitespace-pre-wrap">{init.description}</div>
-                                                              </div>
-                                                            )}
-                                                          </div>
-                                                        </motion.div>
-                                                      )}
-                                                    </AnimatePresence>
-                                                  </div>
-                                                )
-                                              })}
-                                            </div>
-                                          )}
-                                          
-                                          {/* Completed Initiatives (collapsed by default, can expand) */}
-                                          {groupedInitiatives.COMPLETED.length > 0 && (
-                                            <details className="group">
-                                              <summary className="cursor-pointer text-[11px] font-medium text-neutral-600 hover:text-foreground mb-2 flex items-center gap-2">
-                                                <ChevronDown className="h-3 w-3 text-neutral-400 group-open:rotate-180 transition-transform" />
-                                                Completed ({groupedInitiatives.COMPLETED.length})
-                                              </summary>
-                                              <div className="mt-2 space-y-2">
-                                                {groupedInitiatives.COMPLETED.map((init) => {
-                                                  const isInitExpanded = expandedInitiatives.has(init.id)
-                                                  const initStatusBadge = getInitiativeStatusBadge(init.status)
-                                                  
-                                                  return (
-                                                    <div
-                                                      key={`init-${init.id}`}
-                                                      className="rounded-lg border-l-2 border-neutral-300 border border-neutral-200 bg-neutral-50/40 hover:bg-neutral-50/60 transition-all opacity-75"
-                                                    >
-                                                      <div
-                                                        className="p-2.5 cursor-pointer"
-                                                        onClick={() => handleToggleInitiative(init.id)}
-                                                        onKeyDown={(e) => {
-                                                          if (e.key === 'Enter' || e.key === ' ') {
-                                                            e.preventDefault()
-                                                            handleToggleInitiative(init.id)
-                                                          }
-                                                        }}
-                                                        role="button"
-                                                        tabIndex={0}
+                                                      <motion.div
+                                                        animate={{ rotate: isInitExpanded ? 180 : 0 }}
+                                                        transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                                                        className="flex-shrink-0"
                                                       >
+                                                        <ChevronDown className="h-3.5 w-3.5 text-neutral-400" />
+                                                      </motion.div>
+                                                    </div>
+                                                  </div>
+
+                                                  {/* Expanded Initiative Details */}
+                                                  <AnimatePresence>
+                                                    {isInitExpanded && (
+                                                      <motion.div
+                                                        initial={{ opacity: 0, height: 0 }}
+                                                        animate={{ opacity: 1, height: 'auto' }}
+                                                        exit={{ opacity: 0, height: 0 }}
+                                                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                                                        className="border-t border-emerald-100 bg-emerald-50/30 overflow-hidden"
+                                                      >
+                                                        <div className="p-3 pt-2 space-y-2">
+                                                          {init.keyResultTitle && (
+                                                            <div className="flex items-center gap-2">
+                                                              <span className="text-[10px] text-neutral-500">Supporting:</span>
+                                                              <span className="text-[11px] text-violet-700 font-medium">
+                                                                {init.keyResultTitle}
+                                                              </span>
+                                                            </div>
+                                                          )}
+                                                          {init.description && (
+                                                            <div>
+                                                              <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500 mb-1">Description</div>
+                                                              <div className="text-[11px] text-neutral-700 whitespace-pre-wrap">{init.description}</div>
+                                                            </div>
+                                                          )}
+                                                          {init.ownerId && availableUsers.length > 0 && (
+                                                            <div className="flex items-center gap-2">
+                                                              <span className="text-[10px] text-neutral-500">Owner:</span>
+                                                              <span className="text-[11px] text-neutral-700">
+                                                                {availableUsers.find(u => u.id === init.ownerId)?.name || 'Unknown'}
+                                                              </span>
+                                                            </div>
+                                                          )}
+                                                          {init.createdAt && (
+                                                            <div className="flex items-center gap-2">
+                                                              <span className="text-[10px] text-neutral-500">Created:</span>
+                                                              <span className="text-[11px] text-neutral-700">
+                                                                {formatLastUpdated(init.createdAt)}
+                                                              </span>
+                                                            </div>
+                                                          )}
+                                                          {/* Status Trend Chart */}
+                                                          <div className="pt-2 border-t border-emerald-200">
+                                                            <InitiativeStatusTrendChart initiativeId={init.id} />
+                                                          </div>
+
+                                                          {/* Tasks for this Initiative - TEMPORARILY DISABLED */}
+
+                                                        </div>
+                                                      </motion.div>
+                                                    )}
+                                                  </AnimatePresence>
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        )}
+
+                                        {/* Blocked Initiatives */}
+                                        {groupedInitiatives.BLOCKED.length > 0 && (
+                                          <div className="space-y-2">
+                                            {groupedInitiatives.BLOCKED.map((init) => {
+                                              const isInitExpanded = expandedInitiatives.has(init.id)
+                                              const initStatusBadge = getInitiativeStatusBadge(init.status)
+                                              const dueDateInfo = formatDueDate(init.dueDate)
+                                              const lastUpdated = formatLastUpdated(init.updatedAt)
+
+                                              return (
+                                                <div
+                                                  key={`init-${init.id}`}
+                                                  className="rounded-lg border-l-2 border-rose-400 border border-neutral-200 bg-rose-50/40 hover:bg-rose-50/60 transition-all"
+                                                >
+                                                  <div
+                                                    className="p-2.5 cursor-pointer"
+                                                    onClick={() => handleToggleInitiative(init.id)}
+                                                    onKeyDown={(e) => {
+                                                      if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault()
+                                                        handleToggleInitiative(init.id)
+                                                      }
+                                                    }}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    aria-label={`${isInitExpanded ? 'Collapse' : 'Expand'} initiative: ${init.title}`}
+                                                  >
+                                                    <div className="flex items-start justify-between gap-2">
+                                                      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
                                                         <div className="flex items-center gap-2">
-                                                          <div className="text-[12px] text-neutral-700 font-medium line-through">
+                                                          <Rocket className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                                                          <div className="text-[12px] text-foreground font-medium">
+                                                            {init.title}
+                                                          </div>
+                                                          <OkrBadge tone={initStatusBadge.tone}>
+                                                            {initStatusBadge.label}
+                                                          </OkrBadge>
+                                                          {(init as any).goalType && (
+                                                            <Badge variant="outline" className="text-xs">
+                                                              {(init as any).goalType === 'ASPIRATIONAL' ? 'Aspirational' : 'Committed'}
+                                                            </Badge>
+                                                          )}
+                                                          {(init as any).progress !== undefined && (init as any).progress !== null && (
+                                                            <Badge variant="secondary" className="text-xs">
+                                                              {(init as any).progress}%
+                                                            </Badge>
+                                                          )}
+                                                        </div>
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                          {dueDateInfo && (
+                                                            <span className={cn(
+                                                              "text-[11px]",
+                                                              dueDateInfo.isOverdue ? "text-rose-600 font-medium" : "text-neutral-600"
+                                                            )}>
+                                                              {dueDateInfo.text}
+                                                            </span>
+                                                          )}
+                                                          {lastUpdated && (
+                                                            <span className="text-[10px] text-neutral-500">
+                                                              Updated {lastUpdated}
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                      </div>
+                                                      <motion.div
+                                                        animate={{ rotate: isInitExpanded ? 180 : 0 }}
+                                                        transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                                                        className="flex-shrink-0"
+                                                      >
+                                                        <ChevronDown className="h-3.5 w-3.5 text-neutral-400" />
+                                                      </motion.div>
+                                                    </div>
+                                                  </div>
+
+                                                  <AnimatePresence>
+                                                    {isInitExpanded && (
+                                                      <motion.div
+                                                        initial={{ opacity: 0, height: 0 }}
+                                                        animate={{ opacity: 1, height: 'auto' }}
+                                                        exit={{ opacity: 0, height: 0 }}
+                                                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                                                        className="border-t border-rose-100 bg-rose-50/30 overflow-hidden"
+                                                      >
+                                                        <div className="p-3 pt-2 space-y-2">
+                                                          {init.description && (
+                                                            <div>
+                                                              <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500 mb-1">Description</div>
+                                                              <div className="text-[11px] text-neutral-700 whitespace-pre-wrap">{init.description}</div>
+                                                            </div>
+                                                          )}
+                                                          {init.ownerId && availableUsers.length > 0 && (
+                                                            <div className="flex items-center gap-2">
+                                                              <span className="text-[10px] text-neutral-500">Owner:</span>
+                                                              <span className="text-[11px] text-neutral-700">
+                                                                {availableUsers.find(u => u.id === init.ownerId)?.name || 'Unknown'}
+                                                              </span>
+                                                            </div>
+                                                          )}
+                                                        </div>
+                                                      </motion.div>
+                                                    )}
+                                                  </AnimatePresence>
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        )}
+
+                                        {/* Not Started Initiatives */}
+                                        {groupedInitiatives.NOT_STARTED.length > 0 && (
+                                          <div className="space-y-2">
+                                            {groupedInitiatives.NOT_STARTED.map((init) => {
+                                              const isInitExpanded = expandedInitiatives.has(init.id)
+                                              const initStatusBadge = getInitiativeStatusBadge(init.status)
+                                              const dueDateInfo = formatDueDate(init.dueDate)
+
+                                              return (
+                                                <div
+                                                  key={`init-${init.id}`}
+                                                  className="rounded-lg border-l-2 border-amber-400 border border-neutral-200 bg-amber-50/40 hover:bg-amber-50/60 transition-all"
+                                                >
+                                                  <div
+                                                    className="p-2.5 cursor-pointer"
+                                                    onClick={() => handleToggleInitiative(init.id)}
+                                                    onKeyDown={(e) => {
+                                                      if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault()
+                                                        handleToggleInitiative(init.id)
+                                                      }
+                                                    }}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    aria-label={`${isInitExpanded ? 'Collapse' : 'Expand'} initiative: ${init.title}`}
+                                                  >
+                                                    <div className="flex items-start justify-between gap-2">
+                                                      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                          <Rocket className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                                                          <div className="text-[12px] text-foreground font-medium">
                                                             {init.title}
                                                           </div>
                                                           <OkrBadge tone={initStatusBadge.tone}>
                                                             {initStatusBadge.label}
                                                           </OkrBadge>
                                                         </div>
+                                                        {dueDateInfo && (
+                                                          <span className={cn(
+                                                            "text-[11px]",
+                                                            dueDateInfo.isOverdue ? "text-rose-600 font-medium" : "text-neutral-600"
+                                                          )}>
+                                                            {dueDateInfo.text}
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                      <motion.div
+                                                        animate={{ rotate: isInitExpanded ? 180 : 0 }}
+                                                        transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                                                        className="flex-shrink-0"
+                                                      >
+                                                        <ChevronDown className="h-3.5 w-3.5 text-neutral-400" />
+                                                      </motion.div>
+                                                    </div>
+                                                  </div>
+
+                                                  <AnimatePresence>
+                                                    {isInitExpanded && (
+                                                      <motion.div
+                                                        initial={{ opacity: 0, height: 0 }}
+                                                        animate={{ opacity: 1, height: 'auto' }}
+                                                        exit={{ opacity: 0, height: 0 }}
+                                                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                                                        className="border-t border-amber-100 bg-amber-50/30 overflow-hidden"
+                                                      >
+                                                        <div className="p-3 pt-2 space-y-2">
+                                                          {init.description && (
+                                                            <div>
+                                                              <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500 mb-1">Description</div>
+                                                              <div className="text-[11px] text-neutral-700 whitespace-pre-wrap">{init.description}</div>
+                                                            </div>
+                                                          )}
+                                                        </div>
+                                                      </motion.div>
+                                                    )}
+                                                  </AnimatePresence>
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        )}
+
+                                        {/* Completed Initiatives (collapsed by default, can expand) */}
+                                        {groupedInitiatives.COMPLETED.length > 0 && (
+                                          <details className="group">
+                                            <summary className="cursor-pointer text-[11px] font-medium text-neutral-600 hover:text-foreground mb-2 flex items-center gap-2">
+                                              <ChevronDown className="h-3 w-3 text-neutral-400 group-open:rotate-180 transition-transform" />
+                                              Completed ({groupedInitiatives.COMPLETED.length})
+                                            </summary>
+                                            <div className="mt-2 space-y-2">
+                                              {groupedInitiatives.COMPLETED.map((init) => {
+                                                const isInitExpanded = expandedInitiatives.has(init.id)
+                                                const initStatusBadge = getInitiativeStatusBadge(init.status)
+
+                                                return (
+                                                  <div
+                                                    key={`init-${init.id}`}
+                                                    className="rounded-lg border-l-2 border-neutral-300 border border-neutral-200 bg-neutral-50/40 hover:bg-neutral-50/60 transition-all opacity-75"
+                                                  >
+                                                    <div
+                                                      className="p-2.5 cursor-pointer"
+                                                      onClick={() => handleToggleInitiative(init.id)}
+                                                      onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                          e.preventDefault()
+                                                          handleToggleInitiative(init.id)
+                                                        }
+                                                      }}
+                                                      role="button"
+                                                      tabIndex={0}
+                                                    >
+                                                      <div className="flex items-center gap-2">
+                                                        <div className="text-[12px] text-neutral-700 font-medium line-through">
+                                                          {init.title}
+                                                        </div>
+                                                        <OkrBadge tone={initStatusBadge.tone}>
+                                                          {initStatusBadge.label}
+                                                        </OkrBadge>
                                                       </div>
                                                     </div>
-                                                  )
-                                                })}
-                                              </div>
-                                            </details>
-                                          )}
-                                        </div>
+                                                  </div>
+                                                )
+                                              })}
+                                            </div>
+                                          </details>
+                                        )}
                                       </div>
-                                    )
-                                  })()}
-                                  
-                                  {/* Trend Charts */}
-                                  <div className="pt-3 border-t border-neutral-200 space-y-3">
-                                    <KeyResultTrendChart keyResultId={kr.id} />
-                                    <KeyResultStatusTrendChart keyResultId={kr.id} />
-                                  </div>
-
-                                  {/* Tasks for this Key Result - TEMPORARILY DISABLED */}
-                                  {false && onAddTask && (tasksByKeyResult[kr.id]?.length > 0 || (canEdit && canEditKeyResult && canEditKeyResult(kr.id))) && (
-                                    <div className="pt-3 border-t border-neutral-200">
-                                      <TaskList
-                                        tasks={tasksByKeyResult[kr.id] || []}
-                                        keyResultId={kr.id}
-                                        onAddTask={onAddTask}
-                                        onEditTask={onEditTask}
-                                        onDeleteTask={onDeleteTask}
-                                        canEdit={canEdit && canEditKeyResult ? canEditKeyResult(kr.id) : false}
-                                        ownerNames={availableUsers.reduce((acc, u) => {
-                                          acc[u.id] = u.name
-                                          return acc
-                                        }, {} as Record<string, string>)}
-                                        hideTitle={false}
-                                      />
                                     </div>
-                                  )}
+                                  )
+                                })()}
+
+                                {/* Trend Charts */}
+                                <div className="pt-3 border-t border-neutral-200 space-y-3">
+                                  <KeyResultTrendChart keyResultId={kr.id} />
+                                  <KeyResultStatusTrendChart keyResultId={kr.id} />
                                 </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed border-violet-200 bg-violet-50/30 p-4 text-center">
-                    <p className="text-[13px] text-neutral-700 mb-1 font-medium">No Key Results yet</p>
-                    <p className="text-[11px] text-neutral-500 mb-3">Key Results define measurable outcomes that support this objective</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2 text-[11px] font-medium"
-                      onClick={() => onAddKeyResult(objective.id, objective.title)}
-                    >
-                      + Add Key Result
-                    </Button>
-                  </div>
-                )}
+
+                                {/* Tasks for this Key Result - TEMPORARILY DISABLED */}
+
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-violet-200 bg-violet-50/30 p-4 text-center">
+                  <p className="text-[13px] text-neutral-700 mb-1 font-medium">No Key Results yet</p>
+                  <p className="text-[11px] text-neutral-500 mb-3">Key Results define measurable outcomes that support this objective</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px] font-medium"
+                    onClick={() => onAddKeyResult(objective.id, objective.title)}
+                  >
+                    + Add Key Result
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Initiatives block - only show initiatives NOT linked to any KR (directly linked to Objective) */}
@@ -2576,7 +2544,7 @@ export function ObjectiveRow({
               const objectiveLevelInitiatives = initiatives.filter(init => !init.keyResultId)
               const groupedInitiatives = groupInitiativesByStatus(objectiveLevelInitiatives)
               const totalInitiatives = objectiveLevelInitiatives.length
-              
+
               if (totalInitiatives === 0 && initiatives.length === 0) {
                 return (
                   <div className="mt-4">
@@ -2601,11 +2569,11 @@ export function ObjectiveRow({
                   </div>
                 )
               }
-              
+
               if (totalInitiatives === 0) {
                 return null
               }
-              
+
               return (
                 <div className="mt-4">
                   <div className="flex items-center justify-between mb-3">
@@ -2624,7 +2592,7 @@ export function ObjectiveRow({
                       </Button>
                     )}
                   </div>
-                  
+
                   <div className="space-y-3">
                     {/* In Progress Initiatives */}
                     {groupedInitiatives.IN_PROGRESS.length > 0 && (
@@ -2634,7 +2602,7 @@ export function ObjectiveRow({
                           const initStatusBadge = getInitiativeStatusBadge(init.status)
                           const dueDateInfo = formatDueDate(init.dueDate)
                           const lastUpdated = formatLastUpdated(init.updatedAt)
-                          
+
                           return (
                             <div
                               key={`init-${init.id}`}
@@ -2688,7 +2656,7 @@ export function ObjectiveRow({
                                   </motion.div>
                                 </div>
                               </div>
-                              
+
                               <AnimatePresence>
                                 {isInitExpanded && (
                                   <motion.div
@@ -2730,7 +2698,7 @@ export function ObjectiveRow({
                         })}
                       </div>
                     )}
-                    
+
                     {/* Blocked Initiatives */}
                     {groupedInitiatives.BLOCKED.length > 0 && (
                       <div className="space-y-2">
@@ -2739,7 +2707,7 @@ export function ObjectiveRow({
                           const initStatusBadge = getInitiativeStatusBadge(init.status)
                           const dueDateInfo = formatDueDate(init.dueDate)
                           const lastUpdated = formatLastUpdated(init.updatedAt)
-                          
+
                           return (
                             <div
                               key={`init-${init.id}`}
@@ -2793,7 +2761,7 @@ export function ObjectiveRow({
                                   </motion.div>
                                 </div>
                               </div>
-                              
+
                               <AnimatePresence>
                                 {isInitExpanded && (
                                   <motion.div
@@ -2827,7 +2795,7 @@ export function ObjectiveRow({
                         })}
                       </div>
                     )}
-                    
+
                     {/* Not Started Initiatives */}
                     {groupedInitiatives.NOT_STARTED.length > 0 && (
                       <div className="space-y-2">
@@ -2835,7 +2803,7 @@ export function ObjectiveRow({
                           const isInitExpanded = expandedInitiatives.has(init.id)
                           const initStatusBadge = getInitiativeStatusBadge(init.status)
                           const dueDateInfo = formatDueDate(init.dueDate)
-                          
+
                           return (
                             <div
                               key={`init-${init.id}`}
@@ -2882,7 +2850,7 @@ export function ObjectiveRow({
                                   </motion.div>
                                 </div>
                               </div>
-                              
+
                               <AnimatePresence>
                                 {isInitExpanded && (
                                   <motion.div
@@ -2916,7 +2884,7 @@ export function ObjectiveRow({
                         })}
                       </div>
                     )}
-                    
+
                     {/* Completed Initiatives */}
                     {groupedInitiatives.COMPLETED.length > 0 && (
                       <details className="group">
@@ -2927,7 +2895,7 @@ export function ObjectiveRow({
                         <div className="mt-2 space-y-2">
                           {groupedInitiatives.COMPLETED.map((init) => {
                             const initStatusBadge = getInitiativeStatusBadge(init.status)
-                            
+
                             return (
                               <div
                                 key={`init-${init.id}`}

@@ -82,6 +82,7 @@ deploy_service() {
             WEBSITES_PORT="$PORT" \
             NODE_ENV="production" \
             SCM_DO_BUILD_DURING_DEPLOYMENT="false" \
+            CORS_ORIGINS="https://${APP_NAME_PREFIX}-web.azurewebsites.net,http://localhost:3000,http://localhost:5173" \
         --output none
 
     # Special configuration for core-api

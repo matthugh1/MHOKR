@@ -15,7 +15,7 @@ interface PeopleAndTagsSectionProps {
   hideTitle?: boolean
   detail: {
     id?: string
-    type?: 'objective' | 'keyResult'
+    type?: 'objective' | 'keyResult' | 'initiative'
     tags?: Array<{
       id: string
       name: string

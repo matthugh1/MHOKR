@@ -1,11 +1,13 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ArrowRight, CheckSquare, Target, Zap, FileText, AlertCircle } from 'lucide-react'
+import { ArrowRight, CheckSquare, Target, Zap, FileText, AlertCircle, Edit2 } from 'lucide-react'
 import { format } from 'date-fns'
+import { InlineStatusEditor } from './InlineStatusEditor'
+import { InlineProgressEditor } from './InlineProgressEditor'
 
 interface TodoItem {
   type: 'CHECK_IN' | 'TASK' | 'KEY_RESULT' | 'OBJECTIVE' | 'INITIATIVE'
@@ -31,7 +33,17 @@ interface TodoItemCardProps {
   todo: TodoItem
   onAction?: (todo: TodoItem) => void | Promise<void>
   onView?: (todo: TodoItem) => void
+  onStatusUpdate?: () => void | Promise<void>
   loading?: boolean
+  showProgress?: boolean
+  currentProgress?: number
+  draggable?: boolean
+  onDragStart?: (e: React.DragEvent) => void
+  onDragOver?: (e: React.DragEvent) => void
+  onDrop?: (e: React.DragEvent) => void
+  onDragEnd?: (e: React.DragEvent) => void
+  isDragging?: boolean
+  dragOver?: boolean
 }
 
 const typeIcons = {
@@ -60,9 +72,16 @@ const statusColors: Record<string, string> = {
   COMPLETED: 'bg-slate-500',
 }
 
-export function TodoItemCard({ todo, onAction, onView, loading = false }: TodoItemCardProps) {
+export function TodoItemCard({ todo, onAction, onView, onStatusUpdate, loading = false, showProgress = false, currentProgress, draggable = false, onDragStart, onDragOver, onDrop, onDragEnd, isDragging = false, dragOver = false }: TodoItemCardProps) {
   const Icon = typeIcons[todo.type] || AlertCircle
   const typeColor = typeColors[todo.type] || 'bg-gray-500'
+  const [isEditingStatus, setIsEditingStatus] = useState(false)
+  const [isEditingProgress, setIsEditingProgress] = useState(false)
+
+  // Determine if status editing is supported for this todo type
+  const canEditStatus = todo.type === 'OBJECTIVE' || todo.type === 'KEY_RESULT' || todo.type === 'INITIATIVE' || todo.type === 'TASK'
+  const canEditProgress = (todo.type === 'OBJECTIVE' || todo.type === 'KEY_RESULT') && showProgress
+  const progress = currentProgress !== undefined ? currentProgress : (todo.metadata.progress || 0)
 
   const getStatusBadgeColor = () => {
     if (todo.reason.includes('Overdue')) return 'destructive'
@@ -111,13 +130,27 @@ export function TodoItemCard({ todo, onAction, onView, loading = false }: TodoIt
   const actionLabel = getActionLabel()
 
   return (
-    <Card className="hover:shadow-md transition-shadow">
+    <Card
+      className={`hover:shadow-md transition-shadow ${isDragging ? 'opacity-50' : ''} ${dragOver ? 'border-2 border-primary' : ''}`}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={(e) => {
+        e.preventDefault()
+        onDragOver?.(e)
+      }}
+      onDrop={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onDrop?.(e)
+      }}
+      onDragEnd={onDragEnd}
+    >
       <CardContent className="pt-6">
         <div className="flex items-start gap-4">
           <div className={`${typeColor} rounded-lg p-2 flex-shrink-0`}>
             <Icon className="w-5 h-5 text-white" />
           </div>
-          
+
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2 mb-2">
               <div className="flex-1 min-w-0">
@@ -125,9 +158,35 @@ export function TodoItemCard({ todo, onAction, onView, loading = false }: TodoIt
                   <Badge variant="outline" className="text-xs">
                     {todo.type.replace(/_/g, ' ')}
                   </Badge>
-                  <Badge variant={getStatusBadgeColor()} className="text-xs">
-                    {todo.status}
-                  </Badge>
+                  {isEditingStatus && canEditStatus ? (
+                    <InlineStatusEditor
+                      itemType={todo.type as 'OBJECTIVE' | 'KEY_RESULT' | 'INITIATIVE' | 'TASK'}
+                      itemId={todo.id}
+                      currentStatus={todo.status}
+                      onSuccess={async () => {
+                        setIsEditingStatus(false)
+                        await onStatusUpdate?.()
+                      }}
+                      onCancel={() => setIsEditingStatus(false)}
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Badge variant={getStatusBadgeColor()} className="text-xs">
+                        {todo.status}
+                      </Badge>
+                      {canEditStatus && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 w-5 p-0"
+                          onClick={() => setIsEditingStatus(true)}
+                          title="Edit status"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <h3 className="font-semibold text-card-foreground mb-1 line-clamp-2">
                   {todo.title}
@@ -135,6 +194,46 @@ export function TodoItemCard({ todo, onAction, onView, loading = false }: TodoIt
                 <p className="text-sm text-muted-foreground mb-2">
                   {todo.reason}
                 </p>
+                {canEditProgress && (
+                  <div className="mb-2">
+                    {isEditingProgress ? (
+                      <InlineProgressEditor
+                        itemType={todo.type as 'OBJECTIVE' | 'KEY_RESULT'}
+                        itemId={todo.id}
+                        currentProgress={progress}
+                        onSuccess={async () => {
+                          setIsEditingProgress(false)
+                          await onStatusUpdate?.()
+                        }}
+                        onCancel={() => setIsEditingProgress(false)}
+                      />
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="text-muted-foreground">Progress</span>
+                            <span className="font-medium">{progress.toFixed(0)}%</span>
+                          </div>
+                          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary transition-all"
+                              style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 w-5 p-0"
+                          onClick={() => setIsEditingProgress(true)}
+                          title="Edit progress"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {todo.dueDate && (
                   <p className="text-xs text-muted-foreground">
                     Due: {format(new Date(todo.dueDate), 'MMM d, yyyy')}
@@ -147,7 +246,7 @@ export function TodoItemCard({ todo, onAction, onView, loading = false }: TodoIt
                 )}
               </div>
             </div>
-            
+
             <div className="flex items-center gap-2 mt-3">
               {actionLabel && onAction && (
                 <Button

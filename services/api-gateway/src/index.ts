@@ -47,6 +47,8 @@ app.use(cors({
   origin: process.env.CORS_ORIGINS?.split(',') || '*',
   credentials: true,
 }));
+// Explicitly handle preflight requests
+app.options('*', cors());
 
 // Request logging middleware for debugging
 app.use((req, _res, next) => {

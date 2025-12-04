@@ -102,7 +102,7 @@ const convertNodeToItem = (node: HierarchyOKRNode, expandedIds: Set<string>): an
 }
 
 interface StatusBadgeProps {
-  status: 'on-track' | 'at-risk' | 'off-track'
+  status: 'on-track' | 'at-risk' | 'off-track' | 'not-started' | 'in-progress' | 'blocked' | 'completed'
 }
 
 const StatusBadge = ({ status }: StatusBadgeProps) => {
@@ -110,17 +110,25 @@ const StatusBadge = ({ status }: StatusBadgeProps) => {
     'on-track': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
     'at-risk': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
     'off-track': 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+    'completed': 'bg-emerald-600/10 text-emerald-400 border-emerald-600/20',
+    'not-started': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    'in-progress': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    'blocked': 'bg-rose-500/10 text-rose-400 border-rose-500/20',
   }
 
   const labels = {
     'on-track': 'On Track',
     'at-risk': 'At Risk',
     'off-track': 'Off Track',
+    'completed': 'Completed',
+    'not-started': 'Not Started',
+    'in-progress': 'In Progress',
+    'blocked': 'Blocked',
   }
 
   return (
     <span className={`text-xs px-2.5 py-1 rounded-full border ${styles[status] || styles['on-track']} flex items-center gap-1.5 flex-shrink-0`}>
-      <div className={`w-1.5 h-1.5 rounded-full ${status === 'on-track' ? 'bg-emerald-400' : status === 'at-risk' ? 'bg-amber-400' : 'bg-rose-400'}`} />
+      <div className={`w-1.5 h-1.5 rounded-full ${status === 'on-track' || status === 'completed' || status === 'in-progress' ? 'bg-emerald-400' : status === 'at-risk' || status === 'not-started' ? 'bg-amber-400' : 'bg-rose-400'}`} />
       {labels[status]}
     </span>
   )
@@ -128,13 +136,14 @@ const StatusBadge = ({ status }: StatusBadgeProps) => {
 
 interface ProgressBarProps {
   value: number
-  status: 'on-track' | 'at-risk' | 'off-track'
+  status: 'on-track' | 'at-risk' | 'off-track' | 'not-started' | 'in-progress' | 'blocked' | 'completed'
 }
 
 const ProgressBar = ({ value, status }: ProgressBarProps) => {
   let color = 'bg-emerald-500'
-  if (status === 'at-risk') color = 'bg-amber-500'
-  if (status === 'off-track') color = 'bg-rose-500'
+  if (status === 'at-risk' || status === 'not-started') color = 'bg-amber-500'
+  if (status === 'off-track' || status === 'blocked') color = 'bg-rose-500'
+  if (status === 'in-progress' || status === 'completed') color = 'bg-emerald-500'
 
   const clampedValue = Math.min(100, Math.max(0, value))
 
@@ -291,21 +300,21 @@ function OKRHierarchyPageContent() {
 
   // Filter states from URL
   const selectedCycleIdFromUrl = searchParams.get('cycleId')
-  
+
   // Sort state
   const [sortBy, setSortBy] = useState<'title-asc' | 'title-desc' | 'none'>('none')
   const allCyclesFromUrl = searchParams.get('allCycles') === 'true' // Track explicit "All cycles" selection
   const selectedStatus = searchParams.get('status') as string | null
   const selectedScope = (searchParams.get('scope') as 'my' | 'team-workspace' | 'tenant') || 'tenant'
   const searchQueryFromUrl = searchParams.get('search') || ''
-  
+
   // Local search input state (for debouncing)
   const [searchInput, setSearchInput] = useState(searchQueryFromUrl)
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQueryFromUrl)
 
   // Local state - initialize from URL, or null if not in URL
   const [selectedCycleId, setSelectedCycleId] = useState<string | null>(selectedCycleIdFromUrl || null)
-  
+
   // Debug: Log when selectedCycleId changes
   useEffect(() => {
     console.log('[HierarchyPage] selectedCycleId changed:', {
@@ -340,7 +349,7 @@ function OKRHierarchyPageContent() {
   const [editObjectiveId, setEditObjectiveId] = useState<string | null>(null)
   const [newObjectiveModalOpen, setNewObjectiveModalOpen] = useState(false)
   const [sidePanelTab, setSidePanelTab] = useState<'details' | 'edit' | 'create'>('details')
-  const [createMode, setCreateMode] = useState<'objective' | 'kr' | null>(null)
+  const [createMode, setCreateMode] = useState<'objective' | 'kr' | 'initiative' | null>(null)
   const [availableUsers, setAvailableUsers] = useState<any[]>([])
   const [workspaces, setWorkspaces] = useState<Array<{ id: string; name: string }>>([])
   const [teams, setTeams] = useState<Array<{ id: string; name: string; workspaceId?: string }>>([])
@@ -381,7 +390,7 @@ function OKRHierarchyPageContent() {
         // This sets both the state (for dropdown display) and URL (for persistence)
         // BUT: Don't set default if user explicitly selected "All cycles" (check URL param or ref)
         const shouldSetDefault = !cycleInitializedRef.current && !selectedCycleIdFromUrl && cycles.length > 0 && !allCyclesSelectedRef.current && !allCyclesFromUrl
-        
+
         if (shouldSetDefault) {
           const activeCycle = cycles.find((c: any) => c.status === 'ACTIVE') || cycles[0]
           if (activeCycle) {
@@ -422,7 +431,7 @@ function OKRHierarchyPageContent() {
           // Ensure ref is set
           allCyclesSelectedRef.current = true
         }
-        
+
         // Mark cycles as loaded (even if empty, we've checked)
         setCyclesLoaded(true)
       } catch (error: any) {
@@ -517,13 +526,13 @@ function OKRHierarchyPageContent() {
   // Fetch OKR data
   // Disable API calls when creation modal is open to prevent Network Errors
   const isCreationModeActive = newObjectiveModalOpen || sidePanelTab === 'create'
-  
+
   // Wait for cycles to load AND ensure we have a cycleId (either from URL or default)
   // OR if user explicitly selected "All Cycles", allow fetching without cycleId
   const hasCycleId = !!selectedCycleId || !!selectedCycleIdFromUrl
   const allCyclesSelected = allCyclesFromUrl || allCyclesSelectedRef.current
   const canFetchOKRs = !!currentOrganization?.id && cyclesLoaded && (hasCycleId || allCyclesSelected || activeCycles.length === 0) && !isCreationModeActive
-  
+
   console.log('[HierarchyPage] Calling useHierarchyOKRs with:', {
     tenantId: currentOrganization?.id,
     cycleId: selectedCycleId,
@@ -620,7 +629,7 @@ function OKRHierarchyPageContent() {
       sortBy
     })
     if (!filterTree) return []
-    
+
     // Backend handles sorting, so we just convert the data
     return filterTree.roots.map(root => convertNodeToItem(root, expandedIds))
   }, [filterTree, expandedIds, loading, error, currentOrganization?.id, selectedCycleId, debouncedSearchQuery, sortBy])
@@ -836,7 +845,7 @@ function OKRHierarchyPageContent() {
     }
     // Update state immediately (dropdown is source of truth)
     const newCycleId = opt.key && opt.key !== 'all' && opt.key !== 'unassigned' ? opt.key : null
-    
+
     // Track if user explicitly selected "All cycles" BEFORE updating state/URL
     if (opt.key === 'all' || opt.key === 'unassigned') {
       allCyclesSelectedRef.current = true
@@ -844,9 +853,9 @@ function OKRHierarchyPageContent() {
     } else {
       allCyclesSelectedRef.current = false
     }
-    
+
     setSelectedCycleId(newCycleId)
-    
+
     // Update URL to reflect selection - use replace to avoid adding to history
     const params = new URLSearchParams(searchParams.toString())
     if (newCycleId) {
@@ -903,7 +912,7 @@ function OKRHierarchyPageContent() {
 
   // Track previous filter values to detect changes
   const prevFiltersRef = useRef({ scope: selectedScope, cycleId: selectedCycleId, status: selectedStatus })
-  
+
   // Reload children for expanded nodes when scope/cycle/status changes and tree data updates
   useEffect(() => {
     // Wait for loading to complete and tree data to be available
@@ -912,7 +921,7 @@ function OKRHierarchyPageContent() {
     }
 
     // Check if filters actually changed
-    const filtersChanged = 
+    const filtersChanged =
       prevFiltersRef.current.scope !== selectedScope ||
       prevFiltersRef.current.cycleId !== selectedCycleId ||
       prevFiltersRef.current.status !== selectedStatus
@@ -952,7 +961,7 @@ function OKRHierarchyPageContent() {
           console.warn('[HierarchyPage] Expanded node not found in tree:', nodeId)
         }
       })
-      
+
       // Execute all reloads in parallel
       if (reloadPromises.length > 0) {
         Promise.all(reloadPromises).catch(err => {
@@ -1059,13 +1068,12 @@ function OKRHierarchyPageContent() {
             )}
 
             {/* Type Icon */}
-            <div className={`p-1.5 rounded-md ${
-              item.type === 'objective' 
-                ? 'bg-indigo-500/20 text-indigo-400' 
-                : item.type === 'initiative'
+            <div className={`p-1.5 rounded-md ${item.type === 'objective'
+              ? 'bg-indigo-500/20 text-indigo-400'
+              : item.type === 'initiative'
                 ? 'bg-emerald-500/20 text-emerald-400'
                 : 'bg-slate-700/50 text-slate-400'
-            }`}>
+              }`}>
               {item.type === 'objective' ? (
                 <Target size={16} />
               ) : item.type === 'initiative' ? (
@@ -1149,177 +1157,177 @@ function OKRHierarchyPageContent() {
                         <span>{selectedTimeframeLabel}</span>
                         <ChevronDown size={14} className={cn("transition-transform", cycleSelectorOpen && "rotate-180")} />
                       </button>
-                    {cycleSelectorOpen && (
-                      <div className="absolute z-50 mt-2 w-72 rounded-lg border border-slate-700 bg-slate-900 shadow-xl p-3">
-                        {/* Current & Upcoming */}
-                        {normalizedCycles.filter(c => c.status === 'ACTIVE' || c.status === 'UPCOMING' || c.status === 'DRAFT').length > 0 && (
-                          <div className="mb-4">
-                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 px-2">
-                              Current & Upcoming
+                      {cycleSelectorOpen && (
+                        <div className="absolute z-50 mt-2 w-72 rounded-lg border border-slate-700 bg-slate-900 shadow-xl p-3">
+                          {/* Current & Upcoming */}
+                          {normalizedCycles.filter(c => c.status === 'ACTIVE' || c.status === 'UPCOMING' || c.status === 'DRAFT').length > 0 && (
+                            <div className="mb-4">
+                              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 px-2">
+                                Current & Upcoming
+                              </div>
+                              <div className="space-y-1">
+                                {normalizedCycles
+                                  .filter(c => c.status === 'ACTIVE' || c.status === 'UPCOMING' || c.status === 'DRAFT')
+                                  .map((cycle) => (
+                                    <div
+                                      key={cycle.id}
+                                      onClick={() => {
+                                        if (!isCreationModeActive) {
+                                          handleCycleChange({ key: cycle.id, label: cycle.name })
+                                          setCycleSelectorOpen(false)
+                                        }
+                                      }}
+                                      className={cn(
+                                        "rounded-md text-sm text-slate-300 flex items-center justify-between w-full px-3 py-2",
+                                        isCreationModeActive
+                                          ? "cursor-not-allowed opacity-50"
+                                          : "hover:bg-slate-800 cursor-pointer"
+                                      )}
+                                    >
+                                      <span className="font-medium text-slate-200">{cycle.name}</span>
+                                      <span className="text-xs text-slate-500 capitalize">{cycle.status.toLowerCase()}</span>
+                                    </div>
+                                  ))}
+                              </div>
                             </div>
-                            <div className="space-y-1">
-                              {normalizedCycles
-                                .filter(c => c.status === 'ACTIVE' || c.status === 'UPCOMING' || c.status === 'DRAFT')
-                                .map((cycle) => (
-                                  <div
-                                    key={cycle.id}
-                                    onClick={() => {
-                                      if (!isCreationModeActive) {
-                                        handleCycleChange({ key: cycle.id, label: cycle.name })
-                                        setCycleSelectorOpen(false)
-                                      }
-                                    }}
-                                    className={cn(
-                                      "rounded-md text-sm text-slate-300 flex items-center justify-between w-full px-3 py-2",
-                                      isCreationModeActive
-                                        ? "cursor-not-allowed opacity-50"
-                                        : "hover:bg-slate-800 cursor-pointer"
-                                    )}
-                                  >
-                                    <span className="font-medium text-slate-200">{cycle.name}</span>
-                                    <span className="text-xs text-slate-500 capitalize">{cycle.status.toLowerCase()}</span>
-                                  </div>
-                                ))}
+                          )}
+                          {/* Previous */}
+                          {normalizedCycles.filter(c => c.status === 'LOCKED' || c.status === 'ARCHIVED').length > 0 && (
+                            <div className="mb-4">
+                              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 px-2">
+                                Previous
+                              </div>
+                              <div className="max-h-[160px] overflow-y-auto space-y-1">
+                                {normalizedCycles
+                                  .filter(c => c.status === 'LOCKED' || c.status === 'ARCHIVED')
+                                  .map((cycle) => (
+                                    <div
+                                      key={cycle.id}
+                                      onClick={() => {
+                                        if (!isCreationModeActive) {
+                                          handleCycleChange({ key: cycle.id, label: cycle.name })
+                                          setCycleSelectorOpen(false)
+                                        }
+                                      }}
+                                      className={cn(
+                                        "rounded-md text-sm text-slate-300 flex items-center justify-between w-full px-3 py-2",
+                                        isCreationModeActive
+                                          ? "cursor-not-allowed opacity-50"
+                                          : "hover:bg-slate-800 cursor-pointer"
+                                      )}
+                                    >
+                                      <span className="font-medium text-slate-200">{cycle.name}</span>
+                                      <span className="text-xs text-slate-500 capitalize">{cycle.status.toLowerCase()}</span>
+                                    </div>
+                                  ))}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                        {/* Previous */}
-                        {normalizedCycles.filter(c => c.status === 'LOCKED' || c.status === 'ARCHIVED').length > 0 && (
-                          <div className="mb-4">
-                            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 px-2">
-                              Previous
+                          )}
+                          {/* All cycles option */}
+                          <div className="pt-2 border-t border-slate-800">
+                            <div
+                              onClick={() => {
+                                if (!isCreationModeActive) {
+                                  handleCycleChange({ key: 'all', label: 'All cycles' })
+                                  setCycleSelectorOpen(false)
+                                }
+                              }}
+                              className={cn(
+                                "rounded-md text-sm text-slate-300 px-3 py-2",
+                                isCreationModeActive
+                                  ? "cursor-not-allowed opacity-50"
+                                  : "hover:bg-slate-800 cursor-pointer"
+                              )}
+                            >
+                              <span className="font-medium text-slate-200">All cycles</span>
                             </div>
-                            <div className="max-h-[160px] overflow-y-auto space-y-1">
-                              {normalizedCycles
-                                .filter(c => c.status === 'LOCKED' || c.status === 'ARCHIVED')
-                                .map((cycle) => (
-                                  <div
-                                    key={cycle.id}
-                                    onClick={() => {
-                                      if (!isCreationModeActive) {
-                                        handleCycleChange({ key: cycle.id, label: cycle.name })
-                                        setCycleSelectorOpen(false)
-                                      }
-                                    }}
-                                    className={cn(
-                                      "rounded-md text-sm text-slate-300 flex items-center justify-between w-full px-3 py-2",
-                                      isCreationModeActive
-                                        ? "cursor-not-allowed opacity-50"
-                                        : "hover:bg-slate-800 cursor-pointer"
-                                    )}
-                                  >
-                                    <span className="font-medium text-slate-200">{cycle.name}</span>
-                                    <span className="text-xs text-slate-500 capitalize">{cycle.status.toLowerCase()}</span>
-                                  </div>
-                                ))}
-                            </div>
-                          </div>
-                        )}
-                        {/* All cycles option */}
-                        <div className="pt-2 border-t border-slate-800">
-                          <div
-                            onClick={() => {
-                              if (!isCreationModeActive) {
-                                handleCycleChange({ key: 'all', label: 'All cycles' })
-                                setCycleSelectorOpen(false)
-                              }
-                            }}
-                            className={cn(
-                              "rounded-md text-sm text-slate-300 px-3 py-2",
-                              isCreationModeActive
-                                ? "cursor-not-allowed opacity-50"
-                                : "hover:bg-slate-800 cursor-pointer"
-                            )}
-                          >
-                            <span className="font-medium text-slate-200">All cycles</span>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
+
+                    {/* Scope Toggle - Now next to cycle dropdown */}
+                    <div className={cn(
+                      "flex items-center gap-1 rounded-lg border p-1",
+                      isCreationModeActive
+                        ? "border-slate-800 bg-slate-800/30 opacity-50"
+                        : "border-slate-700 bg-slate-800/50"
+                    )} role="group" aria-label="Scope filter">
+                      {availableScopes.includes('my') && (
+                        <button
+                          disabled={isCreationModeActive}
+                          className={cn(
+                            "px-3 py-1.5 rounded-md text-sm font-semibold transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
+                            isCreationModeActive
+                              ? "cursor-not-allowed opacity-50"
+                              : selectedScope === 'my'
+                                ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
+                                : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                          )}
+                          onClick={() => handleScopeChange('my')}
+                          aria-pressed={selectedScope === 'my'}
+                          title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
+                        >
+                          My OKRs
+                        </button>
+                      )}
+                      {availableScopes.includes('team-workspace') && (
+                        <button
+                          disabled={isCreationModeActive}
+                          className={cn(
+                            "px-3 py-1.5 rounded-md text-sm font-semibold transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
+                            isCreationModeActive
+                              ? "cursor-not-allowed opacity-50"
+                              : selectedScope === 'team-workspace'
+                                ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
+                                : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                          )}
+                          onClick={() => handleScopeChange('team-workspace')}
+                          aria-pressed={selectedScope === 'team-workspace'}
+                          title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
+                        >
+                          Team/Workspace OKRs
+                        </button>
+                      )}
+                      {availableScopes.includes('tenant') && (
+                        <button
+                          disabled={isCreationModeActive}
+                          className={cn(
+                            "px-3 py-1.5 rounded-md text-sm font-semibold transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
+                            isCreationModeActive
+                              ? "cursor-not-allowed opacity-50"
+                              : selectedScope === 'tenant'
+                                ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
+                                : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
+                          )}
+                          onClick={() => handleScopeChange('tenant')}
+                          aria-pressed={selectedScope === 'tenant'}
+                          title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
+                        >
+                          Company OKRs
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  
-                  {/* Scope Toggle - Now next to cycle dropdown */}
-                  <div className={cn(
-                    "flex items-center gap-1 rounded-lg border p-1",
-                    isCreationModeActive
-                      ? "border-slate-800 bg-slate-800/30 opacity-50"
-                      : "border-slate-700 bg-slate-800/50"
-                  )} role="group" aria-label="Scope filter">
-                    {availableScopes.includes('my') && (
-                      <button
-                        disabled={isCreationModeActive}
-                        className={cn(
-                          "px-3 py-1.5 rounded-md text-sm font-semibold transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
-                          isCreationModeActive
-                            ? "cursor-not-allowed opacity-50"
-                            : selectedScope === 'my'
-                              ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
-                              : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
-                        )}
-                        onClick={() => handleScopeChange('my')}
-                        aria-pressed={selectedScope === 'my'}
-                        title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
-                      >
-                        My OKRs
-                      </button>
-                    )}
-                    {availableScopes.includes('team-workspace') && (
-                      <button
-                        disabled={isCreationModeActive}
-                        className={cn(
-                          "px-3 py-1.5 rounded-md text-sm font-semibold transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
-                          isCreationModeActive
-                            ? "cursor-not-allowed opacity-50"
-                            : selectedScope === 'team-workspace'
-                              ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
-                              : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
-                        )}
-                        onClick={() => handleScopeChange('team-workspace')}
-                        aria-pressed={selectedScope === 'team-workspace'}
-                        title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
-                      >
-                        Team/Workspace OKRs
-                      </button>
-                    )}
-                    {availableScopes.includes('tenant') && (
-                      <button
-                        disabled={isCreationModeActive}
-                        className={cn(
-                          "px-3 py-1.5 rounded-md text-sm font-semibold transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
-                          isCreationModeActive
-                            ? "cursor-not-allowed opacity-50"
-                            : selectedScope === 'tenant'
-                              ? "bg-indigo-600 text-white shadow-md hover:bg-indigo-700"
-                              : "text-slate-400 hover:text-slate-200 hover:bg-slate-700/50"
-                        )}
-                        onClick={() => handleScopeChange('tenant')}
-                        aria-pressed={selectedScope === 'tenant'}
-                        title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
-                      >
-                        Company OKRs
-                      </button>
-                    )}
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        setCreateMode('objective')
+                        setSidePanelTab('create')
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg shadow-indigo-900/20 flex items-center gap-2"
+                    >
+                      <Zap size={16} />
+                      New Objective
+                    </button>
                   </div>
                 </div>
-                
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => {
-                      setCreateMode('objective')
-                      setSidePanelTab('create')
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg shadow-indigo-900/20 flex items-center gap-2"
-                  >
-                    <Zap size={16} />
-                    New Objective
-                  </button>
-                </div>
-                </div>
-                
+
                 {/* Bottom Row: Search and Status Filters */}
                 <div className="flex items-center gap-3 flex-wrap">
-                {/* Search Input */}
-                <div className="flex-1 relative min-w-[200px] max-w-md">
+                  {/* Search Input */}
+                  <div className="flex-1 relative min-w-[200px] max-w-md">
                     <Search className={cn(
                       "absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4",
                       isCreationModeActive ? "text-slate-600" : "text-slate-400"
@@ -1349,7 +1357,7 @@ function OKRHierarchyPageContent() {
                       </button>
                     )}
                   </div>
-                  
+
                   {/* Sort Dropdown */}
                   <div className="relative">
                     <select
@@ -1369,115 +1377,115 @@ function OKRHierarchyPageContent() {
                       <option value="title-desc">Title (Z-A)</option>
                     </select>
                   </div>
-                
-                {/* Status Filter Chips */}
-                <div className={cn(
-                  "flex items-center gap-2 flex-wrap",
-                  isCreationModeActive && "opacity-50"
-                )} role="group" aria-label="Status filters">
-                  <button
-                    disabled={isCreationModeActive}
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
-                      isCreationModeActive
-                        ? "cursor-not-allowed"
-                        : selectedStatus === null
-                          ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
-                          : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
-                    )}
-                    onClick={() => handleStatusChange(null)}
-                    aria-label="Show all statuses"
-                    aria-pressed={selectedStatus === null}
-                    title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
-                  >
-                    All statuses
-                  </button>
-                  <button
-                    disabled={isCreationModeActive}
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
-                      isCreationModeActive
-                        ? "cursor-not-allowed"
-                        : selectedStatus === 'ON_TRACK'
-                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                          : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
-                    )}
-                    onClick={() => handleStatusChange('ON_TRACK')}
-                    aria-label="Filter by status: On track"
-                    aria-pressed={selectedStatus === 'ON_TRACK'}
-                    title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
-                  >
-                    On track
-                  </button>
-                  <button
-                    disabled={isCreationModeActive}
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
-                      isCreationModeActive
-                        ? "cursor-not-allowed"
-                        : selectedStatus === 'AT_RISK'
-                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                          : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
-                    )}
-                    onClick={() => handleStatusChange('AT_RISK')}
-                    aria-label="Filter by status: At risk"
-                    aria-pressed={selectedStatus === 'AT_RISK'}
-                    title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
-                  >
-                    At risk
-                  </button>
-                  <button
-                    disabled={isCreationModeActive}
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
-                      isCreationModeActive
-                        ? "cursor-not-allowed"
-                        : selectedStatus === 'OFF_TRACK' || selectedStatus === 'BLOCKED'
-                          ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                          : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
-                    )}
-                    onClick={() => handleStatusChange(selectedStatus === 'OFF_TRACK' || selectedStatus === 'BLOCKED' ? null : 'OFF_TRACK')}
-                    aria-label="Filter by status: Off track"
-                    aria-pressed={selectedStatus === 'OFF_TRACK' || selectedStatus === 'BLOCKED'}
-                    title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
-                  >
-                    Off track
-                  </button>
-                  <button
-                    disabled={isCreationModeActive}
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
-                      isCreationModeActive
-                        ? "cursor-not-allowed"
-                        : selectedStatus === 'BLOCKED'
-                          ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                          : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
-                    )}
-                    onClick={() => handleStatusChange(selectedStatus === 'BLOCKED' ? null : 'BLOCKED')}
-                    aria-label="Filter by status: Blocked"
-                    aria-pressed={selectedStatus === 'BLOCKED'}
-                    title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
-                  >
-                    Blocked
-                  </button>
-                  <button
-                    disabled={isCreationModeActive}
-                    className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
-                      isCreationModeActive
-                        ? "cursor-not-allowed"
-                        : selectedStatus === 'COMPLETED'
-                          ? "bg-emerald-600/20 text-emerald-300 border border-emerald-600/30"
-                          : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
-                    )}
-                    onClick={() => handleStatusChange(selectedStatus === 'COMPLETED' ? null : 'COMPLETED')}
-                    aria-label="Filter by status: Completed"
-                    aria-pressed={selectedStatus === 'COMPLETED'}
-                    title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
-                  >
-                    Completed
-                  </button>
-                </div>
+
+                  {/* Status Filter Chips */}
+                  <div className={cn(
+                    "flex items-center gap-2 flex-wrap",
+                    isCreationModeActive && "opacity-50"
+                  )} role="group" aria-label="Status filters">
+                    <button
+                      disabled={isCreationModeActive}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
+                        isCreationModeActive
+                          ? "cursor-not-allowed"
+                          : selectedStatus === null
+                            ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
+                            : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
+                      )}
+                      onClick={() => handleStatusChange(null)}
+                      aria-label="Show all statuses"
+                      aria-pressed={selectedStatus === null}
+                      title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
+                    >
+                      All statuses
+                    </button>
+                    <button
+                      disabled={isCreationModeActive}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
+                        isCreationModeActive
+                          ? "cursor-not-allowed"
+                          : selectedStatus === 'ON_TRACK'
+                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                            : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
+                      )}
+                      onClick={() => handleStatusChange('ON_TRACK')}
+                      aria-label="Filter by status: On track"
+                      aria-pressed={selectedStatus === 'ON_TRACK'}
+                      title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
+                    >
+                      On track
+                    </button>
+                    <button
+                      disabled={isCreationModeActive}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
+                        isCreationModeActive
+                          ? "cursor-not-allowed"
+                          : selectedStatus === 'AT_RISK'
+                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                            : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
+                      )}
+                      onClick={() => handleStatusChange('AT_RISK')}
+                      aria-label="Filter by status: At risk"
+                      aria-pressed={selectedStatus === 'AT_RISK'}
+                      title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
+                    >
+                      At risk
+                    </button>
+                    <button
+                      disabled={isCreationModeActive}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
+                        isCreationModeActive
+                          ? "cursor-not-allowed"
+                          : selectedStatus === 'OFF_TRACK' || selectedStatus === 'BLOCKED'
+                            ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                            : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
+                      )}
+                      onClick={() => handleStatusChange(selectedStatus === 'OFF_TRACK' || selectedStatus === 'BLOCKED' ? null : 'OFF_TRACK')}
+                      aria-label="Filter by status: Off track"
+                      aria-pressed={selectedStatus === 'OFF_TRACK' || selectedStatus === 'BLOCKED'}
+                      title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
+                    >
+                      Off track
+                    </button>
+                    <button
+                      disabled={isCreationModeActive}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
+                        isCreationModeActive
+                          ? "cursor-not-allowed"
+                          : selectedStatus === 'BLOCKED'
+                            ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                            : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
+                      )}
+                      onClick={() => handleStatusChange(selectedStatus === 'BLOCKED' ? null : 'BLOCKED')}
+                      aria-label="Filter by status: Blocked"
+                      aria-pressed={selectedStatus === 'BLOCKED'}
+                      title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
+                    >
+                      Blocked
+                    </button>
+                    <button
+                      disabled={isCreationModeActive}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none h-9",
+                        isCreationModeActive
+                          ? "cursor-not-allowed"
+                          : selectedStatus === 'COMPLETED'
+                            ? "bg-emerald-600/20 text-emerald-300 border border-emerald-600/30"
+                            : "bg-slate-800/50 text-slate-400 border border-slate-700 hover:bg-slate-700/50 hover:text-slate-300"
+                      )}
+                      onClick={() => handleStatusChange(selectedStatus === 'COMPLETED' ? null : 'COMPLETED')}
+                      aria-label="Filter by status: Completed"
+                      aria-pressed={selectedStatus === 'COMPLETED'}
+                      title={isCreationModeActive ? "Filters disabled while creating OKR" : undefined}
+                    >
+                      Completed
+                    </button>
+                  </div>
                 </div>
               </div>
             </header>
@@ -1501,8 +1509,8 @@ function OKRHierarchyPageContent() {
                 {/* Content area with scrollable tree and pagination */}
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                   {/* Scrollable Tree Content - Takes available space, scrolls when needed */}
-                  <div 
-                    ref={scrollableContainerRef} 
+                  <div
+                    ref={scrollableContainerRef}
                     className="flex-1 overflow-y-auto overflow-x-hidden min-h-0"
                   >
                     {loading ? (
@@ -2059,13 +2067,6 @@ function OKRHierarchyPageContent() {
       <EditObjectiveModal
         isOpen={editObjectiveModalOpen}
         objectiveId={editObjectiveId}
-        objectiveData={selectedItem?.type === 'objective' && selectedItem._originalNode ? {
-          title: selectedItem.title,
-          ownerId: selectedItem._originalNode.ownerId,
-          cycleId: selectedItem._originalNode.cycleId || undefined,
-          status: selectedItem._originalNode.status,
-          visibilityLevel: (selectedItem._originalNode.visibilityLevel || 'PUBLIC_TENANT') as 'PUBLIC_TENANT' | 'PRIVATE',
-        } : undefined}
         onClose={() => {
           setEditObjectiveModalOpen(false)
           setEditObjectiveId(null)
@@ -2104,3 +2105,4 @@ export default function OKRHierarchyPage() {
     </Suspense>
   )
 }
+// Force rebuild Wed Dec  3 10:21:30 GMT 2025

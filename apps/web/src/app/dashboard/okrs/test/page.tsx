@@ -3,14 +3,14 @@
 import React, { useState, useMemo, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@/components/protected-route'
-import { 
-  ChevronRight, 
-  ChevronDown, 
-  Target, 
-  TrendingUp, 
-  AlertCircle, 
-  CheckCircle2, 
-  MoreHorizontal, 
+import {
+  ChevronRight,
+  ChevronDown,
+  Target,
+  TrendingUp,
+  AlertCircle,
+  CheckCircle2,
+  MoreHorizontal,
   Activity,
   Zap,
   Users,
@@ -82,13 +82,13 @@ const StatusBadge = ({ status }: StatusBadgeProps) => {
     'at-risk': 'bg-amber-500/10 text-amber-400 border-amber-500/20',
     'off-track': 'bg-rose-500/10 text-rose-400 border-rose-500/20',
   }
-  
+
   const labels = {
     'on-track': 'On Track',
     'at-risk': 'At Risk',
     'off-track': 'Off Track',
   }
-  
+
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full border ${styles[status] || styles['on-track']} flex items-center gap-1`}>
       <div className={`w-1.5 h-1.5 rounded-full ${status === 'on-track' ? 'bg-emerald-400' : status === 'at-risk' ? 'bg-amber-400' : 'bg-rose-400'}`} />
@@ -106,7 +106,7 @@ const ProgressBar = ({ value, status }: ProgressBarProps) => {
   let color = 'bg-emerald-500'
   if (status === 'at-risk') color = 'bg-amber-500'
   if (status === 'off-track') color = 'bg-rose-500'
-  
+
   return (
     <div className="h-2 w-full bg-slate-700/50 rounded-full overflow-hidden">
       <div className={`h-full ${color} transition-all duration-500`} style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
@@ -255,12 +255,12 @@ function OKRTestPageContent() {
   // Handle check-in submission
   const handleCheckIn = useCallback(async () => {
     if (!selectedItem || selectedItem.type !== 'kr' || !checkInValue || !selectedItem._originalNode) return
-    
+
     setIsSubmitting(true)
     try {
       const numValue = parseFloat(checkInValue)
       const numConfidence = parseInt(checkInConfidence, 10)
-      
+
       if (isNaN(numValue) || isNaN(numConfidence)) {
         toast({
           title: 'Invalid input',
@@ -274,12 +274,12 @@ function OKRTestPageContent() {
         value: numValue,
         confidence: numConfidence,
       })
-      
+
       toast({
         title: 'Check-in recorded',
         description: 'Check-in has been recorded successfully.',
       })
-      
+
       await refetch()
       setCheckInValue('')
     } catch (error: any) {
@@ -297,7 +297,7 @@ function OKRTestPageContent() {
   // Expand all ancestors of selected item
   useEffect(() => {
     if (!selectedId || !treeData) return
-    
+
     const path = getNodePath(treeData.roots, selectedId)
     if (path && path.length > 1) {
       // Expand all items in path except the last one (selected item)
@@ -327,10 +327,10 @@ function OKRTestPageContent() {
   const renderRow = (item: OKRItem, depth = 0) => {
     const isSelected = selectedId === item.id
     const paddingLeft = `${depth * 24 + 16}px`
-    
+
     return (
       <div key={item.id}>
-        <div 
+        <div
           onClick={() => setSelectedId(item.id)}
           className={`
             group flex items-center py-3 pr-4 border-b border-slate-800/50 cursor-pointer transition-all duration-200 relative
@@ -340,12 +340,12 @@ function OKRTestPageContent() {
         >
           {/* Connectors for hierarchy visualization */}
           {depth > 0 && (
-            <div 
+            <div
               className="absolute border-l border-b border-slate-700 rounded-bl-lg w-4 h-full"
               style={{ left: `${(depth * 24) - 8}px`, top: '-50%', height: '200%' }}
             />
           )}
-          
+
           <div className="flex items-center gap-3 flex-1 min-w-0 z-10">
             {/* Expand/Collapse Icon */}
             {item.children && item.children.length > 0 ? (
@@ -361,12 +361,12 @@ function OKRTestPageContent() {
             ) : (
               <div className="w-6" />
             )}
-            
+
             {/* Type Icon */}
             <div className={`p-1.5 rounded-md ${item.type === 'objective' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-700/50 text-slate-400'}`}>
               {item.type === 'objective' ? <Target size={16} /> : <TrendingUp size={16} />}
             </div>
-            
+
             {/* Title & Owner */}
             <div className="flex-1 min-w-0">
               <div className={`truncate text-sm font-medium ${isSelected ? 'text-indigo-100' : 'text-slate-200'}`}>
@@ -377,7 +377,7 @@ function OKRTestPageContent() {
                 {item.level === 'company' && <span className="bg-indigo-500/20 text-indigo-300 px-1.5 rounded text-[10px]">Company</span>}
               </div>
             </div>
-            
+
             {/* Status & Progress */}
             <div className="w-48 flex flex-col gap-1 items-end">
               <StatusBadge status={item.status} />
@@ -388,14 +388,14 @@ function OKRTestPageContent() {
             </div>
           </div>
         </div>
-        
+
         {/* Recursively render children */}
         {item.children && item.expanded && (
           <div className="relative animate-in slide-in-from-top-2 duration-200">
             {/* Vertical guide line */}
-            <div 
-              className="absolute w-px bg-slate-800 h-full transition-opacity duration-200" 
-              style={{ left: `${depth * 24 + 27}px` }} 
+            <div
+              className="absolute w-px bg-slate-800 h-full transition-opacity duration-200"
+              style={{ left: `${depth * 24 + 27}px` }}
             />
             {item.children.map(child => renderRow(child, depth + 1))}
           </div>
@@ -433,12 +433,12 @@ function OKRTestPageContent() {
             ))}
           </nav>
           <div className="p-4 border-t border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-xs font-bold">
-                  {user?.firstName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
-                </div>
-                <div className="text-sm">
-                  <div className="text-white">{user?.firstName || 'User'}</div>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-xs font-bold">
+                {user?.firstName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
+              </div>
+              <div className="text-sm">
+                <div className="text-white">{user?.firstName || 'User'}</div>
                 <div className="text-slate-500 text-xs">{user?.email || ''}</div>
               </div>
             </div>
@@ -467,7 +467,7 @@ function OKRTestPageContent() {
               </button>
             </div>
           </header>
-          
+
           {/* Two-Panel Workspace */}
           <div className="flex-1 flex overflow-hidden">
             {/* LEFT PANEL: The Cascade Tree */}
@@ -483,7 +483,7 @@ function OKRTestPageContent() {
                   <span className="text-slate-300">Owner</span>
                 </div>
               </div>
-              
+
               {/* Tree Content */}
               {loading ? (
                 <div className="flex items-center justify-center py-12">
@@ -545,7 +545,7 @@ function OKRTestPageContent() {
                       )}
                     </div>
                   </div>
-                  
+
                   <div className="flex-1 overflow-y-auto p-6 space-y-8">
                     {/* SECTION 1: AI ACTIONABLE INSIGHTS */}
                     {selectedItem.aiInsight && (
@@ -585,7 +585,7 @@ function OKRTestPageContent() {
                             </span>
                           )}
                         </div>
-                        
+
                         <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-800">
                           <div className="flex items-end justify-between mb-2">
                             <div className="text-3xl font-light text-white">
@@ -598,21 +598,21 @@ function OKRTestPageContent() {
                             )}
                           </div>
                           <ProgressBar value={selectedItem.progress} status={selectedItem.status} />
-                          
+
                           <div className="mt-4 grid grid-cols-2 gap-3">
                             <div>
                               <label className="text-xs text-slate-500 mb-1 block">New Value</label>
-                              <input 
-                                type="number" 
+                              <input
+                                type="number"
                                 value={checkInValue}
                                 onChange={(e) => setCheckInValue(e.target.value)}
-                                className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none transition-colors" 
-                                placeholder={selectedItem.current?.toString() || '0'} 
+                                className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none transition-colors"
+                                placeholder={selectedItem.current?.toString() || '0'}
                               />
                             </div>
                             <div>
                               <label className="text-xs text-slate-500 mb-1 block">Confidence</label>
-                              <select 
+                              <select
                                 value={checkInConfidence}
                                 onChange={(e) => setCheckInConfidence(e.target.value)}
                                 className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none transition-colors"
@@ -625,7 +625,7 @@ function OKRTestPageContent() {
                               </select>
                             </div>
                           </div>
-                          <button 
+                          <button
                             onClick={handleCheckIn}
                             disabled={isSubmitting || !checkInValue}
                             className="w-full mt-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white text-sm font-medium py-2 rounded transition-colors flex items-center justify-center gap-2"
@@ -659,14 +659,14 @@ function OKRTestPageContent() {
                         return null
                       }
                       const parentObjective = findParent(data, selectedItem.id)
-                      
+
                       return parentObjective ? (
                         <div className="space-y-3 animate-in slide-in-from-bottom-4 duration-300 delay-100">
                           <h4 className="text-sm font-medium text-white flex items-center gap-2">
                             <ArrowUpRight size={16} className="text-slate-500" />
                             Alignment Context
                           </h4>
-                          <div 
+                          <div
                             className="p-3 rounded-lg border border-slate-800 bg-slate-800/30 hover:bg-slate-800/50 cursor-pointer transition-colors"
                             onClick={() => setSelectedId(parentObjective.id)}
                           >
@@ -750,14 +750,6 @@ function OKRTestPageContent() {
       <EditObjectiveModal
         isOpen={editObjectiveModalOpen}
         objectiveId={editObjectiveId}
-                  objectiveData={selectedItem?.type === 'objective' && selectedItem._originalNode ? {
-                    title: selectedItem.title,
-                    ownerId: selectedItem._originalNode.ownerId,
-                    cycleId: selectedItem._originalNode.cycleId || undefined,
-                    status: selectedItem._originalNode.status,
-                    visibilityLevel: (selectedItem._originalNode.visibilityLevel as any) || 'PUBLIC_TENANT',
-                    tenantId: (selectedItem._originalNode as any).tenantId,
-                  } : undefined}
         onClose={() => {
           setEditObjectiveModalOpen(false)
           setEditObjectiveId(null)

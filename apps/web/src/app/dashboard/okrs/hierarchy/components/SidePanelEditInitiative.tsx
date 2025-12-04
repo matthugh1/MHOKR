@@ -94,17 +94,17 @@ export function SidePanelEditInitiative({
     try {
       const response = await api.get(`/initiatives/${selectedNode.id}`)
       const initiative = response.data
-      
+
       // Load tags and contributors
       const tagsResponse = await api.get(`/initiatives/${selectedNode.id}/tags`).catch(() => ({ data: [] }))
       const contributorsResponse = await api.get(`/initiatives/${selectedNode.id}/contributors`).catch(() => ({ data: [] }))
-      
+
       const fullData = {
         ...initiative,
         tags: tagsResponse.data || [],
         contributors: contributorsResponse.data || [],
       }
-      
+
       populateForm(fullData)
     } catch (err: any) {
       console.error('Failed to load initiative:', err)
@@ -232,9 +232,9 @@ export function SidePanelEditInitiative({
                 Owner <span className="text-red-400">*</span>
               </Label>
               <SearchableUserSelect
-                users={availableUsers}
-                selectedUserId={ownerId}
-                onUserSelect={setOwnerId}
+                availableUsers={availableUsers}
+                value={ownerId}
+                onValueChange={setOwnerId}
                 placeholder="Select owner"
               />
             </div>
@@ -283,7 +283,7 @@ export function SidePanelEditInitiative({
               </Label>
               <GoalTypeSelector
                 value={goalType}
-                onChange={setGoalType}
+                onValueChange={setGoalType}
               />
             </div>
           </TabsContent>
@@ -296,10 +296,9 @@ export function SidePanelEditInitiative({
                   Cycle
                 </Label>
                 <StandardCycleSelector
-                  cycles={availableCycles.map(c => ({ id: c.id, name: c.name, status: 'ACTIVE' }))}
-                  selectedCycleId={cycleId}
-                  onCycleChange={setCycleId}
-                  placeholder="Select cycle (optional)"
+                  value={cycleId}
+                  onValueChange={setCycleId}
+                  currentOrganizationId={currentOrganization?.id}
                 />
               </div>
             )}
@@ -372,31 +371,34 @@ export function SidePanelEditInitiative({
             </div>
 
             {/* Tags */}
-            {tenantPermissions.canEditOKRs && (
+            {selectedNode && tenantPermissions.canEditObjective(selectedNode as any) && (
               <div>
                 <Label className="text-sm font-semibold text-slate-300 mb-2 block">
                   Tags
                 </Label>
                 <TagSelector
-                  resourceType="initiative"
-                  resourceId={selectedNode?.id || ''}
+                  entityType="initiative"
+                  entityId={selectedNode?.id || ''}
                   selectedTags={selectedTags}
                   onTagsChange={setSelectedTags}
+                  currentOrganizationId={currentOrganization?.id || null}
                 />
               </div>
             )}
 
             {/* Contributors */}
-            {tenantPermissions.canEditOKRs && (
+            {selectedNode && tenantPermissions.canEditObjective(selectedNode as any) && (
               <div>
                 <Label className="text-sm font-semibold text-slate-300 mb-2 block">
                   Contributors
                 </Label>
                 <ContributorSelector
-                  resourceType="initiative"
-                  resourceId={selectedNode?.id || ''}
+                  entityType="initiative"
+                  entityId={selectedNode?.id || ''}
                   selectedContributors={selectedContributors}
                   onContributorsChange={setSelectedContributors}
+                  availableUsers={availableUsers}
+                  currentOrganizationId={currentOrganization?.id || null}
                 />
               </div>
             )}

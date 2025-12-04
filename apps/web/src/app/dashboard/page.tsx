@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { Sparkles, ArrowRight, BarChart3, Target, Search, Filter } from 'lucide-react'
+import { Sparkles, ArrowRight, BarChart3, Target, Search, Filter, Zap, CheckSquare } from 'lucide-react'
+import { formatDistanceToNow } from 'date-fns'
 import Link from 'next/link'
 import { ProtectedRoute } from '@/components/protected-route'
 import { DashboardLayout } from '@/components/dashboard-layout'
@@ -52,7 +53,7 @@ interface TodoItem {
   title: string
   reason: string
   priority: number
-  dueDate: string | null
+  dueDate: string | Date | null
   status: string
   metadata: {
     objectiveId?: string
@@ -124,6 +125,9 @@ export default function DashboardPage() {
   const [checkInFormOpen, setCheckInFormOpen] = useState(false)
   const [selectedCheckInKr, setSelectedCheckInKr] = useState<{ id: string; title: string } | null>(null)
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
+  const [recentlyViewed, setRecentlyViewed] = useState<Array<{ id: string; type: string; title: string; timestamp: Date }>>([])
+  const [draggedTodoIndex, setDraggedTodoIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const { toast } = useToast()
 
   // Determine user roles and scopes
@@ -180,27 +184,13 @@ export default function DashboardPage() {
         // Use /me/summary for personal work items
         const response = await api.get('/me/summary')
         const summary = response.data || {}
-        
-        // Debug logging - log the full response structure
-        console.log('[Dashboard] Full API response:', JSON.stringify(response.data, null, 2))
-        console.log('[Dashboard] Response keys:', Object.keys(summary))
-        console.log('[Dashboard] myTodos type:', typeof summary.myTodos, 'isArray:', Array.isArray(summary.myTodos), 'value:', summary.myTodos)
-        console.log('[Dashboard] intelligence type:', typeof summary.intelligence, 'value:', summary.intelligence)
-        
+
         const ownedObjectives = summary.ownedObjectives || []
-        const todos = summary.myTodos || []
+        const todos: TodoItem[] = summary.myTodos || []
         const intelligenceData = summary.intelligence || null
         const activity = summary.recentActivity || []
-        
+
         setRecentActivity(activity)
-        
-        // Debug logging
-        console.log('[Dashboard] Summary response:', {
-          ownedObjectivesCount: ownedObjectives.length,
-          todosCount: todos.length,
-          hasIntelligence: !!intelligenceData,
-          todos: todos.slice(0, 5), // Log first 5 todos
-        })
 
         // Transform to match Objective interface
         const objectives: Objective[] = ownedObjectives.map((obj: any) => ({
@@ -219,7 +209,7 @@ export default function DashboardPage() {
         const overdueCheckIns = todos.filter(t => t.type === 'CHECK_IN' && t.reason.includes('Overdue'))
         const tasksDueToday = todos.filter(t => t.type === 'TASK' && t.reason.includes('Due today'))
         const atRiskItems = todos.filter(t => t.reason.includes('At Risk') || t.reason.includes('Off Track'))
-        
+
         setQuickActions({
           canCheckInBulk: overdueCheckIns.length > 0,
           overdueCheckInCount: overdueCheckIns.length,
@@ -237,13 +227,7 @@ export default function DashboardPage() {
         setCanCreateObjective(overviewResponse.data.canCreateObjective || false)
         setCanPublishOKR(overviewResponse.data.canPublishOKR || false)
       } catch (error) {
-        console.error('Failed to fetch my work:', error)
-        console.error('Error details:', error)
-        // Log the full error for debugging
-        if (error instanceof Error) {
-          console.error('Error message:', error.message)
-          console.error('Error stack:', error.stack)
-        }
+        // Silently handle errors to prevent console spam
         setMyOkrs([])
         setMyTodos([])
         setIntelligence(null)
@@ -257,11 +241,11 @@ export default function DashboardPage() {
 
   // Transform recent activity into feed items
   const feedItems = useMemo(() => {
-    return recentActivity.slice(0, 20).map((activity: any) => ({
-      id: activity.id || `activity-${Math.random()}`,
+    return recentActivity.slice(0, 20).map((activity: any, idx: number) => ({
+      id: activity.id || `activity-${idx}`,
       type: activity.action === 'CHECK_IN' ? 'checkin' as const :
-            activity.action === 'UPDATED' && activity.summary?.includes('status') ? 'status_update' as const :
-            activity.action === 'CREATED' ? 'created' as const :
+        activity.action === 'UPDATED' && activity.summary?.includes('status') ? 'status_update' as const :
+          activity.action === 'CREATED' ? 'created' as const :
             'progress_update' as const,
       title: activity.summary || activity.action,
       description: activity.actorName ? `by ${activity.actorName}` : undefined,
@@ -275,11 +259,116 @@ export default function DashboardPage() {
     }))
   }, [recentActivity])
 
+  // Load recently viewed from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('okr-recently-viewed')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        // Filter to last 5 items and convert timestamps
+        const recent = parsed
+          .slice(0, 5)
+          .map((item: any) => ({
+            ...item,
+            timestamp: new Date(item.timestamp),
+          }))
+        setRecentlyViewed(recent)
+      }
+    } catch (error) {
+      console.error('Failed to load recently viewed:', error)
+    }
+  }, [])
+
+  // Helper function to track viewed items
+  const trackView = (id: string, type: string, title: string) => {
+    try {
+      const stored = localStorage.getItem('okr-recently-viewed') || '[]'
+      const parsed = JSON.parse(stored)
+
+      // Remove if already exists
+      const filtered = parsed.filter((item: any) => !(item.id === id && item.type === type))
+
+      // Add to front
+      const updated = [
+        { id, type, title, timestamp: new Date().toISOString() },
+        ...filtered,
+      ].slice(0, 5) // Keep only last 5
+
+      localStorage.setItem('okr-recently-viewed', JSON.stringify(updated))
+      setRecentlyViewed(updated.map(item => ({ ...item, timestamp: new Date(item.timestamp) })))
+    } catch (error) {
+      console.error('Failed to track view:', error)
+    }
+  }
+
+  // Helper function to refresh todos and intelligence
+  const refreshTodos = async () => {
+    try {
+      const refreshResponse = await api.get('/me/summary')
+      setMyTodos(refreshResponse.data.myTodos || [])
+      setIntelligence(refreshResponse.data.intelligence || null)
+    } catch (error) {
+      console.error('Failed to refresh todos:', error)
+    }
+  }
+
+  // Drag and drop handlers for todo prioritization - memoized to prevent re-renders
+  const handleDragStart = useCallback((index: number) => {
+    return (e: React.DragEvent) => {
+      setDraggedTodoIndex(index)
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/html', index.toString())
+    }
+  }, [])
+
+  const handleDragOver = useCallback((index: number) => {
+    return (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      e.dataTransfer.dropEffect = 'move'
+      setDragOverIndex((prev) => prev !== index ? index : prev)
+    }
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedTodoIndex(null)
+    setDragOverIndex(null)
+  }, [])
+
+  const handleDrop = useCallback((dropIndex: number) => {
+    return (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setDraggedTodoIndex((dragIndex) => {
+        if (dragIndex === null || dragIndex === dropIndex) {
+          setDragOverIndex(null)
+          return null
+        }
+
+        // Reorder todos
+        setMyTodos((currentTodos) => {
+          const newTodos = [...currentTodos]
+          const [removed] = newTodos.splice(dragIndex, 1)
+          newTodos.splice(dropIndex, 0, removed)
+
+          // Update priority based on new position (lower index = higher priority)
+          return newTodos.map((todo, idx) => ({
+            ...todo,
+            priority: idx + 1, // Update priority based on position
+          }))
+        })
+
+        setDragOverIndex(null)
+        return null
+      })
+    }
+  }, [])
+
   // Helper function to handle todo actions
   const handleTodoAction = async (todo: TodoItem) => {
     const actionKey = `${todo.type}-${todo.id}`
     setActionLoading(prev => ({ ...prev, [actionKey]: true }))
-    
+
     try {
       if (todo.type === 'CHECK_IN') {
         setSelectedCheckInKr({ id: todo.metadata.keyResultId || todo.id, title: todo.title })
@@ -292,16 +381,18 @@ export default function DashboardPage() {
         const refreshResponse = await api.get('/me/summary')
         setMyTodos(refreshResponse.data.myTodos || [])
       } else if (todo.type === 'OBJECTIVE' || todo.type === 'KEY_RESULT') {
+        // Track view
+        trackView(todo.id, todo.type, todo.title)
         // Navigate to edit
-        const url = todo.type === 'OBJECTIVE' 
+        const url = todo.type === 'OBJECTIVE'
           ? `/dashboard/okrs/hierarchy?objectiveId=${todo.id}`
           : `/dashboard/okrs/hierarchy?krId=${todo.id}`
         window.location.href = url
       }
     } catch (error: any) {
-      toast({ 
+      toast({
         variant: 'destructive',
-        title: 'Action failed', 
+        title: 'Action failed',
         description: error.response?.data?.message || error.message || 'Failed to perform action'
       })
     } finally {
@@ -370,7 +461,7 @@ export default function DashboardPage() {
     }
 
     fetchDashboard()
-  }, [currentOrganization?.id, activeCycleId, workspaceLoading])
+  }, [currentOrganization?.id, workspaceLoading])
 
   const getAttentionItemIcon = (type: string) => {
     switch (type) {
@@ -527,7 +618,7 @@ export default function DashboardPage() {
                             </CardDescription>
                           </div>
                         </div>
-                        
+
                         {/* Search and Filter */}
                         <div className="flex items-center gap-2 mt-4">
                           <div className="relative flex-1">
@@ -592,12 +683,12 @@ export default function DashboardPage() {
                               <TabsTrigger value="due-soon">Due Soon</TabsTrigger>
                               <TabsTrigger value="all">All My Work</TabsTrigger>
                             </TabsList>
-                            
+
                             <TabsContent value="focus-now" className="mt-4">
                               <div className="space-y-4">
                                 {myTodos
                                   .filter(todo => {
-                                    const matchesSearch = !searchQuery || 
+                                    const matchesSearch = !searchQuery ||
                                       todo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                                       todo.reason.toLowerCase().includes(searchQuery.toLowerCase())
                                     const matchesFilter = filterType === 'all' ||
@@ -606,16 +697,20 @@ export default function DashboardPage() {
                                       (filterType === 'at-risk' && (todo.reason.includes('At Risk') || todo.reason.includes('Off Track')))
                                     return matchesSearch && matchesFilter && todo.priority <= 3
                                   })
-                                  .map((todo) => (
+                                  .map((todo, index) => (
                                     <TodoItemCard
                                       key={`${todo.type}-${todo.id}`}
                                       todo={todo}
                                       onAction={handleTodoAction}
+                                      onStatusUpdate={refreshTodos}
                                       loading={actionLoading[`${todo.type}-${todo.id}`]}
+                                      showProgress={todo.type === 'OBJECTIVE' || todo.type === 'KEY_RESULT'}
+                                      currentProgress={todo.metadata.progress}
+                                      draggable={false}
                                     />
                                   ))}
                                 {myTodos.filter(todo => {
-                                  const matchesSearch = !searchQuery || 
+                                  const matchesSearch = !searchQuery ||
                                     todo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                                     todo.reason.toLowerCase().includes(searchQuery.toLowerCase())
                                   const matchesFilter = filterType === 'all' ||
@@ -624,58 +719,62 @@ export default function DashboardPage() {
                                     (filterType === 'at-risk' && (todo.reason.includes('At Risk') || todo.reason.includes('Off Track')))
                                   return matchesSearch && matchesFilter && todo.priority <= 3
                                 }).length === 0 && (
-                                  <div className="text-center py-8 text-muted-foreground">
-                                    No high-priority items to focus on
-                                  </div>
-                                )}
+                                    <div className="text-center py-8 text-muted-foreground">
+                                      No high-priority items to focus on
+                                    </div>
+                                  )}
                               </div>
                             </TabsContent>
-                            
+
                             <TabsContent value="due-soon" className="mt-4">
                               <div className="space-y-4">
                                 {myTodos
                                   .filter(todo => {
-                                    const matchesSearch = !searchQuery || 
+                                    const matchesSearch = !searchQuery ||
                                       todo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                                       todo.reason.toLowerCase().includes(searchQuery.toLowerCase())
                                     const matchesFilter = filterType === 'all' ||
                                       (filterType === 'overdue' && todo.reason.includes('Overdue')) ||
                                       (filterType === 'due-today' && todo.reason.includes('Due today')) ||
                                       (filterType === 'at-risk' && (todo.reason.includes('At Risk') || todo.reason.includes('Off Track')))
-                                    return matchesSearch && matchesFilter && todo.dueDate && 
+                                    return matchesSearch && matchesFilter && todo.dueDate &&
                                       new Date(todo.dueDate) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
                                   })
-                                  .map((todo) => (
+                                  .map((todo, index) => (
                                     <TodoItemCard
                                       key={`${todo.type}-${todo.id}`}
                                       todo={todo}
                                       onAction={handleTodoAction}
+                                      onStatusUpdate={refreshTodos}
                                       loading={actionLoading[`${todo.type}-${todo.id}`]}
+                                      showProgress={todo.type === 'OBJECTIVE' || todo.type === 'KEY_RESULT'}
+                                      currentProgress={todo.metadata.progress}
+                                      draggable={false}
                                     />
                                   ))}
                                 {myTodos.filter(todo => {
-                                  const matchesSearch = !searchQuery || 
+                                  const matchesSearch = !searchQuery ||
                                     todo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                                     todo.reason.toLowerCase().includes(searchQuery.toLowerCase())
                                   const matchesFilter = filterType === 'all' ||
                                     (filterType === 'overdue' && todo.reason.includes('Overdue')) ||
                                     (filterType === 'due-today' && todo.reason.includes('Due today')) ||
                                     (filterType === 'at-risk' && (todo.reason.includes('At Risk') || todo.reason.includes('Off Track')))
-                                  return matchesSearch && matchesFilter && todo.dueDate && 
+                                  return matchesSearch && matchesFilter && todo.dueDate &&
                                     new Date(todo.dueDate) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
                                 }).length === 0 && (
-                                  <div className="text-center py-8 text-muted-foreground">
-                                    No items due soon
-                                  </div>
-                                )}
+                                    <div className="text-center py-8 text-muted-foreground">
+                                      No items due soon
+                                    </div>
+                                  )}
                               </div>
                             </TabsContent>
-                            
+
                             <TabsContent value="all" className="mt-4">
                               <div className="space-y-4">
                                 {myTodos
                                   .filter(todo => {
-                                    const matchesSearch = !searchQuery || 
+                                    const matchesSearch = !searchQuery ||
                                       todo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                                       todo.reason.toLowerCase().includes(searchQuery.toLowerCase())
                                     const matchesFilter = filterType === 'all' ||
@@ -684,16 +783,20 @@ export default function DashboardPage() {
                                       (filterType === 'at-risk' && (todo.reason.includes('At Risk') || todo.reason.includes('Off Track')))
                                     return matchesSearch && matchesFilter
                                   })
-                                  .map((todo) => (
+                                  .map((todo, index) => (
                                     <TodoItemCard
                                       key={`${todo.type}-${todo.id}`}
                                       todo={todo}
                                       onAction={handleTodoAction}
+                                      onStatusUpdate={refreshTodos}
                                       loading={actionLoading[`${todo.type}-${todo.id}`]}
+                                      showProgress={todo.type === 'OBJECTIVE' || todo.type === 'KEY_RESULT'}
+                                      currentProgress={todo.metadata.progress}
+                                      draggable={false}
                                     />
                                   ))}
                                 {myTodos.filter(todo => {
-                                  const matchesSearch = !searchQuery || 
+                                  const matchesSearch = !searchQuery ||
                                     todo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                                     todo.reason.toLowerCase().includes(searchQuery.toLowerCase())
                                   const matchesFilter = filterType === 'all' ||
@@ -702,10 +805,10 @@ export default function DashboardPage() {
                                     (filterType === 'at-risk' && (todo.reason.includes('At Risk') || todo.reason.includes('Off Track')))
                                   return matchesSearch && matchesFilter
                                 }).length === 0 && (
-                                  <div className="text-center py-8 text-muted-foreground">
-                                    No todos match your filters
-                                  </div>
-                                )}
+                                    <div className="text-center py-8 text-muted-foreground">
+                                      No todos match your filters
+                                    </div>
+                                  )}
                               </div>
                             </TabsContent>
                           </Tabs>
@@ -735,9 +838,9 @@ export default function DashboardPage() {
                               onClick={async () => {
                                 const overdueCheckIn = myTodos.find(t => t.type === 'CHECK_IN' && t.reason.includes('Overdue'))
                                 if (overdueCheckIn) {
-                                  setSelectedCheckInKr({ 
-                                    id: overdueCheckIn.metadata.keyResultId || overdueCheckIn.id, 
-                                    title: overdueCheckIn.title 
+                                  setSelectedCheckInKr({
+                                    id: overdueCheckIn.metadata.keyResultId || overdueCheckIn.id,
+                                    title: overdueCheckIn.title
                                   })
                                   setCheckInFormOpen(true)
                                 }
@@ -746,33 +849,84 @@ export default function DashboardPage() {
                               variant="default"
                             />
                           )}
-                          
+
                           {quickActions.canCompleteTasksToday && (
                             <QuickActionButton
                               label={`Complete ${quickActions.tasksDueTodayCount} task${quickActions.tasksDueTodayCount !== 1 ? 's' : ''} due today`}
                               onClick={async () => {
                                 const tasksDueToday = myTodos.filter(t => t.type === 'TASK' && t.reason.includes('Due today'))
-                                // TODO: Implement bulk task completion
-                                console.log('Bulk complete tasks:', tasksDueToday)
+                                if (tasksDueToday.length === 0) return
+
+                                try {
+                                  // Complete all tasks in parallel
+                                  await Promise.all(
+                                    tasksDueToday.map(task =>
+                                      api.patch(`/tasks/${task.id}`, { status: 'COMPLETED' })
+                                    )
+                                  )
+
+                                  toast({
+                                    title: 'Tasks completed',
+                                    description: `Successfully completed ${tasksDueToday.length} task${tasksDueToday.length !== 1 ? 's' : ''}.`
+                                  })
+
+                                  // Refresh todos
+                                  await refreshTodos()
+                                } catch (error: any) {
+                                  toast({
+                                    variant: 'destructive',
+                                    title: 'Failed to complete tasks',
+                                    description: error.response?.data?.message || error.message || 'Some tasks could not be completed'
+                                  })
+                                }
                               }}
                               icon={<CheckSquare className="w-4 h-4" />}
                               variant="outline"
                             />
                           )}
-                          
+
                           {quickActions.canUpdateAtRiskItems && (
                             <QuickActionButton
                               label={`Update ${quickActions.atRiskItemsCount} at-risk item${quickActions.atRiskItemsCount !== 1 ? 's' : ''}`}
                               onClick={async () => {
                                 const atRiskItems = myTodos.filter(t => t.reason.includes('At Risk') || t.reason.includes('Off Track'))
-                                // TODO: Implement bulk status update
-                                console.log('Update at-risk items:', atRiskItems)
+                                if (atRiskItems.length === 0) return
+
+                                try {
+                                  // Update all at-risk items to ON_TRACK in parallel
+                                  await Promise.all(
+                                    atRiskItems.map(item => {
+                                      if (item.type === 'OBJECTIVE') {
+                                        return api.patch(`/objectives/${item.id}`, { status: 'ON_TRACK' })
+                                      } else if (item.type === 'KEY_RESULT') {
+                                        return api.patch(`/key-results/${item.id}`, { status: 'ON_TRACK' })
+                                      } else if (item.type === 'INITIATIVE') {
+                                        return api.patch(`/initiatives/${item.id}`, { status: 'IN_PROGRESS' })
+                                      }
+                                      return Promise.resolve()
+                                    })
+                                  )
+
+                                  toast({
+                                    title: 'Status updated',
+                                    description: `Successfully updated ${atRiskItems.length} item${atRiskItems.length !== 1 ? 's' : ''} to on track.`
+                                  })
+
+                                  // Refresh todos
+                                  await refreshTodos()
+                                } catch (error: any) {
+                                  toast({
+                                    variant: 'destructive',
+                                    title: 'Failed to update status',
+                                    description: error.response?.data?.message || error.message || 'Some items could not be updated'
+                                  })
+                                }
                               }}
                               icon={<AlertCircle className="w-4 h-4" />}
                               variant="outline"
                             />
                           )}
-                          
+
                           {!quickActions.canCheckInBulk && !quickActions.canCompleteTasksToday && !quickActions.canUpdateAtRiskItems && (
                             <p className="text-sm text-muted-foreground text-center py-4">
                               No quick actions available
@@ -793,6 +947,8 @@ export default function DashboardPage() {
                     <ActionFeed
                       items={feedItems}
                       onItemClick={(item) => {
+                        // Track view
+                        trackView(item.entityId, item.entityType, item.entityTitle)
                         // Navigate to the item
                         if (item.entityType === 'OBJECTIVE') {
                           window.location.href = `/dashboard/okrs/hierarchy?objectiveId=${item.entityId}`
@@ -806,6 +962,52 @@ export default function DashboardPage() {
                       }}
                       className="h-full"
                     />
+
+                    {/* Recently Viewed Section */}
+                    {recentlyViewed.length > 0 && (
+                      <motion.section
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3, delay: 0.5 }}
+                        className="mt-6"
+                      >
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg">Recently Viewed</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2">
+                              {recentlyViewed.map((item) => (
+                                <Button
+                                  key={`${item.type}-${item.id}`}
+                                  variant="ghost"
+                                  className="w-full justify-start text-left h-auto py-2"
+                                  onClick={() => {
+                                    trackView(item.id, item.type, item.title)
+                                    const url = item.type === 'OBJECTIVE'
+                                      ? `/dashboard/okrs/hierarchy?objectiveId=${item.id}`
+                                      : item.type === 'KEY_RESULT'
+                                        ? `/dashboard/okrs/hierarchy?krId=${item.id}`
+                                        : item.type === 'INITIATIVE'
+                                          ? `/dashboard/okrs/hierarchy?initiativeId=${item.id}`
+                                          : `/dashboard/okrs/hierarchy?taskId=${item.id}`
+                                    window.location.href = url
+                                  }}
+                                >
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <Target className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
+                                    <span className="text-sm truncate">{item.title}</span>
+                                    <span className="text-xs text-muted-foreground ml-auto flex-shrink-0">
+                                      {formatDistanceToNow(item.timestamp, { addSuffix: true })}
+                                    </span>
+                                  </div>
+                                </Button>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.section>
+                    )}
                   </motion.section>
                 </div>
               </div>

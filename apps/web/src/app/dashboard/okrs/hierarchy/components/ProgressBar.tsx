@@ -2,16 +2,16 @@
  * Progress Bar component for Hierarchy View
  */
 
-import { OKRStatus } from './types'
+import { OKRStatus, InitiativeStatus } from './types'
 import { cn } from '@/lib/utils'
 
 interface ProgressBarProps {
   value: number
-  status: OKRStatus
+  status: OKRStatus | InitiativeStatus
   className?: string
 }
 
-const getProgressColor = (status: OKRStatus): string => {
+const getProgressColor = (status: OKRStatus | InitiativeStatus): string => {
   switch (status) {
     case 'ON_TRACK':
     case 'COMPLETED':
@@ -22,6 +22,12 @@ const getProgressColor = (status: OKRStatus): string => {
       return 'bg-rose-500'
     case 'CANCELLED':
       return 'bg-slate-500'
+    case 'NOT_STARTED':
+      return 'bg-slate-400'
+    case 'IN_PROGRESS':
+      return 'bg-blue-500'
+    case 'BLOCKED':
+      return 'bg-rose-500'
     default:
       return 'bg-emerald-500'
   }

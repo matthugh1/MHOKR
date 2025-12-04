@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 /**
@@ -9,7 +9,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
  * This page redirects all requests to /dashboard/okrs to /dashboard/okrs/hierarchy
  * The hierarchy page is now the main OKRs page.
  */
-export default function OKRsPage() {
+function OKRsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -27,5 +27,13 @@ export default function OKRsPage() {
         <p className="text-muted-foreground">Redirecting to OKR Hierarchy...</p>
       </div>
     </div>
+  )
+}
+
+export default function OKRsPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <OKRsPageContent />
+    </Suspense>
   )
 }

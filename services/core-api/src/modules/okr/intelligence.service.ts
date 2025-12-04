@@ -148,6 +148,94 @@ export class IntelligenceService {
       });
     }
 
+    // Advanced Pattern Detection
+
+    // Pattern: High workload concentration (many items of same type)
+    const workloadByType = {
+      OBJECTIVE: objectives.length,
+      KEY_RESULT: keyResults.length,
+      INITIATIVE: initiatives.length,
+      TASK: tasks.length,
+    };
+    const maxWorkloadType = Object.entries(workloadByType).reduce((a, b) => 
+      workloadByType[a[0] as keyof typeof workloadByType] > workloadByType[b[0] as keyof typeof workloadByType] ? a : b
+    );
+    if (maxWorkloadType[1] >= 10 && maxWorkloadType[1] / (objectives.length + keyResults.length + initiatives.length + tasks.length) > 0.5) {
+      patterns.push({
+        type: 'WORKLOAD_CONCENTRATION',
+        message: `High concentration of ${maxWorkloadType[0].toLowerCase()}s (${maxWorkloadType[1]}) - consider delegating or redistributing`,
+        severity: 'medium',
+      });
+    }
+
+    // Pattern: Progress stagnation (items with same progress for 14+ days)
+    const staleProgressItems = todos.filter(t => 
+      t.reason.includes('No update') && 
+      t.metadata.progress !== undefined && 
+      t.metadata.progress > 0 && 
+      t.metadata.progress < 100
+    );
+    if (staleProgressItems.length >= 3) {
+      patterns.push({
+        type: 'PROGRESS_STAGNATION',
+        message: `${staleProgressItems.length} items show no progress updates - review blockers or adjust targets`,
+        severity: staleProgressItems.length >= 5 ? 'high' : 'medium',
+      });
+    }
+
+    // Pattern: Dependency bottlenecks (multiple blocked items linked to same parent)
+    const blockedByParent = new Map<string, number>();
+    initiatives.filter(i => i.status === 'BLOCKED').forEach(init => {
+      const parentId = init.objectiveId || 'unknown';
+      blockedByParent.set(parentId, (blockedByParent.get(parentId) || 0) + 1);
+    });
+    tasks.filter(t => t.status === 'BLOCKED').forEach(task => {
+      const parentId = task.keyResultId || task.initiativeId || 'unknown';
+      blockedByParent.set(parentId, (blockedByParent.get(parentId) || 0) + 1);
+    });
+    const bottleneckParents = Array.from(blockedByParent.entries()).filter(([_, count]) => count >= 2);
+    if (bottleneckParents.length > 0) {
+      patterns.push({
+        type: 'DEPENDENCY_BOTTLENECK',
+        message: `${bottleneckParents.length} parent item${bottleneckParents.length !== 1 ? 's' : ''} have multiple blocked dependencies - address root causes`,
+        severity: 'high',
+      });
+    }
+
+    // Pattern: Overdue check-ins clustering (multiple overdue check-ins for same objective)
+    const overdueByObjective = new Map<string, number>();
+    todos.filter(t => t.type === 'CHECK_IN' && t.reason.includes('Overdue')).forEach(todo => {
+      const objId = todo.metadata.objectiveId || 'unknown';
+      overdueByObjective.set(objId, (overdueByObjective.get(objId) || 0) + 1);
+    });
+    const clusteredOverdue = Array.from(overdueByObjective.entries()).filter(([_, count]) => count >= 2);
+    if (clusteredOverdue.length > 0) {
+      patterns.push({
+        type: 'CHECKIN_CLUSTERING',
+        message: `${clusteredOverdue.length} objective${clusteredOverdue.length !== 1 ? 's' : ''} have multiple overdue check-ins - consider adjusting cadence`,
+        severity: 'medium',
+      });
+    }
+
+    // Pattern: Status consistency (all items in same status category)
+    const statusDistribution = {
+      ON_TRACK: objectives.filter(o => o.status === 'ON_TRACK').length + keyResults.filter(kr => kr.status === 'ON_TRACK').length,
+      AT_RISK: objectives.filter(o => o.status === 'AT_RISK').length + keyResults.filter(kr => kr.status === 'AT_RISK').length,
+      OFF_TRACK: objectives.filter(o => o.status === 'OFF_TRACK').length + keyResults.filter(kr => kr.status === 'OFF_TRACK').length,
+    };
+    const totalTracked = statusDistribution.ON_TRACK + statusDistribution.AT_RISK + statusDistribution.OFF_TRACK;
+    if (totalTracked > 0) {
+      const atRiskRatio = statusDistribution.AT_RISK / totalTracked;
+      const offTrackRatio = statusDistribution.OFF_TRACK / totalTracked;
+      if (atRiskRatio >= 0.5 || offTrackRatio >= 0.3) {
+        patterns.push({
+          type: 'STATUS_CONSISTENCY',
+          message: `${Math.round((atRiskRatio + offTrackRatio) * 100)}% of items are at risk or off track - review overall strategy`,
+          severity: offTrackRatio >= 0.3 ? 'high' : 'medium',
+        });
+      }
+    }
+
     // Workload distribution
     const workloadDistribution = {
       byType: {
